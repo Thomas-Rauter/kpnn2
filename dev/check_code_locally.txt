@@ -1,6 +1,7 @@
-ruff format
-ruff check . --fix
-ruff format --check .
-mypy src
-# pytest -m "not slow"
-pytest
+# pip install -e ".[dev]"  # when the pin or env changed
+python -m ruff format .
+python -m ruff check . --fix
+python -m ruff format --check .
+python -m mypy src
+# python -m pytest -m "not slow"
+python -m pytest

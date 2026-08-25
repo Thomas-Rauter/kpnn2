@@ -43,9 +43,7 @@ def _set_seeds() -> None:
 
 def _dead_edge_scenario():
     return next(
-        item
-        for item in STRUCTURAL_SCENARIOS
-        if item.id == _SCENARIO_ID
+        item for item in STRUCTURAL_SCENARIOS if item.id == _SCENARIO_ID
     )
 
 

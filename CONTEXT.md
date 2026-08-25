@@ -463,6 +463,8 @@ stay as above.
 ## Dependencies
 
 **Core:** `torch`, `pandas`, `numpy`, `xarray`, Python `>=3.10`.
+On Python 3.11+, `xarray>=2026.4,<2026.8`. On Python 3.10,
+`xarray>=2024.11,<2025.7` (last xarray line that supports 3.10).
 
 **Not required:** captum, anndata.
 
@@ -471,7 +473,10 @@ Randomness in tests: `random.seed(42)`, `numpy.random.seed(42)`,
 
 Code style: lines `<= 80` characters. Function definitions and
 calls with 2+ arguments put each argument on its own line and the
-closing `)` on its own line.
+closing `)` on its own line. Format Python with
+`python -m ruff` from the `dev` extra (exact pin in
+`pyproject.toml`). Do not use a global `ruff` on `PATH`; it can
+disagree with CI.
 
 ---
 
@@ -489,3 +494,5 @@ closing `)` on its own line.
   implement skip routing.
 - One graph node is one scalar in v1 (no node width).
 - Public failures: `Kpnn2Error` only.
+- After Python edits, run `python -m ruff format .` from the
+  `dev` extra. Do not use a global `ruff` on `PATH`.

@@ -60,6 +60,29 @@ Install development dependencies with:
 pip install -e ".[dev]"
 ```
 
+That extra pins an exact Ruff version. CI runs the same pin.
+A global `ruff` on `PATH` (for example `~/.local/bin/ruff`) can
+be a different version and will accept code that CI then rejects.
+
+After installing the `dev` extra, lint and format with the
+environment's interpreter so `PATH` cannot shadow Ruff:
+
+```bash
+python -m ruff --version
+python -m ruff check .
+python -m ruff format --check .
+```
+
+To apply formatting:
+
+```bash
+python -m ruff format .
+```
+
+When upgrading Ruff, bump the pin in `pyproject.toml`, run
+`python -m ruff format .`, and commit the pin and any rewrites
+together.
+
 Install documentation dependencies with:
 
 ```bash

@@ -718,8 +718,7 @@ def _prediction_column(
         index = last_names.index(PREDICTION_OUTPUT)
     except ValueError as exc:
         raise ValueError(
-            f"{PREDICTION_OUTPUT!r} is not in the last layer "
-            f"{last_names}."
+            f"{PREDICTION_OUTPUT!r} is not in the last layer {last_names}."
         ) from exc
     return output[:, index : index + 1]
 

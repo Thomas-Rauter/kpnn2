@@ -36,11 +36,12 @@ jobs:
 
       - name: Run Ruff lint
         run: |
-          ruff check .
+          python -m ruff --version
+          python -m ruff check .
 
       - name: Run Ruff format check
         run: |
-          ruff format --check .
+          python -m ruff format --check .
 
       - name: Run mypy
         if: matrix.python-version == '3.11'
