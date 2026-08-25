@@ -63,6 +63,7 @@ def two_tower_feedforward(
     depth: int = 3,
     hidden_width: int | None = None,
     shared_output: bool = True,
+    disconnected_tower: str = "b",
 ) -> TwoTowerGraph:
     """
     Build two matched feedforward towers.
@@ -71,23 +72,33 @@ def two_tower_feedforward(
     hidden levels. Hidden width defaults to the feature count.
 
     With ``shared_output`` both towers end at ``"prediction"``.
-    Without it, tower B ends at ``"decoy_readout"`` and has no live
-    path to ``"prediction"``.
+    Without it, ``disconnected_tower`` (``"a"`` or ``"b"``) ends at
+    ``"decoy_readout"`` and has no live path to ``"prediction"``.
+    The other tower still ends at ``"prediction"``. Default
+    ``disconnected_tower="b"`` keeps the existing split.
     """
     _validate_tower_size(n_features_per_tower)
     if depth < 1:
         raise ValueError(f"'depth' must be at least 1, got {depth}.")
+    if disconnected_tower not in {"a", "b"}:
+        raise ValueError(
+            "'disconnected_tower' must be 'a' or 'b', got "
+            f"{disconnected_tower!r}."
+        )
     width = n_features_per_tower if hidden_width is None else hidden_width
     if width < 1:
         raise ValueError(f"'hidden_width' must be at least 1, got {width}.")
-    tower_b_output = PREDICTION_OUTPUT if shared_output else DECOY_OUTPUT
+    a_output, b_output, outputs = _tower_outputs(
+        shared_output=shared_output,
+        disconnected_tower=disconnected_tower,
+    )
     dense = hidden_width is not None
     a_features, a_nodes, a_edges = _feedforward_tower(
         prefix="a",
         n_features=n_features_per_tower,
         hidden_width=width,
         depth=depth,
-        output=PREDICTION_OUTPUT,
+        output=a_output,
         dense=dense,
     )
     b_features, b_nodes, b_edges = _feedforward_tower(
@@ -95,13 +106,8 @@ def two_tower_feedforward(
         n_features=n_features_per_tower,
         hidden_width=width,
         depth=depth,
-        output=tower_b_output,
+        output=b_output,
         dense=dense,
-    )
-    outputs = (
-        (PREDICTION_OUTPUT,)
-        if shared_output
-        else (PREDICTION_OUTPUT, DECOY_OUTPUT)
     )
     return TwoTowerGraph(
         edgelist=_make_edgelist([*a_edges, *b_edges]),
@@ -321,6 +327,33 @@ def _inter_level_edges(
         edges.append((source, targets[index]))
         edges.append((source, targets[(index + 1) % n_targets]))
     return edges
+
+
+def _tower_outputs(
+    *,
+    shared_output: bool,
+    disconnected_tower: str,
+) -> tuple[str, str, tuple[str, ...]]:
+    """
+    Return tower-A output, tower-B output, and the output-name tuple.
+    """
+    if shared_output:
+        return (
+            PREDICTION_OUTPUT,
+            PREDICTION_OUTPUT,
+            (PREDICTION_OUTPUT,),
+        )
+    if disconnected_tower == "a":
+        return (
+            DECOY_OUTPUT,
+            PREDICTION_OUTPUT,
+            (PREDICTION_OUTPUT, DECOY_OUTPUT),
+        )
+    return (
+        PREDICTION_OUTPUT,
+        DECOY_OUTPUT,
+        (PREDICTION_OUTPUT, DECOY_OUTPUT),
+    )
 
 
 def _validate_tower_size(n_features_per_tower: int) -> None:

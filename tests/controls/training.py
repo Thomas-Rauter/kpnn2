@@ -237,6 +237,25 @@ def matched_linear_towers(
     )
 
 
+def broken_matched_towers(
+    *,
+    hidden_width: int | None = None,
+) -> TwoTowerGraph:
+    """
+    Matched towers whose A features cannot reach ``prediction``.
+
+    Names match ``matched_linear_towers``. Tower-A last hops go to
+    ``decoy_readout``; tower B still terminates at ``prediction``.
+    """
+    return two_tower_feedforward(
+        n_features_per_tower=N_FEATURES_PER_TOWER,
+        depth=FEEDFORWARD_DEPTH,
+        hidden_width=hidden_width,
+        shared_output=False,
+        disconnected_tower="a",
+    )
+
+
 def linear_coefficients(
     n_causal: int,
 ) -> tuple[float, ...]:
@@ -376,6 +395,7 @@ def train_matched_linear_towers(
     bias_init: float | None = None,
     hidden_width: int | None = None,
     important_features: Sequence[str] | None = None,
+    graph: TwoTowerGraph | None = None,
 ) -> TrainedRun:
     """
     Train ``LayeredNet`` on matched two-tower data; return held-out.
@@ -389,10 +409,15 @@ def train_matched_linear_towers(
     ``bias`` / ``relu`` / ``n_epochs`` / ``bias_init`` /
     ``hidden_width`` to train a different ``LayeredNet``. Pass
     ``important_features`` when the DGF ignores some tower-A names.
+    Pass ``graph`` to train a different TwoTowerGraph (for example
+    a rewired prior). ``hidden_width`` is used only when ``graph``
+    is omitted. Loss and val ROC-AUC use the last-layer column
+    named ``prediction``.
     """
-    graph = matched_linear_towers(
-        hidden_width=hidden_width,
-    )
+    if graph is None:
+        graph = matched_linear_towers(
+            hidden_width=hidden_width,
+        )
     assert_decoys_structurally_live(graph)
     if simulate is None:
         simulate = linear_tower_simulator(graph)
@@ -437,12 +462,14 @@ def train_matched_linear_towers(
     )
     _fit_binary_classifier(
         model,
+        spec=spec,
         x_train=x_train,
         y_train=y_train_tensor,
         n_epochs=n_epochs,
     )
     val_roc_auc = _evaluate_roc_auc(
         model,
+        spec=spec,
         x_eval=x_eval,
         y_eval=y_eval_tensor,
     )
@@ -616,6 +643,7 @@ def trained_separations(
 def _fit_binary_classifier(
     model: nn.Module,
     *,
+    spec: GraphSpec,
     x_train: torch.Tensor,
     y_train: torch.Tensor,
     n_epochs: int,
@@ -641,7 +669,10 @@ def _fit_binary_classifier(
     for _epoch in range(n_epochs):
         for x_batch, y_batch in loader:
             optimizer.zero_grad(set_to_none=True)
-            logits = model(x_batch)
+            logits = _prediction_column(
+                model(x_batch),
+                spec,
+            )
             loss = loss_fn(
                 logits,
                 y_batch,
@@ -653,6 +684,7 @@ def _fit_binary_classifier(
 def _evaluate_roc_auc(
     model: nn.Module,
     *,
+    spec: GraphSpec,
     x_eval: torch.Tensor,
     y_eval: torch.Tensor,
 ) -> float:
@@ -661,13 +693,35 @@ def _evaluate_roc_auc(
     """
     model.eval()
     with torch.no_grad():
-        probabilities = torch.sigmoid(model(x_eval))
+        logits = _prediction_column(
+            model(x_eval),
+            spec,
+        )
+        probabilities = torch.sigmoid(logits)
     return float(
         roc_auc_score(
             y_eval.detach().cpu().numpy().reshape(-1),
             probabilities.detach().cpu().numpy().reshape(-1),
         )
     )
+
+
+def _prediction_column(
+    output: torch.Tensor,
+    spec: GraphSpec,
+) -> torch.Tensor:
+    """
+    Last-layer logit named ``prediction``, shape ``(n, 1)``.
+    """
+    last_names = spec.layer_nodes[-1]
+    try:
+        index = last_names.index(PREDICTION_OUTPUT)
+    except ValueError as exc:
+        raise ValueError(
+            f"{PREDICTION_OUTPUT!r} is not in the last layer "
+            f"{last_names}."
+        ) from exc
+    return output[:, index : index + 1]
 
 
 def _set_seed(seed: int) -> None:
