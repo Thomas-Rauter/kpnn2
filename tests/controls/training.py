@@ -1,8 +1,23 @@
 """
 Train matched two-tower graphs and score them with autograd.
 
-``LayeredNet`` uses ``bias=False`` and ``relu=False`` so a linear
-label is representable. Weights are learned, not pinned.
+Scenarios share the matched DAG and linear tower-A labels.
+They differ in ``LayeredNet`` relu/bias (and in ReLU-only init
+and scoring policy).
+
+``linear_feedforward`` uses ``bias=False`` and ``relu=False`` so a
+linear label is representable. ``relu_feedforward`` uses
+``relu=True`` and ``bias=True``: a user-typical KPNN has ReLU in
+``forward()``, and bias is on so this scenario is not a silent
+copy of the linear control. After construction, ReLU biases are
+filled with ``RELU_BIAS_INIT`` (measured: the default uniform
+init left seeds 42 and 44 at chance even at 320 epochs). Weights
+are learned, not pinned. Epochs stay at ``N_EPOCHS`` (80);
+raising them did not fix those collapsed inits.
+
+``train_matched_linear_towers`` defaults match the linear scenario
+(``bias=False``, ``relu=False``, no bias fill, linear simulator)
+for Tier 3 negative controls.
 
 Decoy (tower B) nodes stay fully wired to ``prediction``. The
 reachability guard must pass before any rank claim: otherwise the
@@ -36,7 +51,11 @@ from .graphs import (
     two_tower_feedforward,
 )
 from .ground_truth import assert_all_structurally_live
-from .metrics import Separation, compute_separation
+from .metrics import (
+    DEFAULT_MIN_PER_EXAMPLE,
+    Separation,
+    compute_separation,
+)
 from .scoring import (
     align_and_enable_grad,
     attributed_output_sum,
@@ -61,13 +80,36 @@ WEIGHT_DECAY = 1e-4
 N_FEATURES_PER_TOWER = 2
 FEEDFORWARD_DEPTH = 2
 
-# Linear labels: no bias, no ReLU. Documented choice for this helper.
-TRAIN_BIAS = False
-TRAIN_RELU = False
+# Linear helper / linear scenario defaults. Do not reuse these for
+# relu_feedforward; that scenario sets relu and bias explicitly.
+DEFAULT_TRAIN_BIAS = False
+DEFAULT_TRAIN_RELU = False
+# Small positive bias keeps ReLU units active at step 0.
+RELU_BIAS_INIT = 0.1
+# ReLU gates some examples; 0.6 is still a majority of rows.
+RELU_MIN_PER_EXAMPLE_CONSISTENCY = 0.6
 
-TRAINED_SCENARIO_IDS: tuple[str, ...] = ("linear_feedforward",)
 SEEDS: tuple[int, ...] = (42, 43, 44, 45, 46)
 MIN_SEEDS_PASSING = 4
+
+
+@dataclass(frozen=True)
+class TrainedScenario:
+    """
+    One trained-tier configuration: activations, bias, scoring.
+
+    Graph and labels are the matched two-tower linear DGF for every
+    current id. ``n_epochs`` can differ when a scenario needs more
+    fitting; ReLU currently uses the same 80 as the linear control.
+    """
+
+    id: str
+    bias: bool
+    relu: bool
+    n_epochs: int = N_EPOCHS
+    bias_init: float | None = None
+    include_hidden: bool = True
+    min_per_example_consistency: float = DEFAULT_MIN_PER_EXAMPLE
 
 
 @dataclass(frozen=True)
@@ -79,6 +121,49 @@ class TrainedRun:
     x_eval_df: pd.DataFrame
     val_roc_auc: float
     graph: TwoTowerGraph
+
+
+TRAINED_SCENARIOS: tuple[TrainedScenario, ...] = (
+    TrainedScenario(
+        id="linear_feedforward",
+        bias=DEFAULT_TRAIN_BIAS,
+        relu=DEFAULT_TRAIN_RELU,
+        n_epochs=N_EPOCHS,
+    ),
+    TrainedScenario(
+        id="relu_feedforward",
+        bias=True,
+        relu=True,
+        n_epochs=N_EPOCHS,
+        bias_init=RELU_BIAS_INIT,
+        include_hidden=False,
+        min_per_example_consistency=RELU_MIN_PER_EXAMPLE_CONSISTENCY,
+    ),
+)
+TRAINED_SCENARIO_IDS: tuple[str, ...] = tuple(
+    scenario.id for scenario in TRAINED_SCENARIOS
+)
+_TRAINED_SCENARIOS_BY_ID: dict[str, TrainedScenario] = {
+    scenario.id: scenario for scenario in TRAINED_SCENARIOS
+}
+
+
+def trained_scenario(scenario_id: str) -> TrainedScenario:
+    """
+    Look up a registered trained-tier scenario.
+
+    Raises
+    ------
+    KeyError
+        If ``scenario_id`` is not in ``TRAINED_SCENARIO_IDS``.
+    """
+    try:
+        return _TRAINED_SCENARIOS_BY_ID[scenario_id]
+    except KeyError as exc:
+        known = ", ".join(TRAINED_SCENARIO_IDS)
+        raise KeyError(
+            f"Unknown trained scenario {scenario_id!r}. Known ids: {known}."
+        ) from exc
 
 
 def matched_linear_towers() -> TwoTowerGraph:
@@ -157,12 +242,20 @@ def train_matched_linear_towers(
     n_eval: int = N_EVAL,
     n_epochs: int = N_EPOCHS,
     simulate: Simulator | None = None,
+    bias: bool = DEFAULT_TRAIN_BIAS,
+    relu: bool = DEFAULT_TRAIN_RELU,
+    bias_init: float | None = None,
 ) -> TrainedRun:
     """
     Train ``LayeredNet`` on linear tower-A labels; return held-out data.
 
+    Defaults (``bias=False``, ``relu=False``, no bias fill) match
+    ``linear_feedforward`` and the Tier 3 negative controls.
+
     Pass ``simulate`` to override the default linear simulator (used
-    for shuffled-label negative controls).
+    for shuffled-label negative controls). Pass ``bias`` / ``relu`` /
+    ``n_epochs`` / ``bias_init`` to train a different ``LayeredNet``
+    on the same graph and labels.
     """
     graph = matched_linear_towers()
     assert_decoys_structurally_live(graph)
@@ -181,9 +274,14 @@ def train_matched_linear_towers(
     spec = parse_edgelist(graph.edgelist)
     model = LayeredNet(
         spec,
-        bias=TRAIN_BIAS,
-        relu=TRAIN_RELU,
+        bias=bias,
+        relu=relu,
     )
+    if bias_init is not None:
+        _fill_biases(
+            model,
+            bias_init,
+        )
     x_train = align_inputs(
         x_train_df,
         spec,
@@ -217,6 +315,26 @@ def train_matched_linear_towers(
         x_eval_df=x_eval_df,
         val_roc_auc=val_roc_auc,
         graph=graph,
+    )
+
+
+def train_trained_scenario(
+    scenario_id: str,
+    *,
+    seed: int,
+    simulate: Simulator | None = None,
+) -> TrainedRun:
+    """
+    Train the named registered scenario on matched towers.
+    """
+    scenario = trained_scenario(scenario_id)
+    return train_matched_linear_towers(
+        seed=seed,
+        n_epochs=scenario.n_epochs,
+        simulate=simulate,
+        bias=scenario.bias,
+        relu=scenario.relu,
+        bias_init=scenario.bias_init,
     )
 
 
@@ -407,3 +525,20 @@ def _set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.set_num_threads(1)
+
+
+def _fill_biases(
+    model: LayeredNet,
+    value: float,
+) -> None:
+    """
+    Set every ``MaskedLinear`` bias to ``value``.
+
+    Used by ``relu_feedforward`` so hidden units start in the
+    active ReLU regime. No-op on layers constructed without bias.
+    """
+    with torch.no_grad():
+        for layer in model.layers:
+            if layer.bias is None:
+                continue
+            layer.bias.fill_(value)

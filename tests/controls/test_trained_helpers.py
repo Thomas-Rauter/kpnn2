@@ -1,30 +1,53 @@
 """
 Fast tests for trained-tier helpers: no model fitting.
+
+Both registered scenarios share the matched two-tower graph and
+linear tower-A labels. They differ only in LayeredNet relu/bias.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from tests.controls.simulate import linear_logit_labels
 from tests.controls.training import (
+    RELU_BIAS_INIT,
+    TRAINED_SCENARIO_IDS,
     assert_decoys_structurally_live,
     linear_coefficients,
     linear_tower_simulator,
     matched_linear_towers,
+    trained_scenario,
 )
 
 SEED = 42
 N_SAMPLES = 64
 
 
-def test_matched_tower_decoys_are_structurally_live() -> None:
+@pytest.mark.parametrize(
+    "scenario_id",
+    TRAINED_SCENARIO_IDS,
+    ids=list(TRAINED_SCENARIO_IDS),
+)
+def test_matched_tower_decoys_are_structurally_live(
+    scenario_id: str,
+) -> None:
+    trained_scenario(scenario_id)
     graph = matched_linear_towers()
     assert_decoys_structurally_live(graph)
     assert graph.outputs == ("prediction",)
 
 
-def test_labels_follow_tower_a_not_tower_b() -> None:
+@pytest.mark.parametrize(
+    "scenario_id",
+    TRAINED_SCENARIO_IDS,
+    ids=list(TRAINED_SCENARIO_IDS),
+)
+def test_labels_follow_tower_a_not_tower_b(
+    scenario_id: str,
+) -> None:
+    trained_scenario(scenario_id)
     graph = matched_linear_towers()
     simulate = linear_tower_simulator(graph)
     rng = np.random.default_rng(SEED)
@@ -65,3 +88,19 @@ def test_labels_follow_tower_a_not_tower_b() -> None:
         labels,
         labels_flip_b,
     )
+
+
+def test_linear_feedforward_is_linear_without_bias() -> None:
+    scenario = trained_scenario("linear_feedforward")
+    assert scenario.bias is False
+    assert scenario.relu is False
+    assert scenario.bias_init is None
+    assert scenario.include_hidden is True
+
+
+def test_relu_feedforward_uses_relu_with_bias() -> None:
+    scenario = trained_scenario("relu_feedforward")
+    assert scenario.bias is True
+    assert scenario.relu is True
+    assert scenario.bias_init == RELU_BIAS_INIT
+    assert scenario.include_hidden is False
