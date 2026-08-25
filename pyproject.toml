@@ -46,6 +46,7 @@ dev = [
     "pandas-stubs>=2.3.3,<2.4",
     "build",
     "scikit-learn",
+    "captum",
 ]
 docs = [
     "mkdocs",

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 This project follows semantic versioning.
 
 
+## [Unreleased]
+
+### Changed
+
+- The `dev` extra now includes `captum` so tests can run the
+  documented Captum mapping workflow. Captum remains optional
+  for library users and is not a core dependency.
+
+
 ## [0.1.0] - 2026-08-25
 
 Initial release of `kpnn2`.
