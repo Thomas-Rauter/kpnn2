@@ -1,0 +1,5 @@
+Make sure Changelog is up to date, and also write the date of today in there.
+
+Make sure the RELEASE_NOTES.md are up to date, also with the date of today.
+
+Check the pyproject.toml file in general

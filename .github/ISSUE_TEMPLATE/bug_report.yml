@@ -1,0 +1,120 @@
+name: Bug report
+description: Report something that is broken or behaves unexpectedly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug in `kpnn2`.
+
+        Please include a minimal reproducible example when possible.
+        For graph-related issues, a small edgelist is usually the
+        most useful input.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+      placeholder: "I expected ..., but ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the package is this related to?
+      options:
+        - parse_edgelist / GraphSpec
+        - MaskedLinear
+        - align_inputs
+        - map_node_attributions
+        - documentation
+        - testing / development
+        - packaging / installation
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: edgelist
+    attributes:
+      label: Minimal edge list
+      description: Paste the smallest edge list that reproduces the issue, if relevant.
+      render: csv
+      placeholder: |
+        source,target
+        input_a,hidden_1
+        hidden_1,output
+    validations:
+      required: false
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Minimal code example
+      description: Paste the smallest Python example that reproduces the issue.
+      render: python
+      placeholder: |
+        import pandas as pd
+        from kpnn2 import parse_edgelist
+
+        edgelist = pd.DataFrame({
+            "source": ["x1", "h1"],
+            "target": ["h1", "y"],
+        })
+
+        spec = parse_edgelist(edgelist)
+    validations:
+      required: false
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Error message or traceback
+      description: Paste the full error message or traceback, if there is one.
+      render: python-traceback
+    validations:
+      required: false
+
+  - type: input
+    id: kpnn2-version
+    attributes:
+      label: kpnn2 version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.11.8"
+    validations:
+      required: true
+
+  - type: input
+    id: pytorch-version
+    attributes:
+      label: PyTorch version
+      placeholder: "2.5.1"
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15, Ubuntu 24.04, Windows 11, ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add any other context that may help diagnose the issue.
+    validations:
+      required: false

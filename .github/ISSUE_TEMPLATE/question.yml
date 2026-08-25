@@ -1,0 +1,77 @@
+name: Question
+description: Ask a usage question about kpnn2.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your question about `kpnn2`.
+
+        For usage questions, please include enough context to
+        understand your edgelist, `GraphSpec`, and expected
+        `forward()` workflow.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: "How do I ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the package is your question about?
+      options:
+        - installation
+        - parse_edgelist / GraphSpec
+        - MaskedLinear
+        - align_inputs
+        - map_node_attributions
+        - examples / tutorials
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Describe what you are trying to do.
+      placeholder: "I have an edge list representing ..., and I want to ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: edgelist
+    attributes:
+      label: Example edge list
+      description: Paste a small example edge list, if relevant.
+      render: csv
+      placeholder: |
+        source,target
+        input_a,hidden_1
+        hidden_1,output
+    validations:
+      required: false
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code example
+      description: Paste relevant code, if any.
+      render: python
+    validations:
+      required: false
+
+  - type: input
+    id: kpnn2-version
+    attributes:
+      label: kpnn2 version
+      placeholder: "0.1.0"
+    validations:
+      required: false

@@ -1,0 +1,6 @@
+ruff format
+ruff check . --fix
+ruff format --check .
+mypy src
+# pytest -m "not slow"
+pytest

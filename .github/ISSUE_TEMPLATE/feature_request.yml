@@ -1,0 +1,80 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement to `kpnn2`.
+
+        Feature requests are most useful when they describe the
+        workflow, graph structure, or modeling use case that is
+        currently difficult to express.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this feature solve?
+      description: Describe the limitation or workflow that motivated this request.
+      placeholder: "I want to use kpnn2 for ..., but currently ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or API you would like.
+      placeholder: "It would be useful if ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the package is this related to?
+      options:
+        - parse_edgelist / GraphSpec
+        - MaskedLinear
+        - align_inputs
+        - map_node_attributions
+        - documentation
+        - testing / development
+        - packaging / installation
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example use case
+      description: Provide a concrete example, if possible.
+      placeholder: |
+        For example, I have an edge list like this:
+
+        source,target
+        gene_a,pathway_1
+        pathway_1,phenotype
+
+        I would like to ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workaround or alternative API you considered.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be interested in contributing this feature or discussing an implementation.
+          required: false

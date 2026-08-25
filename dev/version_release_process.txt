@@ -1,0 +1,15 @@
+# 1. Run the Test-PyPI dry run under /dev (after exporting the twine username and password, then only proceed when the smoke test passes).
+./dev/dry_run_testpypi_release.sh
+
+# 2. Check the dry run release on Test-PyPI. Only proceed if everything looks fine.
+
+# 3. Create annotated tag
+git tag -a v0.1.0 <sha> -m "Release v0.1.0"
+
+# 4. Push the tag to GitHub
+git push origin v0.1.0
+
+# 5. Wait for CI to finish and give you green light. Then allow the release to PyPI
+
+# 6. Create GitHub release
+gh release create v0.1.0 -t "kpnn2 v0.1.0" -F RELEASE_NOTES.md

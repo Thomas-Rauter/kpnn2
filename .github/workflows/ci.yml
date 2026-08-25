@@ -1,0 +1,203 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-check:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install pytest-cov
+
+      - name: Verify pandas type stubs for mypy
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m pip show pandas-stubs
+
+      - name: Run Ruff lint
+        run: |
+          ruff check .
+
+      - name: Run Ruff format check
+        run: |
+          ruff format --check .
+
+      - name: Run mypy
+        if: matrix.python-version == '3.11'
+        run: |
+          mypy src
+
+      - name: Run pytest with coverage
+        run: |
+          pytest \
+            -m "not slow" \
+            --cov=kpnn2 \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-report=html
+
+      - name: Run slow tests
+        if: matrix.python-version == '3.11'
+        run: |
+          pytest -m slow
+
+      - name: Upload HTML coverage artifact
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov
+          path: htmlcov/
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Thomas-Rauter/kpnn2
+
+      - name: Build package
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m build
+
+      - name: Check package metadata
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m pip install twine
+          python -m twine check dist/*
+
+      - name: Smoke test installed wheel
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m venv /tmp/kpnn2-wheel-test
+          /tmp/kpnn2-wheel-test/bin/python -m pip install --upgrade pip
+          /tmp/kpnn2-wheel-test/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/kpnn2-wheel-test/bin/python - <<'PY'
+          import pandas as pd
+          import torch
+
+          from kpnn2 import (
+              GraphSpec,
+              MaskedLinear,
+              align_inputs,
+              map_node_attributions,
+              parse_edgelist,
+          )
+
+          edgelist = pd.DataFrame(
+              {
+                  "source": ["feature_a", "feature_b", "hidden"],
+                  "target": ["hidden", "hidden", "prediction"],
+              }
+          )
+          spec = parse_edgelist(edgelist)
+          assert isinstance(spec, GraphSpec)
+          assert spec.input_nodes == ("feature_a", "feature_b")
+
+          data = pd.DataFrame(
+              {
+                  "feature_b": [1.0, 2.0],
+                  "feature_a": [3.0, 4.0],
+              }
+          )
+          x = align_inputs(data, spec)
+          assert x.shape == (2, 2)
+          assert x.dtype == torch.float32
+
+          layer = MaskedLinear(spec.masks[0])
+          h = layer(x)
+          assert h.shape == (2, 1)
+
+          da = map_node_attributions(
+              attributions=h,
+              spec=spec,
+              layer=1,
+          )
+          assert list(da["node"].values) == list(
+              spec.layer_nodes[1]
+          )
+          assert int(da.sizes["observation"]) == 2
+          assert int(da.coords["layer"]) == 1
+
+          print("installed wheel smoke test passed")
+          PY
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system Graphviz
+        run: |
+          # GitHub Ubuntu runners prefer azure.archive.ubuntu.com, which can stall apt for hours.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Install package and docs dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[docs]
+
+      - name: Execute docs notebooks
+        run: |
+          python -m jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --inplace \
+            --ExecutePreprocessor.kernel_name=python3 \
+            docs/getting-started.ipynb
+
+          python -m jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --inplace \
+            --ExecutePreprocessor.kernel_name=python3 \
+            docs/recurrent-example.ipynb
+
+          python -m jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --inplace \
+            --ExecutePreprocessor.kernel_name=python3 \
+            docs/map-node-attributions.ipynb
+
+          python -m jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --inplace \
+            --ExecutePreprocessor.kernel_name=python3 \
+            docs/skip-edges.ipynb
+
+      - name: Build documentation
+        run: |
+          mkdocs build --strict

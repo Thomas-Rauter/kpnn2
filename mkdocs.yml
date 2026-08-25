@@ -1,0 +1,81 @@
+site_name: kpnn2
+site_description: >
+  Sparse named neural nets from an edgelist, as native PyTorch
+  primitives.
+site_url: https://thomas-rauter.github.io/kpnn2/
+repo_url: https://github.com/Thomas-Rauter/kpnn2
+repo_name: Thomas-Rauter/kpnn2
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Getting started: getting-started.ipynb
+  - Additional examples:
+      - Recurrent example: recurrent-example.ipynb
+      - Mapping attributions: map-node-attributions.ipynb
+  - Reference:
+      - Skip edges: skip-edges.ipynb
+      - API: api.md
+  - Project:
+      - Changelog: changelog.md
+      - Citing: citing.md
+      - Feedback: feedback.md
+
+plugins:
+  - search
+  - include-markdown
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            show_root_heading: false
+            show_root_toc_entry: false
+            show_root_full_path: false
+            show_symbol_type_heading: false
+            show_symbol_type_toc: false
+            show_signature: true
+            show_signature_annotations: true
+            separate_signature: true
+            line_length: 60
+            show_source: false
+            merge_init_into_class: true
+            docstring_section_style: table
+            filters:
+              - "!^_"
+  - mkdocs-jupyter:
+      include:
+        - "*.ipynb"
+      ignore:
+        - "*.md"
+      include_source: true
+      execute: false
+      ignore_h1_titles: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite

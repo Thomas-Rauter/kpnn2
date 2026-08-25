@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use kpnn2 in your research, please cite it using the metadata from this file."
+title: "kpnn2: Sparse named neural nets from an edgelist, as native PyTorch primitives"
+type: software
+authors:
+  - family-names: "Rauter"
+    given-names: "Thomas"
+    orcid: "https://orcid.org/0009-0004-5578-3628"
+repository-code: "https://github.com/Thomas-Rauter/kpnn2"
+url: "https://thomas-rauter.github.io/kpnn2/"
+abstract: "kpnn2 turns a source/target edgelist into a GraphSpec (masks, layer names, skip list) so the user writes ordinary PyTorch with MaskedLinear. It is not a graph compiler."
+keywords:
+  - pytorch
+  - sparse-neural-networks
+  - graph-defined-neural-networks
+  - knowledge-primed-neural-networks
+license: "MIT"
+version: "0.1.0"
+date-released: 2026-08-25
