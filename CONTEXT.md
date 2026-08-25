@@ -31,8 +31,9 @@ edgelist, using native nn.Module layers.
 3. **Build:** The user writes a PyTorch `nn.Module` using
    `MaskedLinear(spec.masks[i])` for adjacent hops and their own
    activations, norms, loops, and heads.
-4. **Align:** `align_inputs()` maps a named DataFrame (or a pre-ordered
-   tensor) onto `spec.input_nodes` as a `float32` tensor.
+4. **Align:** `align_inputs()` maps a named DataFrame onto
+   `spec.input_nodes` as a `float32` tensor. Pre-ordered tensors
+   go straight to the model.
 5. **Train:** The user owns loss, optimizer, and the training loop.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
    at one GraphSpec layer as an `xarray.DataArray` (`node` names
@@ -95,7 +96,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `GraphSpec` | Frozen structural dataclass (masks, layers, skips) |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
-| `align_inputs` | Named data or tensor → `float32` input tensor |
+| `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
 | `Kpnn2Error` | User-facing error type |
 | `__version__` | Package version string |
@@ -312,10 +313,13 @@ Returns `torch.float32` tensor of shape
 
 **`torch.Tensor`:**
 
-- Must be 2-dimensional.
-- `shape[1] == len(spec.input_nodes)`.
-- Assumed to already follow `spec.input_nodes` order; **no reorder**.
-- Wrong ndim or width: `Kpnn2Error`.
+- Illegal. Raise `Kpnn2Error`. The message must say that `data`
+  is a tensor (or that a tensor is not accepted) and that a
+  pandas DataFrame is required.
+- Do not check width / ndim as a substitute for alignment.
+- Do not return a cast tensor.
+- Pre-ordered tensors go **straight to the model**. Users who
+  need alignment pass a DataFrame.
 
 **Not supported in v1:** AnnData, numpy arrays, dicts of columns.
 

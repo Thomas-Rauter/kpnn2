@@ -1,5 +1,5 @@
 """
-Align named or tensor inputs to ``GraphSpec.input_nodes``.
+Align named DataFrame columns to ``GraphSpec.input_nodes``.
 """
 
 import pandas as pd
@@ -12,10 +12,16 @@ _DF_DUPLICATE_COLUMNS_MSG = (
     "Input DataFrame must not contain duplicate column names "
     "(including after converting labels to strings)."
 )
+_TENSOR_NOT_ACCEPTED_MSG = (
+    "'data' is a tensor; a pandas DataFrame is required. "
+    "Pass a DataFrame so columns can be matched to "
+    "spec.input_nodes. Pre-ordered tensors go straight to "
+    "the model."
+)
 
 
 def align_inputs(
-    data: pd.DataFrame | torch.Tensor,
+    data: pd.DataFrame,
     spec: GraphSpec,
 ) -> torch.Tensor:
     """
@@ -28,17 +34,16 @@ def align_inputs(
     ``spec.input_nodes``. Missing, duplicate, or non-numeric required
     columns raise an error.
 
-    **Tensor.** Must be 2-D with
-    ``shape[1] == len(spec.input_nodes)``. Columns are assumed to
-    already follow ``spec.input_nodes``; they are not reordered.
+    **Tensor.** Not accepted. Raise ``Kpnn2Error``. Pre-ordered
+    tensors go straight to the model. Users who need alignment pass
+    a DataFrame.
 
     AnnData is not supported.
 
     Parameters
     ----------
-    data : DataFrame | Tensor
-        Feature table with named columns, or a pre-ordered 2-D
-        tensor.
+    data : DataFrame
+        Feature table with named columns.
     spec : GraphSpec
         Graph structure whose ``input_nodes`` define column order.
 
@@ -51,17 +56,17 @@ def align_inputs(
     Raises
     ------
     Kpnn2Error
-        If ``spec`` is not a ``GraphSpec``; ``data`` is neither a
-        DataFrame nor a tensor; required DataFrame columns are
+        If ``spec`` is not a ``GraphSpec``; ``data`` is a tensor;
+        ``data`` is not a DataFrame; required DataFrame columns are
         missing or duplicated (including after ``str`` conversion);
-        required columns are non-numeric; or a tensor has the wrong
-        number of dimensions or the wrong width.
+        or required columns are non-numeric.
 
     Notes
     -----
     PyTorch never sees feature names. Column ``i`` of the returned
-    tensor is ``spec.input_nodes[i]``. Always build train, validation,
-    and test tensors with this function and the same ``spec``. Passing
+    tensor is ``spec.input_nodes[i]``. Use this function when the
+    table has named columns. A tensor whose columns already follow
+    ``spec.input_nodes`` goes straight to the model. Passing
     ``DataFrame.to_numpy()`` (or any hand-stacked array) into the
     model can silently wire the wrong features if the column order
     differs.
@@ -96,30 +101,25 @@ def align_inputs(
     >>> x.tolist()
     [[0.5], [1.5]]
 
-    A 2-D tensor is checked and cast, not reordered:
+    A tensor is not accepted; pass a DataFrame instead:
 
     >>> t = torch.tensor([[0.5], [1.5]])
-    >>> y = k2.align_inputs(t, spec)
-    >>> y.dtype
-    torch.float32
-    >>> y.tolist()
-    [[0.5], [1.5]]
+    >>> k2.align_inputs(t, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    Kpnn2Error: 'data' is a tensor; a pandas DataFrame is required. ...
     """
     if not isinstance(spec, GraphSpec):
         raise Kpnn2Error("'spec' must be a GraphSpec.")
+    if isinstance(data, torch.Tensor):
+        raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
     if isinstance(data, pd.DataFrame):
         return _align_dataframe(
             data,
             spec,
         )
-    if isinstance(data, torch.Tensor):
-        return _align_tensor(
-            data,
-            spec,
-        )
     raise Kpnn2Error(
-        "Unsupported input data type. Expected a pandas DataFrame "
-        "or a torch.Tensor."
+        "Unsupported input data type. Expected a pandas DataFrame."
     )
 
 
@@ -164,21 +164,3 @@ def _align_dataframe(
         ordered.to_numpy(copy=True),
         dtype=torch.float32,
     )
-
-
-def _align_tensor(
-    data: torch.Tensor,
-    spec: GraphSpec,
-) -> torch.Tensor:
-    """
-    Validate tensor shape and cast to float32 without reordering.
-    """
-    if data.ndim != 2:
-        raise Kpnn2Error("Input tensor must be 2-dimensional.")
-    n_features = len(spec.input_nodes)
-    if data.shape[1] != n_features:
-        raise Kpnn2Error(
-            "Input tensor has the wrong number of features. "
-            f"Expected {n_features}, got {data.shape[1]}."
-        )
-    return data.to(dtype=torch.float32)

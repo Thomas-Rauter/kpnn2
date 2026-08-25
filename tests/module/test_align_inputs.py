@@ -91,42 +91,44 @@ def test_align_inputs_rejects_missing_dataframe_column():
         )
 
 
-def test_align_inputs_accepts_matching_2d_tensor():
+def _tensor_reject_cases():
+    return [
+        pytest.param(
+            torch.tensor(
+                [
+                    [1.0, 2.0],
+                    [3.0, 4.0],
+                ],
+                dtype=torch.float32,
+            ),
+            id="matching_2d",
+        ),
+        pytest.param(
+            torch.tensor(
+                [
+                    [1.0, 2.0, 3.0],
+                    [4.0, 5.0, 6.0],
+                ],
+                dtype=torch.float32,
+            ),
+            id="wrong_width",
+        ),
+        pytest.param(
+            torch.tensor([1.0, 2.0]),
+            id="not_2d",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "data",
+    _tensor_reject_cases(),
+)
+def test_align_inputs_rejects_tensor(data):
     spec = _tiny_spec()
-    data = torch.tensor(
-        [
-            [1.0, 2.0],
-            [3.0, 4.0],
-        ],
-        dtype=torch.float32,
-    )
-
-    aligned = align_inputs(
-        data,
-        spec,
-    )
-
-    assert aligned.shape == (2, 2)
-    assert aligned.dtype == torch.float32
-    assert torch.equal(
-        aligned,
-        data,
-    )
-
-
-def test_align_inputs_rejects_wrong_tensor_width():
-    spec = _tiny_spec()
-    data = torch.tensor(
-        [
-            [1.0, 2.0, 3.0],
-            [4.0, 5.0, 6.0],
-        ],
-        dtype=torch.float32,
-    )
-
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of features",
+        match=r"tensor.*pandas DataFrame",
     ):
         align_inputs(
             data,
@@ -190,12 +192,6 @@ def _invalid_align_cases():
             spec,
             "non-numeric",
             id="non_numeric",
-        ),
-        pytest.param(
-            torch.tensor([1.0, 2.0]),
-            spec,
-            "2-dimensional",
-            id="not_2d_tensor",
         ),
     ]
 

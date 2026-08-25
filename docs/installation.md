@@ -39,7 +39,8 @@ xarray dimensions.
 ## AnnData
 
 AnnData input is not supported in v1. `align_inputs()` accepts a
-pandas DataFrame or a pre-ordered tensor.
+pandas DataFrame. Tensors are not accepted; pass a pre-ordered
+tensor straight to the model.
 
 ## Development installation
 

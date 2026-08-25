@@ -9,6 +9,9 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `align_inputs` rejects `torch.Tensor`. Pass a pandas DataFrame
+  for name alignment, or a pre-ordered tensor straight to the
+  model.
 - The `dev` extra now includes `captum` so tests can run the
   documented Captum mapping workflow. Captum remains optional
   for library users and is not a core dependency.
