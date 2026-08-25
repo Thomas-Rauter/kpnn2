@@ -1,3 +1,5 @@
+import math
+
 import pytest
 import torch
 
@@ -394,6 +396,67 @@ def test_masked_linear_zero_degree_row_stays_zero():
         y[:, 1],
         torch.zeros(3),
     )
+
+
+def test_masked_linear_init_respects_degree_bound():
+    torch.manual_seed(42)
+    in_features = 32
+    mask = torch.zeros(
+        1,
+        in_features,
+    )
+    mask[0, 0] = 1.0
+    layer = MaskedLinear(mask)
+    fan_in = 1
+    bound = 1.0 / math.sqrt(fan_in)
+    eps = 1e-6
+    assert torch.all(layer.raw_weight[0].abs() <= bound + eps)
+    assert abs(layer.bias[0].item()) <= bound + eps
+
+
+def test_masked_linear_init_not_full_in_features():
+    torch.manual_seed(42)
+    in_features = 32
+    mask = torch.zeros(
+        1,
+        in_features,
+    )
+    mask[0, 0] = 1.0
+    layer = MaskedLinear(mask)
+    degree_bound = 1.0 / math.sqrt(1)
+    full_width_bound = 1.0 / math.sqrt(in_features)
+    eps = 1e-6
+    exceeded_full_width = False
+    n_resets = 32
+    for seed in range(42, 42 + n_resets):
+        torch.manual_seed(seed)
+        layer.reset_parameters()
+        row = layer.raw_weight[0]
+        assert torch.all(row.abs() <= degree_bound + eps)
+        assert abs(layer.bias[0].item()) <= degree_bound + eps
+        if torch.any(row.abs() > full_width_bound):
+            exceeded_full_width = True
+        if abs(layer.bias[0].item()) > full_width_bound:
+            exceeded_full_width = True
+    assert exceeded_full_width
+
+
+def test_masked_linear_init_dense_row_tighter_bound():
+    torch.manual_seed(42)
+    in_features = 32
+    mask = torch.zeros(
+        2,
+        in_features,
+    )
+    mask[0, 0] = 1.0
+    mask[1] = 1.0
+    layer = MaskedLinear(mask)
+    sparse_bound = 1.0 / math.sqrt(1)
+    dense_bound = 1.0 / math.sqrt(in_features)
+    eps = 1e-6
+    assert dense_bound < sparse_bound
+    assert torch.all(layer.raw_weight[1].abs() <= dense_bound + eps)
+    assert abs(layer.bias[1].item()) <= dense_bound + eps
 
 
 def test_masked_linear_ignores_mutation_of_constructor_tensor():
