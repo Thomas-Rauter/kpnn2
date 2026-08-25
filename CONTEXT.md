@@ -144,8 +144,8 @@ Node names are stored as strings. Non-string values in `source` /
 | No missing values in `source` or `target` | `Kpnn2Error` |
 | No empty-string node names | `Kpnn2Error` |
 | At least one edge | `Kpnn2Error` |
-| No duplicate `(source, target)` pairs | `Kpnn2Error` |
-| No self-loops (`source == target`) | `Kpnn2Error` |
+| No duplicate `(source, target)` pairs | `Kpnn2Error` naming the pair(s), sorted |
+| No self-loops (`source == target`) | `Kpnn2Error` naming the node(s), sorted |
 | Graph is a DAG (no cycles) | `Kpnn2Error` naming unranked leftover nodes |
 | At least one input (in-degree 0) | `Kpnn2Error` |
 | At least one output (out-degree 0) | `Kpnn2Error` |
@@ -183,6 +183,14 @@ name (`nodes` minus keys of `depths`), sorted alphabetically and
 comma-separated. That leftover set may include nodes downstream
 of a cycle, not only vertices on a directed cycle. Do not run a
 separate cycle-extraction algorithm.
+
+Duplicate `(source, target)` pairs raise `Kpnn2Error` with the
+count of extra rows after the first of each pair
+(`DataFrame.duplicated().sum()`) and the unique duplicated pairs
+as `{source} -> {target}`, sorted lexicographically by
+`(source, target)` and comma-separated. Self-loops raise
+`Kpnn2Error` with the row count (`source == target`) and unique
+node names, sorted alphabetically and comma-separated.
 
 Isolated nodes cannot appear: the node set is the union of `source`
 and `target` values only.

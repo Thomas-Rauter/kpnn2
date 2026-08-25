@@ -9,6 +9,9 @@ This project follows semantic versioning.
 
 ### Changed
 
+- Duplicate-edge and self-loop failures from `parse_edgelist`
+  name the offending pairs / nodes (unique, sorted), while
+  keeping the existing extra-row / self-loop-row counts.
 - `MaskedLinear` keeps a float32 frozen mask after Module
   dtype casts. Forward multiplies `raw_weight` by a mask
   cast to `raw_weight.dtype` / device so `.half()`,

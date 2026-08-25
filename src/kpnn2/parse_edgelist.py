@@ -36,7 +36,8 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     Kpnn2Error
         If ``edgelist`` is not a DataFrame, required columns are
         missing, values are missing or empty, the table has no rows,
-        or ``(source, target)`` pairs are duplicated.
+        or ``(source, target)`` pairs are duplicated (message
+        names the unique pairs, sorted).
     """
     if not isinstance(edgelist, pd.DataFrame):
         raise Kpnn2Error("'edgelist' must be a pandas DataFrame.")
@@ -77,9 +78,21 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
 
     n_duplicates = int(normalized.duplicated().sum())
     if n_duplicates > 0:
+        duplicated_rows = normalized[normalized.duplicated(keep=False)]
+        unique_pairs = duplicated_rows.drop_duplicates().sort_values(
+            by=[_SOURCE, _TARGET],
+        )
+        pair_labels = [
+            f"{source} -> {target}"
+            for source, target in zip(
+                unique_pairs[_SOURCE],
+                unique_pairs[_TARGET],
+            )
+        ]
+        pairs_str = ", ".join(pair_labels)
         raise Kpnn2Error(
-            f"Edgelist contains {n_duplicates} duplicate edge(s). "
-            "At most one connection is allowed for each "
+            f"Edgelist contains {n_duplicates} duplicate edge(s): "
+            f"{pairs_str}. At most one connection is allowed for each "
             "source-target pair."
         )
 
@@ -103,14 +116,17 @@ def _reject_self_loops(edgelist: pd.DataFrame) -> None:
     Raises
     ------
     Kpnn2Error
-        If one or more self-loops are present.
+        If one or more self-loops are present. The message names
+        the unique self-loop nodes, sorted alphabetically.
     """
     self_loops = edgelist[_SOURCE] == edgelist[_TARGET]
     n_self_loops = int(self_loops.sum())
     if n_self_loops > 0:
+        loop_nodes = sorted(set(edgelist.loc[self_loops, _SOURCE]))
+        nodes_str = ", ".join(loop_nodes)
         raise Kpnn2Error(
-            f"Edgelist contains {n_self_loops} self-loop(s). "
-            "Self-loops are not allowed."
+            f"Edgelist contains {n_self_loops} self-loop(s): "
+            f"{nodes_str}. Self-loops are not allowed."
         )
 
 
@@ -422,10 +438,11 @@ def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
     Kpnn2Error
         If ``edgelist`` is not a DataFrame; required columns are
         missing; the table is empty; names are missing or empty;
-        source-target pairs are duplicated; any edge is a self-loop;
-        the graph has a cycle (message names unranked leftover
-        nodes); or there is no in-degree-0 node or no out-degree-0
-        node.
+        source-target pairs are duplicated (message names the
+        unique pairs, sorted); any edge is a self-loop (message
+        names the unique nodes, sorted); the graph has a cycle
+        (message names unranked leftover nodes); or there is no
+        in-degree-0 node or no out-degree-0 node.
 
     Notes
     -----
@@ -435,6 +452,10 @@ def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
     (``nodes`` minus keys of ``depths``), sorted alphabetically.
     That set may include nodes downstream of a cycle, not only
     vertices on a directed cycle.
+
+    Duplicate ``(source, target)`` pairs name the unique pairs as
+    ``{source} -> {target}``, sorted lexicographically.
+    Self-loops name the unique nodes, sorted alphabetically.
 
     ``len(masks)`` is ``len(layer_nodes) - 1``. ``masks[i]`` is the
     hop from layer ``i`` to ``i + 1``. Shape is

@@ -98,5 +98,46 @@ def test_validate_edgelist_rejects_duplicate_edges():
     with pytest.raises(
         Kpnn2Error,
         match="1 duplicate edge",
-    ):
+    ) as exc_info:
         _validate_edgelist(edgelist)
+
+    assert "a -> b" in str(exc_info.value)
+
+
+def test_validate_edgelist_rejects_two_duplicate_pairs():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["z", "x", "x", "x", "z"],
+            "target": ["w", "y", "y", "y", "w"],
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="3 duplicate edge",
+    ) as exc_info:
+        _validate_edgelist(edgelist)
+
+    message = str(exc_info.value)
+    assert "x -> y" in message
+    assert "z -> w" in message
+    assert "x -> y, z -> w" in message
+
+
+def test_validate_edgelist_rejects_duplicate_self_loops_as_duplicates():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "A"],
+            "target": ["A", "A"],
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="1 duplicate edge",
+    ) as exc_info:
+        _validate_edgelist(edgelist)
+
+    message = str(exc_info.value)
+    assert "A -> A" in message
+    assert "self-loop" not in message

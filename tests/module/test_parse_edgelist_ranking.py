@@ -68,8 +68,30 @@ def test_parse_edgelist_rejects_self_loops():
     with pytest.raises(
         Kpnn2Error,
         match="self-loop",
-    ):
+    ) as exc_info:
         parse_edgelist(edgelist)
+
+    assert "A" in str(exc_info.value)
+
+
+def test_parse_edgelist_rejects_two_self_loops():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["B", "A"],
+            "target": ["B", "A"],
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="self-loop",
+    ) as exc_info:
+        parse_edgelist(edgelist)
+
+    message = str(exc_info.value)
+    assert "A" in message
+    assert "B" in message
+    assert "A, B" in message
 
 
 def test_parse_edgelist_rejects_cycles():
