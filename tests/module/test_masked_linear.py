@@ -130,6 +130,16 @@ def test_masked_linear_mask_is_buffer_not_parameter():
     assert "raw_weight" in parameters
 
 
+def test_masked_linear_rejects_non_tensor_mask():
+    with pytest.raises(
+        Kpnn2Error,
+        match="torch.Tensor",
+    ):
+        MaskedLinear(
+            [[1.0, 0.0]],
+        )
+
+
 def test_masked_linear_rejects_1d_mask():
     mask = torch.ones(3)
     with pytest.raises(
@@ -357,6 +367,33 @@ def test_masked_linear_state_dict_roundtrip_keeps_mask():
         match="read-only",
     ):
         dst.mask.fill_(0.0)
+
+
+def test_masked_linear_zero_degree_row_stays_zero():
+    torch.manual_seed(42)
+    mask = torch.tensor(
+        [
+            [1.0, 1.0],
+            [0.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+    layer = MaskedLinear(mask)
+    assert torch.equal(
+        layer.raw_weight[1],
+        torch.zeros(2),
+    )
+    assert layer.bias[1].item() == 0.0
+    y = layer(
+        torch.randn(
+            3,
+            2,
+        )
+    )
+    assert torch.equal(
+        y[:, 1],
+        torch.zeros(3),
+    )
 
 
 def test_masked_linear_ignores_mutation_of_constructor_tensor():

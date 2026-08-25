@@ -132,3 +132,88 @@ def test_align_inputs_rejects_wrong_tensor_width():
             data,
             spec,
         )
+
+
+def _invalid_align_cases():
+    spec = _tiny_spec()
+    numeric = pd.DataFrame(
+        {
+            "A": [1.0],
+            "B": [2.0],
+        }
+    )
+    duplicate = pd.DataFrame(
+        [[1.0, 2.0, 3.0]],
+        columns=["A", "B", "A"],
+    )
+    duplicate_after_str = pd.DataFrame(
+        {
+            "A": [1.0],
+            "B": [2.0],
+            1: [3.0],
+            "1": [4.0],
+        }
+    )
+    non_numeric = pd.DataFrame(
+        {
+            "A": ["x"],
+            "B": [2.0],
+        }
+    )
+    return [
+        pytest.param(
+            numeric,
+            object(),
+            "GraphSpec",
+            id="non_graph_spec",
+        ),
+        pytest.param(
+            [[1.0, 2.0]],
+            spec,
+            "Unsupported input data type",
+            id="unsupported_type",
+        ),
+        pytest.param(
+            duplicate,
+            spec,
+            "duplicate column",
+            id="duplicate_columns",
+        ),
+        pytest.param(
+            duplicate_after_str,
+            spec,
+            "duplicate column",
+            id="duplicate_after_str",
+        ),
+        pytest.param(
+            non_numeric,
+            spec,
+            "non-numeric",
+            id="non_numeric",
+        ),
+        pytest.param(
+            torch.tensor([1.0, 2.0]),
+            spec,
+            "2-dimensional",
+            id="not_2d_tensor",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "data, spec, match",
+    _invalid_align_cases(),
+)
+def test_align_inputs_rejects_invalid_data_and_spec(
+    data,
+    spec,
+    match,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=match,
+    ):
+        align_inputs(
+            data,
+            spec,
+        )

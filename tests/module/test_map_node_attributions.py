@@ -174,3 +174,191 @@ def test_map_node_attributions_rejects_coords_for_node():
             layer=1,
             coords={"node": ["x", "y"]},
         )
+
+
+def test_map_node_attributions_labels_1d_tensor():
+    spec = _tiny_spec()
+    da = map_node_attributions(
+        attributions=torch.tensor(
+            [0.1, 0.2],
+            dtype=torch.float32,
+        ),
+        spec=spec,
+        layer=1,
+    )
+
+    assert da.dims == ("node",)
+    assert da["node"].values.tolist() == ["E", "H"]
+    assert da.sel(node="H").item() == pytest.approx(0.2)
+
+
+def test_map_node_attributions_stacks_1d_step_tensors():
+    spec = _tiny_spec()
+    da = map_node_attributions(
+        attributions=(
+            torch.tensor([0.1, 0.2]),
+            torch.tensor([0.3, 0.4]),
+        ),
+        spec=spec,
+        layer=1,
+    )
+
+    assert da.dims == ("step", "node")
+    assert da.sel(
+        step=1,
+        node="H",
+    ).item() == pytest.approx(0.4)
+
+
+def _invalid_map_cases():
+    spec = _tiny_spec()
+    scores = torch.zeros(1, 2)
+    stacked_3d = (
+        torch.zeros(1, 1, 2),
+        torch.zeros(1, 1, 2),
+    )
+    return [
+        pytest.param(
+            scores,
+            object(),
+            1,
+            {},
+            "GraphSpec",
+            id="non_graph_spec",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            True,
+            {},
+            "must be an int",
+            id="layer_is_bool",
+        ),
+        pytest.param(
+            {"scores": scores},
+            spec,
+            1,
+            {},
+            "torch.Tensor or a sequence",
+            id="not_tensor_or_sequence",
+        ),
+        pytest.param(
+            [],
+            spec,
+            1,
+            {},
+            "must not be empty",
+            id="empty_sequence",
+        ),
+        pytest.param(
+            [scores, 1.0],
+            spec,
+            1,
+            {},
+            "Each item",
+            id="sequence_item_not_tensor",
+        ),
+        pytest.param(
+            (scores, torch.zeros(2, 2)),
+            spec,
+            1,
+            {},
+            "same shape",
+            id="mismatched_shapes",
+        ),
+        pytest.param(
+            stacked_3d,
+            spec,
+            1,
+            {},
+            "Pass dims=",
+            id="stacked_3d_needs_dims",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"dims": (0, "node")},
+            "sequence of strings",
+            id="dims_not_strings",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"dims": ("node",)},
+            "length must match",
+            id="dims_wrong_length",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"dims": ("layer", "node")},
+            "must not include 'layer'",
+            id="dims_include_layer",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"dims": ("node", "node")},
+            "must be unique",
+            id="dims_not_unique",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"dims": ("observation", "class")},
+            "exactly once",
+            id="dims_missing_node",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"coords": ["obs"]},
+            "must be a mapping",
+            id="coords_not_mapping",
+        ),
+        pytest.param(
+            scores,
+            spec,
+            1,
+            {"coords": {"foo": [0]}},
+            "unknown dim",
+            id="coords_unknown_dim",
+        ),
+        pytest.param(
+            torch.zeros(2, 2),
+            spec,
+            1,
+            {"coords": {"observation": ["a"]}},
+            "length must be 2",
+            id="coords_wrong_length",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "attributions, spec, layer, extra, match",
+    _invalid_map_cases(),
+)
+def test_map_node_attributions_rejects_invalid_arguments(
+    attributions,
+    spec,
+    layer,
+    extra,
+    match,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=match,
+    ):
+        map_node_attributions(
+            attributions,
+            spec,
+            layer,
+            **extra,
+        )

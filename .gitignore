@@ -18,3 +18,4 @@ RELEASE_NOTES.md
 .kpnn2.code-workspace
 .cursor/
 .cursorignore
+htmlcov/
