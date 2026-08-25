@@ -20,6 +20,8 @@ from .graphs import (
     multi_output_graph,
     skip_edge_graph,
     two_tower_feedforward,
+    wide_layer_live_gap_graph,
+    wide_layer_live_middle_graph,
 )
 from .ground_truth import (
     StructuralGroundTruth,
@@ -137,5 +139,15 @@ STRUCTURAL_SCENARIOS: tuple[StructuralScenario, ...] = (
         scenario_id="multi_output_output_1",
         graph=multi_output_graph(),
         attributed_outputs=("output_1",),
+    ),
+    _from_importance_graph(
+        scenario_id="wide_layer_live_middle",
+        graph=wide_layer_live_middle_graph(),
+        attributed_outputs=(PREDICTION_OUTPUT,),
+    ),
+    _from_importance_graph(
+        scenario_id="wide_layer_live_gap",
+        graph=wide_layer_live_gap_graph(),
+        attributed_outputs=(PREDICTION_OUTPUT,),
     ),
 )

@@ -4,7 +4,9 @@ Edgelist builders for computational-control tests.
 ``two_tower_feedforward`` builds two structurally matched subgraphs
 from one construction applied twice, so degree sequences and depths
 cannot drift. ``dead_edge_graph`` and ``skip_edge_graph`` isolate
-pinned-zero hops and skip residuals. Edgelists are source/target
+pinned-zero hops and skip residuals. ``wide_layer_live_middle_graph``
+and ``wide_layer_live_gap_graph`` put live hidden units at non-zero
+or gapped tensor indices in one layer. Edgelists are source/target
 only; intended zero pins live on ``dead_edges``, not parser columns.
 """
 
@@ -177,6 +179,67 @@ def skip_edge_graph() -> ImportanceGraph:
                 ("dead_in", "dead_h"),
             }
         ),
+    )
+
+
+def wide_layer_live_middle_graph() -> ImportanceGraph:
+    """
+    Three same-depth hiddens; the live unit is tensor index 1.
+
+    Alphabetical hidden order is
+    ``("alpha_dead", "mid_live", "zed_dead")``. Mapping names to
+    the wrong index (live at 0) would fail ranking tests.
+
+    ``live_in -> mid_live -> prediction`` is the live path.
+    ``dead_in`` feeds both dead hiddens, which end at
+    ``decoy_readout`` (not attributed). No intended zero pins.
+    """
+    edges: list[Edge] = [
+        ("live_in", "mid_live"),
+        ("mid_live", PREDICTION_OUTPUT),
+        ("dead_in", "alpha_dead"),
+        ("dead_in", "zed_dead"),
+        ("alpha_dead", DECOY_OUTPUT),
+        ("zed_dead", DECOY_OUTPUT),
+    ]
+    return ImportanceGraph(
+        edgelist=_make_edgelist(edges),
+        important_features=("live_in",),
+        unimportant_features=("dead_in",),
+        important_nodes=("mid_live",),
+        unimportant_nodes=("alpha_dead", "zed_dead"),
+        outputs=(PREDICTION_OUTPUT, DECOY_OUTPUT),
+        dead_edges=frozenset(),
+    )
+
+
+def wide_layer_live_gap_graph() -> ImportanceGraph:
+    """
+    Same-depth hiddens in live, dead, live tensor order.
+
+    Alphabetical hidden order is
+    ``("left_live", "mid_dead", "right_live")``. An off-by-one
+    slice of the live units would smear scores onto ``mid_dead``.
+
+    Both live hiddens feed ``prediction``. ``mid_dead`` feeds
+    ``decoy_readout`` only. No intended zero pins.
+    """
+    edges: list[Edge] = [
+        ("live_in", "left_live"),
+        ("live_in", "right_live"),
+        ("left_live", PREDICTION_OUTPUT),
+        ("right_live", PREDICTION_OUTPUT),
+        ("dead_in", "mid_dead"),
+        ("mid_dead", DECOY_OUTPUT),
+    ]
+    return ImportanceGraph(
+        edgelist=_make_edgelist(edges),
+        important_features=("live_in",),
+        unimportant_features=("dead_in",),
+        important_nodes=("left_live", "right_live"),
+        unimportant_nodes=("mid_dead",),
+        outputs=(PREDICTION_OUTPUT, DECOY_OUTPUT),
+        dead_edges=frozenset(),
     )
 
 

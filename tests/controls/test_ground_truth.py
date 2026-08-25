@@ -9,10 +9,13 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from kpnn2 import parse_edgelist
 from tests.controls.graphs import (
     dead_edge_graph,
     multi_output_graph,
     skip_edge_graph,
+    wide_layer_live_gap_graph,
+    wide_layer_live_middle_graph,
 )
 from tests.controls.ground_truth import (
     assert_all_structurally_live,
@@ -180,6 +183,50 @@ def test_declared_labels_match_solver(scenario) -> None:
     assert declared_ground_truth(scenario) == solver_ground_truth(scenario)
 
 
+def test_wide_layer_live_middle_index_and_solver() -> None:
+    """
+    Live hidden is tensor index 1, not 0; solver matches labels.
+    """
+    scenario = next(
+        item
+        for item in STRUCTURAL_SCENARIOS
+        if item.id == "wide_layer_live_middle"
+    )
+    spec = parse_edgelist(scenario.edgelist)
+    hidden_layer = spec.layer_nodes[1]
+    assert hidden_layer == (
+        "alpha_dead",
+        "mid_live",
+        "zed_dead",
+    )
+    assert hidden_layer.index("mid_live") == 1
+    assert declared_ground_truth(scenario) == solver_ground_truth(
+        scenario,
+    )
+
+
+def test_wide_layer_live_gap_index_and_solver() -> None:
+    """
+    Live hiddens have a dead unit between them in the tensor.
+    """
+    scenario = next(
+        item
+        for item in STRUCTURAL_SCENARIOS
+        if item.id == "wide_layer_live_gap"
+    )
+    spec = parse_edgelist(scenario.edgelist)
+    hidden_layer = spec.layer_nodes[1]
+    assert hidden_layer == (
+        "left_live",
+        "mid_dead",
+        "right_live",
+    )
+    assert hidden_layer.index("mid_dead") == 1
+    assert declared_ground_truth(scenario) == solver_ground_truth(
+        scenario,
+    )
+
+
 def test_structural_scenario_ids_are_unique() -> None:
     ids = [scenario.id for scenario in STRUCTURAL_SCENARIOS]
     assert len(ids) == len(set(ids))
@@ -190,6 +237,8 @@ def test_graph_builders_keep_source_target_only() -> None:
         dead_edge_graph(),
         skip_edge_graph(),
         multi_output_graph(),
+        wide_layer_live_middle_graph(),
+        wide_layer_live_gap_graph(),
     ]
     for graph in graphs:
         assert list(graph.edgelist.columns) == ["source", "target"]
