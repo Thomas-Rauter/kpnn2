@@ -83,8 +83,13 @@ def test_parse_edgelist_rejects_cycles():
     with pytest.raises(
         Kpnn2Error,
         match="cycle",
-    ):
+    ) as exc_info:
         parse_edgelist(edgelist)
+
+    # Kahn leftover is B, C, D (A is ranked; D is downstream of the
+    # cycle). A message that omits those names must fail this test.
+    message = str(exc_info.value)
+    assert "B, C, D" in message
 
 
 def test_parse_edgelist_rejects_missing_input():

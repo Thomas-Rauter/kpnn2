@@ -9,6 +9,9 @@ This project follows semantic versioning.
 
 ### Changed
 
+- Cycle failures from `parse_edgelist` name the unranked leftover
+  nodes (Kahn set: `nodes` minus ranked depths), sorted
+  alphabetically. Cycles still raise `Kpnn2Error`; DAGs only.
 - `align_inputs` rejects `torch.Tensor`. Pass a pandas DataFrame
   for name alignment, or a pre-ordered tensor straight to the
   model.

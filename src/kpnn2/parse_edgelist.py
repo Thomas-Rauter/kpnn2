@@ -241,7 +241,9 @@ def _rank_layers(
     Raises
     ------
     Kpnn2Error
-        If a cycle leaves some nodes unranked.
+        If a cycle leaves some nodes unranked. The message names
+        every leftover node (``nodes`` minus keys of ``depths``),
+        sorted alphabetically.
     """
     remaining = dict(in_degree)
     depths: dict[str, int] = {}
@@ -258,7 +260,12 @@ def _rank_layers(
                 ready.append(child)
 
     if len(depths) != len(nodes):
-        raise Kpnn2Error("Edgelist contains a cycle. Only DAGs are supported.")
+        unranked = sorted(nodes - depths.keys())
+        unranked_str = ", ".join(unranked)
+        raise Kpnn2Error(
+            "Edgelist contains a cycle. Only DAGs are supported. "
+            f"Unranked nodes: {unranked_str}."
+        )
 
     n_layers = max(depths.values()) + 1
     layer_nodes: list[list[str]] = [[] for _ in range(n_layers)]
@@ -416,11 +423,19 @@ def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
         If ``edgelist`` is not a DataFrame; required columns are
         missing; the table is empty; names are missing or empty;
         source-target pairs are duplicated; any edge is a self-loop;
-        the graph has a cycle; or there is no in-degree-0 node or no
-        out-degree-0 node.
+        the graph has a cycle (message names unranked leftover
+        nodes); or there is no in-degree-0 node or no out-degree-0
+        node.
 
     Notes
     -----
+    A cycle is detected when the Kahn sweep leaves some nodes
+    unranked. The error still says the edgelist has a cycle and
+    that only DAGs are supported, and lists every leftover name
+    (``nodes`` minus keys of ``depths``), sorted alphabetically.
+    That set may include nodes downstream of a cycle, not only
+    vertices on a directed cycle.
+
     ``len(masks)`` is ``len(layer_nodes) - 1``. ``masks[i]`` is the
     hop from layer ``i`` to ``i + 1``. Shape is
     ``(layer_dims[i + 1], layer_dims[i])``, matching
