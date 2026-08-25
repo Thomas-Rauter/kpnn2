@@ -1,5 +1,6 @@
 """
-Sparse named neural nets from an edgelist, as PyTorch primitives.
+Build sparsely connected PyTorch neural networks from a named
+edgelist, using native nn.Module layers.
 
 ``kpnn2`` turns a source/target edgelist into a ``GraphSpec``
 (adjacent masks, layer names, skip list) so you write ordinary

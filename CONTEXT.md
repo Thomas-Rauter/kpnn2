@@ -15,9 +15,8 @@ from `kpnn2`.
 
 ## One-sentence summary
 
-`kpnn2` turns a **source/target edgelist** into a **`GraphSpec`**
-(adjacent masks, layer node names, skip list) so the user writes
-**ordinary PyTorch** with **`MaskedLinear`**.
+Build sparsely connected PyTorch neural networks from a named
+edgelist, using native nn.Module layers.
 
 ---
 

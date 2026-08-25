@@ -1,7 +1,7 @@
 site_name: kpnn2
 site_description: >
-  Sparse named neural nets from an edgelist, as native PyTorch
-  primitives.
+  Build sparsely connected PyTorch neural networks from a named
+  edgelist, using native nn.Module layers.
 site_url: https://thomas-rauter.github.io/kpnn2/
 repo_url: https://github.com/Thomas-Rauter/kpnn2
 repo_name: Thomas-Rauter/kpnn2

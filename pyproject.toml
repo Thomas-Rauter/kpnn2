@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kpnn2"
 version = "0.1.0"
-description = "Sparse named neural nets from an edgelist, as native PyTorch primitives (not a compiler)."
+description = "Build sparsely connected PyTorch neural networks from a named edgelist, using native nn.Module layers."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
