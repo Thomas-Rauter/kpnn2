@@ -9,6 +9,10 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `MaskedLinear` keeps a float32 frozen mask after Module
+  dtype casts. Forward multiplies `raw_weight` by a mask
+  cast to `raw_weight.dtype` / device so `.half()`,
+  bfloat16, and `.double()` work like `nn.Linear`.
 - Cycle failures from `parse_edgelist` name the unranked leftover
   nodes (Kahn set: `nodes` minus ranked depths), sorted
   alphabetically. Cycles still raise `Kpnn2Error`; DAGs only.

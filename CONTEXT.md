@@ -278,14 +278,22 @@ MaskedLinear(mask, bias=True)
   Inferred `in_features` / `out_features` from `mask.shape`.
   Do not take separate size arguments.
 - Register `mask` as a **non-persistent buffer** (not a
-  parameter, not in `state_dict`), `float32`. In-place writes
-  and replacement raise `Kpnn2Error`. Rebuild from the
-  edgelist / `GraphSpec` to change wiring.
+  parameter, not in `state_dict`), `float32`. GraphSpec masks
+  stay float32. After `Module.half()`, `.to(dtype=torch.bfloat16)`,
+  or `.double()`, `layer.mask.dtype` is still `float32`. In-place
+  writes and replacement raise `Kpnn2Error`. Rebuild from the
+  edgelist / `GraphSpec` to change wiring. The stored mask does
+  not follow the module floating dtype.
 - Trainable `raw_weight`: same shape as `mask`.
 - Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
   parameter.
-- Forward: `Y = F.linear(X, raw_weight * mask, bias)`.
-  Equivalently `Y = X @ (W ⊙ M).T + b`.
+- Forward multiplies in the parameter dtype:
+  `effective = raw_weight * mask.to(dtype=raw_weight.dtype,
+  device=raw_weight.device)`, then
+  `Y = F.linear(X, effective, bias)`.
+  Equivalently `Y = X @ (W ⊙ M).T + b` with `M` cast to `W`'s
+  dtype/device. This is why `.half()` / bfloat16 / `.double()`
+  work like `nn.Linear`.
 - **Degree-aware init:** for each output row `j`,
   `fan_in = int(mask[j].sum())` (count of 1s in that row).
   Use that `fan_in` for kaiming/uniform scale of that row (and for

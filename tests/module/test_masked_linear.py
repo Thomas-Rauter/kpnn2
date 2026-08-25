@@ -2,6 +2,7 @@ import math
 
 import pytest
 import torch
+import torch.nn.functional as F
 
 from kpnn2 import Kpnn2Error, MaskedLinear
 
@@ -194,6 +195,28 @@ def _layer_with_pinned_diag_weights(bias):
     return layer
 
 
+def _pinned_bias():
+    return torch.tensor(
+        [0.1, -0.2],
+        dtype=torch.float32,
+    )
+
+
+def _expected_linear(
+    layer,
+    x,
+):
+    effective = layer.raw_weight * layer.mask.to(
+        dtype=layer.raw_weight.dtype,
+        device=layer.raw_weight.device,
+    )
+    return F.linear(
+        x,
+        effective,
+        layer.bias,
+    )
+
+
 def test_masked_linear_pinned_weights_match_masked_product():
     layer = _layer_with_pinned_diag_weights(bias=False)
     x = torch.tensor(
@@ -316,6 +339,67 @@ def test_masked_linear_rejects_mask_replacement():
             2,
             3,
         )
+
+
+@pytest.mark.parametrize(
+    "apply_cast",
+    [
+        pytest.param(
+            lambda layer: layer.half(),
+            id="half",
+        ),
+        pytest.param(
+            lambda layer: layer.to(dtype=torch.bfloat16),
+            id="bfloat16",
+        ),
+        pytest.param(
+            lambda layer: layer.double(),
+            id="double",
+        ),
+    ],
+)
+def test_masked_linear_module_dtype_cast_forward(apply_cast):
+    layer = _layer_with_pinned_diag_weights(bias=True)
+    with torch.no_grad():
+        layer.bias.copy_(_pinned_bias())
+    layer = apply_cast(layer)
+    assert layer.mask.dtype == torch.float32
+    x = torch.ones(
+        2,
+        2,
+        dtype=layer.raw_weight.dtype,
+        device=layer.raw_weight.device,
+    )
+    y = layer(x)
+    assert y.dtype == layer.raw_weight.dtype
+    torch.testing.assert_close(
+        y,
+        _expected_linear(
+            layer,
+            x,
+        ),
+    )
+
+
+def test_masked_linear_half_keeps_float32_readonly_mask():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    layer = layer.half()
+    assert layer.mask.dtype == torch.float32
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask[0, 0] = 0.0
 
 
 def test_masked_linear_device_move_keeps_mask_read_only():

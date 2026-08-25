@@ -41,13 +41,15 @@ class MaskedLinear(nn.Module):
     mask : torch.Tensor
         Frozen float32 buffer, same shape as the constructor
         ``mask``. Not trained, not saved in ``state_dict``, and
-        not writable in place. Connectivity comes only from the
-        tensor passed to the constructor (typically
-        ``spec.masks[i]``).
+        not writable in place. Stays float32 after
+        ``.half()`` / bfloat16 / ``.double()``. Connectivity
+        comes only from the tensor passed to the constructor
+        (typically ``spec.masks[i]``).
     raw_weight : nn.Parameter
         Trainable weight of shape ``(out_features, in_features)``.
         Masked-out entries can be nonzero in this tensor; they are
-        zeroed in the forward product ``raw_weight * mask``.
+        zeroed in the forward product of ``raw_weight`` and a
+        ``mask`` cast to ``raw_weight.dtype``.
     bias : nn.Parameter | None
         Trainable bias, or ``None`` when constructed with
         ``bias=False``.
@@ -62,9 +64,13 @@ class MaskedLinear(nn.Module):
     Construct with ``mask``; sizes come from ``mask.shape``.
     ``mask`` is a float32 buffer, is not trained, and is omitted
     from ``state_dict``. In-place writes and replacement are
-    rejected. The trainable tensor is ``raw_weight``. Forward is
-    ``Y = F.linear(X, raw_weight * mask, bias)``. There are no
-    extra edge-weight constraints beyond the mask.
+    rejected. Module dtype casts do not change the stored mask
+    dtype. The trainable tensor is ``raw_weight``. Forward is
+    ``Y = F.linear(X, effective, bias)`` where ``effective`` is
+    ``raw_weight * mask.to(dtype=raw_weight.dtype,
+    device=raw_weight.device)``, so ``.half()``, bfloat16, and
+    ``.double()`` work like ``nn.Linear``. There are no extra
+    edge-weight constraints beyond the mask.
 
     ``reset_parameters`` uses per-row mask degree as ``fan_in``,
     not full ``in_features``. Typical construction:
@@ -219,10 +225,20 @@ class MaskedLinear(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        ``F.linear(x, raw_weight * mask, bias)``.
+        ``F.linear`` of ``x`` with ``raw_weight`` times a
+        dtype/device-cast ``mask``.
+
+        The stored ``mask`` remains float32. The product uses
+        ``mask.to(dtype=raw_weight.dtype,
+        device=raw_weight.device)`` so ``.half()``, bfloat16,
+        and ``.double()`` match ``nn.Linear``.
         """
+        effective = self.raw_weight * self.mask.to(
+            dtype=self.raw_weight.dtype,
+            device=self.raw_weight.device,
+        )
         return F.linear(
             x,
-            self.raw_weight * self.mask,
+            effective,
             self.bias,
         )
