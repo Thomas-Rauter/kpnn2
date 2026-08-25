@@ -2,9 +2,10 @@
 Tier 2: trained importance on matched towers.
 
 Important and unimportant groups are structurally matched and both
-wired to ``prediction``. After a learnability gate (held-out
-ROC-AUC >= MIN_VAL_ROC_AUC, currently 0.95), autograd scores must
-rank the data-generating tower above the decoy tower.
+wired to ``prediction``. After a per-scenario learnability gate
+(held-out ROC-AUC >= ``min_val_roc_auc``, 0.95 for every current
+id), autograd scores must rank the data-generating tower above
+the decoy tower.
 
 ``linear_feedforward`` is a linear no-bias control. It scores
 features and hidden layers with gradient×input, AUC = 1.0,
@@ -22,6 +23,13 @@ Measured ReLU-specific scoring (still strict; gate unchanged):
   AUC = 1.0 and max_ratio = 0.2.
 - Same seeds (42-46) and MIN_SEEDS_PASSING = 4.
 
+``relu_product_feedforward`` uses ReLU and bias on the product of
+the two tower-A features. Feature count stays 2. Hidden width is
+8 so a ReLU net can represent the product and the 0.95 gate
+holds. Scoring is features only. Measured product cuts (still
+strict; median AUC stays 1.0): max_ratio = 0.45 and consistency
+>= 0.5. Same seeds and MIN_SEEDS_PASSING = 4.
+
 Marked integration/slow. Unique scenario-id checks are fast.
 """
 
@@ -38,7 +46,6 @@ from tests.controls.metrics import (
 )
 from tests.controls.training import (
     MIN_SEEDS_PASSING,
-    MIN_VAL_ROC_AUC,
     SEEDS,
     TRAINED_SCENARIO_IDS,
     TrainedRun,
@@ -82,6 +89,7 @@ def test_trained_importance_recovers_the_data_generating_group(
     scenario_id: str,
 ) -> None:
     """Attribution must follow the labels, not the matched topology."""
+    scenario = trained_scenario(scenario_id)
     outcomes = [_run_seed(scenario_id, seed) for seed in SEEDS]
     n_passing = sum(
         outcome.passed_gate and outcome.passed_importance
@@ -94,8 +102,8 @@ def test_trained_importance_recovers_the_data_generating_group(
     assert not gate_failures, (
         f"Scenario '{scenario_id}': learnability PRECONDITION failed "
         f"on seeds {gate_failures} (need held-out ROC-AUC >= "
-        f"{MIN_VAL_ROC_AUC}). Importance was not counted for those "
-        f"seeds.\n{formatted}"
+        f"{scenario.min_val_roc_auc}). Importance was not counted "
+        f"for those seeds.\n{formatted}"
     )
     worst = min(
         outcomes,
@@ -119,7 +127,7 @@ def _run_seed(
         scenario_id,
         seed=seed,
     )
-    if trained.val_roc_auc < MIN_VAL_ROC_AUC:
+    if trained.val_roc_auc < scenario.min_val_roc_auc:
         return _SeedOutcome(
             seed=seed,
             val_roc_auc=trained.val_roc_auc,
@@ -139,6 +147,7 @@ def _run_seed(
         separation_passes(
             item,
             min_per_example_consistency=scenario.min_per_example_consistency,
+            max_ratio=scenario.max_ratio,
         )
         for item in separations
     )
@@ -174,6 +183,7 @@ def _score_tables(
 ) -> str:
     """Named median-|score| tables for CI diagnosis."""
     graph = trained.graph
+    important_features = trained.important_features
     feature_table = autograd_feature_table(
         trained.model,
         trained.spec,
@@ -181,7 +191,7 @@ def _score_tables(
     )
     feature_scores = median_abs_scores(
         feature_table,
-        [*graph.tower_a_features, *graph.tower_b_features],
+        [*important_features, *graph.tower_b_features],
         label="features",
     )
     lines = [
@@ -189,7 +199,7 @@ def _score_tables(
             scenario_id=scenario_id,
             label="features",
             scores=feature_scores,
-            important=graph.tower_a_features,
+            important=important_features,
             unimportant=graph.tower_b_features,
         )
     ]

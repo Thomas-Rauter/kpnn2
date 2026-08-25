@@ -1,8 +1,10 @@
 """
 Fast tests for trained-tier helpers: no model fitting.
 
-Both registered scenarios share the matched two-tower graph and
-linear tower-A labels. They differ only in LayeredNet relu/bias.
+Registered scenarios share the matched two-tower graph and
+independent features. Linear-label ids differ only in LayeredNet
+relu/bias. ``relu_product_feedforward`` uses the product of the
+two tower-A features.
 """
 
 from __future__ import annotations
@@ -10,19 +12,34 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests.controls.simulate import linear_logit_labels
+from tests.controls.simulate import (
+    linear_logit_labels,
+    product_logit_labels,
+)
 from tests.controls.training import (
+    MIN_VAL_ROC_AUC,
+    PRODUCT_HIDDEN_WIDTH,
+    PRODUCT_MAX_RATIO,
+    PRODUCT_MIN_PER_EXAMPLE_CONSISTENCY,
     RELU_BIAS_INIT,
     TRAINED_SCENARIO_IDS,
     assert_decoys_structurally_live,
     linear_coefficients,
     linear_tower_simulator,
     matched_linear_towers,
+    product_causal_features,
+    product_tower_simulator,
+    scenario_graph,
     trained_scenario,
 )
 
 SEED = 42
 N_SAMPLES = 64
+LINEAR_LABEL_SCENARIO_IDS = tuple(
+    scenario_id
+    for scenario_id in TRAINED_SCENARIO_IDS
+    if not trained_scenario(scenario_id).product_labels
+)
 
 
 @pytest.mark.parametrize(
@@ -33,16 +50,16 @@ N_SAMPLES = 64
 def test_matched_tower_decoys_are_structurally_live(
     scenario_id: str,
 ) -> None:
-    trained_scenario(scenario_id)
-    graph = matched_linear_towers()
+    scenario = trained_scenario(scenario_id)
+    graph = scenario_graph(scenario)
     assert_decoys_structurally_live(graph)
     assert graph.outputs == ("prediction",)
 
 
 @pytest.mark.parametrize(
     "scenario_id",
-    TRAINED_SCENARIO_IDS,
-    ids=list(TRAINED_SCENARIO_IDS),
+    LINEAR_LABEL_SCENARIO_IDS,
+    ids=list(LINEAR_LABEL_SCENARIO_IDS),
 )
 def test_labels_follow_tower_a_not_tower_b(
     scenario_id: str,
@@ -90,12 +107,54 @@ def test_labels_follow_tower_a_not_tower_b(
     )
 
 
+def test_product_labels_follow_either_causal_feature_not_tower_b() -> None:
+    graph = matched_linear_towers()
+    causal = product_causal_features(graph)
+    assert causal == graph.tower_a_features
+    simulate = product_tower_simulator(graph)
+    rng = np.random.default_rng(SEED)
+    features, labels = simulate(
+        rng,
+        N_SAMPLES,
+    )
+    min_flipped = int(0.9 * N_SAMPLES)
+    for name in causal:
+        flipped = features.copy()
+        flipped.loc[:, name] = -flipped.loc[:, name]
+        labels_flipped = product_logit_labels(
+            flipped,
+            causal_features=causal,
+        )
+        n_flipped = int((labels != labels_flipped).sum())
+        assert n_flipped >= min_flipped, (
+            f"flipping causal feature {name!r} changed "
+            f"{n_flipped}/{N_SAMPLES} labels, need >= {min_flipped}."
+        )
+
+    flipped_b = features.copy()
+    flipped_b.loc[:, list(graph.tower_b_features)] = -flipped_b.loc[
+        :,
+        list(graph.tower_b_features),
+    ]
+    labels_flip_b = product_logit_labels(
+        flipped_b,
+        causal_features=causal,
+    )
+    assert np.array_equal(
+        labels,
+        labels_flip_b,
+    )
+
+
 def test_linear_feedforward_is_linear_without_bias() -> None:
     scenario = trained_scenario("linear_feedforward")
     assert scenario.bias is False
     assert scenario.relu is False
     assert scenario.bias_init is None
     assert scenario.include_hidden is True
+    assert scenario.product_labels is False
+    assert scenario.hidden_width is None
+    assert scenario.min_val_roc_auc == MIN_VAL_ROC_AUC
 
 
 def test_relu_feedforward_uses_relu_with_bias() -> None:
@@ -104,3 +163,26 @@ def test_relu_feedforward_uses_relu_with_bias() -> None:
     assert scenario.relu is True
     assert scenario.bias_init == RELU_BIAS_INIT
     assert scenario.include_hidden is False
+    assert scenario.product_labels is False
+    assert scenario.hidden_width is None
+    assert scenario.min_val_roc_auc == MIN_VAL_ROC_AUC
+
+
+def test_relu_product_feedforward_uses_relu_with_bias() -> None:
+    scenario = trained_scenario("relu_product_feedforward")
+    assert scenario.bias is True
+    assert scenario.relu is True
+    assert scenario.bias_init == RELU_BIAS_INIT
+    assert scenario.include_hidden is False
+    assert scenario.product_labels is True
+    assert scenario.hidden_width == PRODUCT_HIDDEN_WIDTH
+    assert scenario.max_ratio == PRODUCT_MAX_RATIO
+    assert (
+        scenario.min_per_example_consistency
+        == PRODUCT_MIN_PER_EXAMPLE_CONSISTENCY
+    )
+    assert scenario.min_val_roc_auc == MIN_VAL_ROC_AUC
+    graph = scenario_graph(scenario)
+    causal = product_causal_features(graph)
+    assert causal == graph.tower_a_features
+    assert len(causal) == 2

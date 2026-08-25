@@ -1,19 +1,32 @@
 """
 Train matched two-tower graphs and score them with autograd.
 
-Scenarios share the matched DAG and linear tower-A labels.
-They differ in ``LayeredNet`` relu/bias (and in ReLU-only init
-and scoring policy).
+Scenarios share the matched DAG and independent features. They
+differ in ``LayeredNet`` relu/bias, scoring policy, and DGF.
 
 ``linear_feedforward`` uses ``bias=False`` and ``relu=False`` so a
 linear label is representable. ``relu_feedforward`` uses
-``relu=True`` and ``bias=True``: a user-typical KPNN has ReLU in
-``forward()``, and bias is on so this scenario is not a silent
-copy of the linear control. After construction, ReLU biases are
-filled with ``RELU_BIAS_INIT`` (measured: the default uniform
-init left seeds 42 and 44 at chance even at 320 epochs). Weights
-are learned, not pinned. Epochs stay at ``N_EPOCHS`` (80);
-raising them did not fix those collapsed inits.
+``relu=True`` and ``bias=True`` on the same linear tower-A labels:
+a user-typical KPNN has ReLU in ``forward()``, and bias is on so
+this scenario is not a silent copy of the linear control. After
+construction, ReLU biases are filled with ``RELU_BIAS_INIT``
+(measured: the default uniform init left seeds 42 and 44 at
+chance even at 320 epochs). Weights are learned, not pinned.
+Epochs stay at ``N_EPOCHS`` (80); raising them did not fix those
+collapsed inits.
+
+``relu_product_feedforward`` uses ReLU and bias on the product of
+the two tower-A features. A linear ``LayeredNet`` cannot represent
+a product, so ``relu=True`` is required. Feature width stays at
+``N_FEATURES_PER_TOWER`` (2) so both A features are causal.
+Hidden width is ``PRODUCT_HIDDEN_WIDTH`` (8): a width-2 hidden
+tower cannot represent the product (measured train AUC < 0.90
+even at 320 epochs; val gate 0/5 at 0.95). With hidden width 8,
+the 0.95 gate holds on seeds 42-46. Scoring is still features
+only. Product-specific cuts (still strict; median AUC stays
+1.0): ``PRODUCT_MAX_RATIO`` 0.45 and consistency 0.5, because
+∂(x1 x2)/∂x1 ∝ x2 so some rows have near-zero causal grads
+and decoy medians are not as small as on the linear DGF.
 
 ``train_matched_linear_towers`` defaults match the linear scenario
 (``bias=False``, ``relu=False``, no bias fill, linear simulator)
@@ -52,6 +65,7 @@ from .graphs import (
 )
 from .ground_truth import assert_all_structurally_live
 from .metrics import (
+    DEFAULT_MAX_RATIO,
     DEFAULT_MIN_PER_EXAMPLE,
     Separation,
     compute_separation,
@@ -64,6 +78,7 @@ from .scoring import (
 from .simulate import (
     independent_normal_features,
     linear_logit_labels,
+    product_logit_labels,
 )
 
 Simulator = Callable[
@@ -79,15 +94,22 @@ LEARNING_RATE = 2e-2
 WEIGHT_DECAY = 1e-4
 N_FEATURES_PER_TOWER = 2
 FEEDFORWARD_DEPTH = 2
+# Width-2 hidden cannot represent the product. Feature count stays 2.
+PRODUCT_HIDDEN_WIDTH = 8
 
 # Linear helper / linear scenario defaults. Do not reuse these for
-# relu_feedforward; that scenario sets relu and bias explicitly.
+# relu_feedforward or relu_product_feedforward; those scenarios
+# set relu and bias explicitly.
 DEFAULT_TRAIN_BIAS = False
 DEFAULT_TRAIN_RELU = False
 # Small positive bias keeps ReLU units active at step 0.
 RELU_BIAS_INIT = 0.1
 # ReLU gates some examples; 0.6 is still a majority of rows.
 RELU_MIN_PER_EXAMPLE_CONSISTENCY = 0.6
+# Product ∂/∂x1 ∝ x2; 0.5 is still a majority of eval rows.
+PRODUCT_MIN_PER_EXAMPLE_CONSISTENCY = 0.5
+# Measured at hidden width 8, 80 epochs: seed 42 ratio was 0.433.
+PRODUCT_MAX_RATIO = 0.45
 
 SEEDS: tuple[int, ...] = (42, 43, 44, 45, 46)
 MIN_SEEDS_PASSING = 4
@@ -98,9 +120,12 @@ class TrainedScenario:
     """
     One trained-tier configuration: activations, bias, scoring.
 
-    Graph and labels are the matched two-tower linear DGF for every
-    current id. ``n_epochs`` can differ when a scenario needs more
-    fitting; ReLU currently uses the same 80 as the linear control.
+    Graph is the matched two-tower DAG for every current id.
+    ``product_labels`` selects the product DGF; otherwise labels
+    are linear in tower A. Product uses a wider hidden layer so
+    the 0.95 gate stays in force. ``n_epochs`` can differ when a
+    scenario needs more fitting; ReLU currently uses the same 80
+    as the linear control.
     """
 
     id: str
@@ -110,6 +135,10 @@ class TrainedScenario:
     bias_init: float | None = None
     include_hidden: bool = True
     min_per_example_consistency: float = DEFAULT_MIN_PER_EXAMPLE
+    max_ratio: float = DEFAULT_MAX_RATIO
+    product_labels: bool = False
+    hidden_width: int | None = None
+    min_val_roc_auc: float = MIN_VAL_ROC_AUC
 
 
 @dataclass(frozen=True)
@@ -121,6 +150,7 @@ class TrainedRun:
     x_eval_df: pd.DataFrame
     val_roc_auc: float
     graph: TwoTowerGraph
+    important_features: tuple[str, ...]
 
 
 TRAINED_SCENARIOS: tuple[TrainedScenario, ...] = (
@@ -139,6 +169,18 @@ TRAINED_SCENARIOS: tuple[TrainedScenario, ...] = (
         include_hidden=False,
         min_per_example_consistency=RELU_MIN_PER_EXAMPLE_CONSISTENCY,
     ),
+    TrainedScenario(
+        id="relu_product_feedforward",
+        bias=True,
+        relu=True,
+        n_epochs=N_EPOCHS,
+        bias_init=RELU_BIAS_INIT,
+        include_hidden=False,
+        min_per_example_consistency=PRODUCT_MIN_PER_EXAMPLE_CONSISTENCY,
+        max_ratio=PRODUCT_MAX_RATIO,
+        product_labels=True,
+        hidden_width=PRODUCT_HIDDEN_WIDTH,
+    ),
 )
 TRAINED_SCENARIO_IDS: tuple[str, ...] = tuple(
     scenario.id for scenario in TRAINED_SCENARIOS
@@ -146,6 +188,17 @@ TRAINED_SCENARIO_IDS: tuple[str, ...] = tuple(
 _TRAINED_SCENARIOS_BY_ID: dict[str, TrainedScenario] = {
     scenario.id: scenario for scenario in TRAINED_SCENARIOS
 }
+
+
+def scenario_graph(
+    scenario: TrainedScenario,
+) -> TwoTowerGraph:
+    """
+    Matched towers with the scenario's hidden width.
+    """
+    return matched_linear_towers(
+        hidden_width=scenario.hidden_width,
+    )
 
 
 def trained_scenario(scenario_id: str) -> TrainedScenario:
@@ -166,13 +219,20 @@ def trained_scenario(scenario_id: str) -> TrainedScenario:
         ) from exc
 
 
-def matched_linear_towers() -> TwoTowerGraph:
+def matched_linear_towers(
+    *,
+    hidden_width: int | None = None,
+) -> TwoTowerGraph:
     """
     Two matched DAG towers that both terminate at ``prediction``.
+
+    ``hidden_width`` is forwarded to ``two_tower_feedforward``.
+    ``None`` keeps hidden width equal to the feature count.
     """
     return two_tower_feedforward(
         n_features_per_tower=N_FEATURES_PER_TOWER,
         depth=FEEDFORWARD_DEPTH,
+        hidden_width=hidden_width,
         shared_output=True,
     )
 
@@ -215,6 +275,75 @@ def linear_tower_simulator(
     return simulate
 
 
+def product_causal_features(
+    graph: TwoTowerGraph,
+) -> tuple[str, str]:
+    """
+    First two tower-A features; the product DGF uses exactly these.
+    """
+    causal = graph.tower_a_features[:2]
+    if len(causal) != 2:
+        raise ValueError(
+            "Product labels need two tower-A features, got "
+            f"{len(graph.tower_a_features)}."
+        )
+    return causal[0], causal[1]
+
+
+def product_tower_simulator(
+    graph: TwoTowerGraph,
+) -> Simulator:
+    """
+    Labels depend on the product of two tower-A features only.
+    """
+    causal = product_causal_features(graph)
+    feature_names = graph.tower_a_features + graph.tower_b_features
+
+    def simulate(
+        rng: np.random.Generator,
+        n_samples: int,
+    ) -> tuple[pd.DataFrame, np.ndarray]:
+        features = independent_normal_features(
+            rng,
+            n_samples,
+            feature_names=feature_names,
+        )
+        labels = product_logit_labels(
+            features,
+            causal_features=causal,
+        )
+        return features, labels
+
+    return simulate
+
+
+def scenario_simulator(
+    scenario: TrainedScenario,
+    graph: TwoTowerGraph,
+) -> Simulator:
+    """
+    Return the DGF simulator registered for ``scenario``.
+    """
+    if scenario.product_labels:
+        return product_tower_simulator(graph)
+    return linear_tower_simulator(graph)
+
+
+def scenario_important_features(
+    scenario: TrainedScenario,
+    graph: TwoTowerGraph,
+) -> tuple[str, ...]:
+    """
+    Features the scenario's DGF actually uses.
+
+    Remaining tower-A names, if any, are omitted: they must not be
+    declared important when the DGF ignores them.
+    """
+    if scenario.product_labels:
+        return product_causal_features(graph)
+    return graph.tower_a_features
+
+
 def assert_decoys_structurally_live(
     graph: TwoTowerGraph,
 ) -> None:
@@ -245,22 +374,30 @@ def train_matched_linear_towers(
     bias: bool = DEFAULT_TRAIN_BIAS,
     relu: bool = DEFAULT_TRAIN_RELU,
     bias_init: float | None = None,
+    hidden_width: int | None = None,
+    important_features: Sequence[str] | None = None,
 ) -> TrainedRun:
     """
-    Train ``LayeredNet`` on linear tower-A labels; return held-out data.
+    Train ``LayeredNet`` on matched two-tower data; return held-out.
 
-    Defaults (``bias=False``, ``relu=False``, no bias fill) match
-    ``linear_feedforward`` and the Tier 3 negative controls.
+    Defaults (``bias=False``, ``relu=False``, no bias fill, linear
+    simulator, default hidden width) match ``linear_feedforward``
+    and the Tier 3 negative controls.
 
-    Pass ``simulate`` to override the default linear simulator (used
-    for shuffled-label negative controls). Pass ``bias`` / ``relu`` /
-    ``n_epochs`` / ``bias_init`` to train a different ``LayeredNet``
-    on the same graph and labels.
+    Pass ``simulate`` to override the default linear simulator
+    (shuffled-label negative controls or a product DGF). Pass
+    ``bias`` / ``relu`` / ``n_epochs`` / ``bias_init`` /
+    ``hidden_width`` to train a different ``LayeredNet``. Pass
+    ``important_features`` when the DGF ignores some tower-A names.
     """
-    graph = matched_linear_towers()
+    graph = matched_linear_towers(
+        hidden_width=hidden_width,
+    )
     assert_decoys_structurally_live(graph)
     if simulate is None:
         simulate = linear_tower_simulator(graph)
+    if important_features is None:
+        important_features = graph.tower_a_features
     _set_seed(seed)
     rng = np.random.default_rng(seed)
     x_train_df, y_train = simulate(
@@ -315,6 +452,7 @@ def train_matched_linear_towers(
         x_eval_df=x_eval_df,
         val_roc_auc=val_roc_auc,
         graph=graph,
+        important_features=tuple(important_features),
     )
 
 
@@ -328,6 +466,12 @@ def train_trained_scenario(
     Train the named registered scenario on matched towers.
     """
     scenario = trained_scenario(scenario_id)
+    graph = scenario_graph(scenario)
+    if simulate is None:
+        simulate = scenario_simulator(
+            scenario,
+            graph,
+        )
     return train_matched_linear_towers(
         seed=seed,
         n_epochs=scenario.n_epochs,
@@ -335,6 +479,11 @@ def train_trained_scenario(
         bias=scenario.bias,
         relu=scenario.relu,
         bias_init=scenario.bias_init,
+        hidden_width=scenario.hidden_width,
+        important_features=scenario_important_features(
+            scenario,
+            graph,
+        ),
     )
 
 
@@ -416,11 +565,13 @@ def trained_separations(
     """
     Feature separation plus per-layer hidden-node separations.
 
-    Defaults to tower A important and tower B unimportant.
+    Defaults to the run's DGF-important features and tower B
+    unimportant. Unused tower-A names must not be declared
+    important: callers store the causal set on ``TrainedRun``.
     """
     graph = run.graph
     if important_features is None:
-        important_features = graph.tower_a_features
+        important_features = run.important_features
     if unimportant_features is None:
         unimportant_features = graph.tower_b_features
     if important_nodes is None:
@@ -534,8 +685,8 @@ def _fill_biases(
     """
     Set every ``MaskedLinear`` bias to ``value``.
 
-    Used by ``relu_feedforward`` so hidden units start in the
-    active ReLU regime. No-op on layers constructed without bias.
+    Used by ReLU scenarios so hidden units start in the active
+    ReLU regime. No-op on layers constructed without bias.
     """
     with torch.no_grad():
         for layer in model.layers:
