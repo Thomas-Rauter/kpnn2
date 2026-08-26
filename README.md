@@ -11,22 +11,30 @@
 Build sparsely connected PyTorch neural networks from a named
 edgelist, using native nn.Module layers.
 
-**Documentation:** https://thomas-rauter.github.io/kpnn2/
-
 ## Overview
 
-`kpnn2` turns a source/target edgelist into a `GraphSpec` (adjacent
-masks, layer names, skip list) so you write ordinary PyTorch with
-`MaskedLinear`.
+If you already know how named entities should connect, you can use
+that graph as the architecture of a neural network. You write the
+connections as named edges, train an ordinary PyTorch module that
+only uses those connections, and map importance scores back onto
+the same names.
+
+The hidden units keep the identities from the graph, so
+attributions can be read as scores for those entities, not for
+anonymous neurons.
+
+Mechanically, `kpnn2` turns a source/target edgelist into a
+`GraphSpec` (adjacent masks, layer names, skip list) so you write
+ordinary PyTorch with `MaskedLinear`.
 
 An **edgelist** is a table of directed connections: each row links a
 `source` node to a `target` node. For example:
 
 | source | target |
 |--------|--------|
-| feature_a | hidden_1 |
-| feature_b | hidden_1 |
-| hidden_1 | output |
+| A | H |
+| B | H |
+| H | C |
 
 Define a model architecture as an edgelist, parse it into named
 layers and frozen connectivity masks, build a normal
@@ -46,8 +54,7 @@ is directed connections between named nodes.
 
 A major application is interpretable nets shaped by prior knowledge
 of domain networks, for example in biology (more on the
-[Getting started](https://thomas-rauter.github.io/kpnn2/getting-started/)
-page).
+[Getting started](docs/getting-started.ipynb) page).
 
 `kpnn2` is a set of primitives, not a graph compiler. There is no
 ready-made model object. It leaves training loops, losses,
@@ -67,6 +74,93 @@ keeps the package flexible.
 6. Optionally run Captum (or another method) yourself, then label a
    layer tensor with `map_node_attributions()` (returns xarray).
 
+The snippet below is a complete toy run of that loop, using the
+edgelist from the table above. Column order in the input table
+does not matter: `align_inputs()` matches names. Captum is not a
+`kpnn2` dependency (`pip install captum`). Skip edges are omitted
+here; see [**Skip edges**](docs/skip-edges.ipynb). A full
+walkthrough is in [**Getting started**](docs/getting-started.ipynb).
+
+```python
+import pandas as pd
+import torch
+import torch.nn.functional as F
+from captum.attr import IntegratedGradients, LayerConductance
+from torch import nn
+
+import kpnn2 as k2
+
+torch.manual_seed(42)
+
+edgelist = pd.DataFrame(
+    {
+        "source": ["A", "B", "H"],
+        "target": ["H", "H", "C"],
+    }
+)
+spec = k2.parse_edgelist(edgelist)
+
+
+class Net(nn.Module):
+    def __init__(self, spec: k2.GraphSpec):
+        super().__init__()
+        self.lin0 = k2.MaskedLinear(spec.masks[0])
+        self.lin1 = k2.MaskedLinear(spec.masks[1])
+
+    def forward(self, x):
+        h = F.relu(self.lin0(x))
+        return self.lin1(h)
+
+
+model = Net(spec)
+
+n = 16
+a = torch.rand(n)
+b = torch.rand(n)
+x_df = pd.DataFrame(
+    {
+        "B": b.numpy(),
+        "A": a.numpy(),
+    }
+)
+x = k2.align_inputs(
+    x_df,
+    spec,
+)
+y = a.unsqueeze(1)  # C should track A, not B
+
+optimizer = torch.optim.Adam(
+    model.parameters(),
+    lr=1e-1,
+)
+loss_fn = nn.MSELoss()
+model.train()
+for _ in range(40):
+    optimizer.zero_grad()
+    loss = loss_fn(model(x), y)
+    loss.backward()
+    optimizer.step()
+
+model.eval()
+ig = IntegratedGradients(model)
+feature_attr = k2.map_node_attributions(
+    attributions=ig.attribute(x, target=0),
+    spec=spec,
+    layer=0,
+)
+
+# lin0 is the hop into H, which is GraphSpec layer 1.
+lc = LayerConductance(model, model.lin0)
+node_attr = k2.map_node_attributions(
+    attributions=lc.attribute(x, target=0),
+    spec=spec,
+    layer=1,
+)
+
+print(feature_attr.to_pandas().abs().mean())
+print(node_attr.to_pandas().abs().mean())
+```
+
 ## Main public API
 
 The documented public names are:
@@ -81,11 +175,8 @@ The documented public names are:
 Skip-edge fields live on `GraphSpec.skips`. The package does not
 return a ready-made model.
 
-See the
-[API reference](https://thomas-rauter.github.io/kpnn2/api/)
-for details, and
-[Skip edges](https://thomas-rauter.github.io/kpnn2/skip-edges/)
-for residual wiring.
+See the [**API reference**](docs/api.md) for details, and
+[**Skip edges**](docs/skip-edges.ipynb) for residual wiring.
 
 ## Package philosophy
 
@@ -113,12 +204,14 @@ Those remain part of the normal PyTorch workflow:
 
 Adjacent hops go through `MaskedLinear`. Skip edges stay out of the
 masks: you keep the source activation and add a residual in
-`forward()`. See
-[Skip edges](https://thomas-rauter.github.io/kpnn2/skip-edges/).
+`forward()`. See [**Skip edges**](docs/skip-edges.ipynb).
 
 Cycles are not parsed in v1. A recurrent (fixed-step) update is
 ordinary user `forward()`. See the
-[Recurrent example](https://thomas-rauter.github.io/kpnn2/recurrent-example/).
+[**Recurrent example**](docs/recurrent-example.ipynb).
+
+See [**Mapping attributions**](docs/map-node-attributions.ipynb)
+for how `map_node_attributions()` labels a layer tensor.
 
 ## Installation
 
@@ -128,86 +221,30 @@ Requires Python 3.10 or later.
 pip install kpnn2
 ```
 
-## Minimal example
-
-```python
-import pandas as pd
-import torch
-import torch.nn.functional as F
-from torch import nn
-
-import kpnn2 as k2
-
-edgelist = pd.DataFrame(
-    {
-        "source": ["A", "H", "A"],
-        "target": ["H", "C", "C"],
-    }
-)
-spec = k2.parse_edgelist(edgelist)
-
-
-class Net(nn.Module):
-    def __init__(self, spec: k2.GraphSpec):
-        super().__init__()
-        self.spec = spec
-        self.lin0 = k2.MaskedLinear(spec.masks[0])
-        self.lin1 = k2.MaskedLinear(spec.masks[1])
-        self.w_skip = nn.Parameter(torch.zeros(1))
-
-    def forward(self, x):
-        h = F.relu(self.lin0(x))
-        c = self.lin1(h)
-        saved = {0: x, 1: h}
-        for skip in self.spec.skips:
-            src = saved[skip.source_layer]
-            src = src[:, skip.source_index]
-            add = torch.zeros_like(c)
-            add[:, skip.target_index] = self.w_skip * src
-            c = c + add
-        return c
-
-
-model = Net(spec)
-x_df = pd.DataFrame({"A": [0.1, 0.2]})
-x = k2.align_inputs(
-    x_df,
-    spec,
-)
-y = model(x)
-
-# Name a tensor at one layer. Captum is optional and not imported.
-scores = torch.tensor([[0.4], [0.5]])
-da = k2.map_node_attributions(
-    attributions=scores,
-    spec=spec,
-    layer=len(spec.layer_nodes) - 1,
-)
-```
-
 ## Start here
 
 If you are new to the package, start with:
 
-- [Installation](https://thomas-rauter.github.io/kpnn2/installation/)
-  for package setup
-- [Getting started](https://thomas-rauter.github.io/kpnn2/getting-started/)
-  for a full end-to-end feedforward example
-- [Recurrent example](https://thomas-rauter.github.io/kpnn2/recurrent-example/)
-  for a cyclic graph with a shared masked update
-- [Mapping attributions](https://thomas-rauter.github.io/kpnn2/map-node-attributions/)
-  for labeling layer tensors with node names
-- [Skip edges](https://thomas-rauter.github.io/kpnn2/skip-edges/)
-  for keeping activations in memory instead of pseudo nodes
-- [API reference](https://thomas-rauter.github.io/kpnn2/api/)
-  for function- and object-level documentation
+- [**Installation**](docs/installation.md) for package setup
+- [**Getting started**](docs/getting-started.ipynb) for a full
+  end-to-end feedforward example
+- [**Recurrent example**](docs/recurrent-example.ipynb) for a
+  cyclic graph with a shared masked update
+- [**Mapping attributions**](docs/map-node-attributions.ipynb) for
+  labeling layer tensors with node names
+- [**Skip edges**](docs/skip-edges.ipynb) for keeping activations
+  in memory instead of pseudo nodes
+- [**API reference**](docs/api.md) for function- and object-level
+  documentation
 
 ## Citation
 
 If you use `kpnn2` in research, please cite the software.
-Citation metadata is available in [`CITATION.cff`](CITATION.cff).
+Citation metadata is available in
+[`CITATION.cff`](https://github.com/Thomas-Rauter/kpnn2/blob/main/CITATION.cff).
 
 ## License
 
 This project is licensed under the MIT License. See the
-[`LICENSE`](LICENSE) file for details.
+[LICENSE file on GitHub](https://github.com/Thomas-Rauter/kpnn2/blob/main/LICENSE)
+for details.
