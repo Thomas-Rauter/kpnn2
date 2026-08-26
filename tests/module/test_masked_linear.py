@@ -1,10 +1,12 @@
 import math
 
+import pandas as pd
 import pytest
 import torch
 import torch.nn.functional as F
 
-from kpnn2 import Kpnn2Error, MaskedLinear
+from kpnn2 import Kpnn2Error, MaskedLinear, parse_edgelist
+from kpnn2._frozen_mask import FrozenMask
 
 
 def test_masked_linear_output_shape():
@@ -339,6 +341,151 @@ def test_masked_linear_rejects_mask_replacement():
             2,
             3,
         )
+
+
+def test_masked_linear_rejects_out_kwarg_write():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    before = layer.mask.tolist()
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        torch.add(
+            layer.mask,
+            1,
+            out=layer.mask,
+        )
+    assert layer.mask.tolist() == before
+
+
+def test_masked_linear_numpy_cannot_change_mask():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    before = layer.mask.tolist()
+    arr = layer.mask.numpy()
+    try:
+        arr[:] = 0
+    except (ValueError, Kpnn2Error):
+        pass
+    assert layer.mask.tolist() == before
+    assert not arr.flags.writeable
+
+
+def test_masked_linear_rejects_register_buffer_mask():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    before = layer.mask.tolist()
+    assert isinstance(layer.mask, FrozenMask)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.register_buffer(
+            "mask",
+            torch.zeros(
+                2,
+                3,
+            ),
+            persistent=False,
+        )
+    assert layer.mask.tolist() == before
+    assert isinstance(layer.mask, FrozenMask)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+
+
+def test_masked_linear_mask_independent_of_graph_spec():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "B"],
+            "target": ["B", "C"],
+        }
+    )
+    spec = parse_edgelist(edgelist)
+    layer = MaskedLinear(spec.masks[0])
+    spec_before = spec.masks[0].tolist()
+    layer_before = layer.mask.tolist()
+    assert layer.mask is not spec.masks[0]
+    assert layer.mask.data_ptr() != spec.masks[0].data_ptr()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+    assert spec.masks[0].tolist() == spec_before
+    assert layer.mask.tolist() == layer_before
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        spec.masks[0].fill_(0.0)
+    assert spec.masks[0].tolist() == spec_before
+    assert layer.mask.tolist() == layer_before
+
+    for tensor in (layer.mask, spec.masks[0]):
+        arr = tensor.numpy()
+        try:
+            arr[:] = 0
+        except (ValueError, Kpnn2Error):
+            pass
+    assert spec.masks[0].tolist() == spec_before
+    assert layer.mask.tolist() == layer_before
+
+    layer = layer.to(
+        device="cpu",
+        dtype=torch.float32,
+    )
+    assert spec.masks[0].tolist() == spec_before
+    assert layer.mask.tolist() == layer_before
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        spec.masks[0].fill_(0.0)
+
+
+def test_masked_linear_rejects_in_place_mask_write_keeps_values():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    before = layer.mask.tolist()
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask[0, 0] = 0.0
+    assert layer.mask.tolist() == before
 
 
 @pytest.mark.parametrize(

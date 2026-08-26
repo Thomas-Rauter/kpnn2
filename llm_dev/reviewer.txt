@@ -95,10 +95,14 @@ Do not:
 Next packet: revise and send MESSAGE TO REVIEWER with Round+1.
 ```
 
-Do not include a commit message. Do not write patches unless
+Do not write patches unless
 a required change would be ambiguous without a short snippet.
 Do not APPROVE with leftover follow-ups that are in-scope
 for this TASK.
+
+When you approve, write a second copyable block below your answer
+with the recommendet commit message (do not stage or commit yourself!).
+The commit message should be header and body in a single copyable block.
 
 
 ================================================================

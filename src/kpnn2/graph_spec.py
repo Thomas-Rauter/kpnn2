@@ -76,7 +76,8 @@ class GraphSpec:
         ``nn.Linear.weight``. Entry ``[target_index, source_index]``
         is ``1.0`` for an original edge with depth gap exactly 1,
         otherwise ``0.0``. Skip edges are not written into these
-        tensors. Entries reject in-place writes.
+        tensors. In-place writes, ``out=`` into the tensor, and
+        numpy aliases of stored storage are rejected.
     skips : tuple[Skip, ...]
         Original edges with depth gap greater than 1. Each record
         has ``source``, ``target``, ``source_layer``,
@@ -87,8 +88,10 @@ class GraphSpec:
     Notes
     -----
     Fields cannot be reassigned. Sequences are tuples. Mask
-    tensors reject in-place writes. ``MaskedLinear`` clones the
-    mask into a non-persistent buffer.
+    tensors reject in-place writes and ``out=`` writes
+    (``Kpnn2Error``). ``numpy()`` is not a writable view of
+    stored storage. ``MaskedLinear`` clones the mask into a
+    non-persistent buffer independent of ``spec.masks``.
 
     Examples
     --------

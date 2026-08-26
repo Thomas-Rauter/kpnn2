@@ -202,7 +202,8 @@ and `target` values only.
 `GraphSpec` is a frozen dataclass. It holds structure only: no
 `nn.Module`, no parameters, no execution plan object. Sequences
 are tuples. Do not reassign fields. Mask tensors reject in-place
-writes.
+writes, `out=` writes into the mask, and numpy aliases of stored
+storage (`Kpnn2Error` for torch writes).
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -227,6 +228,12 @@ writes.
   exactly 1.
 - All other entries are `0.0`.
 - **Skip edges (gap > 1) do not appear in any mask.**
+- In-place writes (`fill_`, `copy_`, item assignment) and
+  `out=` into a stored mask raise `Kpnn2Error`. `numpy()` does
+  not yield a writable view of the stored storage.
+- `MaskedLinear(spec.masks[i])` stores an independent frozen
+  copy. A write (or failed write) on one side does not change
+  the other.
 
 ### `Skip` records
 
@@ -289,9 +296,14 @@ MaskedLinear(mask, bias=True)
   parameter, not in `state_dict`), `float32`. GraphSpec masks
   stay float32. After `Module.half()`, `.to(dtype=torch.bfloat16)`,
   or `.double()`, `layer.mask.dtype` is still `float32`. In-place
-  writes and replacement raise `Kpnn2Error`. Rebuild from the
-  edgelist / `GraphSpec` to change wiring. The stored mask does
-  not follow the module floating dtype.
+  writes (`fill_`, `copy_`, item assignment, `out=` into the
+  mask) and replacement (`layer.mask = ...` or
+  `register_buffer("mask", ...)`) raise `Kpnn2Error`. `numpy()`
+  does not yield a writable view of the stored storage.
+  `MaskedLinear(spec.masks[i])` stores an independent frozen
+  copy. Rebuild from the edgelist / `GraphSpec` to change
+  wiring. The stored mask does not follow the module floating
+  dtype.
 - Trainable `raw_weight`: same shape as `mask`.
 - Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
   parameter.

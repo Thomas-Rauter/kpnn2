@@ -9,6 +9,10 @@ This project follows semantic versioning.
 
 ### Changed
 
+- Frozen connectivity masks reject `out=` writes, mask
+  replacement via `register_buffer`, and numpy aliases of
+  stored storage. `MaskedLinear` clones independently of
+  `GraphSpec.masks`.
 - Duplicate-edge and self-loop failures from `parse_edgelist`
   name the offending pairs / nodes (unique, sorted), while
   keeping the existing extra-row / self-loop-row counts.

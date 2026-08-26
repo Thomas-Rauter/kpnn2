@@ -41,10 +41,11 @@ class MaskedLinear(nn.Module):
     mask : torch.Tensor
         Frozen float32 buffer, same shape as the constructor
         ``mask``. Not trained, not saved in ``state_dict``, and
-        not writable in place. Stays float32 after
-        ``.half()`` / bfloat16 / ``.double()``. Connectivity
-        comes only from the tensor passed to the constructor
-        (typically ``spec.masks[i]``).
+        not writable in place. Independent of the constructor
+        tensor (including ``spec.masks[i]``). Stays float32
+        after ``.half()`` / bfloat16 / ``.double()``.
+        Connectivity comes only from the tensor passed to the
+        constructor (typically ``spec.masks[i]``).
     raw_weight : nn.Parameter
         Trainable weight of shape ``(out_features, in_features)``.
         Masked-out entries can be nonzero in this tensor; they are
@@ -63,9 +64,12 @@ class MaskedLinear(nn.Module):
     -----
     Construct with ``mask``; sizes come from ``mask.shape``.
     ``mask`` is a float32 buffer, is not trained, and is omitted
-    from ``state_dict``. In-place writes and replacement are
-    rejected. Module dtype casts do not change the stored mask
-    dtype. The trainable tensor is ``raw_weight``. Forward is
+    from ``state_dict``. In-place writes (including ``out=``),
+    ``layer.mask = ...``, and
+    ``register_buffer("mask", ...)`` raise ``Kpnn2Error``.
+    ``numpy()`` is not a writable view of stored storage.
+    Module dtype casts do not change the stored mask dtype.
+    The trainable tensor is ``raw_weight``. Forward is
     ``Y = F.linear(X, effective, bias)`` where ``effective`` is
     ``raw_weight * mask.to(dtype=raw_weight.dtype,
     device=raw_weight.device)``, so ``.half()``, bfloat16, and
@@ -158,6 +162,23 @@ class MaskedLinear(nn.Module):
         )
         self._mask_locked = True
         self.reset_parameters()
+
+    def register_buffer(
+        self,
+        name: str,
+        tensor: torch.Tensor | None,
+        persistent: bool = True,
+    ) -> None:
+        if name == "mask" and getattr(self, "_mask_locked", False):
+            raise Kpnn2Error(
+                "MaskedLinear.mask is read-only. Rebuild the "
+                "layer from the edgelist GraphSpec."
+            )
+        super().register_buffer(
+            name,
+            tensor,
+            persistent,
+        )
 
     def __setattr__(
         self,
