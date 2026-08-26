@@ -29,8 +29,9 @@ edgelist, using native nn.Module layers.
    mask tensors, and skip-edge metadata. It does not construct an
    `nn.Module`.
 3. **Build:** The user writes a PyTorch `nn.Module` using
-   `MaskedLinear(spec.masks[i])` for adjacent hops and their own
-   activations, norms, loops, and heads.
+   `MaskedLinear(spec.masks[i])` for adjacent hops,
+   `SkipAdd(spec)` for skip indexing, and their own activations,
+   norms, loops, and heads.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a `float32` tensor. Pre-ordered tensors
    go straight to the model.
@@ -61,17 +62,18 @@ edgelist, using native nn.Module layers.
 - **Not AnnData (v1).** No `anndata` support in `align_inputs`.
 - **Not cyclic (v1).** Cycles raise `Kpnn2Error`. Recurrence is
   user `forward()` on a future adjacency layout, not a v1 parser mode.
-- **Not pseudo-node expansion.** Skip edges are metadata plus a
-  residual add in user code, not dummy neurons in masks.
+- **Not pseudo-node expansion.** Skip edges are metadata plus
+  `SkipAdd` (or a residual add in user code), not dummy neurons
+  in masks.
 
 ---
 
 ## Package philosophy
 
 **Primitives, not a compiled container.** `kpnn2` owns edgelist
-parsing, mask tensors, named I/O alignment, and attribution column
-names. The user owns `nn.Module.forward()`, nonlinearities, skip
-residuals, and training.
+parsing, mask tensors, skip indexing, named I/O alignment, and
+attribution column names. The user owns `nn.Module.forward()`,
+call order, nonlinearities, and training.
 
 Division of labor:
 
@@ -79,7 +81,8 @@ Division of labor:
 |-------|--------|
 | Edgelist → `GraphSpec` (ranks, masks, skips) | kpnn2 |
 | `MaskedLinear` (frozen mask) | kpnn2 |
-| `forward()`, activations, norms, heads | User (PyTorch) |
+| `SkipAdd` (skip indexing onto a layer tensor) | kpnn2 |
+| `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
 | Captum / other attribution algorithms | User |
 | Tensor → named `xarray.DataArray` | kpnn2 |
@@ -96,13 +99,14 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `GraphSpec` | Frozen structural dataclass (masks, layers, skips) |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
+| `SkipAdd` | `nn.Module`: inject skip sources into a layer pre-activation |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
 | `Kpnn2Error` | User-facing error type |
 | `__version__` | Package version string |
 
-`__all__` contains exactly these names (including `Skip` and
-`__version__`). No other public symbols.
+`__all__` contains exactly these names (including `Skip`,
+`SkipAdd`, and `__version__`). No other public symbols.
 
 Do **not** export or implement: `compile_graph`, `customize_model`,
 `interpret_model`, `align_features_to_input_nodes`, `edge_weights`,
@@ -261,27 +265,38 @@ in `skips`.
 
 ## Skip connections (no pseudo nodes)
 
-Masks only encode **adjacent** hops. A skip `A → C` that jumps one
-or more layers is **not** inserted as a dummy channel.
+Masks only encode **adjacent** hops. A skip `A → H2` that jumps
+one or more layers is **not** inserted as a dummy channel and is
+**not** written into any mask.
 
-The user keeps the source activation in a Python variable and adds
-it when the target layer is computed, using a learnable scalar (or
-any user module):
+A skip means the source is an extra parent of the target.
+`SkipAdd` injects `w * saved_source` into the target
+pre-activation **after** that hop's `MaskedLinear` and **before**
+ReLU / BatchNorm / dropout. It does not undo ReLU, does not send
+the source through the adjacent weight matrix, and does not
+modify saved source tensors. There is no skip bias; unit bias
+stays on `MaskedLinear`.
+
+`kpnn2` owns skip indexing (`spec.skips` plus `SkipAdd`). The
+user owns call order and nonlinearities. Hand-written residual
+adds remain valid.
 
 ```python
-# spec.skips tells you source_layer, target_layer, indices
-a = x                              # layer 0, node A
-h = torch.relu(self.lin0(a))       # adjacent hop 0→1
+self.skips = k2.SkipAdd(spec)      # once; one scalar per skip
+
+saved = {0: x}
+h = self.lin0(x)                   # adjacent hop 0→1
+h = self.skips(h, saved, 1)        # no-op if nothing targets 1
+h = torch.relu(h)
+saved[1] = h
 c = self.lin1(h)                   # adjacent hop 1→2
-c = c + self.w_skip * a            # skip A → C
+c = self.skips(c, saved, 2)        # A → C into C's pre-activation
 ```
 
-`MaskedLinear` layers must not contain skip edges. There is no
-identity overwrite and no compiler-generated node names.
-
-If several skips exist, keep a dict of saved layer tensors (or
-named slices) and apply each `Skip` when its `target_layer` is
-built: add `w * saved[source]` into the target index.
+Construct `SkipAdd` once. Call it after every hop; it is a
+no-op when nothing targets that layer. Empty `spec.skips` is
+identity. `MaskedLinear` must not contain skip edges. There is
+no identity overwrite and no compiler-generated node names.
 
 ---
 
@@ -335,6 +350,34 @@ MaskedLinear(mask, bias=True)
   by 0 in the forward pass.
 
 Typical construction: `MaskedLinear(spec.masks[i])`.
+
+---
+
+## `SkipAdd`
+
+Skip counterpart to `MaskedLinear`. Indexes `spec.skips`; does
+not change masks.
+
+```text
+SkipAdd(spec)
+```
+
+- One learnable scalar per `spec.skips`, initialized to `0`.
+- No skip bias.
+- `forward(hidden, saved, target_layer)` returns `hidden` plus
+  every skip whose `target_layer` matches.
+- `saved` maps layer index → tensor with width
+  `len(spec.layer_nodes[layer])`. Entries are only read.
+- Empty `spec.skips` is identity.
+- Construct once; call after every hop; no-op if nothing
+  targets that layer.
+- The add uses `hidden.dtype` / `hidden.device` (skip weight
+  and source are cast like `MaskedLinear` casts the mask).
+- `copy.deepcopy` succeeds. Parameters on the copy are
+  distinct. The stored `GraphSpec` stays frozen (do not
+  mutate `spec.skips` or masks).
+- Public failures: `Kpnn2Error` (bad spec, invalid
+  `target_layer`, missing saved layer, width mismatch).
 
 ---
 
@@ -432,15 +475,24 @@ class Net(nn.Module):
         super().__init__()
         self.lin0 = k2.MaskedLinear(spec.masks[0])
         self.lin1 = k2.MaskedLinear(spec.masks[1])
-        self.w_skip = nn.Parameter(torch.zeros(1))
+        self.skips = k2.SkipAdd(spec)
         self.spec = spec
 
     def forward(self, x):
-        h = F.relu(self.lin0(x))
-        c = self.lin1(h)
-        for skip in self.spec.skips:
-            # user indexes saved activations by skip.source_layer
-            c = c + self.w_skip * x
+        saved = {0: x}
+        h = F.relu(
+            self.skips(
+                self.lin0(x),
+                saved,
+                target_layer=1,
+            )
+        )
+        saved[1] = h
+        c = self.skips(
+            self.lin1(h),
+            saved,
+            target_layer=2,
+        )
         return c
 
 model = Net(spec)
@@ -456,9 +508,9 @@ da = k2.map_node_attributions(
 )
 ```
 
-The skip loop above is illustrative. Real code should add
-`w * saved_source` into `layer_nodes[target_layer][target_index]`
-using the `Skip` fields, not blindly add the full input vector.
+`SkipAdd` indexes each matching skip onto the correct unit.
+Call it after `MaskedLinear` and before the hop's nonlinearity
+(last hop may stay linear).
 
 ---
 
@@ -469,8 +521,10 @@ PyTorch:
 
 1. `spec = k2.parse_edgelist(edgelist)`
 2. `self.layer_i = k2.MaskedLinear(spec.masks[i])` for each hop
-3. Put ReLU / BatchNorm / Dropout in `forward()` yourself
-4. Implement skips as residuals using `spec.skips`
+3. `self.skips = k2.SkipAdd(spec)` once
+4. Put ReLU / BatchNorm / Dropout in `forward()` yourself.
+   Call `SkipAdd` after each hop's `MaskedLinear` and before
+   that hop's nonlinearity.
 5. `x = k2.align_inputs(df, spec)`
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
@@ -492,6 +546,7 @@ src/kpnn2/
   parse_edgelist.py           # parse_edgelist
   graph_spec.py               # GraphSpec, Skip
   masked_linear.py            # MaskedLinear
+  skip_add.py                 # SkipAdd
   align_inputs.py
   map_node_attributions.py
   errors.py                   # Kpnn2Error
@@ -542,7 +597,8 @@ disagree with CI.
   a later prompt explicitly asks.
 - `parse_edgelist` must not instantiate `nn.Module`.
 - `MaskedLinear` must not store other layers' activations or
-  implement skip routing.
+  implement skip routing. `SkipAdd` owns skip indexing; the
+  user owns call order and nonlinearities.
 - One graph node is one scalar in v1 (no node width).
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the

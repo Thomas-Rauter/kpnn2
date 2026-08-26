@@ -15,8 +15,9 @@ class Skip:
     One original edge whose endpoints are more than one layer apart.
 
     Adjacent edges (depth gap exactly 1) live in ``GraphSpec.masks``,
-    not here. A skip is metadata for a residual add in user
-    ``forward()`` code. It is not expanded into a dummy neuron.
+    not here. A skip is metadata for ``SkipAdd`` (or a residual add
+    in user ``forward()`` code). It is not expanded into a dummy
+    neuron.
 
     Parameters
     ----------
@@ -51,8 +52,8 @@ class GraphSpec:
     Frozen blueprint from ``parse_edgelist``.
 
     Structure only: not an ``nn.Module`` and no parameters. Use
-    ``masks`` for ``MaskedLinear`` hops and ``skips`` for residual
-    adds in ``forward()``.
+    ``masks`` for ``MaskedLinear`` hops and ``skips`` for
+    ``SkipAdd`` (or a residual add in ``forward()``).
 
     Parameters
     ----------
@@ -82,8 +83,8 @@ class GraphSpec:
         Original edges with depth gap greater than 1. Each record
         has ``source``, ``target``, ``source_layer``,
         ``target_layer``, ``source_index``, and ``target_index``.
-        Wire these in ``forward()`` as a residual add. Do not expand
-        them into pseudo-nodes.
+        Index these with ``SkipAdd``, or wire a residual add in
+        ``forward()``. Do not expand them into pseudo-nodes.
 
     Notes
     -----

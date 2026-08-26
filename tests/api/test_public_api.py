@@ -5,6 +5,7 @@ _PUBLIC_NAMES = [
     "GraphSpec",
     "Skip",
     "MaskedLinear",
+    "SkipAdd",
     "align_inputs",
     "map_node_attributions",
     "Kpnn2Error",

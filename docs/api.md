@@ -30,6 +30,15 @@ toc_depth: 2
         - reset_parameters
         - forward
 
+::: kpnn2.skip_add.SkipAdd
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+      merge_init_into_class: true
+      members:
+        - reset_parameters
+        - forward
+
 ::: kpnn2.align_inputs.align_inputs
     options:
       show_root_heading: true
