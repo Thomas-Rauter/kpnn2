@@ -124,8 +124,8 @@ class MaskedLinear(nn.Module):
         Float32 buffer, same shape as the constructor ``mask``.
         Not trained and not saved in ``state_dict``. An
         independent copy of the constructor tensor (including
-        ``spec.masks[i]``), so later edits to that tensor do not
-        reach this layer. Stays float32 after ``.half()`` /
+        ``spec.hops[i].mask``), so later edits to that tensor do
+        not reach this layer. Stays float32 after ``.half()`` /
         bfloat16 / ``.double()``. **Treat it as read-only:**
         like any PyTorch buffer it can be written to, and doing
         so silently rewires the layer. Rebuild from the edgelist
@@ -180,7 +180,9 @@ class MaskedLinear(nn.Module):
 
     ``reset_parameters`` uses per-row mask degree as ``fan_in``,
     not full ``in_features``. Typical construction:
-    ``MaskedLinear(spec.masks[i])``.
+    ``MaskedLinear(spec.hops[i].mask)``. Because a hop mask
+    carries every parent of its target, including skip parents,
+    that per-row degree is the unit's real fan-in.
 
     Examples
     --------

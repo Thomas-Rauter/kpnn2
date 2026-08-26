@@ -4,10 +4,11 @@ _PUBLIC_NAMES = [
     "parse_layered",
     "parse_adjacency",
     "LayeredSpec",
+    "Hop",
     "Skip",
     "AdjacencySpec",
     "MaskedLinear",
-    "SkipAdd",
+    "gather_hop_inputs",
     "align_inputs",
     "map_node_attributions",
     "Kpnn2Error",
@@ -22,6 +23,7 @@ _COMPILER_LEFTOVERS = [
     "edge_weights",
     "CompileArtifact",
     "ConstrainedMaskedLinear",
+    "SkipAdd",
 ]
 
 

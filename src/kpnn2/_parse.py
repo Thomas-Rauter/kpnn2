@@ -8,8 +8,14 @@ import pandas as pd
 import torch
 
 from ._errors import Kpnn2Error
-from ._layout import Layout, NodeSlot, build_layout, fill_block
-from ._spec import LayeredSpec, Skip
+from ._layout import (
+    Layout,
+    NodeSlot,
+    build_layout,
+    concat_layouts,
+    fill_block,
+)
+from ._spec import Hop, LayeredSpec, Skip
 
 _SOURCE = "source"
 _TARGET = "target"
@@ -319,19 +325,47 @@ def _node_placement(
     return placement
 
 
-def _build_masks(
+def _parent_layers(
+    edgelist: pd.DataFrame,
+    placement: dict[str, tuple[int, NodeSlot]],
+    n_layers: int,
+) -> list[set[int]]:
+    """
+    Collect, per depth, the depths that feed it.
+
+    Entry ``d`` is every depth with at least one edge into depth
+    ``d``. Longest-path ranking guarantees ``d - 1`` is in it for
+    every ``d > 0``, and that entry 0 is empty.
+    """
+    parents: list[set[int]] = [set() for _ in range(n_layers)]
+    for source, target in zip(
+        edgelist[_SOURCE].tolist(),
+        edgelist[_TARGET].tolist(),
+    ):
+        source_layer, _ = placement[source]
+        target_layer, _ = placement[target]
+        parents[target_layer].add(source_layer)
+    return parents
+
+
+def _build_hops(
     edgelist: pd.DataFrame,
     layouts: list[Layout],
     placement: dict[str, tuple[int, NodeSlot]],
-) -> list[torch.Tensor]:
+) -> list[Hop]:
     """
-    Build adjacent-hop mask tensors from original edges.
+    Build one incoming mask per depth after the first.
 
-    ``masks[i]`` has shape
-    ``(layouts[i + 1].n_units, layouts[i].n_units)``, dtype
-    float32. Each depth-gap-1 edge fills the block its endpoints
-    own, which is one entry per edge while nodes are one unit
-    wide. Skip edges (gap greater than 1) are omitted.
+    ``hops[i]`` targets depth ``i + 1`` and its mask holds every
+    edge entering that depth, adjacent or skip, with shape
+    ``(target units, sum of source units)``. The column axis is
+    the source depths concatenated in ascending order, so an
+    edge fills the block its endpoints own on that axis: one
+    entry per edge while nodes are one unit wide.
+
+    Only depths that really feed the target become columns, so a
+    graph without skips gives exactly one source depth per hop
+    and the same masks a per-adjacent-hop layout would.
 
     Parameters
     ----------
@@ -344,36 +378,58 @@ def _build_masks(
 
     Returns
     -------
-    list[torch.Tensor]
-        One mask per hop from layer ``i`` to layer ``i + 1``.
+    list[Hop]
+        One hop per depth from 1 upwards, in depth order.
     """
-    masks: list[torch.Tensor] = []
-    for i in range(len(layouts) - 1):
-        mask = torch.zeros(
+    n_layers = len(layouts)
+    parents = _parent_layers(
+        edgelist,
+        placement,
+        n_layers,
+    )
+
+    source_layers: dict[int, tuple[int, ...]] = {}
+    source_layouts: dict[int, Layout] = {}
+    masks: dict[int, torch.Tensor] = {}
+    for target_layer in range(1, n_layers):
+        ordered = tuple(sorted(parents[target_layer]))
+        source_layout = concat_layouts(
+            [layouts[layer] for layer in ordered],
+        )
+        source_layers[target_layer] = ordered
+        source_layouts[target_layer] = source_layout
+        masks[target_layer] = torch.zeros(
             (
-                layouts[i + 1].n_units,
-                layouts[i].n_units,
+                layouts[target_layer].n_units,
+                source_layout.n_units,
             ),
             dtype=torch.float32,
         )
-        masks.append(mask)
 
-    sources = edgelist[_SOURCE].tolist()
-    targets = edgelist[_TARGET].tolist()
     for source, target in zip(
-        sources,
-        targets,
+        edgelist[_SOURCE].tolist(),
+        edgelist[_TARGET].tolist(),
     ):
-        source_layer, source_slot = placement[source]
         target_layer, target_slot = placement[target]
-        gap = target_layer - source_layer
-        if gap == 1:
-            fill_block(
-                masks[source_layer],
-                target_slot,
-                source_slot,
+        fill_block(
+            masks[target_layer],
+            target_slot,
+            source_layouts[target_layer].slot(source),
+        )
+
+    hops: list[Hop] = []
+    for target_layer in range(1, n_layers):
+        ordered = source_layers[target_layer]
+        hops.append(
+            Hop(
+                target_layer=target_layer,
+                source_layers=ordered,
+                source_dims=tuple(layouts[layer].n_units for layer in ordered),
+                source_nodes=source_layouts[target_layer].names,
+                mask=masks[target_layer],
             )
-    return masks
+        )
+    return hops
 
 
 def _build_skips(
@@ -383,10 +439,11 @@ def _build_skips(
     """
     Collect original edges with depth gap greater than 1.
 
-    Adjacent edges (gap exactly 1) are omitted; they belong in
-    masks, not here. Each recorded index is the first unit its
-    node owns, which is the node's column index while nodes are
-    one unit wide.
+    These records are metadata: the edges themselves are already
+    ones in the target depth's hop mask. Adjacent edges (gap
+    exactly 1) are omitted, since nothing distinguishes them.
+    Each recorded index is the first unit its node owns, which
+    is the node's column index while nodes are one unit wide.
 
     Parameters
     ----------
@@ -431,13 +488,17 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     The graph must be a DAG. Nodes are ranked with Kahn's algorithm:
     input nodes (in-degree 0) have depth 0, and every other node has
     ``depth = 1 + max(parent depths)``. Names are sorted alphabetically
-    inside each layer. That ranking defines ``LayeredSpec.layer_nodes``,
-    adjacent-hop ``masks``, and skip-edge records.
+    inside each layer. That ranking defines ``LayeredSpec.layer_nodes``
+    and one ``Hop`` per layer after the first.
 
-    Adjacent edges (depth gap exactly 1) become ones in ``masks``.
-    Edges with depth gap greater than 1 are stored in ``skips`` and
-    do not appear in any mask. Do not expand skips into dummy
-    neurons; add them as residuals in ``forward()``.
+    **Every** edge lands in exactly one hop mask, the one of its
+    target layer, whether its depth gap is 1 or larger. A hop
+    whose target has parents further back reads several layers:
+    its mask columns are those layers concatenated. Edges with a
+    gap greater than 1 are additionally listed in ``skips`` as
+    metadata, so they can be reported, but they are not a
+    separate computation and are not expanded into dummy
+    neurons.
 
     Terminals that are not at maximum depth (early outputs) are
     allowed. Cycles, self-loops, and graphs with no input or no
@@ -454,7 +515,7 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     Returns
     -------
     LayeredSpec
-        Frozen structure: layers, masks, and skips.
+        Frozen structure: layers, hops, and skip metadata.
 
     Raises
     ------
@@ -480,18 +541,23 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     ``{source} -> {target}``, sorted lexicographically.
     Self-loops name the unique nodes, sorted alphabetically.
 
-    ``len(masks)`` is ``len(layer_nodes) - 1``. ``masks[i]`` is the
-    hop from layer ``i`` to ``i + 1``. Shape is
-    ``(layer_dims[i + 1], layer_dims[i])``, matching
-    ``nn.Linear.weight``. Dtype is float32.
-    ``masks[i][target_index, source_index]`` is ``1.0`` only for an
-    original edge from ``layer_nodes[i][source_index]`` to
-    ``layer_nodes[i + 1][target_index]`` with depth gap exactly 1.
+    ``len(hops)`` is ``len(layer_nodes) - 1`` and
+    ``hops[i].target_layer`` is ``i + 1``. ``hops[i].mask`` has
+    shape ``(layer_dims[i + 1], sum(hops[i].source_dims))``,
+    matching ``nn.Linear.weight``, and dtype float32. Its rows
+    are ``layer_nodes[i + 1]`` and its columns are
+    ``hops[i].source_nodes``, the source layers concatenated in
+    ascending order. An entry is ``1.0`` only for an original
+    edge between the node naming that row and the node naming
+    that column. ``hops[0]`` always reads layer 0 alone, so its
+    mask is what an ``align_inputs`` tensor feeds directly.
 
     Every original edge with depth gap greater than 1 appears once
     in ``skips``. Each record has ``source``, ``target``,
     ``source_layer``, ``target_layer``, ``source_index``, and
     ``target_index``. Adjacent edges never appear in ``skips``.
+    Membership in ``skips`` changes nothing about how the edge is
+    computed; it is already in its target's hop mask.
 
     Examples
     --------
@@ -516,8 +582,16 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     (('A',), ('H',), ('C',))
     >>> spec.layer_dims
     (1, 1, 1)
-    >>> spec.masks[0].tolist()
-    [[1.0]]
+
+    The hop into ``C`` reads both earlier layers, so the skip
+    ``A -> C`` is a column of its mask:
+
+    >>> spec.hops[1].source_layers
+    (0, 1)
+    >>> spec.hops[1].source_nodes
+    ('A', 'H')
+    >>> spec.hops[1].mask.tolist()
+    [[1.0, 1.0]]
     >>> spec.skips[0].source, spec.skips[0].target
     ('A', 'C')
     >>> spec.skips[0].source_layer, spec.skips[0].target_layer
@@ -546,7 +620,7 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     layouts = _layer_layouts(layer_nodes)
     placement = _node_placement(layouts)
     layer_dims = [layout.n_units for layout in layouts]
-    masks = _build_masks(
+    hops = _build_hops(
         normalized,
         layouts,
         placement,
@@ -561,6 +635,6 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
         hidden_nodes=tuple(hidden_nodes),
         layer_nodes=tuple(tuple(layer) for layer in layer_nodes),
         layer_dims=tuple(layer_dims),
-        masks=tuple(masks),
+        hops=tuple(hops),
         skips=tuple(skips),
     )

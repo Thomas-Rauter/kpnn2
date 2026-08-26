@@ -24,6 +24,13 @@ and may change between releases.
       show_root_toc_entry: true
       members: false
 
+::: kpnn2.Hop
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+      members:
+        - column_offsets
+
 ::: kpnn2.Skip
     options:
       show_root_heading: true
@@ -45,14 +52,10 @@ and may change between releases.
         - reset_parameters
         - forward
 
-::: kpnn2.SkipAdd
+::: kpnn2.gather_hop_inputs
     options:
       show_root_heading: true
       show_root_toc_entry: true
-      merge_init_into_class: true
-      members:
-        - reset_parameters
-        - forward
 
 ::: kpnn2.align_inputs
     options:

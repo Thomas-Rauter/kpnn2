@@ -18,8 +18,8 @@ class AdjacencySpec:
     node lives in one state vector and connectivity is one square
     mask, so the graph may contain cycles and self-loops.
 
-    There are no depths here: no ``layer_nodes``, no per-hop
-    ``masks`` tuple, and no ``skips``. This is not a one-layer
+    There are no depths here: no ``layer_nodes``, no ``hops``
+    tuple, and no ``skips``. This is not a one-layer
     ``LayeredSpec``. Use ``MaskedLinear(spec.mask)`` for one state
     update and write the recurrence in ``forward()``.
 

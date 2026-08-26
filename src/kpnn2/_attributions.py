@@ -93,8 +93,9 @@ def map_node_attributions(
 
     Notes
     -----
-    For a ``MaskedLinear`` built from ``spec.masks[i]``, the layer
-    index to pass here is ``i + 1`` (the hop output), not ``i``.
+    For a ``MaskedLinear`` built from ``spec.hops[i].mask``, the
+    layer index to pass here is ``spec.hops[i].target_layer``,
+    that is ``i + 1``: the hop output, not its input.
     Do not name-map tensors from BatchNorm or other unnamed
     modules; only map units that are spec nodes.
 

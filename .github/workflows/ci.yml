@@ -103,6 +103,7 @@ jobs:
               LayeredSpec,
               MaskedLinear,
               align_inputs,
+              gather_hop_inputs,
               map_node_attributions,
               parse_layered,
           )
@@ -127,8 +128,10 @@ jobs:
           assert x.shape == (2, 2)
           assert x.dtype == torch.float32
 
-          layer = MaskedLinear(spec.masks[0])
-          h = layer(x)
+          hop = spec.hops[0]
+          assert hop.source_layers == (0,)
+          layer = MaskedLinear(hop.mask)
+          h = layer(gather_hop_inputs({0: x}, hop))
           assert h.shape == (2, 1)
 
           da = map_node_attributions(

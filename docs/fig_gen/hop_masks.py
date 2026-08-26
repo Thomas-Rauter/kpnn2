@@ -1,12 +1,12 @@
-"""Generate the Skip edges SkipAdd schematic.
+"""Generate the Skip edges hop-mask schematic.
 
-Writes ``docs/figures/skip_add.svg``.
+Writes ``docs/figures/hop_masks.svg``.
 """
 
 from pathlib import Path
 
 _DOCS_DIR = Path(__file__).resolve().parents[1]
-_OUT_PATH = _DOCS_DIR / "figures" / "skip_add.svg"
+_OUT_PATH = _DOCS_DIR / "figures" / "hop_masks.svg"
 _FONT = "Liberation Sans, sans-serif"
 _FONTSIZE = "6"
 
@@ -102,6 +102,17 @@ def _skip(
     )
 
 
+def _label(
+    x: float,
+    y: float,
+    text: str,
+) -> str:
+    return (
+        f'  <text x="{x:g}" y="{y:g}" '
+        f'text-anchor="middle" fill="#000">{text}</text>'
+    )
+
+
 def svg_text() -> str:
     a_mid = _center(_A)
     h1_mid = _center(_H1)
@@ -114,7 +125,7 @@ def svg_text() -> str:
     return "\n".join(
         [
             '<svg xmlns="http://www.w3.org/2000/svg"',
-            '     viewBox="0 0 320 108"',
+            '     viewBox="0 0 320 114"',
             f'     font-family="{_FONT}"',
             f'     font-size="{_FONTSIZE}"',
             '     fill="none">',
@@ -125,18 +136,26 @@ def svg_text() -> str:
             '      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>',
             "    </marker>",
             "  </defs>",
-            f'  <text x="{a_mid[0]:g}" y="12" '
-            f'text-anchor="middle" fill="#000">'
-            f"layer 0</text>",
-            f'  <text x="{h1_mid[0]:g}" y="12" '
-            f'text-anchor="middle" fill="#000">'
-            f"layer 1</text>",
-            f'  <text x="{h2_mid[0]:g}" y="12" '
-            f'text-anchor="middle" fill="#000">'
-            f"layer 2</text>",
-            f'  <text x="{c_mid[0]:g}" y="12" '
-            f'text-anchor="middle" fill="#000">'
-            f"layer 3</text>",
+            _label(
+                a_mid[0],
+                12,
+                "layer 0",
+            ),
+            _label(
+                h1_mid[0],
+                12,
+                "layer 1",
+            ),
+            _label(
+                h2_mid[0],
+                12,
+                "layer 2",
+            ),
+            _label(
+                c_mid[0],
+                12,
+                "layer 3",
+            ),
             "",
             _box(_A, "A"),
             _box(_B, "B"),
@@ -147,30 +166,42 @@ def svg_text() -> str:
             "",
             _line(_right_center(_A), _left_center(_H1)),
             _line(_right_center(_B), _left_center(_H1)),
-            f'  <text x="{(a_mid[0] + h1_mid[0]) / 2:g}" '
-            f'y="24" text-anchor="middle" fill="#000">'
-            f"mask[0]</text>",
+            _label(
+                (a_mid[0] + h1_mid[0]) / 2,
+                24,
+                "hops[0].mask",
+            ),
             "",
             _line(_right_center(_H1), _left_center(_H2)),
-            f'  <text x="{(h1_mid[0] + h2_mid[0]) / 2:g}" '
-            f'y="36" text-anchor="middle" fill="#000">'
-            f"mask[1]</text>",
+            _label(
+                (h1_mid[0] + h2_mid[0]) / 2,
+                36,
+                "hops[1].mask",
+            ),
             "",
             _line(_right_center(_H2), _left_center(_C)),
-            f'  <text x="{(h2_mid[0] + c_mid[0]) / 2:g}" '
-            f'y="36" text-anchor="middle" fill="#000">'
-            f"mask[2]</text>",
+            _label(
+                (h2_mid[0] + c_mid[0]) / 2,
+                36,
+                "hops[2].mask",
+            ),
             "",
             # A -> H2 and A -> C share A's bottom-center.
             _skip(a_bottom, h2_bottom, 72.0),
             _skip(h1_bottom, c_bottom, 80.0),
             _skip(a_bottom, c_bottom, 96.0),
-            '  <text x="160" y="106" text-anchor="middle" fill="#000">',
-            (
-                "    Dashed: SkipAdd into the target "
-                "pre-activation (not in masks)"
+            _label(
+                160,
+                106,
+                "Dashed: edges that jump a layer. They are columns of "
+                "the same hop mask as the solid ones,",
             ),
-            "  </text>",
+            _label(
+                160,
+                112,
+                "so hops[1] reads layers 0 and 1, and hops[2] reads "
+                "layers 0, 1 and 2.",
+            ),
             "</svg>",
             "",
         ]
@@ -178,7 +209,7 @@ def svg_text() -> str:
 
 
 def write_figure(out_path: Path | None = None) -> Path:
-    """Write the SkipAdd schematic SVG."""
+    """Write the hop-mask schematic SVG."""
     path = _OUT_PATH if out_path is None else out_path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(svg_text())

@@ -8,9 +8,9 @@ class Kpnn2Error(Exception):
     User-facing failure from the public ``kpnn2`` API.
 
     Raised for invalid edgelists, illegal ``LayeredSpec`` operations,
-    bad ``MaskedLinear`` masks, ``SkipAdd`` arguments that do not
-    match the spec, and input or attribution tensors that do not
-    match the spec.
+    bad ``MaskedLinear`` masks, saved activations that do not match
+    the hop they are gathered for, and input or attribution tensors
+    that do not match the spec.
 
     Examples
     --------

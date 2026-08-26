@@ -351,12 +351,13 @@ def test_masked_linear_mask_independent_of_layered_spec():
         }
     )
     spec = parse_layered(edgelist)
-    layer = MaskedLinear(spec.masks[0])
+    mask = spec.hops[0].mask
+    layer = MaskedLinear(mask)
     layer_before = layer.mask.tolist()
-    assert layer.mask is not spec.masks[0]
-    assert layer.mask.data_ptr() != spec.masks[0].data_ptr()
+    assert layer.mask is not mask
+    assert layer.mask.data_ptr() != mask.data_ptr()
 
-    spec.masks[0].fill_(0.0)
+    mask.fill_(0.0)
     assert layer.mask.tolist() == layer_before
 
     layer = layer.to(
@@ -610,7 +611,7 @@ def test_module_with_masked_linear_and_layered_spec_deepcopy():
     class Net(nn.Module):
         def __init__(self, spec):
             super().__init__()
-            self.lin = MaskedLinear(spec.masks[0])
+            self.lin = MaskedLinear(spec.hops[0].mask)
             self.spec = spec
 
         def forward(self, x):
@@ -635,15 +636,15 @@ def test_module_with_masked_linear_and_layered_spec_deepcopy():
         net(x),
     )
     assert copied.lin.mask.dtype == torch.float32
-    assert copied.spec.masks[0].dtype == torch.float32
+    assert copied.spec.hops[0].mask.dtype == torch.float32
     assert type(copied.lin.mask) is torch.Tensor
-    assert type(copied.spec.masks[0]) is torch.Tensor
+    assert type(copied.spec.hops[0].mask) is torch.Tensor
 
     before = net.lin.mask.tolist()
     copied.lin.mask.fill_(0.0)
-    copied.spec.masks[0].fill_(0.0)
+    copied.spec.hops[0].mask.fill_(0.0)
     assert net.lin.mask.tolist() == before
-    assert net.spec.masks[0].tolist() == before
+    assert net.spec.hops[0].mask.tolist() == before
 
 
 def test_masked_linear_deepcopy_keeps_dtype_cast_and_state_dict():

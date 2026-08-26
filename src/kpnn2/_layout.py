@@ -8,7 +8,7 @@ column index and block expansion writes a single mask entry.
 
 Routing index arithmetic through this module is what keeps node
 width additive: give ``build_layout`` real widths and mask
-construction, input alignment, skip indexing, and attribution
+construction, input alignment, hop concatenation, and attribution
 naming follow without changes at their call sites.
 """
 
@@ -233,6 +233,48 @@ def build_layout(
             )
         )
         start += width
+    return Layout(slots=tuple(slots))
+
+
+def concat_layouts(
+    layouts: Sequence[Layout],
+) -> Layout:
+    """
+    Lay several axes end to end on one axis.
+
+    This is the source axis of a hop that reads more than one
+    layer: the layouts keep their internal order and each one
+    starts where the previous stopped, so a node's slot in the
+    result is its slot in its own layer shifted by the widths of
+    everything in front of it.
+
+    Parameters
+    ----------
+    layouts
+        Layouts to concatenate, in axis order.
+
+    Returns
+    -------
+    Layout
+        One layout over every node of every input, in order.
+
+    Raises
+    ------
+    Kpnn2Error
+        If a name appears in more than one input layout.
+    """
+    slots: list[NodeSlot] = []
+    start = 0
+    for layout in layouts:
+        for slot in layout.slots:
+            slots.append(
+                NodeSlot(
+                    name=slot.name,
+                    start=start + slot.start,
+                    width=slot.width,
+                )
+            )
+        start += layout.n_units
     return Layout(slots=tuple(slots))
 
 

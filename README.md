@@ -27,7 +27,8 @@ Figure 1 shows a dense NN next to a sparse NN with skip edges.
 **Figure 1.** (a) Dense adjacent layers, the usual PyTorch case.
 (b) A sparse DAG with skip edges (dashed), the same graph as on
 the [Skip edges](docs/skip-edges.ipynb) page. `kpnn2` turns (b)
-into ordinary `MaskedLinear` hops plus `SkipAdd`.
+into ordinary `MaskedLinear` hops, one per layer, with the skip
+edges inside those masks.
 
 An **edgelist** is a table of directed connections: each row links
 a `source` node to a `target` node. For example:
@@ -74,10 +75,10 @@ graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
 2. Parse it with `parse_layered()` to a `LayeredSpec`. For a graph
    with feedback loops, use `parse_adjacency()` and an
    `AdjacencySpec` instead.
-3. Write an `nn.Module` with `MaskedLinear` for adjacent hops
-   and `SkipAdd` for skip edges. Construct `SkipAdd` once; call
-   it after every hop, before ReLU or BatchNorm. Skip edges stay
-   out of the masks.
+3. Write an `nn.Module` with one `MaskedLinear` per
+   `spec.hops`, feeding each one
+   `gather_hop_inputs(saved, hop)`. Skip edges are already
+   inside those masks, so there is nothing extra to call.
 4. Align named input tables with `align_inputs()`.
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
@@ -113,8 +114,8 @@ spec = k2.parse_layered(edgelist)
 class Net(nn.Module):
     def __init__(self, spec: k2.LayeredSpec):
         super().__init__()
-        self.lin0 = k2.MaskedLinear(spec.masks[0])
-        self.lin1 = k2.MaskedLinear(spec.masks[1])
+        self.lin0 = k2.MaskedLinear(spec.hops[0].mask)
+        self.lin1 = k2.MaskedLinear(spec.hops[1].mask)
 
     def forward(self, x):
         h = F.relu(self.lin0(x))
@@ -177,26 +178,29 @@ The documented public names are:
 - `parse_layered()`
 - `parse_adjacency()`
 - `LayeredSpec`
+- `Hop`
 - `Skip`
 - `AdjacencySpec`
 - `MaskedLinear`
-- `SkipAdd`
+- `gather_hop_inputs()`
 - `align_inputs()`
 - `map_node_attributions()`
 
-Skip-edge fields live on `LayeredSpec.skips`. Inject them with
-`SkipAdd`. An `AdjacencySpec` has no layers and no skips: it
+`LayeredSpec.hops` holds one `Hop` per layer after the first, and
+a hop's mask carries every edge entering that layer, skip edges
+included. `LayeredSpec.skips` lists which edges span layers, as
+metadata. An `AdjacencySpec` has no layers and no skips: it
 carries one square `mask` over all `nodes`, plus `input_index`
 and `output_index` into that state vector.
 
 See the [**API reference**](docs/api.md) for details, and
-[**Skip edges**](docs/skip-edges.ipynb) for the call order.
+[**Skip edges**](docs/skip-edges.ipynb) for a worked example.
 
 ## Package philosophy
 
 `kpnn2` is intentionally minimally opinionated.
 
-It owns edgelist parsing, mask tensors, skip indexing, named
+It owns edgelist parsing, mask tensors, hop input assembly, named
 input alignment, and attribution column names. It does not impose
 broader modeling choices such as:
 
@@ -235,8 +239,8 @@ If you are new to the package, start with:
   requires a DAG)
 - [**Mapping attributions**](docs/map-node-attributions.ipynb) for
   labeling layer tensors with node names
-- [**Skip edges**](docs/skip-edges.ipynb) for `SkipAdd` instead of
-  dummy nodes in the masks
+- [**Skip edges**](docs/skip-edges.ipynb) for edges that jump a
+  layer, and why they need no separate mechanism
 - [**API reference**](docs/api.md) for function- and object-level
   documentation
 

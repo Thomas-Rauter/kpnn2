@@ -69,7 +69,7 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     and every edge goes into one square mask. Nothing is ranked,
     so cycles and self-loops are allowed. Use this layout for
     recurrent networks; use ``parse_layered`` for a DAG that
-    should become per-hop masks and skip records.
+    should become one mask per layer.
 
     A DAG is valid input to both parsers. The layout is a choice,
     not a property of the graph, so this function never inspects
@@ -104,7 +104,7 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
 
     See Also
     --------
-    parse_layered : Rank a DAG into per-hop masks and skips.
+    parse_layered : Rank a DAG into one incoming mask per layer.
 
     Notes
     -----
@@ -121,7 +121,7 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     dtype float32. ``mask[target_index, source_index]`` is ``1.0``
     for an original edge from ``nodes[source_index]`` to
     ``nodes[target_index]``, matching the ``nn.Linear.weight``
-    layout used by the layered masks.
+    layout used by the layered hop masks.
 
     This function does not build an ``nn.Module``, unroll time,
     choose a step count, or re-inject inputs between steps. The

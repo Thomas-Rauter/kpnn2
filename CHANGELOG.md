@@ -21,6 +21,47 @@ This project follows semantic versioning.
 
 ### Changed
 
+- **Skip edges are now ordinary mask entries, and `SkipAdd` is
+  gone.** `LayeredSpec.masks` is replaced by `LayeredSpec.hops`,
+  a tuple of `Hop` records with one entry per layer after the
+  first. A hop's mask holds *every* edge entering its layer, so a
+  hop whose target has parents further back reads several layers
+  and its mask columns are those layers concatenated
+  (`hop.source_layers`, `hop.source_dims`, `hop.source_nodes`,
+  `hop.column_offsets`). `kpnn2.gather_hop_inputs(saved, hop)`
+  builds that input tensor. `Skip` and `spec.skips` stay, now as
+  metadata describing which edges span layers rather than a
+  second thing to compute.
+
+  This removes four problems at once, all of which came from
+  representing skips as a module instead of as data:
+
+    - **No silently dropped edges.** Missing a `SkipAdd` call
+      used to delete those edges from the model with no error.
+      Now every parent of a layer is in that layer's single mask,
+      and a forgotten activation raises `Kpnn2Error` from
+      `gather_hop_inputs` instead. Summing the ones over all hop
+      masks equals the edge count, and a test asserts it.
+    - **Correct degree-aware init.** A unit with two adjacent and
+      eight skip parents used to be initialized as if its fan-in
+      were two, with the eight skip weights pinned at zero.
+      `MaskedLinear` now sees the real fan-in, because all ten
+      parents are in the same mask row.
+    - **No per-edge Python loop.** The old forward allocated one
+      batch-sized `torch.zeros_like` per skip edge. A hop is one
+      matmul, and a hop with a single source layer returns the
+      saved tensor without even a copy.
+    - **Node width stays additive.** The per-skip scalar was the
+      one place the internal unit layout could not generalize; a
+      skip now block-expands through `fill_block` like every
+      other edge.
+
+  Migration: replace `MaskedLinear(spec.masks[i])` with
+  `MaskedLinear(spec.hops[i].mask)`, drop `SkipAdd`, and feed
+  each layer `gather_hop_inputs(saved, hop)` while storing every
+  activation you produce in `saved`. A graph with no skip edges
+  needs no other change: every hop then has one source layer and
+  the same mask as before.
 - `map_node_attributions()` accepts a `LayeredSpec` or an
   `AdjacencySpec`, and `layer` is now optional. It stays required
   for a `LayeredSpec` and must be omitted for an `AdjacencySpec`,
@@ -56,7 +97,7 @@ This project follows semantic versioning.
 - Connectivity masks are plain `torch.Tensor` again. The
   `FrozenMask` subclass that rejected in-place writes is gone,
   together with the `Kpnn2Error` it raised from
-  `spec.masks[i]`, `spec.mask`, and `MaskedLinear.mask` on
+  `hop.mask`, `spec.mask`, and `MaskedLinear.mask` on
   `fill_`, item assignment, `out=`, buffer replacement, and
   `numpy()`. Those tensors are now documented as read-only
   rather than enforced, which is how PyTorch treats buffers.
@@ -64,7 +105,7 @@ This project follows semantic versioning.
   operation: it cloned the whole mask on every forward pass and
   made `torch.compile(fullgraph=True)` fail with a graph break.
   Both are fixed, and `MaskedLinear` still stores its own copy
-  of the mask, so writing to `spec.masks[i]` cannot rewire a
+  of the mask, so writing to `hop.mask` cannot rewire a
   layer that was already built. Mask operations also return
   standard PyTorch types again: `mask.shape` is a `torch.Size`
   rather than a plain tuple, indexing returns a view instead of
@@ -72,20 +113,21 @@ This project follows semantic versioning.
 - Node positions are now internal slices rather than single
   columns. A private `_layout.py` places each node on a
   contiguous `NodeSlot` of its tensor axis, masks are written by
-  block expansion, and parsing, skip indexing, input alignment,
-  and attribution naming all read positions from a `Layout`.
+  block expansion, and parsing, hop concatenation, input
+  alignment, and attribution naming all read positions from a
+  `Layout`.
   Every slice is one unit wide, so shapes, masks, indices, and
   the public API are unchanged. This makes per-node width an
   additive change later rather than a structural one.
 - Internal modules are now private (`_parse.py`, `_spec.py`,
-  `_masked_linear.py`, `_skip_add.py`, `_align.py`,
+  `_masked_linear.py`, `_gather.py`, `_align.py`,
   `_attributions.py`, `_errors.py`). `kpnn2/__init__.py` is the
   only public import path, so implementation files can be split
   or reorganized later without a breaking release.
-- The public API is unchanged: `kpnn2.__all__` and every exported
-  signature are identical. Code that imports from `kpnn2` directly
-  needs no change; code that imported a module path such as
-  `kpnn2.masked_linear` must import from `kpnn2` instead.
+- Code that imported a module path such as `kpnn2.masked_linear`
+  must import from `kpnn2` instead. The exported names themselves
+  changed later in this Unreleased section (`Hop`,
+  `gather_hop_inputs`, and dropping `SkipAdd` and `raw_weight`).
 - The API reference now documents the package-level names, so
   permalinks are `#kpnn2.map_node_attributions` rather than
   `#kpnn2.map_node_attributions.map_node_attributions`.

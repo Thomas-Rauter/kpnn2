@@ -74,8 +74,9 @@ def align_inputs(
     differs.
 
     The returned width is always ``len(spec.input_nodes)``. For a
-    ``LayeredSpec`` that is the width of ``masks[0]``, so the
-    tensor feeds the first hop directly. For an ``AdjacencySpec``
+    ``LayeredSpec`` that is the width of ``hops[0].mask``, whose
+    only source layer is layer 0, so the tensor feeds the first
+    hop directly and needs no gathering. For an ``AdjacencySpec``
     it is **not** the mask width: scatter the tensor into the
     ``len(spec.nodes)``-wide state vector with ``spec.input_index``
     before calling ``MaskedLinear(spec.mask)``.

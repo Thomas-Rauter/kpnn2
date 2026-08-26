@@ -8,15 +8,17 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from kpnn2 import LayeredSpec, MaskedLinear, Skip
+from kpnn2 import LayeredSpec, MaskedLinear, gather_hop_inputs
 
 
 class LayeredNet(nn.Module):
     """
-    Adjacent MaskedLinear hops plus skip residuals.
+    One ``MaskedLinear`` per ``spec.hops``, in depth order.
 
-    ReLU is applied after every hop except the last, when
-    ``relu`` is True. The last hop stays linear.
+    Each hop reads every layer that feeds its target, so skip
+    edges ride along inside the hop mask and there is nothing
+    extra to add. ReLU is applied after every hop except the
+    last, when ``relu`` is True. The last hop stays linear.
     """
 
     def __init__(
@@ -29,18 +31,14 @@ class LayeredNet(nn.Module):
         self.spec = spec
         self.relu = relu
         layers = []
-        for mask in spec.masks:
+        for hop in spec.hops:
             layers.append(
                 MaskedLinear(
-                    mask,
+                    hop.mask,
                     bias=bias,
                 )
             )
         self.layers = nn.ModuleList(layers)
-        skip_weights = []
-        for _skip in spec.skips:
-            skip_weights.append(nn.Parameter(torch.zeros(1)))
-        self.skip_weights = nn.ParameterList(skip_weights)
 
     def forward(
         self,
@@ -49,21 +47,17 @@ class LayeredNet(nn.Module):
         saved = {0: x}
         hidden = x
         last_hop = len(self.layers) - 1
-        for hop, layer in enumerate(self.layers):
-            hidden = layer(hidden)
-            if self.relu and hop < last_hop:
-                hidden = F.relu(hidden)
-            target_layer = hop + 1
-            hidden = _apply_skips(
-                hidden=hidden,
-                saved=saved,
-                skips=self.spec.skips,
-                skip_weights=self.skip_weights,
-                target_layer=target_layer,
+        for index, hop in enumerate(self.spec.hops):
+            sources = gather_hop_inputs(
+                saved,
+                hop,
             )
+            hidden = self.layers[index](sources)
+            if self.relu and index < last_hop:
+                hidden = F.relu(hidden)
             if hidden.requires_grad:
                 hidden.retain_grad()
-            saved[target_layer] = hidden
+            saved[hop.target_layer] = hidden
         self.layer_tensors = saved
         return hidden
 
@@ -73,16 +67,16 @@ def pin_all_weights(
     value: float = 1.0,
 ) -> None:
     """
-    Set live adjacent weights and skip scalars to ``value``.
+    Set every live edge weight and nothing else to ``value``.
 
-    Masked-out trainable entries are set to 0.
+    Masked-out trainable entries are set to 0. Skip edges are
+    live entries of a hop mask, so they are pinned by the same
+    line as adjacent edges.
     """
     with torch.no_grad():
         for layer in module.layers:
             trainable = layer.parametrizations.weight.original
             trainable.copy_(layer.mask * value)
-        for weight in module.skip_weights:
-            weight.fill_(value)
 
 
 def pin_edge(
@@ -92,58 +86,30 @@ def pin_edge(
     value: float,
 ) -> None:
     """
-    Set one adjacent trainable weight entry or skip scalar.
+    Set the weight of one live edge to ``value``.
+
+    Adjacent and skip edges are found the same way: the hop that
+    produces ``target`` names its rows, and its concatenated
+    source layers name its columns.
 
     Raises
     ------
     ValueError
-        If ``source -> target`` is not an adjacent live mask entry
-        and not a skip in ``module.spec``.
+        If ``source -> target`` is not a live entry of any hop
+        mask in ``module.spec``.
     """
     spec = module.spec
     with torch.no_grad():
-        for hop, layer in enumerate(module.layers):
-            sources = spec.layer_nodes[hop]
-            targets = spec.layer_nodes[hop + 1]
-            if source not in sources or target not in targets:
+        for index, hop in enumerate(spec.hops):
+            targets = spec.layer_nodes[hop.target_layer]
+            if target not in targets or source not in hop.source_nodes:
                 continue
-            source_index = sources.index(source)
-            target_index = targets.index(target)
-            if layer.mask[target_index, source_index].item() != 1.0:
+            row = targets.index(target)
+            column = hop.source_nodes.index(source)
+            layer = module.layers[index]
+            if layer.mask[row, column].item() != 1.0:
                 continue
             trainable = layer.parametrizations.weight.original
-            trainable[target_index, source_index] = value
+            trainable[row, column] = value
             return
-        for skip, weight in zip(
-            spec.skips,
-            module.skip_weights,
-            strict=True,
-        ):
-            if skip.source == source and skip.target == target:
-                weight.fill_(value)
-                return
     raise ValueError(f"No edge {source!r} -> {target!r} in spec.")
-
-
-def _apply_skips(
-    hidden: torch.Tensor,
-    saved: dict[int, torch.Tensor],
-    skips: list[Skip],
-    skip_weights: nn.ParameterList,
-    target_layer: int,
-) -> torch.Tensor:
-    for skip, weight in zip(
-        skips,
-        skip_weights,
-        strict=True,
-    ):
-        if skip.target_layer != target_layer:
-            continue
-        source = saved[skip.source_layer][
-            :,
-            skip.source_index,
-        ]
-        addition = torch.zeros_like(hidden)
-        addition[:, skip.target_index] = weight * source
-        hidden = hidden + addition
-    return hidden

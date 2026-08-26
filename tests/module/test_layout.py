@@ -8,10 +8,11 @@ from kpnn2._layout import (
     Layout,
     NodeSlot,
     build_layout,
+    concat_layouts,
     expand_columns,
     fill_block,
 )
-from kpnn2._parse import _build_masks, _build_skips, _node_placement
+from kpnn2._parse import _build_hops, _build_skips, _node_placement
 from kpnn2._parse_adjacency import _build_square_mask
 
 
@@ -241,7 +242,45 @@ def test_expand_columns_repeats_each_node_across_its_units():
     ]
 
 
-def test_build_masks_block_expands_a_wider_layout():
+def test_concat_layouts_shifts_each_layout_onto_one_axis():
+    joined = concat_layouts(_wide_layouts())
+    assert joined.n_units == 7
+    assert joined.names == ("A", "B", "H")
+    assert joined.slot("A").units == slice(0, 2)
+    assert joined.slot("B").units == slice(2, 5)
+    assert joined.slot("H").units == slice(5, 7)
+    assert joined.unit_names() == [
+        "A",
+        "A",
+        "B",
+        "B",
+        "B",
+        "H",
+        "H",
+    ]
+
+
+def test_concat_layouts_of_nothing_is_an_empty_axis():
+    joined = concat_layouts([])
+    assert joined.n_units == 0
+    assert joined.names == ()
+
+
+def test_concat_layouts_rejects_a_repeated_name():
+    layout = build_layout(["A"])
+    with pytest.raises(
+        Kpnn2Error,
+        match="Duplicate node name",
+    ):
+        concat_layouts(
+            [
+                layout,
+                layout,
+            ]
+        )
+
+
+def test_build_hops_block_expands_a_wider_layout():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -249,20 +288,22 @@ def test_build_masks_block_expands_a_wider_layout():
         }
     )
     layouts = _wide_layouts()
-    masks = _build_masks(
+    hops = _build_hops(
         edgelist,
         layouts,
         _node_placement(layouts),
     )
-    assert len(masks) == 1
-    assert tuple(masks[0].shape) == (2, 5)
-    assert masks[0].tolist() == [
+    assert len(hops) == 1
+    assert hops[0].source_layers == (0,)
+    assert hops[0].source_dims == (5,)
+    assert tuple(hops[0].mask.shape) == (2, 5)
+    assert hops[0].mask.tolist() == [
         [1.0, 1.0, 1.0, 1.0, 1.0],
         [1.0, 1.0, 1.0, 1.0, 1.0],
     ]
 
 
-def test_build_masks_leaves_unconnected_blocks_zero():
+def test_build_hops_leaves_unconnected_blocks_zero():
     edgelist = pd.DataFrame(
         {
             "source": ["A"],
@@ -270,15 +311,52 @@ def test_build_masks_leaves_unconnected_blocks_zero():
         }
     )
     layouts = _wide_layouts()
-    masks = _build_masks(
+    hops = _build_hops(
         edgelist,
         layouts,
         _node_placement(layouts),
     )
-    assert masks[0].tolist() == [
+    assert hops[0].mask.tolist() == [
         [1.0, 1.0, 0.0, 0.0, 0.0],
         [1.0, 1.0, 0.0, 0.0, 0.0],
     ]
+
+
+def test_build_hops_block_expands_a_skip_edge_too():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "H", "B"],
+            "target": ["H", "C", "C"],
+        }
+    )
+    layouts = [
+        build_layout(
+            ["A", "B"],
+            [2, 3],
+        ),
+        build_layout(
+            ["H"],
+            [2],
+        ),
+        build_layout(
+            ["C"],
+            [4],
+        ),
+    ]
+    hops = _build_hops(
+        edgelist,
+        layouts,
+        _node_placement(layouts),
+    )
+    assert len(hops) == 2
+    skip_hop = hops[1]
+    assert skip_hop.target_layer == 2
+    assert skip_hop.source_layers == (0, 1)
+    assert skip_hop.source_dims == (5, 2)
+    assert skip_hop.column_offsets == (0, 5)
+    assert tuple(skip_hop.mask.shape) == (4, 7)
+    expected_row = [0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    assert skip_hop.mask.tolist() == [expected_row] * 4
 
 
 def test_build_skips_records_the_block_start():
