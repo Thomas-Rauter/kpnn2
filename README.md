@@ -13,22 +13,24 @@ edgelist, using native nn.Module layers.
 
 ## Overview
 
-If you already know how named entities should connect, you can use
-that graph as the architecture of a neural network. You write the
-connections as named edges, train an ordinary PyTorch module that
-only uses those connections, and map importance scores back onto
-the same names.
+A fully connected stack is what PyTorch makes easy: every unit in
+one layer feeds every unit in the next, so `nn.Linear` is enough.
 
-The hidden units keep the identities from the graph, so
-attributions can be read as scores for those entities, not for
-anonymous neurons.
+A sparsely connected net with skip edges is not. Only some pairs
+are linked, some edges jump a layer, and the units have stable
+names. Implementing that by hand in PyTorch is awkward. That is
+the gap `kpnn2` fills: the same training loop, with connectivity
+taken from a named edgelist.
 
-Mechanically, `kpnn2` turns a source/target edgelist into a
-`GraphSpec` (adjacent masks, layer names, skip list) so you write
-ordinary PyTorch with `MaskedLinear` and `SkipAdd`.
+![Fully connected versus sparse](docs/figures/dense_vs_sparse.svg)
 
-An **edgelist** is a table of directed connections: each row links a
-`source` node to a `target` node. For example:
+**Figure 1.** (a) Dense adjacent layers, the usual PyTorch case.
+(b) A sparse DAG with skip edges (dashed), the same graph as on
+the [Skip edges](docs/skip-edges.ipynb) page. `kpnn2` turns (b)
+into ordinary `MaskedLinear` hops plus `SkipAdd`.
+
+An **edgelist** is a table of directed connections: each row links
+a `source` node to a `target` node. For example:
 
 | source | target |
 |--------|--------|
@@ -36,32 +38,29 @@ An **edgelist** is a table of directed connections: each row links a
 | B | H |
 | H | C |
 
-Define a model architecture as an edgelist, parse it into named
-layers and frozen connectivity masks, build a normal
-`torch.nn.Module`, train it with standard PyTorch, and optionally
-map attributions back to the named nodes that defined the
-architecture.
+`parse_edgelist()` layers that table into a `GraphSpec`. You write
+a normal `torch.nn.Module`, train with standard PyTorch, and can
+map attributions back onto the named nodes.
 
-The package is for sparsely connected or structured nets from a
-predefined graph, without manually wiring every `nn.Linear`. It is
-domain-agnostic: any setting where a neural architecture can be
-written as named edges can use the same abstraction.
+People choose this sparsity on purpose. An emerging research area
+defines the architecture so the net *is* a real named network:
+hidden units stand for entities, and importance scores on those
+units map back to the same names. That is a route to
+interpretability, not a fully connected net with a post-hoc story.
 
-Here, "graph" means the architecture specification, not necessarily
-a graph neural network. Feedforward KPNNs and fixed-step recurrent
-updates can both be represented by edgelists when the architecture
-is directed connections between named nodes.
+In biology this is an active area, including pathway-based models
+([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5))
+and ontology-based models
+([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).
+The [Getting started](docs/getting-started.ipynb) notebook walks
+through a biological example.
 
-A major application is interpretable nets shaped by prior knowledge
-of domain networks, for example in biology (more on the
-[Getting started](docs/getting-started.ipynb) page).
+The same primitives are domain-agnostic. Here "graph" means the
+architecture specification, not a graph neural network.
 
 `kpnn2` is a set of primitives, not a graph compiler. There is no
-ready-made model object. It leaves training loops, losses,
-optimizers, activations, and heads to you. Adjacent hops use
-`MaskedLinear`. Skips use `SkipAdd` (construct once, call after
-every hop, before ReLU or BatchNorm). That keeps the package
-flexible.
+ready-made model object. Training loops, losses, optimizers,
+activations, and heads stay yours.
 
 ## Core workflow
 
@@ -164,7 +163,7 @@ print(feature_attr.to_pandas().abs().mean())
 print(node_attr.to_pandas().abs().mean())
 ```
 
-## Main public API
+## API
 
 The documented public names are:
 
@@ -203,20 +202,6 @@ Those remain part of the normal PyTorch workflow:
 - PyTorch handles `forward()`, training, and customization
 - you map trained tensors back to named nodes when you want
   interpretation
-
-## Skip edges and cycles
-
-Adjacent hops go through `MaskedLinear`. Skip edges stay out of the
-masks. Construct `SkipAdd` once from the `GraphSpec`, then call it
-after every hop, before ReLU or BatchNorm. See
-[**Skip edges**](docs/skip-edges.ipynb).
-
-Cycles are not parsed in v1. A recurrent (fixed-step) update is
-ordinary user `forward()`. See the
-[**Recurrent example**](docs/recurrent-example.ipynb).
-
-See [**Mapping attributions**](docs/map-node-attributions.ipynb)
-for how `map_node_attributions()` labels a layer tensor.
 
 ## Installation
 

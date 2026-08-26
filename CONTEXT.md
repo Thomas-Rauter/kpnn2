@@ -559,6 +559,8 @@ tests/
 CONTEXT.md                    # this file
 README.md
 docs/
+  fig_gen/                    # SVG generators; write to figures/
+  figures/
 ```
 
 Implementation may split private helpers, but public import paths
