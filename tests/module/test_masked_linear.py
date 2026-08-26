@@ -1,9 +1,11 @@
+import copy
 import math
 
 import pandas as pd
 import pytest
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 from kpnn2 import Kpnn2Error, MaskedLinear, parse_edgelist
 from kpnn2._frozen_mask import FrozenMask
@@ -688,6 +690,163 @@ def test_masked_linear_init_dense_row_tighter_bound():
     assert dense_bound < sparse_bound
     assert torch.all(layer.raw_weight[1].abs() <= dense_bound + eps)
     assert abs(layer.bias[1].item()) <= dense_bound + eps
+
+
+def test_masked_linear_deepcopy_independent_params_and_frozen_mask():
+    layer = _layer_with_pinned_diag_weights(bias=True)
+    with torch.no_grad():
+        layer.bias.copy_(_pinned_bias())
+    before_mask = layer.mask.tolist()
+    copied = copy.deepcopy(layer)
+
+    assert copied is not layer
+    assert copied.raw_weight is not layer.raw_weight
+    assert copied.bias is not layer.bias
+    assert layer.mask is not copied.mask
+    assert layer.mask.data_ptr() != copied.mask.data_ptr()
+    torch.testing.assert_close(
+        copied.raw_weight,
+        layer.raw_weight,
+    )
+    torch.testing.assert_close(
+        copied.bias,
+        layer.bias,
+    )
+    torch.testing.assert_close(
+        copied.mask,
+        layer.mask,
+    )
+    assert copied.mask.dtype == torch.float32
+    assert isinstance(
+        copied.mask,
+        FrozenMask,
+    )
+    x = torch.tensor(
+        [[1.0, 1.0]],
+        dtype=torch.float32,
+    )
+    torch.testing.assert_close(
+        copied(x),
+        layer(x),
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        copied.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+    assert layer.mask.tolist() == before_mask
+    assert copied.mask.tolist() == before_mask
+
+
+def test_module_with_masked_linear_and_graph_spec_deepcopy():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "B"],
+            "target": ["B", "C"],
+        }
+    )
+    spec = parse_edgelist(edgelist)
+
+    class Net(nn.Module):
+        def __init__(self, spec):
+            super().__init__()
+            self.lin = MaskedLinear(spec.masks[0])
+            self.spec = spec
+
+        def forward(self, x):
+            return self.lin(x)
+
+    net = Net(spec)
+    with torch.no_grad():
+        net.lin.raw_weight.fill_(0.5)
+        net.lin.bias.fill_(0.1)
+    copied = copy.deepcopy(net)
+    assert copied is not net
+    assert copied.lin is not net.lin
+    assert copied.spec is not net.spec
+    assert copied.lin.raw_weight is not net.lin.raw_weight
+    x = torch.ones(
+        2,
+        net.lin.in_features,
+        dtype=torch.float32,
+    )
+    torch.testing.assert_close(
+        copied(x),
+        net(x),
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        copied.lin.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        copied.spec.masks[0].fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        net.lin.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        net.spec.masks[0].fill_(0.0)
+    assert copied.lin.mask.dtype == torch.float32
+    assert copied.spec.masks[0].dtype == torch.float32
+    assert isinstance(
+        copied.lin.mask,
+        FrozenMask,
+    )
+    assert isinstance(
+        copied.spec.masks[0],
+        FrozenMask,
+    )
+
+
+def test_masked_linear_deepcopy_keeps_dtype_cast_and_state_dict():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    copied = copy.deepcopy(layer)
+    for module in (
+        layer,
+        copied,
+    ):
+        assert "mask" not in module.state_dict()
+        assert module.mask.dtype == torch.float32
+        with pytest.raises(
+            Kpnn2Error,
+            match="read-only",
+        ):
+            module.mask.fill_(0.0)
+
+    layer.half()
+    copied.double()
+    assert layer.mask.dtype == torch.float32
+    assert copied.mask.dtype == torch.float32
+    assert "mask" not in layer.state_dict()
+    assert "mask" not in copied.state_dict()
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        layer.mask.fill_(0.0)
+    with pytest.raises(
+        Kpnn2Error,
+        match="read-only",
+    ):
+        copied.mask.fill_(0.0)
 
 
 def test_masked_linear_ignores_mutation_of_constructor_tensor():

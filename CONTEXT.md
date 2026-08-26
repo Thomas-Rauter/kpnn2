@@ -203,7 +203,9 @@ and `target` values only.
 `nn.Module`, no parameters, no execution plan object. Sequences
 are tuples. Do not reassign fields. Mask tensors reject in-place
 writes, `out=` writes into the mask, and numpy aliases of stored
-storage (`Kpnn2Error` for torch writes).
+storage (`Kpnn2Error` for torch writes). `copy.deepcopy` of a
+`GraphSpec` succeeds; copied masks stay frozen float32 and do
+not share storage with the original.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -231,6 +233,9 @@ storage (`Kpnn2Error` for torch writes).
 - In-place writes (`fill_`, `copy_`, item assignment) and
   `out=` into a stored mask raise `Kpnn2Error`. `numpy()` does
   not yield a writable view of the stored storage.
+- `copy.deepcopy` succeeds. Copied masks keep the same values,
+  stay frozen float32, and do not share storage with the
+  original.
 - `MaskedLinear(spec.masks[i])` stores an independent frozen
   copy. A write (or failed write) on one side does not change
   the other.
@@ -303,7 +308,10 @@ MaskedLinear(mask, bias=True)
   `MaskedLinear(spec.masks[i])` stores an independent frozen
   copy. Rebuild from the edgelist / `GraphSpec` to change
   wiring. The stored mask does not follow the module floating
-  dtype.
+  dtype. `copy.deepcopy` of a `MaskedLinear` (and of a user
+  `nn.Module` that holds `MaskedLinear` layers and a
+  `GraphSpec`) succeeds. Parameters on the copy are distinct
+  objects. Copied masks stay frozen float32.
 - Trainable `raw_weight`: same shape as `mask`.
 - Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
   parameter.
@@ -467,6 +475,8 @@ PyTorch:
    `map_node_attributions(...)`
 
 Do not add a compiled core or mutate connectivity after parse.
+`copy.deepcopy` of this module shape succeeds. Copied masks
+stay frozen float32.
 
 The Python distribution and import name are **`kpnn2`**.
 Do not rename them.

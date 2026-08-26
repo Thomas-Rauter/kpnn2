@@ -92,6 +92,17 @@ class FrozenMask(torch.Tensor):
         converted.setflags(write=False)
         return converted
 
+    def __deepcopy__(
+        self,
+        memo,
+    ):
+        tensor_id = id(self)
+        if tensor_id in memo:
+            return memo[tensor_id]
+        copied = freeze_mask(self)
+        memo[tensor_id] = copied
+        return copied
+
 
 def _out_targets_frozen(out) -> bool:
     if isinstance(out, FrozenMask):

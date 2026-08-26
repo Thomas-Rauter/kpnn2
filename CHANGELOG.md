@@ -9,6 +9,9 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `copy.deepcopy` of `GraphSpec`, `MaskedLinear`, and user
+  modules that hold them succeeds. Copied masks stay frozen
+  float32 and do not share storage with the original.
 - Frozen connectivity masks reject `out=` writes, mask
   replacement via `register_buffer`, and numpy aliases of
   stored storage. `MaskedLinear` clones independently of

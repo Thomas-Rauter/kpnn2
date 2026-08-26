@@ -1,3 +1,4 @@
+import copy
 from dataclasses import FrozenInstanceError
 
 import pandas as pd
@@ -5,6 +6,7 @@ import pytest
 import torch
 
 from kpnn2 import Kpnn2Error, parse_edgelist
+from kpnn2._frozen_mask import FrozenMask
 
 
 def test_graph_spec_rejects_field_assignment():
@@ -98,3 +100,52 @@ def test_graph_spec_masks_numpy_cannot_change_values():
         pass
     assert spec.masks[0].tolist() == before
     assert not arr.flags.writeable
+
+
+def test_graph_spec_deepcopy_independent_frozen_masks():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "B"],
+            "target": ["B", "C"],
+        }
+    )
+    spec = parse_edgelist(edgelist)
+    before = [mask.tolist() for mask in spec.masks]
+    copied = copy.deepcopy(spec)
+
+    assert copied is not spec
+    assert copied.input_nodes == spec.input_nodes
+    assert copied.layer_nodes == spec.layer_nodes
+    assert len(copied.masks) == len(spec.masks)
+    for orig, dup in zip(
+        spec.masks,
+        copied.masks,
+        strict=True,
+    ):
+        assert isinstance(
+            orig,
+            FrozenMask,
+        )
+        assert isinstance(
+            dup,
+            FrozenMask,
+        )
+        assert orig.dtype == torch.float32
+        assert dup.dtype == torch.float32
+        assert orig.tolist() == dup.tolist()
+        assert orig is not dup
+        assert orig.data_ptr() != dup.data_ptr()
+        with pytest.raises(
+            Kpnn2Error,
+            match="read-only",
+        ):
+            orig.fill_(0.0)
+        with pytest.raises(
+            Kpnn2Error,
+            match="read-only",
+        ):
+            dup.fill_(0.0)
+        assert orig.tolist() == dup.tolist()
+
+    assert [mask.tolist() for mask in spec.masks] == before
+    assert [mask.tolist() for mask in copied.masks] == before
