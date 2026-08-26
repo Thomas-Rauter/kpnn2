@@ -122,7 +122,7 @@ def _reject_self_loops(edgelist: pd.DataFrame) -> None:
     self_loops = edgelist[_SOURCE] == edgelist[_TARGET]
     n_self_loops = int(self_loops.sum())
     if n_self_loops > 0:
-        loop_nodes = sorted(set(edgelist.loc[self_loops, _SOURCE]))
+        loop_nodes = sorted(set(edgelist[_SOURCE][self_loops].tolist()))
         nodes_str = ", ".join(loop_nodes)
         raise Kpnn2Error(
             f"Edgelist contains {n_self_loops} self-loop(s): "
