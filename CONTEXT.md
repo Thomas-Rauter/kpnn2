@@ -543,13 +543,13 @@ Do not rename them.
 ```
 src/kpnn2/
   __init__.py                 # public exports only
-  parse_layered.py            # parse_layered
-  layered_spec.py             # LayeredSpec, Skip
-  masked_linear.py            # MaskedLinear
-  skip_add.py                 # SkipAdd
-  align_inputs.py
-  map_node_attributions.py
-  errors.py                   # Kpnn2Error
+  _parse.py                   # parse_layered
+  _spec.py                    # LayeredSpec, Skip
+  _masked_linear.py           # MaskedLinear
+  _skip_add.py                # SkipAdd
+  _align.py                   # align_inputs
+  _attributions.py            # map_node_attributions
+  _errors.py                  # Kpnn2Error
   _frozen_mask.py             # read-only connectivity tensors
 
 tests/
@@ -563,8 +563,20 @@ docs/
   figures/
 ```
 
-Implementation may split private helpers, but public import paths
-stay as above.
+`src/kpnn2/__init__.py` is the **only** public import path. Users
+write `import kpnn2` or `from kpnn2 import MaskedLinear`, never
+`from kpnn2._masked_linear import MaskedLinear`.
+
+Every implementation module carries a leading underscore and is
+private. Private modules may be renamed, split, merged, or promoted
+to subpackages (for example `_parse.py` → `_parse/`) without a
+breaking change, as long as `kpnn2.__all__` and the documented
+signatures stay identical. Do not add a second public path for a
+symbol that `__init__.py` already exports.
+
+`docs/api.md` therefore points mkdocstrings at the façade paths
+(`::: kpnn2.MaskedLinear`), not at module paths. Tests may import
+private modules directly to reach internal helpers.
 
 ---
 

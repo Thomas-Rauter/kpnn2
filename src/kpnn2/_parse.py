@@ -7,8 +7,8 @@ from collections import deque
 import pandas as pd
 import torch
 
-from .errors import Kpnn2Error
-from .layered_spec import LayeredSpec, Skip
+from ._errors import Kpnn2Error
+from ._spec import LayeredSpec, Skip
 
 _SOURCE = "source"
 _TARGET = "target"

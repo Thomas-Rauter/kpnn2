@@ -3,8 +3,7 @@ import pytest
 import torch
 import xarray as xr
 
-from kpnn2 import map_node_attributions, parse_layered
-from kpnn2.errors import Kpnn2Error
+from kpnn2 import Kpnn2Error, map_node_attributions, parse_layered
 
 
 def _tiny_spec():

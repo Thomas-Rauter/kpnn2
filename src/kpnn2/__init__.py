@@ -9,13 +9,13 @@ graph compiler: there is no ready-made model object and no
 training loop.
 """
 
-from .align_inputs import align_inputs
-from .errors import Kpnn2Error
-from .layered_spec import LayeredSpec, Skip
-from .map_node_attributions import map_node_attributions
-from .masked_linear import MaskedLinear
-from .parse_layered import parse_layered
-from .skip_add import SkipAdd
+from ._align import align_inputs
+from ._attributions import map_node_attributions
+from ._errors import Kpnn2Error
+from ._masked_linear import MaskedLinear
+from ._parse import parse_layered
+from ._skip_add import SkipAdd
+from ._spec import LayeredSpec, Skip
 
 __version__ = "0.1.0"
 

@@ -1,8 +1,7 @@
 import pandas as pd
 import pytest
 
-from kpnn2 import parse_layered
-from kpnn2.errors import Kpnn2Error
+from kpnn2 import Kpnn2Error, parse_layered
 
 
 def test_parse_layered_ranks_a_simple_chain():

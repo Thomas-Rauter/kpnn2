@@ -2,8 +2,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import align_inputs, parse_layered
-from kpnn2.errors import Kpnn2Error
+from kpnn2 import Kpnn2Error, align_inputs, parse_layered
 
 
 def _tiny_spec():

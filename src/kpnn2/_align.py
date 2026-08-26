@@ -5,8 +5,8 @@ Align named DataFrame columns to ``LayeredSpec.input_nodes``.
 import pandas as pd
 import torch
 
-from .errors import Kpnn2Error
-from .layered_spec import LayeredSpec
+from ._errors import Kpnn2Error
+from ._spec import LayeredSpec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'data' is a tensor; a pandas DataFrame is required. "

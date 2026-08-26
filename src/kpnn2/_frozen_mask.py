@@ -5,7 +5,7 @@ Read-only connectivity tensors for LayeredSpec and MaskedLinear.
 import numpy as np
 import torch
 
-from .errors import Kpnn2Error
+from ._errors import Kpnn2Error
 
 _READ_ONLY_MSG = (
     "Connectivity mask is read-only. Rebuild from the "

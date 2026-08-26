@@ -7,8 +7,8 @@ from collections.abc import Mapping
 import torch
 from torch import nn
 
-from .errors import Kpnn2Error
-from .layered_spec import LayeredSpec
+from ._errors import Kpnn2Error
+from ._spec import LayeredSpec
 
 
 class SkipAdd(nn.Module):

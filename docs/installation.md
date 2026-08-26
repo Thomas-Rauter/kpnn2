@@ -31,7 +31,7 @@ pip install captum
 ```
 
 Then pass the resulting tensor to
-[`map_node_attributions`](api.md#kpnn2.map_node_attributions.map_node_attributions).
+[`map_node_attributions`](api.md#kpnn2.map_node_attributions).
 Any other attribution method that yields a tensor of named-layer
 units works the same way. Extra axes (class, step, …) stay as extra
 xarray dimensions.

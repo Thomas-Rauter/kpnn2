@@ -4,24 +4,28 @@ toc_depth: 2
 
 # API reference
 
-::: kpnn2.parse_layered.parse_layered
+Every name below is imported straight from the package
+(`from kpnn2 import ...`). Module paths inside `kpnn2` are private
+and may change between releases.
+
+::: kpnn2.parse_layered
     options:
       show_root_heading: true
       show_root_toc_entry: true
 
-::: kpnn2.layered_spec.LayeredSpec
+::: kpnn2.LayeredSpec
     options:
       show_root_heading: true
       show_root_toc_entry: true
       members: false
 
-::: kpnn2.layered_spec.Skip
+::: kpnn2.Skip
     options:
       show_root_heading: true
       show_root_toc_entry: true
       members: false
 
-::: kpnn2.masked_linear.MaskedLinear
+::: kpnn2.MaskedLinear
     options:
       show_root_heading: true
       show_root_toc_entry: true
@@ -30,7 +34,7 @@ toc_depth: 2
         - reset_parameters
         - forward
 
-::: kpnn2.skip_add.SkipAdd
+::: kpnn2.SkipAdd
     options:
       show_root_heading: true
       show_root_toc_entry: true
@@ -39,17 +43,17 @@ toc_depth: 2
         - reset_parameters
         - forward
 
-::: kpnn2.align_inputs.align_inputs
+::: kpnn2.align_inputs
     options:
       show_root_heading: true
       show_root_toc_entry: true
 
-::: kpnn2.map_node_attributions.map_node_attributions
+::: kpnn2.map_node_attributions
     options:
       show_root_heading: true
       show_root_toc_entry: true
 
-::: kpnn2.errors.Kpnn2Error
+::: kpnn2.Kpnn2Error
     options:
       show_root_heading: true
       show_root_toc_entry: true

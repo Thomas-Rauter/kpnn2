@@ -9,8 +9,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ._errors import Kpnn2Error
 from ._frozen_mask import freeze_mask
-from .errors import Kpnn2Error
 
 
 class MaskedLinear(nn.Module):

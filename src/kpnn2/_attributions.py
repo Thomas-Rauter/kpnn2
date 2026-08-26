@@ -8,8 +8,8 @@ import numpy as np
 import torch
 import xarray as xr
 
-from .errors import Kpnn2Error
-from .layered_spec import LayeredSpec
+from ._errors import Kpnn2Error
+from ._spec import LayeredSpec
 
 _NODE_DIM = "node"
 _LAYER_COORD = "layer"
