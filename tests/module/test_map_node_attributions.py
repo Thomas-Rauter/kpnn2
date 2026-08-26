@@ -3,7 +3,12 @@ import pytest
 import torch
 import xarray as xr
 
-from kpnn2 import Kpnn2Error, map_node_attributions, parse_layered
+from kpnn2 import (
+    Kpnn2Error,
+    map_node_attributions,
+    parse_adjacency,
+    parse_layered,
+)
 
 
 def _tiny_spec():
@@ -14,6 +19,19 @@ def _tiny_spec():
         }
     )
     return parse_layered(edgelist)
+
+
+def _tiny_adjacency_spec():
+    """
+    Input x feeds a two-node feedback core; a feeds output y.
+    """
+    edgelist = pd.DataFrame(
+        {
+            "source": ["x", "a", "b", "a"],
+            "target": ["a", "b", "a", "y"],
+        }
+    )
+    return parse_adjacency(edgelist)
 
 
 def test_map_node_attributions_uses_layer_node_names():
@@ -361,3 +379,141 @@ def test_map_node_attributions_rejects_invalid_arguments(
             layer,
             **extra,
         )
+
+
+def test_map_node_attributions_names_adjacency_state_vector():
+    spec = _tiny_adjacency_spec()
+    assert spec.nodes == ("a", "b", "x", "y")
+    attributions = torch.tensor(
+        [
+            [0.1, 0.2, 0.3, 0.4],
+            [0.5, 0.6, 0.7, 0.8],
+        ],
+        dtype=torch.float32,
+    )
+
+    da = map_node_attributions(
+        attributions,
+        spec,
+    )
+
+    assert isinstance(da, xr.DataArray)
+    assert da.dims == ("observation", "node")
+    assert da["node"].values.tolist() == ["a", "b", "x", "y"]
+    assert da.sel(node="a").values.tolist() == pytest.approx([0.1, 0.5])
+    assert da.sel(node="y").values.tolist() == pytest.approx([0.4, 0.8])
+
+
+def test_map_node_attributions_adjacency_has_no_layer_coord():
+    spec = _tiny_adjacency_spec()
+
+    da = map_node_attributions(
+        torch.zeros(2, 4),
+        spec,
+    )
+
+    assert "layer" not in da.coords
+    assert "layer" not in da.dims
+
+
+def test_map_node_attributions_adjacency_accepts_1d_scores():
+    spec = _tiny_adjacency_spec()
+
+    da = map_node_attributions(
+        torch.tensor([0.1, 0.2, 0.3, 0.4]),
+        spec,
+    )
+
+    assert da.dims == ("node",)
+    assert da["node"].values.tolist() == ["a", "b", "x", "y"]
+    assert "layer" not in da.coords
+
+
+def test_map_node_attributions_adjacency_stacks_steps():
+    spec = _tiny_adjacency_spec()
+    step0 = torch.zeros(2, 4)
+    step1 = torch.ones(2, 4)
+
+    da = map_node_attributions(
+        [step0, step1],
+        spec,
+    )
+
+    assert da.dims == ("step", "observation", "node")
+    assert da["node"].values.tolist() == ["a", "b", "x", "y"]
+    assert list(da.coords["step"].values) == [0, 1]
+    assert "layer" not in da.coords
+    assert da.sel(
+        step=1,
+        node="x",
+    ).values.tolist() == pytest.approx([1.0, 1.0])
+
+
+def test_map_node_attributions_adjacency_keeps_extra_coords():
+    spec = _tiny_adjacency_spec()
+
+    da = map_node_attributions(
+        torch.zeros(2, 4),
+        spec,
+        coords={"observation": ["s1", "s2"]},
+    )
+
+    assert list(da.coords["observation"].values) == ["s1", "s2"]
+    assert "layer" not in da.coords
+
+
+def test_map_node_attributions_adjacency_rejects_wrong_width():
+    spec = _tiny_adjacency_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="wrong number of units",
+    ) as caught:
+        map_node_attributions(
+            torch.zeros(2, 3),
+            spec,
+        )
+
+    assert "Expected 4" in str(caught.value)
+
+
+def test_map_node_attributions_adjacency_rejects_a_layer():
+    spec = _tiny_adjacency_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="does not apply to an AdjacencySpec",
+    ):
+        map_node_attributions(
+            torch.zeros(2, 4),
+            spec,
+            0,
+        )
+
+
+def test_map_node_attributions_layered_requires_a_layer():
+    spec = _tiny_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="'layer' is required for a LayeredSpec",
+    ):
+        map_node_attributions(
+            torch.zeros(2, 2),
+            spec,
+        )
+
+
+def test_map_node_attributions_spec_error_names_both_spec_types():
+    with pytest.raises(
+        Kpnn2Error,
+        match="LayeredSpec",
+    ) as caught:
+        map_node_attributions(
+            torch.zeros(2, 2),
+            object(),
+        )
+
+    message = str(caught.value)
+    assert "LayeredSpec" in message
+    assert "AdjacencySpec" in message

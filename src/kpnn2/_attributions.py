@@ -1,5 +1,5 @@
 """
-Map layer attribution tensors onto ``LayeredSpec`` node names.
+Map attribution tensors onto spec node names.
 """
 
 from collections.abc import Mapping, Sequence
@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import xarray as xr
 
+from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
 from ._spec import LayeredSpec
 
@@ -19,14 +20,14 @@ _STEP_DIM = "step"
 
 def map_node_attributions(
     attributions: torch.Tensor | Sequence[torch.Tensor],
-    spec: LayeredSpec,
-    layer: int,
+    spec: LayeredSpec | AdjacencySpec,
+    layer: int | None = None,
     *,
     dims: Sequence[str] | None = None,
     coords: Mapping[str, Sequence] | None = None,
 ) -> xr.DataArray:
     """
-    Label a layer attribution tensor with ``LayeredSpec`` node names.
+    Label an attribution tensor with node names from a spec.
 
     Values are copied with ``detach()`` onto CPU. This function does
     not run an attribution method and does not import Captum. Pass
@@ -38,50 +39,68 @@ def map_node_attributions(
     one axis is named ``node``. A tuple of equal-shaped tensors is
     stacked on a new ``step`` axis (one entry per module call).
 
+    Where the names come from depends on the spec:
+
+    - ``LayeredSpec``: ``layer`` is required and names come from
+      ``spec.layer_nodes[layer]``. The result carries a scalar
+      ``layer`` coordinate.
+    - ``AdjacencySpec``: ``layer`` must be omitted and names come
+      from ``spec.nodes``, the whole state vector. The result
+      carries no ``layer`` coordinate, because there is no depth.
+
     Parameters
     ----------
     attributions : Tensor or sequence of Tensor
-        Scores whose ``node`` axis length equals
-        ``len(spec.layer_nodes[layer])``. A sequence is stacked
-        along ``step``.
-    spec : LayeredSpec
-        Graph structure. ``layer_nodes[layer]`` become the ``node``
-        coordinate.
-    layer : int
+        Scores whose ``node`` axis length equals the number of
+        named units: ``len(spec.layer_nodes[layer])`` for a
+        ``LayeredSpec``, ``len(spec.nodes)`` for an
+        ``AdjacencySpec``. A sequence is stacked along ``step``.
+    spec : LayeredSpec or AdjacencySpec
+        Graph structure supplying the ``node`` coordinate.
+    layer : int, optional
         0-based index into ``spec.layer_nodes``. Layer 0 is the
         input layer. Stored as a scalar coordinate ``layer``.
+        Required for a ``LayeredSpec``; must be omitted for an
+        ``AdjacencySpec``.
     dims : sequence of str, optional
         Name of each axis of the (stacked) tensor. Must contain
         ``node`` exactly once. Required when the tensor has 3 or
         more axes (except a default-stacked 2-D sequence).
     coords : mapping, optional
         Labels for axes other than ``node`` and ``layer``. Length
-        of each entry must match that axis. ``node`` and ``layer``
-        are set from ``spec`` and ``layer``.
+        of each entry must match that axis. ``node`` is set from
+        ``spec``, and ``layer`` from the ``layer`` argument.
 
     Returns
     -------
     DataArray
-        Raw scores with a ``node`` coordinate from
-        ``spec.layer_nodes[layer]`` and scalar ``layer``. Use
+        Raw scores with a ``node`` coordinate from the spec, plus a
+        scalar ``layer`` coordinate for a ``LayeredSpec``. Use
         ``.to_dataframe(name="score").reset_index()`` for a long
         table, or ``.to_pandas()`` for a 2-D wide table.
 
     Raises
     ------
     Kpnn2Error
-        If ``spec`` is not a ``LayeredSpec``; ``layer`` is not a
+        If ``spec`` is neither a ``LayeredSpec`` nor an
+        ``AdjacencySpec``; ``layer`` is missing for a
+        ``LayeredSpec``, given for an ``AdjacencySpec``, or not a
         valid int; ``attributions`` is not a tensor or a non-empty
         sequence of equal-shaped tensors; ``dims`` is missing or
         inconsistent; a ``node`` axis length does not match the
-        layer; or ``coords`` is invalid.
+        named units; or ``coords`` is invalid.
 
     Notes
     -----
     For a ``MaskedLinear`` built from ``spec.masks[i]``, the layer
     index to pass here is ``i + 1`` (the hop output), not ``i``.
     Do not name-map tensors from BatchNorm or other unnamed
-    modules; only map units that are LayeredSpec nodes.
+    modules; only map units that are spec nodes.
+
+    A recurrent net built on an ``AdjacencySpec`` has no layers to
+    index. The natural extra axis there is ``step``: pass one
+    tensor per time step as a sequence and they are stacked for
+    you.
 
     Examples
     --------
@@ -121,19 +140,36 @@ def map_node_attributions(
     ... )
     >>> hidden["node"].values.tolist()
     ['H']
+
+    On an ``AdjacencySpec`` there are no layers: omit ``layer``
+    and the whole state vector is named. One tensor per time step
+    stacks onto a ``step`` axis:
+
+    >>> cyclic = pd.DataFrame(
+    ...     {
+    ...         "source": ["x", "a", "b", "a"],
+    ...         "target": ["a", "b", "a", "y"],
+    ...     }
+    ... )
+    >>> state_spec = k2.parse_adjacency(cyclic)
+    >>> per_step = k2.map_node_attributions(
+    ...     attributions=[
+    ...         torch.zeros(2, 4),
+    ...         torch.ones(2, 4),
+    ...     ],
+    ...     spec=state_spec,
+    ... )
+    >>> per_step.dims
+    ('step', 'observation', 'node')
+    >>> per_step["node"].values.tolist()
+    ['a', 'b', 'x', 'y']
+    >>> "layer" in per_step.coords
+    False
     """
-    if not isinstance(spec, LayeredSpec):
-        raise Kpnn2Error("'spec' must be a LayeredSpec.")
-    if not isinstance(layer, int) or isinstance(layer, bool):
-        raise Kpnn2Error("'layer' must be an int.")
-
-    n_layers = len(spec.layer_nodes)
-    if layer < 0 or layer >= n_layers:
-        raise Kpnn2Error(
-            f"'layer' must be in range [0, {n_layers}). Got {layer}."
-        )
-
-    names = list(spec.layer_nodes[layer])
+    names, layer_coord = _resolve_node_names(
+        spec,
+        layer,
+    )
     n_units = len(names)
     tensor, used_default_step = _as_tensor(attributions)
     dim_names = _resolve_dims(
@@ -152,7 +188,7 @@ def map_node_attributions(
         tensor=tensor,
         dim_names=dim_names,
         names=names,
-        layer=layer,
+        layer=layer_coord,
         coords=coords,
     )
     values = tensor.detach().cpu().numpy()
@@ -161,6 +197,41 @@ def map_node_attributions(
         dims=dim_names,
         coords=coord_map,
     )
+
+
+def _resolve_node_names(
+    spec: LayeredSpec | AdjacencySpec,
+    layer: int | None,
+) -> tuple[list[str], int | None]:
+    """
+    Return the ``node`` names and the scalar ``layer`` coordinate.
+
+    The coordinate is ``None`` for an ``AdjacencySpec``, which has
+    no depths and therefore nothing to report as a layer.
+    """
+    if isinstance(spec, LayeredSpec):
+        if layer is None:
+            raise Kpnn2Error(
+                "'layer' is required for a LayeredSpec. Pass the "
+                "0-based index into spec.layer_nodes."
+            )
+        if not isinstance(layer, int) or isinstance(layer, bool):
+            raise Kpnn2Error("'layer' must be an int.")
+        n_layers = len(spec.layer_nodes)
+        if layer < 0 or layer >= n_layers:
+            raise Kpnn2Error(
+                f"'layer' must be in range [0, {n_layers}). Got {layer}."
+            )
+        return list(spec.layer_nodes[layer]), layer
+    if isinstance(spec, AdjacencySpec):
+        if layer is not None:
+            raise Kpnn2Error(
+                "'layer' does not apply to an AdjacencySpec: every "
+                "node is one unit of a single state vector. Omit "
+                "'layer' to label the node axis with spec.nodes."
+            )
+        return list(spec.nodes), None
+    raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
 
 
 def _as_tensor(
@@ -256,11 +327,15 @@ def _build_coords(
     tensor: torch.Tensor,
     dim_names: tuple[str, ...],
     names: list[str],
-    layer: int,
+    layer: int | None,
     coords: Mapping[str, Sequence] | None,
 ) -> dict[str, object]:
     """
-    Build xarray coordinates, with ``node`` and ``layer`` fixed.
+    Build xarray coordinates, with ``node`` fixed from the spec.
+
+    The scalar ``layer`` coordinate is added only when ``layer`` is
+    not ``None``; an ``AdjacencySpec`` result carries no such
+    coordinate.
     """
     extra: dict[str, Sequence] = {}
     if coords is not None:
@@ -291,5 +366,6 @@ def _build_coords(
             coord_map[dim] = labels
         else:
             coord_map[dim] = np.arange(size)
-    coord_map[_LAYER_COORD] = layer
+    if layer is not None:
+        coord_map[_LAYER_COORD] = layer
     return coord_map

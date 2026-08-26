@@ -532,17 +532,32 @@ state[:, spec.input_index] = x
 
 ---
 
-## `map_node_attributions(attributions, spec, layer, *, dims=None, coords=None)`
+## `map_node_attributions(attributions, spec, layer=None, *, dims=None, coords=None)`
 
 Unopinionated name mapping. No Captum import. Returns
 `xarray.DataArray`. Does not aggregate.
 
+`spec` is a `LayeredSpec` **or** an `AdjacencySpec`, and `layer` is
+optional. The four combinations are exhaustive:
+
+| Spec | `layer` | Result |
+|------|---------|--------|
+| `LayeredSpec` | `int` | Names from `layer_nodes[layer]`; scalar `layer` coordinate attached |
+| `LayeredSpec` | omitted | `Kpnn2Error`: `layer` is required |
+| `AdjacencySpec` | omitted | Names from `spec.nodes`; **no** `layer` coordinate |
+| `AdjacencySpec` | `int` | `Kpnn2Error`: `layer` does not apply |
+
+An `AdjacencySpec` has no depths, so there is no layer index to
+report and none is invented. Do not fabricate `layer=0` for it.
+
 - `attributions`: `torch.Tensor`, or a non-empty tuple/list of
   equal-shaped tensors (stacked on a new `step` axis).
-- `layer`: `int`, index into `spec.layer_nodes` (0-based). Stored
-  as scalar coordinate `layer`.
-- The `node` axis length must equal `len(spec.layer_nodes[layer])`.
-  That axis gets coordinate `spec.layer_nodes[layer]` in order.
+- `layer`: `int` index into `spec.layer_nodes` (0-based), stored as
+  scalar coordinate `layer`. `LayeredSpec` only.
+- The `node` axis length must equal the number of named units:
+  `len(spec.layer_nodes[layer])` for a `LayeredSpec`,
+  `len(spec.nodes)` for an `AdjacencySpec`. That axis gets those
+  names as its coordinate, in order.
 - Default dims: 1-D → `(node,)`; 2-D → `(observation, node)`; a
   stacked sequence of 2-D tensors → `(step, observation, node)`.
   Rank 3+ (except that stacked default) requires `dims=` containing
@@ -551,13 +566,17 @@ Unopinionated name mapping. No Captum import. Returns
 - Values: detached CPU copy of the tensor. No abs/sum/mean.
 - Long table: `da.to_dataframe(name="score").reset_index()`.
   Wide 2-D table: `da.to_pandas()`.
-- Invalid `layer`, shape, `dims`, or `coords`: `Kpnn2Error`.
+- Invalid `spec`, `layer`, shape, `dims`, or `coords`: `Kpnn2Error`.
 
 The user obtains `attributions` however they like (Captum
 LayerConductance, IntegratedGradients, custom grads, etc.). This
-function only attaches LayeredSpec names to the `node` axis. Pass
+function only attaches spec names to the `node` axis. Pass
 `layer=i+1` for `MaskedLinear(spec.masks[i])`. Do not name-map
 BatchNorm or other unnamed modules.
+
+For a recurrent net on an `AdjacencySpec` there is no layer to
+index; the natural extra axis is `step`. Pass one tensor per time
+step as a sequence and they stack onto `(step, observation, node)`.
 
 ---
 

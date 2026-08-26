@@ -21,6 +21,12 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `map_node_attributions()` accepts a `LayeredSpec` or an
+  `AdjacencySpec`, and `layer` is now optional. It stays required
+  for a `LayeredSpec` and must be omitted for an `AdjacencySpec`,
+  whose node axis is the whole state vector (`spec.nodes`) and
+  whose result carries no scalar `layer` coordinate. Existing
+  calls are unaffected: `layer` keeps its position.
 - `align_inputs()` accepts a `LayeredSpec` or an `AdjacencySpec`.
   The DataFrame rules are unchanged; only `spec.input_nodes` is
   read. The result is always `len(spec.input_nodes)` wide, which
