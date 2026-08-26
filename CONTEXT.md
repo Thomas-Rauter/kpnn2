@@ -90,7 +90,7 @@ Division of labor:
 |-------|--------|
 | Edgelist → `LayeredSpec` (ranks, masks, skips) | kpnn2 |
 | Edgelist → `AdjacencySpec` (nodes, one square mask) | kpnn2 |
-| `MaskedLinear` (frozen mask) | kpnn2 |
+| `MaskedLinear` (fixed mask) | kpnn2 |
 | `SkipAdd` (skip indexing onto a layer tensor) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
@@ -233,11 +233,11 @@ and `target` values only.
 
 `LayeredSpec` is a frozen dataclass. It holds structure only: no
 `nn.Module`, no parameters, no execution plan object. Sequences
-are tuples. Do not reassign fields. Mask tensors reject in-place
-writes, `out=` writes into the mask, and numpy aliases of stored
-storage (`Kpnn2Error` for torch writes). `copy.deepcopy` of a
-`LayeredSpec` succeeds; copied masks stay frozen float32 and do
-not share storage with the original.
+are tuples. Do not reassign fields. Mask tensors are **plain
+`torch.Tensor`** and are not write-protected: document them as
+read-only, do not enforce it. `copy.deepcopy` of a `LayeredSpec`
+succeeds; copied masks stay float32 and do not share storage
+with the original.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -262,15 +262,13 @@ not share storage with the original.
   exactly 1.
 - All other entries are `0.0`.
 - **Skip edges (gap > 1) do not appear in any mask.**
-- In-place writes (`fill_`, `copy_`, item assignment) and
-  `out=` into a stored mask raise `Kpnn2Error`. `numpy()` does
-  not yield a writable view of the stored storage.
+- Ordinary `torch.Tensor`, never a subclass. Writes are not
+  blocked; treat the tensors as read-only and rebuild from the
+  edgelist to change wiring.
 - `copy.deepcopy` succeeds. Copied masks keep the same values,
-  stay frozen float32, and do not share storage with the
-  original.
-- `MaskedLinear(spec.masks[i])` stores an independent frozen
-  copy. A write (or failed write) on one side does not change
-  the other.
+  stay float32, and do not share storage with the original.
+- `MaskedLinear(spec.masks[i])` stores an independent copy, so
+  a write on one side does not change the other.
 
 ### `Skip` records
 
@@ -346,10 +344,10 @@ time, choose a step count, or re-inject inputs between steps.
 ### `AdjacencySpec` fields
 
 Frozen dataclass, same rules as `LayeredSpec`: no reassignment,
-sequences are tuples, the mask rejects in-place writes and `out=`
-writes (`Kpnn2Error`), `numpy()` is not a writable view of stored
-storage, and `copy.deepcopy` succeeds with a frozen float32 copy
-that does not share storage.
+sequences are tuples, the mask is a plain `torch.Tensor` that is
+documented read-only but not write-protected, and
+`copy.deepcopy` succeeds with a float32 copy that does not share
+storage.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -372,8 +370,8 @@ here. `SkipAdd` does not accept an `AdjacencySpec`.
   edgelist edge; all other entries `0.0`. Same
   `(out_features, in_features)` convention as the hop masks.
 - Self-loops land on the diagonal.
-- Frozen exactly like `LayeredSpec.masks`.
-  `MaskedLinear(spec.mask)` stores an independent frozen copy.
+- A plain tensor exactly like `LayeredSpec.masks`.
+  `MaskedLinear(spec.mask)` stores an independent copy.
 
 ### Two consequences
 
@@ -414,20 +412,20 @@ MaskedLinear(mask, bias=True)
   Inferred `in_features` / `out_features` from `mask.shape`.
   Do not take separate size arguments.
 - Register `mask` as a **non-persistent buffer** (not a
-  parameter, not in `state_dict`), `float32`. LayeredSpec masks
-  stay float32. After `Module.half()`, `.to(dtype=torch.bfloat16)`,
-  or `.double()`, `layer.mask.dtype` is still `float32`. In-place
-  writes (`fill_`, `copy_`, item assignment, `out=` into the
-  mask) and replacement (`layer.mask = ...` or
-  `register_buffer("mask", ...)`) raise `Kpnn2Error`. `numpy()`
-  does not yield a writable view of the stored storage.
-  `MaskedLinear(spec.masks[i])` stores an independent frozen
-  copy. Rebuild from the edgelist / `LayeredSpec` to change
-  wiring. The stored mask does not follow the module floating
-  dtype. `copy.deepcopy` of a `MaskedLinear` (and of a user
-  `nn.Module` that holds `MaskedLinear` layers and a
-  `LayeredSpec`) succeeds. Parameters on the copy are distinct
-  objects. Copied masks stay frozen float32.
+  parameter, not in `state_dict`), `float32`, and a **plain
+  `torch.Tensor`**. LayeredSpec masks stay float32. After
+  `Module.half()`, `.to(dtype=torch.bfloat16)`, or `.double()`,
+  `layer.mask.dtype` is still `float32`: the stored mask does
+  not follow the module floating dtype.
+  `MaskedLinear(spec.masks[i])` stores an independent copy, so
+  later writes to `spec.masks[i]` do not reach the layer.
+  Rebuild from the edgelist / `LayeredSpec` to change wiring.
+  Nothing blocks a write to `layer.mask`; it is documented
+  read-only, like any PyTorch buffer. `copy.deepcopy` of a
+  `MaskedLinear` (and of a user `nn.Module` that holds
+  `MaskedLinear` layers and a `LayeredSpec`) succeeds.
+  Parameters on the copy are distinct objects. Copied masks
+  stay float32.
 - Trainable `raw_weight`: same shape as `mask`.
 - Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
   parameter.
@@ -437,7 +435,12 @@ MaskedLinear(mask, bias=True)
   `Y = F.linear(X, effective, bias)`.
   Equivalently `Y = X @ (W ⊙ M).T + b` with `M` cast to `W`'s
   dtype/device. This is why `.half()` / bfloat16 / `.double()`
-  work like `nn.Linear`.
+  work like `nn.Linear`. In the common float32 case that `.to`
+  returns the buffer itself, so forward allocates nothing extra
+  for the mask.
+- The forward path holds no tensor subclass, so
+  `torch.compile(layer, fullgraph=True)` traces it without a
+  graph break. Keep it that way.
 - **Degree-aware init:** for each output row `j`,
   `fan_in = int(mask[j].sum())` (count of 1s in that row).
   Use that `fan_in` for kaiming/uniform scale of that row (and for
@@ -475,8 +478,8 @@ SkipAdd(spec)
 - The add uses `hidden.dtype` / `hidden.device` (skip weight
   and source are cast like `MaskedLinear` casts the mask).
 - `copy.deepcopy` succeeds. Parameters on the copy are
-  distinct. The stored `LayeredSpec` stays frozen (do not
-  mutate `spec.skips` or masks).
+  distinct. The stored `LayeredSpec` is not mutated (do not
+  write to `spec.skips` or masks).
 - Public failures: `Kpnn2Error` (bad spec, invalid
   `target_layer`, missing saved layer, width mismatch).
 
@@ -703,7 +706,7 @@ PyTorch:
 
 Do not add a compiled core or mutate connectivity after parse.
 `copy.deepcopy` of this module shape succeeds. Copied masks
-stay frozen float32.
+stay float32.
 
 The Python distribution and import name are **`kpnn2`**.
 Do not rename them.
@@ -724,7 +727,7 @@ src/kpnn2/
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions
   _errors.py                  # Kpnn2Error
-  _frozen_mask.py             # read-only connectivity tensors
+  _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis
 
 tests/
@@ -782,6 +785,14 @@ disagree with CI.
 - Do not rename the package, import, or `src/kpnn2/` directory.
 - Do not reintroduce compilers, backends, pseudo nodes, Captum
   adapters, edge constraints, or AnnData in v1.
+- Masks are plain `torch.Tensor`. Do not add a tensor subclass,
+  a `__torch_function__` override, or any other write guard.
+  A previous `FrozenMask` subclass broke
+  `torch.compile(fullgraph=True)` and cloned the whole mask on
+  every forward pass. Document masks as read-only instead;
+  PyTorch does not write-protect buffers either.
+  `tests/module/test_masked_linear.py` keeps a `fullgraph`
+  regression test.
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks.
 - `parse_layered` and `parse_adjacency` must not instantiate

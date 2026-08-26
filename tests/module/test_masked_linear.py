@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from torch import nn
 
 from kpnn2 import Kpnn2Error, MaskedLinear, parse_layered
-from kpnn2._frozen_mask import FrozenMask
 
 
 def test_masked_linear_output_shape():
@@ -300,116 +299,36 @@ def test_masked_linear_mask_is_not_in_state_dict():
     assert "raw_weight" in keys
 
 
-def test_masked_linear_rejects_in_place_mask_write():
+def test_masked_linear_mask_is_a_plain_tensor():
     layer = MaskedLinear(
         torch.ones(
             2,
             3,
         )
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
+    assert type(layer.mask) is torch.Tensor
+    assert not layer.mask.requires_grad
+    assert layer.mask.is_contiguous()
 
 
-def test_masked_linear_rejects_mask_item_assignment():
+def test_masked_linear_forward_cast_of_mask_is_free():
     layer = MaskedLinear(
         torch.ones(
             2,
             3,
         )
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask[0, 0] = 0.0
-
-
-def test_masked_linear_rejects_mask_replacement():
-    layer = MaskedLinear(
-        torch.ones(
-            2,
-            3,
-        )
+    same = layer.mask.to(
+        dtype=layer.raw_weight.dtype,
+        device=layer.raw_weight.device,
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask = torch.zeros(
-            2,
-            3,
-        )
+    assert same is layer.mask
 
+    row = layer.mask[0]
+    assert row.data_ptr() == layer.mask.data_ptr()
 
-def test_masked_linear_rejects_out_kwarg_write():
-    layer = MaskedLinear(
-        torch.ones(
-            2,
-            3,
-        )
-    )
-    before = layer.mask.tolist()
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        torch.add(
-            layer.mask,
-            1,
-            out=layer.mask,
-        )
-    assert layer.mask.tolist() == before
-
-
-def test_masked_linear_numpy_cannot_change_mask():
-    layer = MaskedLinear(
-        torch.ones(
-            2,
-            3,
-        )
-    )
-    before = layer.mask.tolist()
     arr = layer.mask.numpy()
-    try:
-        arr[:] = 0
-    except (ValueError, Kpnn2Error):
-        pass
-    assert layer.mask.tolist() == before
-    assert not arr.flags.writeable
-
-
-def test_masked_linear_rejects_register_buffer_mask():
-    layer = MaskedLinear(
-        torch.ones(
-            2,
-            3,
-        )
-    )
-    before = layer.mask.tolist()
-    assert isinstance(layer.mask, FrozenMask)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.register_buffer(
-            "mask",
-            torch.zeros(
-                2,
-                3,
-            ),
-            persistent=False,
-        )
-    assert layer.mask.tolist() == before
-    assert isinstance(layer.mask, FrozenMask)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
+    assert arr.flags.writeable
 
 
 def test_masked_linear_mask_independent_of_layered_spec():
@@ -421,73 +340,18 @@ def test_masked_linear_mask_independent_of_layered_spec():
     )
     spec = parse_layered(edgelist)
     layer = MaskedLinear(spec.masks[0])
-    spec_before = spec.masks[0].tolist()
     layer_before = layer.mask.tolist()
     assert layer.mask is not spec.masks[0]
     assert layer.mask.data_ptr() != spec.masks[0].data_ptr()
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
-    assert spec.masks[0].tolist() == spec_before
-    assert layer.mask.tolist() == layer_before
-
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.masks[0].fill_(0.0)
-    assert spec.masks[0].tolist() == spec_before
-    assert layer.mask.tolist() == layer_before
-
-    for tensor in (layer.mask, spec.masks[0]):
-        arr = tensor.numpy()
-        try:
-            arr[:] = 0
-        except (ValueError, Kpnn2Error):
-            pass
-    assert spec.masks[0].tolist() == spec_before
+    spec.masks[0].fill_(0.0)
     assert layer.mask.tolist() == layer_before
 
     layer = layer.to(
         device="cpu",
         dtype=torch.float32,
     )
-    assert spec.masks[0].tolist() == spec_before
     assert layer.mask.tolist() == layer_before
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.masks[0].fill_(0.0)
-
-
-def test_masked_linear_rejects_in_place_mask_write_keeps_values():
-    layer = MaskedLinear(
-        torch.ones(
-            2,
-            3,
-        )
-    )
-    before = layer.mask.tolist()
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask[0, 0] = 0.0
-    assert layer.mask.tolist() == before
 
 
 @pytest.mark.parametrize(
@@ -530,7 +394,7 @@ def test_masked_linear_module_dtype_cast_forward(apply_cast):
     )
 
 
-def test_masked_linear_half_keeps_float32_readonly_mask():
+def test_masked_linear_half_keeps_float32_plain_mask():
     layer = MaskedLinear(
         torch.ones(
             2,
@@ -539,19 +403,11 @@ def test_masked_linear_half_keeps_float32_readonly_mask():
     )
     layer = layer.half()
     assert layer.mask.dtype == torch.float32
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask[0, 0] = 0.0
+    assert type(layer.mask) is torch.Tensor
+    assert layer.raw_weight.dtype == torch.float16
 
 
-def test_masked_linear_device_move_keeps_mask_read_only():
+def test_masked_linear_device_move_keeps_mask_usable():
     layer = MaskedLinear(
         torch.ones(
             2,
@@ -562,11 +418,8 @@ def test_masked_linear_device_move_keeps_mask_read_only():
         device="cpu",
         dtype=torch.float32,
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
+    assert type(layer.mask) is torch.Tensor
+    assert layer.mask.dtype == torch.float32
     x = torch.ones(
         1,
         3,
@@ -597,11 +450,13 @@ def test_masked_linear_state_dict_roundtrip_keeps_mask():
         dst.raw_weight,
         src.raw_weight,
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        dst.mask.fill_(0.0)
+    assert (
+        dst.mask.tolist()
+        == torch.ones(
+            2,
+            3,
+        ).tolist()
+    )
 
 
 def test_masked_linear_zero_degree_row_stays_zero():
@@ -692,7 +547,7 @@ def test_masked_linear_init_dense_row_tighter_bound():
     assert abs(layer.bias[1].item()) <= dense_bound + eps
 
 
-def test_masked_linear_deepcopy_independent_params_and_frozen_mask():
+def test_masked_linear_deepcopy_independent_params_and_mask():
     layer = _layer_with_pinned_diag_weights(bias=True)
     with torch.no_grad():
         layer.bias.copy_(_pinned_bias())
@@ -717,10 +572,7 @@ def test_masked_linear_deepcopy_independent_params_and_frozen_mask():
         layer.mask,
     )
     assert copied.mask.dtype == torch.float32
-    assert isinstance(
-        copied.mask,
-        FrozenMask,
-    )
+    assert type(copied.mask) is torch.Tensor
     x = torch.tensor(
         [[1.0, 1.0]],
         dtype=torch.float32,
@@ -729,18 +581,8 @@ def test_masked_linear_deepcopy_independent_params_and_frozen_mask():
         copied(x),
         layer(x),
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        copied.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
+    copied.mask.fill_(0.0)
     assert layer.mask.tolist() == before_mask
-    assert copied.mask.tolist() == before_mask
 
 
 def test_module_with_masked_linear_and_layered_spec_deepcopy():
@@ -779,36 +621,16 @@ def test_module_with_masked_linear_and_layered_spec_deepcopy():
         copied(x),
         net(x),
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        copied.lin.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        copied.spec.masks[0].fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        net.lin.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        net.spec.masks[0].fill_(0.0)
     assert copied.lin.mask.dtype == torch.float32
     assert copied.spec.masks[0].dtype == torch.float32
-    assert isinstance(
-        copied.lin.mask,
-        FrozenMask,
-    )
-    assert isinstance(
-        copied.spec.masks[0],
-        FrozenMask,
-    )
+    assert type(copied.lin.mask) is torch.Tensor
+    assert type(copied.spec.masks[0]) is torch.Tensor
+
+    before = net.lin.mask.tolist()
+    copied.lin.mask.fill_(0.0)
+    copied.spec.masks[0].fill_(0.0)
+    assert net.lin.mask.tolist() == before
+    assert net.spec.masks[0].tolist() == before
 
 
 def test_masked_linear_deepcopy_keeps_dtype_cast_and_state_dict():
@@ -825,28 +647,45 @@ def test_masked_linear_deepcopy_keeps_dtype_cast_and_state_dict():
     ):
         assert "mask" not in module.state_dict()
         assert module.mask.dtype == torch.float32
-        with pytest.raises(
-            Kpnn2Error,
-            match="read-only",
-        ):
-            module.mask.fill_(0.0)
 
     layer.half()
     copied.double()
     assert layer.mask.dtype == torch.float32
     assert copied.mask.dtype == torch.float32
+    assert type(layer.mask) is torch.Tensor
+    assert type(copied.mask) is torch.Tensor
     assert "mask" not in layer.state_dict()
     assert "mask" not in copied.state_dict()
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        layer.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        copied.mask.fill_(0.0)
+
+
+def test_masked_linear_compiles_without_a_graph_break():
+    dynamo = pytest.importorskip("torch._dynamo")
+    if not dynamo.is_dynamo_supported():
+        pytest.skip("torch.compile is not supported here")
+    torch.manual_seed(42)
+    mask = (
+        torch.rand(
+            16,
+            24,
+        )
+        < 0.3
+    ).float()
+    layer = MaskedLinear(mask)
+    x = torch.randn(
+        4,
+        24,
+    )
+    expected = layer(x)
+    dynamo.reset()
+    compiled = torch.compile(
+        layer,
+        fullgraph=True,
+        backend="eager",
+    )
+    torch.testing.assert_close(
+        compiled(x),
+        expected,
+    )
 
 
 def test_masked_linear_ignores_mutation_of_constructor_tensor():

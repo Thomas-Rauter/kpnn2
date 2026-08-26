@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from torch import Tensor
 
-from ._frozen_mask import freeze_mask
+from ._mask_tensor import as_mask_tensor
 
 
 @dataclass(frozen=True)
@@ -39,9 +39,9 @@ class AdjacencySpec:
         Square connectivity, dtype float32, shape ``(n, n)`` with
         ``n == len(nodes)``. Entry ``[target_index, source_index]``
         is ``1.0`` for every original edge, otherwise ``0.0``.
-        Self-loops land on the diagonal. In-place writes, ``out=``
-        into the tensor, and numpy aliases of stored storage are
-        rejected.
+        Self-loops land on the diagonal. Treat it as read-only:
+        it is an ordinary tensor, so writing to it silently
+        changes the wiring this spec describes.
     input_index : tuple[int, ...]
         Position of each ``input_nodes`` name in ``nodes``.
     output_index : tuple[int, ...]
@@ -49,11 +49,13 @@ class AdjacencySpec:
 
     Notes
     -----
-    Fields cannot be reassigned. Sequences are tuples. The mask
-    tensor rejects in-place writes and ``out=`` writes
-    (``Kpnn2Error``). ``numpy()`` is not a writable view of stored
-    storage. ``MaskedLinear`` clones the mask into a
-    non-persistent buffer independent of ``spec.mask``.
+    Fields cannot be reassigned and sequences are tuples, so the
+    structure itself is fixed. The mask is a plain float32
+    tensor and is not write-protected; treat it as read-only and
+    rebuild from the edgelist to change wiring. ``MaskedLinear``
+    clones the mask into a non-persistent buffer independent of
+    ``spec.mask``, so a layer built earlier keeps its own
+    connectivity either way.
 
     ``align_inputs`` returns ``len(input_nodes)`` columns, which
     is not the mask width. Scatter that tensor into the ``n``-wide
@@ -83,7 +85,7 @@ class AdjacencySpec:
     ('a', 'b')
     >>> spec.input_index, spec.output_index
     ((2,), (3,))
-    >>> spec.mask.shape
+    >>> tuple(spec.mask.shape)
     (4, 4)
     >>> spec.mask[0].tolist()
     [0.0, 1.0, 1.0, 0.0]
@@ -121,7 +123,7 @@ class AdjacencySpec:
         object.__setattr__(
             self,
             "mask",
-            freeze_mask(self.mask),
+            as_mask_tensor(self.mask),
         )
         object.__setattr__(
             self,

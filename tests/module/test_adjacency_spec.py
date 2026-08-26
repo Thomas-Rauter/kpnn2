@@ -5,8 +5,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import Kpnn2Error, parse_adjacency
-from kpnn2._frozen_mask import FrozenMask
+from kpnn2 import MaskedLinear, parse_adjacency
 
 
 def _cyclic_edgelist():
@@ -47,61 +46,29 @@ def test_adjacency_spec_has_no_layered_fields():
     assert not hasattr(spec, "skips")
 
 
-def test_adjacency_spec_mask_is_frozen_float32():
+def test_adjacency_spec_mask_is_a_plain_float32_tensor():
     spec = parse_adjacency(_cyclic_edgelist())
 
-    assert isinstance(
-        spec.mask,
-        FrozenMask,
-    )
+    assert type(spec.mask) is torch.Tensor
     assert spec.mask.dtype == torch.float32
+    assert not spec.mask.requires_grad
+    assert spec.mask.is_contiguous()
+    assert spec.mask.numpy().flags.writeable
 
 
-def test_adjacency_spec_mask_rejects_in_place_writes():
+def test_adjacency_spec_mask_does_not_alias_the_parsed_tensor():
     spec = parse_adjacency(_cyclic_edgelist())
+    layer = MaskedLinear(spec.mask)
+    layer_before = layer.mask.tolist()
+    other = parse_adjacency(_cyclic_edgelist())
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.mask.fill_(0.0)
+    spec.mask.fill_(0.0)
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.mask[0, 0] = 1.0
+    assert layer.mask.tolist() == layer_before
+    assert other.mask.tolist() == layer_before
 
 
-def test_adjacency_spec_mask_rejects_out_kwarg_write():
-    spec = parse_adjacency(_cyclic_edgelist())
-    before = spec.mask.tolist()
-
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        torch.add(
-            spec.mask,
-            1,
-            out=spec.mask,
-        )
-    assert spec.mask.tolist() == before
-
-
-def test_adjacency_spec_mask_numpy_cannot_change_values():
-    spec = parse_adjacency(_cyclic_edgelist())
-    before = spec.mask.tolist()
-    arr = spec.mask.numpy()
-    try:
-        arr[:] = 0
-    except (ValueError, Kpnn2Error):
-        pass
-    assert spec.mask.tolist() == before
-    assert not arr.flags.writeable
-
-
-def test_adjacency_spec_deepcopy_independent_frozen_mask():
+def test_adjacency_spec_deepcopy_independent_mask():
     spec = parse_adjacency(_cyclic_edgelist())
     before = spec.mask.tolist()
     copied = copy.deepcopy(spec)
@@ -111,25 +78,12 @@ def test_adjacency_spec_deepcopy_independent_frozen_mask():
     assert copied.input_index == spec.input_index
     assert copied.output_index == spec.output_index
 
-    assert isinstance(
-        copied.mask,
-        FrozenMask,
-    )
+    assert type(copied.mask) is torch.Tensor
     assert copied.mask.dtype == torch.float32
     assert copied.mask.tolist() == before
     assert copied.mask is not spec.mask
     assert copied.mask.data_ptr() != spec.mask.data_ptr()
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.mask.fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        copied.mask.fill_(0.0)
+    copied.mask.fill_(0.0)
 
     assert spec.mask.tolist() == before
-    assert copied.mask.tolist() == before

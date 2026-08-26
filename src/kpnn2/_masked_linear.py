@@ -3,19 +3,18 @@ Masked linear layer for edgelist-defined connectivity.
 """
 
 import math
-from typing import Any
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ._errors import Kpnn2Error
-from ._frozen_mask import freeze_mask
+from ._mask_tensor import as_mask_tensor
 
 
 class MaskedLinear(nn.Module):
     """
-    Affine hop with a frozen connectivity mask.
+    Affine hop with a fixed connectivity mask.
 
     Same job as ``torch.nn.Linear``: call ``layer(x)`` in an
     ``nn.Module``. This is not a subclass of ``Linear``. For
@@ -39,13 +38,15 @@ class MaskedLinear(nn.Module):
     out_features : int
         Number of output columns, ``mask.shape[0]``.
     mask : torch.Tensor
-        Frozen float32 buffer, same shape as the constructor
-        ``mask``. Not trained, not saved in ``state_dict``, and
-        not writable in place. Independent of the constructor
-        tensor (including ``spec.masks[i]``). Stays float32
-        after ``.half()`` / bfloat16 / ``.double()``.
-        Connectivity comes only from the tensor passed to the
-        constructor (typically ``spec.masks[i]``).
+        Float32 buffer, same shape as the constructor ``mask``.
+        Not trained and not saved in ``state_dict``. An
+        independent copy of the constructor tensor (including
+        ``spec.masks[i]``), so later edits to that tensor do not
+        reach this layer. Stays float32 after ``.half()`` /
+        bfloat16 / ``.double()``. **Treat it as read-only:**
+        like any PyTorch buffer it can be written to, and doing
+        so silently rewires the layer. Rebuild from the edgelist
+        instead.
     raw_weight : nn.Parameter
         Trainable weight of shape ``(out_features, in_features)``.
         Masked-out entries can be nonzero in this tensor; they are
@@ -63,11 +64,11 @@ class MaskedLinear(nn.Module):
     Notes
     -----
     Construct with ``mask``; sizes come from ``mask.shape``.
-    ``mask`` is a float32 buffer, is not trained, and is omitted
-    from ``state_dict``. In-place writes (including ``out=``),
-    ``layer.mask = ...``, and
-    ``register_buffer("mask", ...)`` raise ``Kpnn2Error``.
-    ``numpy()`` is not a writable view of stored storage.
+    ``mask`` is an ordinary float32 buffer: not trained, omitted
+    from ``state_dict``, and not a tensor subclass, so nothing
+    custom runs per operation and ``torch.compile`` sees plain
+    tensors. Nothing prevents writing to it; treat it as
+    read-only and rebuild from the edgelist to change wiring.
     Module dtype casts do not change the stored mask dtype.
     The trainable tensor is ``raw_weight``. Forward is
     ``Y = F.linear(X, effective, bias)`` where ``effective`` is
@@ -157,43 +158,10 @@ class MaskedLinear(nn.Module):
 
         self.register_buffer(
             "mask",
-            freeze_mask(mask),
+            as_mask_tensor(mask),
             persistent=False,
         )
-        self._mask_locked = True
         self.reset_parameters()
-
-    def register_buffer(
-        self,
-        name: str,
-        tensor: torch.Tensor | None,
-        persistent: bool = True,
-    ) -> None:
-        if name == "mask" and getattr(self, "_mask_locked", False):
-            raise Kpnn2Error(
-                "MaskedLinear.mask is read-only. Rebuild the "
-                "layer from the spec."
-            )
-        super().register_buffer(
-            name,
-            tensor,
-            persistent,
-        )
-
-    def __setattr__(
-        self,
-        name: str,
-        value: Any,
-    ) -> None:
-        if name == "mask" and getattr(self, "_mask_locked", False):
-            raise Kpnn2Error(
-                "MaskedLinear.mask is read-only. Rebuild the "
-                "layer from the spec."
-            )
-        super().__setattr__(
-            name,
-            value,
-        )
 
     def _apply(
         self,
@@ -207,8 +175,8 @@ class MaskedLinear(nn.Module):
             **kwargs,
         )
         stored = self._buffers.get("mask")
-        if stored is not None:
-            self._buffers["mask"] = freeze_mask(stored)
+        if stored is not None and stored.dtype != torch.float32:
+            self._buffers["mask"] = stored.to(dtype=torch.float32)
         return out
 
     def reset_parameters(self) -> None:
@@ -222,16 +190,21 @@ class MaskedLinear(nn.Module):
         is drawn uniformly from
         ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``. If
         ``fan_in == 0``, the row and bias entry stay 0.
+
+        Degrees are counted in one pass over ``mask``, so no
+        per-row device synchronization happens here. Rows are
+        then drawn one at a time, which writes straight into
+        ``raw_weight`` without a full-size temporary.
         """
         with torch.no_grad():
             self.raw_weight.zero_()
             if self.bias is not None:
                 self.bias.zero_()
-            for row in range(self.out_features):
-                fan_in = int(self.mask[row].sum().item())
-                if fan_in == 0:
+            degrees = self.mask.sum(dim=1).trunc().tolist()
+            for row, degree in enumerate(degrees):
+                if degree <= 0:
                     continue
-                bound = 1.0 / math.sqrt(fan_in)
+                bound = 1.0 / math.sqrt(degree)
                 nn.init.uniform_(
                     self.raw_weight[row],
                     -bound,

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from torch import Tensor
 
-from ._frozen_mask import freeze_mask
+from ._mask_tensor import as_mask_tensor
 
 
 @dataclass(frozen=True)
@@ -77,8 +77,9 @@ class LayeredSpec:
         ``nn.Linear.weight``. Entry ``[target_index, source_index]``
         is ``1.0`` for an original edge with depth gap exactly 1,
         otherwise ``0.0``. Skip edges are not written into these
-        tensors. In-place writes, ``out=`` into the tensor, and
-        numpy aliases of stored storage are rejected.
+        tensors. Treat them as read-only: they are ordinary
+        tensors, so writing to one silently changes the wiring
+        this spec describes.
     skips : tuple[Skip, ...]
         Original edges with depth gap greater than 1. Each record
         has ``source``, ``target``, ``source_layer``,
@@ -88,11 +89,13 @@ class LayeredSpec:
 
     Notes
     -----
-    Fields cannot be reassigned. Sequences are tuples. Mask
-    tensors reject in-place writes and ``out=`` writes
-    (``Kpnn2Error``). ``numpy()`` is not a writable view of
-    stored storage. ``MaskedLinear`` clones the mask into a
-    non-persistent buffer independent of ``spec.masks``.
+    Fields cannot be reassigned and sequences are tuples, so the
+    structure itself is fixed. The mask tensors are plain
+    float32 tensors and are not write-protected; treat them as
+    read-only and rebuild from the edgelist to change wiring.
+    ``MaskedLinear`` clones the mask into a non-persistent
+    buffer independent of ``spec.masks``, so a layer built
+    earlier keeps its own connectivity either way.
 
     Examples
     --------
@@ -156,7 +159,7 @@ class LayeredSpec:
         object.__setattr__(
             self,
             "masks",
-            tuple(freeze_mask(mask) for mask in self.masks),
+            tuple(as_mask_tensor(mask) for mask in self.masks),
         )
         object.__setattr__(
             self,

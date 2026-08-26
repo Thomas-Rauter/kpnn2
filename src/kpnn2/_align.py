@@ -123,7 +123,7 @@ def align_inputs(
     >>> state_spec = k2.parse_adjacency(cyclic)
     >>> inputs = pd.DataFrame({"x": [0.5, 1.5]})
     >>> x = k2.align_inputs(inputs, state_spec)
-    >>> tuple(x.shape), state_spec.mask.shape
+    >>> tuple(x.shape), tuple(state_spec.mask.shape)
     ((2, 1), (4, 4))
     >>> state = torch.zeros(
     ...     2,

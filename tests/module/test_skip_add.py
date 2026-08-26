@@ -13,7 +13,6 @@ from kpnn2 import (
     SkipAdd,
     parse_layered,
 )
-from kpnn2._frozen_mask import FrozenMask
 
 
 def _chain_edgelist():
@@ -444,7 +443,7 @@ def test_skip_add_shape_and_device_match_hidden():
     )
 
 
-def test_skip_add_deepcopy_independent_params_frozen_spec():
+def test_skip_add_deepcopy_independent_params_and_spec():
     spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     _pin_skip_weights(
@@ -497,22 +496,12 @@ def test_skip_add_deepcopy_independent_params_frozen_spec():
 
     with pytest.raises(FrozenInstanceError):
         module.spec.skips = ()
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        module.spec.masks[0].fill_(0.0)
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        copied.spec.masks[0].fill_(0.0)
-    assert spec.masks[0].tolist() == before_mask
     assert copied.spec.masks[0].dtype == torch.float32
-    assert isinstance(
-        copied.spec.masks[0],
-        FrozenMask,
-    )
+    assert type(copied.spec.masks[0]) is torch.Tensor
+    assert copied.spec.masks[0] is not spec.masks[0]
+
+    copied.spec.masks[0].fill_(0.0)
+    assert spec.masks[0].tolist() == before_mask
 
 
 def test_skip_add_rejects_bad_spec():

@@ -32,6 +32,22 @@ This project follows semantic versioning.
   read. The result is always `len(spec.input_nodes)` wide, which
   for an `AdjacencySpec` is narrower than the square mask, so
   scatter it into the state vector with `spec.input_index`.
+- Connectivity masks are plain `torch.Tensor` again. The
+  `FrozenMask` subclass that rejected in-place writes is gone,
+  together with the `Kpnn2Error` it raised from
+  `spec.masks[i]`, `spec.mask`, and `MaskedLinear.mask` on
+  `fill_`, item assignment, `out=`, buffer replacement, and
+  `numpy()`. Those tensors are now documented as read-only
+  rather than enforced, which is how PyTorch treats buffers.
+  The subclass ran a `__torch_function__` hook on every
+  operation: it cloned the whole mask on every forward pass and
+  made `torch.compile(fullgraph=True)` fail with a graph break.
+  Both are fixed, and `MaskedLinear` still stores its own copy
+  of the mask, so writing to `spec.masks[i]` cannot rewire a
+  layer that was already built. Mask operations also return
+  standard PyTorch types again: `mask.shape` is a `torch.Size`
+  rather than a plain tuple, indexing returns a view instead of
+  a copy, and `numpy()` returns a writable array.
 - Node positions are now internal slices rather than single
   columns. A private `_layout.py` places each node on a
   contiguous `NodeSlot` of its tensor axis, masks are written by

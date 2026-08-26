@@ -31,7 +31,7 @@ class SkipAdd(nn.Module):
     ----------
     spec : LayeredSpec
         Structure whose ``skips`` this module indexes. Not
-        mutated. Masks stay frozen.
+        mutated.
 
     Attributes
     ----------
@@ -59,7 +59,7 @@ class SkipAdd(nn.Module):
     ``MaskedLinear`` casting the mask onto the hop.
 
     ``copy.deepcopy`` succeeds. Parameters on the copy are
-    distinct. Copied ``LayeredSpec`` masks stay frozen float32.
+    distinct. Copied ``LayeredSpec`` masks stay float32.
 
     Examples
     --------

@@ -5,8 +5,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import Kpnn2Error, parse_layered
-from kpnn2._frozen_mask import FrozenMask
+from kpnn2 import MaskedLinear, parse_layered
 
 
 def test_layered_spec_rejects_field_assignment():
@@ -40,7 +39,7 @@ def test_layered_spec_sequences_are_tuples():
         spec.input_nodes.append("X")
 
 
-def test_layered_spec_masks_reject_in_place_writes():
+def test_layered_spec_masks_are_plain_float32_tensors():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -49,20 +48,15 @@ def test_layered_spec_masks_reject_in_place_writes():
     )
     spec = parse_layered(edgelist)
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.masks[0].fill_(0.0)
-
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        spec.masks[0][0, 0] = 0.0
+    for mask in spec.masks:
+        assert type(mask) is torch.Tensor
+        assert mask.dtype == torch.float32
+        assert not mask.requires_grad
+        assert mask.is_contiguous()
+        assert mask.numpy().flags.writeable
 
 
-def test_layered_spec_masks_reject_out_kwarg_write():
+def test_layered_spec_masks_do_not_alias_the_parsed_tensors():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -70,39 +64,17 @@ def test_layered_spec_masks_reject_out_kwarg_write():
         }
     )
     spec = parse_layered(edgelist)
-    before = spec.masks[0].tolist()
+    layer = MaskedLinear(spec.masks[0])
+    layer_before = layer.mask.tolist()
+    other = parse_layered(edgelist)
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="read-only",
-    ):
-        torch.add(
-            spec.masks[0],
-            1,
-            out=spec.masks[0],
-        )
-    assert spec.masks[0].tolist() == before
+    spec.masks[0].fill_(0.0)
+
+    assert layer.mask.tolist() == layer_before
+    assert other.masks[0].tolist() == layer_before
 
 
-def test_layered_spec_masks_numpy_cannot_change_values():
-    edgelist = pd.DataFrame(
-        {
-            "source": ["A", "B"],
-            "target": ["B", "C"],
-        }
-    )
-    spec = parse_layered(edgelist)
-    before = spec.masks[0].tolist()
-    arr = spec.masks[0].numpy()
-    try:
-        arr[:] = 0
-    except (ValueError, Kpnn2Error):
-        pass
-    assert spec.masks[0].tolist() == before
-    assert not arr.flags.writeable
-
-
-def test_layered_spec_deepcopy_independent_frozen_masks():
+def test_layered_spec_deepcopy_independent_masks():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -122,30 +94,13 @@ def test_layered_spec_deepcopy_independent_frozen_masks():
         copied.masks,
         strict=True,
     ):
-        assert isinstance(
-            orig,
-            FrozenMask,
-        )
-        assert isinstance(
-            dup,
-            FrozenMask,
-        )
+        assert type(orig) is torch.Tensor
+        assert type(dup) is torch.Tensor
         assert orig.dtype == torch.float32
         assert dup.dtype == torch.float32
         assert orig.tolist() == dup.tolist()
         assert orig is not dup
         assert orig.data_ptr() != dup.data_ptr()
-        with pytest.raises(
-            Kpnn2Error,
-            match="read-only",
-        ):
-            orig.fill_(0.0)
-        with pytest.raises(
-            Kpnn2Error,
-            match="read-only",
-        ):
-            dup.fill_(0.0)
-        assert orig.tolist() == dup.tolist()
+        dup.fill_(0.0)
 
     assert [mask.tolist() for mask in spec.masks] == before
-    assert [mask.tolist() for mask in copied.masks] == before

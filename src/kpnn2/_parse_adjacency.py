@@ -146,7 +146,7 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     ('x',)
     >>> spec.input_index
     (2,)
-    >>> spec.mask.shape
+    >>> tuple(spec.mask.shape)
     (4, 4)
 
     The feedback edge ``b -> a`` and the forward edge ``a -> b``
