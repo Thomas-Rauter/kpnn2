@@ -111,8 +111,6 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 Do **not** export or implement: `compile_graph`, `customize_model`,
 `interpret_model`, `align_features_to_input_nodes`, `edge_weights`,
 `CompileArtifact`, backends, `ConstrainedMaskedLinear`.
-Do **not** export `parse_edgelist` or `GraphSpec`; those names
-were replaced by `parse_layered` and `LayeredSpec`.
 
 ---
 

@@ -20,8 +20,6 @@ _COMPILER_LEFTOVERS = [
     "edge_weights",
     "CompileArtifact",
     "ConstrainedMaskedLinear",
-    "parse_edgelist",
-    "GraphSpec",
 ]
 
 
