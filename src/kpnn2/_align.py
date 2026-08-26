@@ -7,6 +7,7 @@ import torch
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
+from ._layout import build_layout, expand_columns
 from ._spec import LayeredSpec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
@@ -202,7 +203,12 @@ def _align_dataframe(
             f"{non_numeric_str}."
         )
 
-    return torch.tensor(
+    layout = build_layout(spec.input_nodes)
+    values = expand_columns(
         ordered.to_numpy(copy=True),
+        layout,
+    )
+    return torch.tensor(
+        values,
         dtype=torch.float32,
     )

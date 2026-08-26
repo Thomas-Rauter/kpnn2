@@ -580,6 +580,40 @@ step as a sequence and they stack onto `(step, observation, node)`.
 
 ---
 
+## Internal unit layout
+
+`src/kpnn2/_layout.py` owns every mapping from a node name to a
+position on a tensor axis. Nothing else in `src/` computes a
+column index by hand.
+
+- A node owns a **contiguous slice** of units (`NodeSlot`), not a
+  single column. `DEFAULT_NODE_WIDTH` is `1`, so every slice has
+  width 1, `slot.start` is the node's column index, and every
+  shape documented above is unchanged.
+- A `Layout` places the nodes of one axis in order without gaps.
+  `layout.n_units` is that axis length. `layer_dims[i]` and the
+  square mask size come from `n_units`, not from `len(names)`.
+- Masks are written with `fill_block`, which sets the whole
+  `(target.width, source.width)` block of an edge. At width 1
+  that is one entry per edge.
+- `Skip.source_index` and `Skip.target_index` store a **block
+  start**. `SkipAdd` turns them back into slots with
+  `Layout.slot_at` and indexes with `slot.units`.
+- `align_inputs` passes its ordered columns through
+  `expand_columns`, a no-op at width 1.
+- `map_node_attributions` takes the node-axis length from
+  `layout.n_units` and the coordinate from `layout.unit_names()`.
+
+This is a **hedge, not a feature.** There is no public node width
+and no way for a user to request one; do not add either unless a
+later prompt asks. The point is that adding node width later
+means handing `build_layout` real widths, instead of rewriting
+index arithmetic in five modules at once. Keep it that way: new
+code asks a `Layout` for a slot instead of using `list.index()`
+or `enumerate` positions.
+
+---
+
 ## Errors
 
 All user-facing failures from the public API raise `Kpnn2Error`.
@@ -691,6 +725,7 @@ src/kpnn2/
   _attributions.py            # map_node_attributions
   _errors.py                  # Kpnn2Error
   _frozen_mask.py             # read-only connectivity tensors
+  _layout.py                  # node name -> units on an axis
 
 tests/
   api/                        # public import surface
@@ -757,7 +792,10 @@ disagree with CI.
 - `MaskedLinear` must not store other layers' activations or
   implement skip routing. `SkipAdd` owns skip indexing; the
   user owns call order and nonlinearities.
-- One graph node is one scalar in v1 (no node width).
+- One graph node is one unit in v1 (no public node width). Keep
+  index arithmetic in `_layout.py`: build a `Layout`, ask it for
+  slots, and write masks with `fill_block`. See "Internal unit
+  layout".
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the
   `dev` extra. Do not use a global `ruff` on `PATH`.

@@ -32,6 +32,14 @@ This project follows semantic versioning.
   read. The result is always `len(spec.input_nodes)` wide, which
   for an `AdjacencySpec` is narrower than the square mask, so
   scatter it into the state vector with `spec.input_index`.
+- Node positions are now internal slices rather than single
+  columns. A private `_layout.py` places each node on a
+  contiguous `NodeSlot` of its tensor axis, masks are written by
+  block expansion, and parsing, skip indexing, input alignment,
+  and attribution naming all read positions from a `Layout`.
+  Every slice is one unit wide, so shapes, masks, indices, and
+  the public API are unchanged. This makes per-node width an
+  additive change later rather than a structural one.
 - Internal modules are now private (`_parse.py`, `_spec.py`,
   `_masked_linear.py`, `_skip_add.py`, `_align.py`,
   `_attributions.py`, `_errors.py`). `kpnn2/__init__.py` is the

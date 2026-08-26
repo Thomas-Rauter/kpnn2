@@ -10,6 +10,7 @@ import xarray as xr
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
+from ._layout import Layout, build_layout
 from ._spec import LayeredSpec
 
 _NODE_DIM = "node"
@@ -166,11 +167,12 @@ def map_node_attributions(
     >>> "layer" in per_step.coords
     False
     """
-    names, layer_coord = _resolve_node_names(
+    layout, layer_coord = _resolve_node_layout(
         spec,
         layer,
     )
-    n_units = len(names)
+    names = layout.unit_names()
+    n_units = layout.n_units
     tensor, used_default_step = _as_tensor(attributions)
     dim_names = _resolve_dims(
         tensor=tensor,
@@ -199,15 +201,18 @@ def map_node_attributions(
     )
 
 
-def _resolve_node_names(
+def _resolve_node_layout(
     spec: LayeredSpec | AdjacencySpec,
     layer: int | None,
-) -> tuple[list[str], int | None]:
+) -> tuple[Layout, int | None]:
     """
-    Return the ``node`` names and the scalar ``layer`` coordinate.
+    Return the ``node`` axis layout and the ``layer`` coordinate.
 
-    The coordinate is ``None`` for an ``AdjacencySpec``, which has
-    no depths and therefore nothing to report as a layer.
+    The layout supplies both the expected axis length and the
+    per-unit names, so a node owning several units would label
+    each of them. The coordinate is ``None`` for an
+    ``AdjacencySpec``, which has no depths and therefore nothing
+    to report as a layer.
     """
     if isinstance(spec, LayeredSpec):
         if layer is None:
@@ -222,7 +227,7 @@ def _resolve_node_names(
             raise Kpnn2Error(
                 f"'layer' must be in range [0, {n_layers}). Got {layer}."
             )
-        return list(spec.layer_nodes[layer]), layer
+        return build_layout(spec.layer_nodes[layer]), layer
     if isinstance(spec, AdjacencySpec):
         if layer is not None:
             raise Kpnn2Error(
@@ -230,7 +235,7 @@ def _resolve_node_names(
                 "node is one unit of a single state vector. Omit "
                 "'layer' to label the node axis with spec.nodes."
             )
-        return list(spec.nodes), None
+        return build_layout(spec.nodes), None
     raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
 
 

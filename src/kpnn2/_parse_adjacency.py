@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 
 from ._adjacency_spec import AdjacencySpec
+from ._layout import Layout, build_layout, fill_block
 from ._parse import (
     _SOURCE,
     _TARGET,
@@ -17,32 +18,32 @@ from ._parse import (
 
 def _build_square_mask(
     edgelist: pd.DataFrame,
-    nodes: list[str],
+    layout: Layout,
 ) -> torch.Tensor:
     """
     Build one square mask over every node.
 
-    Shape is ``(n, n)`` with ``n == len(nodes)``, dtype float32.
-    Entry ``[target_index, source_index]`` is ``1.0`` for every
-    original edge. Self-loops land on the diagonal.
+    Shape is ``(n, n)`` with ``n == layout.n_units``, dtype
+    float32. Each edge fills the block its endpoints own, which
+    is the single entry ``[target_index, source_index]`` while
+    nodes are one unit wide. Self-loops land on the diagonal.
 
     Parameters
     ----------
     edgelist
         Normalized edgelist with string ``source`` and ``target``.
-    nodes
-        All node names, alphabetical.
+    layout
+        Unit placement of every node in the state vector.
 
     Returns
     -------
     torch.Tensor
         Square float32 connectivity mask.
     """
-    index = {name: position for position, name in enumerate(nodes)}
     mask = torch.zeros(
         (
-            len(nodes),
-            len(nodes),
+            layout.n_units,
+            layout.n_units,
         ),
         dtype=torch.float32,
     )
@@ -52,7 +53,11 @@ def _build_square_mask(
         sources,
         targets,
     ):
-        mask[index[target], index[source]] = 1.0
+        fill_block(
+            mask,
+            layout.slot(target),
+            layout.slot(source),
+        )
     return mask
 
 
@@ -164,17 +169,17 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
         out_degree,
     )
     nodes = sorted(node_set)
+    layout = build_layout(nodes)
     mask = _build_square_mask(
         normalized,
-        nodes,
+        layout,
     )
-    positions = {name: index for index, name in enumerate(nodes)}
     return AdjacencySpec(
         nodes=tuple(nodes),
         input_nodes=tuple(input_nodes),
         output_nodes=tuple(output_nodes),
         hidden_nodes=tuple(hidden_nodes),
         mask=mask,
-        input_index=tuple(positions[name] for name in input_nodes),
-        output_index=tuple(positions[name] for name in output_nodes),
+        input_index=tuple(layout.start_of(name) for name in input_nodes),
+        output_index=tuple(layout.start_of(name) for name in output_nodes),
     )

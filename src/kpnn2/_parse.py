@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 
 from ._errors import Kpnn2Error
+from ._layout import Layout, NodeSlot, build_layout, fill_block
 from ._spec import LayeredSpec, Skip
 
 _SOURCE = "source"
@@ -292,49 +293,66 @@ def _rank_layers(
     return layer_nodes
 
 
-def _node_locations(
+def _layer_layouts(
     layer_nodes: list[list[str]],
-) -> dict[str, tuple[int, int]]:
+) -> list[Layout]:
     """
-    Map each node name to ``(layer, index)`` in ``layer_nodes``.
+    Place each layer's nodes on that layer's unit axis.
+
+    One layout per depth. Every node is ``DEFAULT_NODE_WIDTH``
+    units wide, so ``layout.n_units`` is the node count and a
+    node's slot start is its column index.
     """
-    locations: dict[str, tuple[int, int]] = {}
-    for layer, names in enumerate(layer_nodes):
-        for index, name in enumerate(names):
-            locations[name] = (layer, index)
-    return locations
+    return [build_layout(names) for names in layer_nodes]
+
+
+def _node_placement(
+    layouts: list[Layout],
+) -> dict[str, tuple[int, NodeSlot]]:
+    """
+    Map each node name to its ``(depth, slot)``.
+    """
+    placement: dict[str, tuple[int, NodeSlot]] = {}
+    for depth, layout in enumerate(layouts):
+        for slot in layout.slots:
+            placement[slot.name] = (depth, slot)
+    return placement
 
 
 def _build_masks(
     edgelist: pd.DataFrame,
-    layer_nodes: list[list[str]],
+    layouts: list[Layout],
+    placement: dict[str, tuple[int, NodeSlot]],
 ) -> list[torch.Tensor]:
     """
     Build adjacent-hop mask tensors from original edges.
 
-    ``masks[i]`` has shape ``(n_{i+1}, n_i)``, dtype float32.
-    Entries are ``1.0`` only for depth-gap-1 edges. Skip edges
-    (gap greater than 1) are omitted.
+    ``masks[i]`` has shape
+    ``(layouts[i + 1].n_units, layouts[i].n_units)``, dtype
+    float32. Each depth-gap-1 edge fills the block its endpoints
+    own, which is one entry per edge while nodes are one unit
+    wide. Skip edges (gap greater than 1) are omitted.
 
     Parameters
     ----------
     edgelist
         Normalized edgelist with string ``source`` and ``target``.
-    layer_nodes
-        Ranked node names, one list per depth.
+    layouts
+        Unit placement per depth.
+    placement
+        Node name to ``(depth, slot)``.
 
     Returns
     -------
     list[torch.Tensor]
         One mask per hop from layer ``i`` to layer ``i + 1``.
     """
-    locations = _node_locations(layer_nodes)
     masks: list[torch.Tensor] = []
-    for i in range(len(layer_nodes) - 1):
+    for i in range(len(layouts) - 1):
         mask = torch.zeros(
             (
-                len(layer_nodes[i + 1]),
-                len(layer_nodes[i]),
+                layouts[i + 1].n_units,
+                layouts[i].n_units,
             ),
             dtype=torch.float32,
         )
@@ -346,37 +364,42 @@ def _build_masks(
         sources,
         targets,
     ):
-        source_layer, source_index = locations[source]
-        target_layer, target_index = locations[target]
+        source_layer, source_slot = placement[source]
+        target_layer, target_slot = placement[target]
         gap = target_layer - source_layer
         if gap == 1:
-            masks[source_layer][target_index, source_index] = 1.0
+            fill_block(
+                masks[source_layer],
+                target_slot,
+                source_slot,
+            )
     return masks
 
 
 def _build_skips(
     edgelist: pd.DataFrame,
-    layer_nodes: list[list[str]],
+    placement: dict[str, tuple[int, NodeSlot]],
 ) -> list[Skip]:
     """
     Collect original edges with depth gap greater than 1.
 
     Adjacent edges (gap exactly 1) are omitted; they belong in
-    masks, not here.
+    masks, not here. Each recorded index is the first unit its
+    node owns, which is the node's column index while nodes are
+    one unit wide.
 
     Parameters
     ----------
     edgelist
         Normalized edgelist with string ``source`` and ``target``.
-    layer_nodes
-        Ranked node names, one list per depth.
+    placement
+        Node name to ``(depth, slot)``.
 
     Returns
     -------
     list[Skip]
         One record per skip edge, in edgelist order.
     """
-    locations = _node_locations(layer_nodes)
     skips: list[Skip] = []
     sources = edgelist[_SOURCE].tolist()
     targets = edgelist[_TARGET].tolist()
@@ -384,8 +407,8 @@ def _build_skips(
         sources,
         targets,
     ):
-        source_layer, source_index = locations[source]
-        target_layer, target_index = locations[target]
+        source_layer, source_slot = placement[source]
+        target_layer, target_slot = placement[target]
         gap = target_layer - source_layer
         if gap > 1:
             skips.append(
@@ -394,8 +417,8 @@ def _build_skips(
                     target=target,
                     source_layer=source_layer,
                     target_layer=target_layer,
-                    source_index=source_index,
-                    target_index=target_index,
+                    source_index=source_slot.start,
+                    target_index=target_slot.start,
                 )
             )
     return skips
@@ -520,14 +543,17 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
         parents,
         in_degree,
     )
-    layer_dims = [len(layer) for layer in layer_nodes]
+    layouts = _layer_layouts(layer_nodes)
+    placement = _node_placement(layouts)
+    layer_dims = [layout.n_units for layout in layouts]
     masks = _build_masks(
         normalized,
-        layer_nodes,
+        layouts,
+        placement,
     )
     skips = _build_skips(
         normalized,
-        layer_nodes,
+        placement,
     )
     return LayeredSpec(
         input_nodes=tuple(input_nodes),
