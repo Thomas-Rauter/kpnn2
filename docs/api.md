@@ -13,6 +13,11 @@ and may change between releases.
       show_root_heading: true
       show_root_toc_entry: true
 
+::: kpnn2.parse_adjacency
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
 ::: kpnn2.LayeredSpec
     options:
       show_root_heading: true
@@ -20,6 +25,12 @@ and may change between releases.
       members: false
 
 ::: kpnn2.Skip
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+      members: false
+
+::: kpnn2.AdjacencySpec
     options:
       show_root_heading: true
       show_root_toc_entry: true

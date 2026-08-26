@@ -172,7 +172,7 @@ class MaskedLinear(nn.Module):
         if name == "mask" and getattr(self, "_mask_locked", False):
             raise Kpnn2Error(
                 "MaskedLinear.mask is read-only. Rebuild the "
-                "layer from the LayeredSpec."
+                "layer from the spec."
             )
         super().register_buffer(
             name,
@@ -188,7 +188,7 @@ class MaskedLinear(nn.Module):
         if name == "mask" and getattr(self, "_mask_locked", False):
             raise Kpnn2Error(
                 "MaskedLinear.mask is read-only. Rebuild the "
-                "layer from the LayeredSpec."
+                "layer from the spec."
             )
         super().__setattr__(
             name,

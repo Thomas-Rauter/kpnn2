@@ -2,8 +2,10 @@ import kpnn2
 
 _PUBLIC_NAMES = [
     "parse_layered",
+    "parse_adjacency",
     "LayeredSpec",
     "Skip",
+    "AdjacencySpec",
     "MaskedLinear",
     "SkipAdd",
     "align_inputs",

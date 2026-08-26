@@ -7,6 +7,18 @@ This project follows semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- `parse_adjacency()` and `AdjacencySpec`: a second layout that
+  puts every node in one state vector with a single square
+  `(n, n)` mask. Cycles and self-loops are allowed, so a
+  recurrent network no longer needs a hand-built mask. The spec
+  carries `nodes`, `input_nodes`, `output_nodes`, `hidden_nodes`,
+  `mask`, `input_index`, and `output_index`.
+- `parse_layered()` is unchanged and still requires a DAG. A DAG
+  is valid input to both parsers; the layout is your choice.
+  There is no `layout=` flag and no dispatch on cycles.
+
 ### Changed
 
 - Internal modules are now private (`_parse.py`, `_spec.py`,

@@ -1,5 +1,5 @@
 """
-Read-only connectivity tensors for LayeredSpec and MaskedLinear.
+Read-only connectivity tensors for the specs and MaskedLinear.
 """
 
 import numpy as np
@@ -9,13 +9,15 @@ from ._errors import Kpnn2Error
 
 _READ_ONLY_MSG = (
     "Connectivity mask is read-only. Rebuild from the "
-    "LayeredSpec if the wiring should change."
+    "edgelist if the wiring should change."
 )
 
 
 class FrozenMask(torch.Tensor):
     """
     Float32 connectivity tensor that rejects in-place writes.
+
+    Used for ``LayeredSpec.masks`` and ``AdjacencySpec.mask``.
     """
 
     @classmethod

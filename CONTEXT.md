@@ -24,14 +24,20 @@ edgelist, using native nn.Module layers.
 
 1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
    `source` and `target` only, validates a layered DAG, and returns a
-   `LayeredSpec`.
+   `LayeredSpec`. `parse_adjacency()` reads the same table and
+   returns an `AdjacencySpec` instead: one square mask over every
+   node, cycles and self-loops allowed. The user picks the layout;
+   a DAG is valid input to both.
 2. **Specify:** `LayeredSpec` holds named nodes by layer, adjacent-hop
-   mask tensors, and skip-edge metadata. It does not construct an
-   `nn.Module`.
+   mask tensors, and skip-edge metadata. `AdjacencySpec` holds all
+   node names, one square mask, and the input/output positions in
+   it. Neither constructs an `nn.Module`.
 3. **Build:** The user writes a PyTorch `nn.Module` using
    `MaskedLinear(spec.masks[i])` for adjacent hops,
    `SkipAdd(spec)` for skip indexing, and their own activations,
-   norms, loops, and heads.
+   norms, loops, and heads. On an `AdjacencySpec` the state update
+   is `MaskedLinear(spec.mask)` and the recurrence is the user's
+   `forward()`.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a `float32` tensor. Pre-ordered tensors
    go straight to the model.
@@ -60,8 +66,11 @@ edgelist, using native nn.Module layers.
 - **Not Captum.** No Captum import anywhere in the library. Attribution
   mapping is name alignment only.
 - **Not AnnData (v1).** No `anndata` support in `align_inputs`.
-- **Not cyclic (v1).** Cycles raise `Kpnn2Error`. Recurrence is
-  user `forward()` on a future adjacency layout, not a v1 parser mode.
+- **Not a time machine.** `parse_adjacency` accepts cycles and
+  self-loops, but nothing here unrolls time, picks a step count, or
+  re-injects inputs between steps. Recurrence is user `forward()`
+  over `AdjacencySpec.mask`. `parse_layered` stays DAG-only and
+  still raises `Kpnn2Error` on a cycle.
 - **Not pseudo-node expansion.** Skip edges are metadata plus
   `SkipAdd` (or a residual add in user code), not dummy neurons
   in masks.
@@ -80,6 +89,7 @@ Division of labor:
 | Layer | Owner |
 |-------|--------|
 | Edgelist → `LayeredSpec` (ranks, masks, skips) | kpnn2 |
+| Edgelist → `AdjacencySpec` (nodes, one square mask) | kpnn2 |
 | `MaskedLinear` (frozen mask) | kpnn2 |
 | `SkipAdd` (skip indexing onto a layer tensor) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
@@ -95,9 +105,11 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 
 | Symbol | Role |
 |--------|------|
-| `parse_layered` | Edgelist DataFrame → `LayeredSpec` |
+| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only) |
+| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (cycles allowed) |
 | `LayeredSpec` | Frozen structural dataclass (masks, layers, skips) |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
+| `AdjacencySpec` | Frozen structural dataclass (nodes, one square mask) |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
 | `SkipAdd` | `nn.Module`: inject skip sources into a layer pre-activation |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
@@ -106,11 +118,19 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `__version__` | Package version string |
 
 `__all__` contains exactly these names (including `Skip`,
-`SkipAdd`, and `__version__`). No other public symbols.
+`SkipAdd`, and `__version__`), in the order of the table above.
+`tests/api/test_public_api.py` compares it as an ordered list. No
+other public symbols.
 
 Do **not** export or implement: `compile_graph`, `customize_model`,
 `interpret_model`, `align_features_to_input_nodes`, `edge_weights`,
 `CompileArtifact`, backends, `ConstrainedMaskedLinear`.
+
+There are **two parsers and two specs, never a dispatcher**. Do not
+add `parse(..., layout=...)`, do not choose a parser by inspecting
+the graph for cycles, and do not represent an `AdjacencySpec` as a
+one-layer `LayeredSpec`. A DAG is valid input to both parsers; the
+layout is the user's choice.
 
 ---
 
@@ -153,6 +173,14 @@ Node names are stored as strings. Non-string values in `source` /
 | Graph is a DAG (no cycles) | `Kpnn2Error` naming unranked leftover nodes |
 | At least one input (in-degree 0) | `Kpnn2Error` |
 | At least one output (out-degree 0) | `Kpnn2Error` |
+
+`parse_adjacency()` enforces **every rule in that table except the
+two structural ones**: self-loops are allowed and cycles are
+allowed. Everything else (DataFrame, columns, missing values,
+empty names, at least one edge, duplicate pairs, at least one
+input, at least one output) is identical, and identically worded,
+because both parsers call the same validation helpers. Self-loops
+are the only edgelist rule the two parsers disagree on.
 
 **Node roles (inferred, not user-declared):**
 
@@ -297,6 +325,80 @@ Construct `SkipAdd` once. Call it after every hop; it is a
 no-op when nothing targets that layer. Empty `spec.skips` is
 identity. `MaskedLinear` must not contain skip edges. There is
 no identity overwrite and no compiler-generated node names.
+
+---
+
+## `parse_adjacency` and `AdjacencySpec`
+
+```text
+parse_adjacency(edgelist) -> AdjacencySpec
+```
+
+The second layout. Every node goes into one state vector, sorted
+alphabetically, and every edge goes into one square mask. Nothing
+is ranked, so **cycles and self-loops are allowed**. This is the
+layout for recurrent networks; the recurrence itself is user
+`forward()` code.
+
+`parse_adjacency` must not instantiate an `nn.Module`, unroll
+time, choose a step count, or re-inject inputs between steps.
+
+### `AdjacencySpec` fields
+
+Frozen dataclass, same rules as `LayeredSpec`: no reassignment,
+sequences are tuples, the mask rejects in-place writes and `out=`
+writes (`Kpnn2Error`), `numpy()` is not a writable view of stored
+storage, and `copy.deepcopy` succeeds with a frozen float32 copy
+that does not share storage.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `nodes` | `tuple[str, ...]` | Every node name, alphabetical. Row and column order of `mask`, and the unit order of the state vector. |
+| `input_nodes` | `tuple[str, ...]` | In-degree 0 nodes, alphabetical. Column order of an input tensor. |
+| `output_nodes` | `tuple[str, ...]` | Out-degree 0 nodes, alphabetical. |
+| `hidden_nodes` | `tuple[str, ...]` | Neither input nor output, alphabetical. |
+| `mask` | `torch.Tensor` | Square connectivity (see below). Singular, not a tuple. |
+| `input_index` | `tuple[int, ...]` | Position of each `input_nodes` name in `nodes`. |
+| `output_index` | `tuple[int, ...]` | Position of each `output_nodes` name in `nodes`. |
+
+There is no `layer_nodes`, no `layer_dims`, no `masks` tuple, and
+no `skips`. Skips are a depth concept and depth does not exist
+here. `SkipAdd` does not accept an `AdjacencySpec`.
+
+### The square mask
+
+- Dtype `torch.float32`, shape `(n, n)` with `n == len(nodes)`.
+- `mask[target_index, source_index] = 1.0` for **every** original
+  edgelist edge; all other entries `0.0`. Same
+  `(out_features, in_features)` convention as the hop masks.
+- Self-loops land on the diagonal.
+- Frozen exactly like `LayeredSpec.masks`.
+  `MaskedLinear(spec.mask)` stores an independent frozen copy.
+
+### Two consequences
+
+1. **Input width is not mask width.** An input tensor is
+   `len(spec.input_nodes)` wide, the state vector is `n` wide.
+   The inputs are scattered into the state vector via
+   `spec.input_index`. In the layered case an aligned tensor
+   feeds `masks[0]` directly; here it does not.
+   (`align_inputs` accepts only a `LayeredSpec` today; widening
+   it to `AdjacencySpec` is a separate change.)
+2. **Input rows are structurally zero.** Input nodes have
+   in-degree 0, so their rows of `mask` are all zeros and
+   `fan_in == 0`. Under the degree-aware init of `MaskedLinear`
+   those rows stay at 0 forever. Writing the inputs into the
+   state vector each step is therefore required, not cosmetic.
+
+```python
+spec = k2.parse_adjacency(edgelist)
+core = k2.MaskedLinear(spec.mask)     # one square hop
+
+state = torch.zeros(n_samples, len(spec.nodes))
+state[:, spec.input_index] = x        # required, see above
+state = torch.relu(core(state))       # one step; loop as needed
+logits = state[:, spec.output_index]
+```
 
 ---
 
@@ -544,7 +646,9 @@ Do not rename them.
 src/kpnn2/
   __init__.py                 # public exports only
   _parse.py                   # parse_layered
+  _parse_adjacency.py         # parse_adjacency
   _spec.py                    # LayeredSpec, Skip
+  _adjacency_spec.py          # AdjacencySpec
   _masked_linear.py           # MaskedLinear
   _skip_add.py                # SkipAdd
   _align.py                   # align_inputs
@@ -609,7 +713,11 @@ disagree with CI.
   adapters, edge constraints, or AnnData in v1.
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks.
-- `parse_layered` must not instantiate `nn.Module`.
+- `parse_layered` and `parse_adjacency` must not instantiate
+  `nn.Module`.
+- Keep the two parsers separate: no `layout=` flag, no dispatch
+  on whether the graph has a cycle, and no `AdjacencySpec`
+  faked as a one-layer `LayeredSpec`.
 - `MaskedLinear` must not store other layers' activations or
   implement skip routing. `SkipAdd` owns skip indexing; the
   user owns call order and nonlinearities.
