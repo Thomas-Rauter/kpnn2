@@ -13,14 +13,14 @@ edgelist, using native nn.Module layers.
 
 ## Overview
 
-A fully connected stack is what PyTorch makes easy: every unit in
-one layer feeds every unit in the next, so `nn.Linear` is enough.
+A fully connected neural network (NN), in which every node in one
+layer connects to every node in the next, is easy to implement in
+PyTorch.
 
-A sparsely connected net with skip edges is not. Only some pairs
-are linked, some edges jump a layer, and the units have stable
-names. Implementing that by hand in PyTorch is awkward. That is
-the gap `kpnn2` fills: the same training loop, with connectivity
-taken from a named edgelist.
+A sparsely connected NN with skip edges is not. Only some pairs of
+nodes are linked, and some edges skip layers. That is the gap
+`kpnn2` fills: the same PyTorch workflow, with that connectivity.
+Figure 1 shows a dense NN next to a sparse NN with skip edges.
 
 ![Fully connected versus sparse](docs/figures/dense_vs_sparse.svg)
 
@@ -42,25 +42,26 @@ a `source` node to a `target` node. For example:
 a normal `torch.nn.Module`, train with standard PyTorch, and can
 map attributions back onto the named nodes.
 
-People choose this sparsity on purpose. An emerging research area
-defines the architecture so the net *is* a real named network:
-hidden units stand for entities, and importance scores on those
-units map back to the same names. That is a route to
-interpretability, not a fully connected net with a post-hoc story.
+Sparse connectivity is often used for speed or memory, without
+needing control over which nodes are linked. A newer line of work
+instead builds the NN so its wiring is a real network, for example
+a biological or chemical graph. Attributions on the NN nodes then
+map onto the nodes of that network, which gives the model a direct
+form of interpretability.
 
-In biology this is an active area, including pathway-based models
+In biology this is an active research area, including pathway-based models
 ([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5))
 and ontology-based models
 ([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).
 The [Getting started](docs/getting-started.ipynb) notebook walks
 through a biological example.
 
-The same primitives are domain-agnostic. Here "graph" means the
-architecture specification, not a graph neural network.
-
-`kpnn2` is a set of primitives, not a graph compiler. There is no
-ready-made model object. Training loops, losses, optimizers,
+`kpnn2` is a set of (domain-agnostic) primitives, not a graph compiler. There
+is no ready-made model object. Training loops, losses, optimizers,
 activations, and heads stay yours.
+
+As a further note, "graph" here means the architecture specification, not a
+graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
 
 ## Core workflow
 
@@ -176,7 +177,7 @@ The documented public names are:
 - `map_node_attributions()`
 
 Skip-edge fields live on `GraphSpec.skips`. Inject them with
-`SkipAdd`. The package does not return a ready-made model.
+`SkipAdd`.
 
 See the [**API reference**](docs/api.md) for details, and
 [**Skip edges**](docs/skip-edges.ipynb) for the call order.
