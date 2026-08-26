@@ -110,10 +110,10 @@ import torch
 
 import kpnn2
 from kpnn2 import (
-    GraphSpec,
+    LayeredSpec,
     MaskedLinear,
     align_inputs,
-    parse_edgelist,
+    parse_layered,
 )
 
 expected = os.environ["PACKAGE_VERSION"]
@@ -130,8 +130,8 @@ edgelist = pd.DataFrame(
         "target": ["hidden", "hidden", "prediction"],
     }
 )
-spec = parse_edgelist(edgelist)
-assert isinstance(spec, GraphSpec)
+spec = parse_layered(edgelist)
+assert isinstance(spec, LayeredSpec)
 assert spec.input_nodes == ("feature_a", "feature_b")
 
 data = pd.DataFrame(
