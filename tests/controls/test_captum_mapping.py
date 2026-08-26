@@ -17,7 +17,7 @@ import torch
 from kpnn2 import (
     align_inputs,
     map_node_attributions,
-    parse_edgelist,
+    parse_layered,
 )
 from tests.controls.scenario import STRUCTURAL_SCENARIOS
 from tests.controls.scoring import (
@@ -74,7 +74,7 @@ def test_integrated_gradients_maps_input_node_order() -> None:
     """
     _set_seeds()
     scenario = _dead_edge_scenario()
-    spec = parse_edgelist(scenario.edgelist)
+    spec = parse_layered(scenario.edgelist)
     model = _pinned_model(
         spec,
         scenario,
@@ -137,7 +137,7 @@ def test_synthetic_captum_tensor_maps_hidden_layer_names() -> None:
     spec.layer_nodes[layer]. Hop 0 output is layer 1.
     """
     scenario = _dead_edge_scenario()
-    spec = parse_edgelist(scenario.edgelist)
+    spec = parse_layered(scenario.edgelist)
     hop = 0
     layer = hop + 1
     names = list(spec.layer_nodes[layer])

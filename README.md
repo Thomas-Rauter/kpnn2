@@ -38,7 +38,7 @@ a `source` node to a `target` node. For example:
 | B | H |
 | H | C |
 
-`parse_edgelist()` layers that table into a `GraphSpec`. You write
+`parse_layered()` layers that table into a `LayeredSpec`. You write
 a normal `torch.nn.Module`, train with standard PyTorch, and can
 map attributions back onto the named nodes.
 
@@ -67,7 +67,7 @@ graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
 
 1. Define a model architecture as an edgelist with named `source`
    and `target` nodes.
-2. Parse it with `parse_edgelist()` to a `GraphSpec`.
+2. Parse it with `parse_layered()` to a `LayeredSpec`.
 3. Write an `nn.Module` with `MaskedLinear` for adjacent hops
    and `SkipAdd` for skip edges. Construct `SkipAdd` once; call
    it after every hop, before ReLU or BatchNorm. Skip edges stay
@@ -101,11 +101,11 @@ edgelist = pd.DataFrame(
         "target": ["H", "H", "C"],
     }
 )
-spec = k2.parse_edgelist(edgelist)
+spec = k2.parse_layered(edgelist)
 
 
 class Net(nn.Module):
-    def __init__(self, spec: k2.GraphSpec):
+    def __init__(self, spec: k2.LayeredSpec):
         super().__init__()
         self.lin0 = k2.MaskedLinear(spec.masks[0])
         self.lin1 = k2.MaskedLinear(spec.masks[1])
@@ -152,7 +152,7 @@ feature_attr = k2.map_node_attributions(
     layer=0,
 )
 
-# lin0 is the hop into H, which is GraphSpec layer 1.
+# lin0 is the hop into H, which is LayeredSpec layer 1.
 lc = LayerConductance(model, model.lin0)
 node_attr = k2.map_node_attributions(
     attributions=lc.attribute(x, target=0),
@@ -168,15 +168,15 @@ print(node_attr.to_pandas().abs().mean())
 
 The documented public names are:
 
-- `parse_edgelist()`
-- `GraphSpec`
+- `parse_layered()`
+- `LayeredSpec`
 - `Skip`
 - `MaskedLinear`
 - `SkipAdd`
 - `align_inputs()`
 - `map_node_attributions()`
 
-Skip-edge fields live on `GraphSpec.skips`. Inject them with
+Skip-edge fields live on `LayeredSpec.skips`. Inject them with
 `SkipAdd`.
 
 See the [**API reference**](docs/api.md) for details, and
@@ -221,7 +221,7 @@ If you are new to the package, start with:
   end-to-end feedforward example
 - [**Recurrent example**](docs/recurrent-example.ipynb) for user
   `forward()` with a shared `MaskedLinear` when the graph is
-  cyclic (`parse_edgelist` still requires a DAG)
+  cyclic (`parse_layered` still requires a DAG)
 - [**Mapping attributions**](docs/map-node-attributions.ipynb) for
   labeling layer tensors with node names
 - [**Skip edges**](docs/skip-edges.ipynb) for `SkipAdd` instead of

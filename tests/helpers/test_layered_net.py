@@ -3,7 +3,7 @@ import pytest
 import torch
 
 import kpnn2
-from kpnn2 import parse_edgelist
+from kpnn2 import parse_layered
 from tests.helpers.layered_net import (
     LayeredNet,
     pin_all_weights,
@@ -32,7 +32,7 @@ def test_layered_net_is_not_public_api():
 
 def test_layered_net_constructs_runs_and_pin_edge_zeros_skip():
     torch.manual_seed(42)
-    spec = parse_edgelist(_chain_plus_skip())
+    spec = parse_layered(_chain_plus_skip())
     model = LayeredNet(
         spec,
         bias=False,
@@ -76,7 +76,7 @@ def test_layered_net_constructs_runs_and_pin_edge_zeros_skip():
 
 
 def test_pin_edge_raises_for_missing_edge():
-    spec = parse_edgelist(_chain_plus_skip())
+    spec = parse_layered(_chain_plus_skip())
     model = LayeredNet(
         spec,
         bias=False,

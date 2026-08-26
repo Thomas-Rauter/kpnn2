@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 
 from .errors import Kpnn2Error
-from .graph_spec import GraphSpec, Skip
+from .layered_spec import LayeredSpec, Skip
 
 _SOURCE = "source"
 _TARGET = "target"
@@ -401,14 +401,14 @@ def _build_skips(
     return skips
 
 
-def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
+def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     """
-    Parse a source/target edgelist into a layered ``GraphSpec``.
+    Parse a source/target edgelist into a ``LayeredSpec``.
 
     The graph must be a DAG. Nodes are ranked with Kahn's algorithm:
     input nodes (in-degree 0) have depth 0, and every other node has
     ``depth = 1 + max(parent depths)``. Names are sorted alphabetically
-    inside each layer. That ranking defines ``GraphSpec.layer_nodes``,
+    inside each layer. That ranking defines ``LayeredSpec.layer_nodes``,
     adjacent-hop ``masks``, and skip-edge records.
 
     Adjacent edges (depth gap exactly 1) become ones in ``masks``.
@@ -430,7 +430,7 @@ def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
 
     Returns
     -------
-    GraphSpec
+    LayeredSpec
         Frozen structure: layers, masks, and skips.
 
     Raises
@@ -482,7 +482,7 @@ def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_edgelist(edgelist)
+    >>> spec = k2.parse_layered(edgelist)
     >>> spec.input_nodes
     ('A',)
     >>> spec.hidden_nodes
@@ -529,7 +529,7 @@ def parse_edgelist(edgelist: pd.DataFrame) -> GraphSpec:
         normalized,
         layer_nodes,
     )
-    return GraphSpec(
+    return LayeredSpec(
         input_nodes=tuple(input_nodes),
         output_nodes=tuple(output_nodes),
         hidden_nodes=tuple(hidden_nodes),

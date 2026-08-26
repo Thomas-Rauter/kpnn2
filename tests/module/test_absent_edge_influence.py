@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import align_inputs, parse_edgelist
+from kpnn2 import align_inputs, parse_layered
 from tests.helpers.layered_net import (
     LayeredNet,
     pin_all_weights,
@@ -55,7 +55,7 @@ def _features_frame(
 
 
 def test_absent_edge_has_zero_forward_influence():
-    spec = parse_edgelist(_independent_paths_edgelist())
+    spec = parse_layered(_independent_paths_edgelist())
     model = _pinned_linear_model(spec)
     prediction_idx = spec.output_nodes.index("prediction")
     decoy_idx = spec.output_nodes.index("decoy")
@@ -89,7 +89,7 @@ def test_absent_edge_has_zero_forward_influence():
 
 
 def test_absent_edge_has_zero_input_gradient():
-    spec = parse_edgelist(_independent_paths_edgelist())
+    spec = parse_layered(_independent_paths_edgelist())
     model = _pinned_linear_model(spec)
     prediction_idx = spec.output_nodes.index("prediction")
     feature_a_idx = spec.input_nodes.index("feature_a")

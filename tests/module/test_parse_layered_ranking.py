@@ -1,11 +1,11 @@
 import pandas as pd
 import pytest
 
-from kpnn2 import parse_edgelist
+from kpnn2 import parse_layered
 from kpnn2.errors import Kpnn2Error
 
 
-def test_parse_edgelist_ranks_a_simple_chain():
+def test_parse_layered_ranks_a_simple_chain():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -13,7 +13,7 @@ def test_parse_edgelist_ranks_a_simple_chain():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.input_nodes == ("A",)
     assert spec.hidden_nodes == ("B",)
@@ -23,7 +23,7 @@ def test_parse_edgelist_ranks_a_simple_chain():
     assert spec.skips == ()
 
 
-def test_parse_edgelist_ranks_skip_without_pseudo_nodes():
+def test_parse_layered_ranks_skip_without_pseudo_nodes():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "H", "A"],
@@ -31,7 +31,7 @@ def test_parse_edgelist_ranks_skip_without_pseudo_nodes():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.input_nodes == ("A",)
     assert spec.hidden_nodes == ("H",)
@@ -40,7 +40,7 @@ def test_parse_edgelist_ranks_skip_without_pseudo_nodes():
     assert spec.layer_dims == (1, 1, 1)
 
 
-def test_parse_edgelist_allows_early_outputs():
+def test_parse_layered_allows_early_outputs():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "A", "H"],
@@ -48,7 +48,7 @@ def test_parse_edgelist_allows_early_outputs():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.input_nodes == ("A",)
     assert spec.hidden_nodes == ("H",)
@@ -57,7 +57,7 @@ def test_parse_edgelist_allows_early_outputs():
     assert spec.layer_dims == (1, 2, 1)
 
 
-def test_parse_edgelist_rejects_self_loops():
+def test_parse_layered_rejects_self_loops():
     edgelist = pd.DataFrame(
         {
             "source": ["A"],
@@ -69,12 +69,12 @@ def test_parse_edgelist_rejects_self_loops():
         Kpnn2Error,
         match="self-loop",
     ) as exc_info:
-        parse_edgelist(edgelist)
+        parse_layered(edgelist)
 
     assert "A" in str(exc_info.value)
 
 
-def test_parse_edgelist_rejects_two_self_loops():
+def test_parse_layered_rejects_two_self_loops():
     edgelist = pd.DataFrame(
         {
             "source": ["B", "A"],
@@ -86,7 +86,7 @@ def test_parse_edgelist_rejects_two_self_loops():
         Kpnn2Error,
         match="self-loop",
     ) as exc_info:
-        parse_edgelist(edgelist)
+        parse_layered(edgelist)
 
     message = str(exc_info.value)
     assert "A" in message
@@ -94,7 +94,7 @@ def test_parse_edgelist_rejects_two_self_loops():
     assert "A, B" in message
 
 
-def test_parse_edgelist_rejects_cycles():
+def test_parse_layered_rejects_cycles():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B", "C", "B"],
@@ -106,7 +106,7 @@ def test_parse_edgelist_rejects_cycles():
         Kpnn2Error,
         match="cycle",
     ) as exc_info:
-        parse_edgelist(edgelist)
+        parse_layered(edgelist)
 
     # Kahn leftover is B, C, D (A is ranked; D is downstream of the
     # cycle). A message that omits those names must fail this test.
@@ -114,7 +114,7 @@ def test_parse_edgelist_rejects_cycles():
     assert "B, C, D" in message
 
 
-def test_parse_edgelist_rejects_missing_input():
+def test_parse_layered_rejects_missing_input():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -126,10 +126,10 @@ def test_parse_edgelist_rejects_missing_input():
         Kpnn2Error,
         match="input node",
     ):
-        parse_edgelist(edgelist)
+        parse_layered(edgelist)
 
 
-def test_parse_edgelist_rejects_missing_output():
+def test_parse_layered_rejects_missing_output():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B", "C"],
@@ -141,4 +141,4 @@ def test_parse_edgelist_rejects_missing_output():
         Kpnn2Error,
         match="output node",
     ):
-        parse_edgelist(edgelist)
+        parse_layered(edgelist)

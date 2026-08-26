@@ -9,7 +9,7 @@ body:
         Thanks for your question about `kpnn2`.
 
         For usage questions, please include enough context to
-        understand your edgelist, `GraphSpec`, and expected
+        understand your edgelist, `LayeredSpec`, and expected
         `forward()` workflow.
 
   - type: textarea
@@ -28,7 +28,7 @@ body:
       description: Which part of the package is your question about?
       options:
         - installation
-        - parse_edgelist / GraphSpec
+        - parse_layered / LayeredSpec
         - MaskedLinear
         - align_inputs
         - map_node_attributions

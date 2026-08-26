@@ -9,7 +9,7 @@ pip install kpnn2
 ```
 
 The core installation supports parsing an edgelist into a
-`GraphSpec`, building `MaskedLinear` layers, aligning named inputs,
+`LayeredSpec`, building `MaskedLinear` layers, aligning named inputs,
 and mapping a layer tensor back to named nodes. Training stays
 ordinary PyTorch.
 

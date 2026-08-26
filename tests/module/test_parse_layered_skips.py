@@ -1,9 +1,9 @@
 import pandas as pd
 
-from kpnn2 import Skip, parse_edgelist
+from kpnn2 import Skip, parse_layered
 
 
-def test_parse_edgelist_records_skip_with_indices():
+def test_parse_layered_records_skip_with_indices():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "H", "A"],
@@ -11,7 +11,7 @@ def test_parse_edgelist_records_skip_with_indices():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.layer_nodes == (("A",), ("H",), ("C",))
     assert spec.skips == (
@@ -26,7 +26,7 @@ def test_parse_edgelist_records_skip_with_indices():
     )
 
 
-def test_parse_edgelist_omits_adjacent_edges_from_skips():
+def test_parse_layered_omits_adjacent_edges_from_skips():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -34,6 +34,6 @@ def test_parse_edgelist_omits_adjacent_edges_from_skips():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.skips == ()

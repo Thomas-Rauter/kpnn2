@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import align_inputs, parse_edgelist
+from kpnn2 import align_inputs, parse_layered
 from kpnn2.errors import Kpnn2Error
 
 
@@ -13,7 +13,7 @@ def _tiny_spec():
             "target": ["H", "H", "C"],
         }
     )
-    return parse_edgelist(edgelist)
+    return parse_layered(edgelist)
 
 
 def test_align_inputs_reorders_dataframe_columns():
@@ -166,8 +166,8 @@ def _invalid_align_cases():
         pytest.param(
             numeric,
             object(),
-            "GraphSpec",
-            id="non_graph_spec",
+            "LayeredSpec",
+            id="non_layered_spec",
         ),
         pytest.param(
             [[1.0, 2.0]],

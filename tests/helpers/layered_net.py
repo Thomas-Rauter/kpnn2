@@ -1,5 +1,5 @@
 """
-Test-only nn.Module built from a GraphSpec.
+Test-only nn.Module built from a LayeredSpec.
 
 Not part of the public kpnn2 API.
 """
@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from kpnn2 import GraphSpec, MaskedLinear, Skip
+from kpnn2 import LayeredSpec, MaskedLinear, Skip
 
 
 class LayeredNet(nn.Module):
@@ -21,7 +21,7 @@ class LayeredNet(nn.Module):
 
     def __init__(
         self,
-        spec: GraphSpec,
+        spec: LayeredSpec,
         bias: bool = True,
         relu: bool = True,
     ) -> None:

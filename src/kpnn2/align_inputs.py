@@ -1,12 +1,12 @@
 """
-Align named DataFrame columns to ``GraphSpec.input_nodes``.
+Align named DataFrame columns to ``LayeredSpec.input_nodes``.
 """
 
 import pandas as pd
 import torch
 
 from .errors import Kpnn2Error
-from .graph_spec import GraphSpec
+from .layered_spec import LayeredSpec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'data' is a tensor; a pandas DataFrame is required. "
@@ -18,7 +18,7 @@ _TENSOR_NOT_ACCEPTED_MSG = (
 
 def align_inputs(
     data: pd.DataFrame,
-    spec: GraphSpec,
+    spec: LayeredSpec,
 ) -> torch.Tensor:
     """
     Return a float32 tensor whose columns follow ``spec.input_nodes``.
@@ -40,7 +40,7 @@ def align_inputs(
     ----------
     data : DataFrame
         Feature table with named columns.
-    spec : GraphSpec
+    spec : LayeredSpec
         Graph structure whose ``input_nodes`` define column order.
 
     Returns
@@ -52,7 +52,7 @@ def align_inputs(
     Raises
     ------
     Kpnn2Error
-        If ``spec`` is not a ``GraphSpec``; ``data`` is a tensor;
+        If ``spec`` is not a ``LayeredSpec``; ``data`` is a tensor;
         ``data`` is not a DataFrame; required DataFrame columns are
         missing or duplicated (including after ``str`` conversion;
         the message names the unique duplicated labels, sorted,
@@ -81,7 +81,7 @@ def align_inputs(
     ...         "target": ["H", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_edgelist(edgelist)
+    >>> spec = k2.parse_layered(edgelist)
     >>> spec.input_nodes
     ('A',)
     >>> df = pd.DataFrame(
@@ -106,8 +106,8 @@ def align_inputs(
     ...
     Kpnn2Error: 'data' is a tensor; a pandas DataFrame is required. ...
     """
-    if not isinstance(spec, GraphSpec):
-        raise Kpnn2Error("'spec' must be a GraphSpec.")
+    if not isinstance(spec, LayeredSpec):
+        raise Kpnn2Error("'spec' must be a LayeredSpec.")
     if isinstance(data, torch.Tensor):
         raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
     if isinstance(data, pd.DataFrame):
@@ -122,7 +122,7 @@ def align_inputs(
 
 def _align_dataframe(
     data: pd.DataFrame,
-    spec: GraphSpec,
+    spec: LayeredSpec,
 ) -> torch.Tensor:
     """
     Reorder numeric DataFrame columns to ``spec.input_nodes``.

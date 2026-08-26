@@ -3,7 +3,7 @@ import pytest
 import torch
 import xarray as xr
 
-from kpnn2 import map_node_attributions, parse_edgelist
+from kpnn2 import map_node_attributions, parse_layered
 from kpnn2.errors import Kpnn2Error
 
 
@@ -14,7 +14,7 @@ def _tiny_spec():
             "target": ["H", "E", "C"],
         }
     )
-    return parse_edgelist(edgelist)
+    return parse_layered(edgelist)
 
 
 def test_map_node_attributions_uses_layer_node_names():
@@ -223,8 +223,8 @@ def _invalid_map_cases():
             object(),
             1,
             {},
-            "GraphSpec",
-            id="non_graph_spec",
+            "LayeredSpec",
+            id="non_layered_spec",
         ),
         pytest.param(
             scores,

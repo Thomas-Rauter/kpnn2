@@ -1,8 +1,8 @@
 import kpnn2
 
 _PUBLIC_NAMES = [
-    "parse_edgelist",
-    "GraphSpec",
+    "parse_layered",
+    "LayeredSpec",
     "Skip",
     "MaskedLinear",
     "SkipAdd",
@@ -20,6 +20,8 @@ _COMPILER_LEFTOVERS = [
     "edge_weights",
     "CompileArtifact",
     "ConstrainedMaskedLinear",
+    "parse_edgelist",
+    "GraphSpec",
 ]
 
 

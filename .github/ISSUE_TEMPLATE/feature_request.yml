@@ -36,7 +36,7 @@ body:
       label: Area
       description: Which part of the package is this related to?
       options:
-        - parse_edgelist / GraphSpec
+        - parse_layered / LayeredSpec
         - MaskedLinear
         - align_inputs
         - map_node_attributions

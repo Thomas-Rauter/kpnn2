@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from kpnn2 import Kpnn2Error, MaskedLinear, parse_edgelist
+from kpnn2 import Kpnn2Error, MaskedLinear, parse_layered
 from kpnn2._frozen_mask import FrozenMask
 
 
@@ -412,14 +412,14 @@ def test_masked_linear_rejects_register_buffer_mask():
         layer.mask.fill_(0.0)
 
 
-def test_masked_linear_mask_independent_of_graph_spec():
+def test_masked_linear_mask_independent_of_layered_spec():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
     layer = MaskedLinear(spec.masks[0])
     spec_before = spec.masks[0].tolist()
     layer_before = layer.mask.tolist()
@@ -743,14 +743,14 @@ def test_masked_linear_deepcopy_independent_params_and_frozen_mask():
     assert copied.mask.tolist() == before_mask
 
 
-def test_module_with_masked_linear_and_graph_spec_deepcopy():
+def test_module_with_masked_linear_and_layered_spec_deepcopy():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     class Net(nn.Module):
         def __init__(self, spec):

@@ -5,31 +5,31 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import Kpnn2Error, parse_edgelist
+from kpnn2 import Kpnn2Error, parse_layered
 from kpnn2._frozen_mask import FrozenMask
 
 
-def test_graph_spec_rejects_field_assignment():
+def test_layered_spec_rejects_field_assignment():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     with pytest.raises(FrozenInstanceError):
         spec.input_nodes = ("X",)
 
 
-def test_graph_spec_sequences_are_tuples():
+def test_layered_spec_sequences_are_tuples():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert isinstance(spec.input_nodes, tuple)
     assert isinstance(spec.layer_nodes, tuple)
@@ -40,14 +40,14 @@ def test_graph_spec_sequences_are_tuples():
         spec.input_nodes.append("X")
 
 
-def test_graph_spec_masks_reject_in_place_writes():
+def test_layered_spec_masks_reject_in_place_writes():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     with pytest.raises(
         Kpnn2Error,
@@ -62,14 +62,14 @@ def test_graph_spec_masks_reject_in_place_writes():
         spec.masks[0][0, 0] = 0.0
 
 
-def test_graph_spec_masks_reject_out_kwarg_write():
+def test_layered_spec_masks_reject_out_kwarg_write():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
     before = spec.masks[0].tolist()
 
     with pytest.raises(
@@ -84,14 +84,14 @@ def test_graph_spec_masks_reject_out_kwarg_write():
     assert spec.masks[0].tolist() == before
 
 
-def test_graph_spec_masks_numpy_cannot_change_values():
+def test_layered_spec_masks_numpy_cannot_change_values():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
     before = spec.masks[0].tolist()
     arr = spec.masks[0].numpy()
     try:
@@ -102,14 +102,14 @@ def test_graph_spec_masks_numpy_cannot_change_values():
     assert not arr.flags.writeable
 
 
-def test_graph_spec_deepcopy_independent_frozen_masks():
+def test_layered_spec_deepcopy_independent_frozen_masks():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
             "target": ["B", "C"],
         }
     )
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
     before = [mask.tolist() for mask in spec.masks]
     copied = copy.deepcopy(spec)
 

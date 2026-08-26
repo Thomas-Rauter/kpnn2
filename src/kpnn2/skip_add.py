@@ -8,7 +8,7 @@ import torch
 from torch import nn
 
 from .errors import Kpnn2Error
-from .graph_spec import GraphSpec
+from .layered_spec import LayeredSpec
 
 
 class SkipAdd(nn.Module):
@@ -22,19 +22,19 @@ class SkipAdd(nn.Module):
     does not modify ``saved`` tensors. There is no skip bias;
     unit bias stays on ``MaskedLinear``.
 
-    Construct once from a ``GraphSpec``. Call after every hop;
+    Construct once from a ``LayeredSpec``. Call after every hop;
     hops with no matching skip are a no-op. Empty ``spec.skips``
     is identity.
 
     Parameters
     ----------
-    spec : GraphSpec
+    spec : LayeredSpec
         Structure whose ``skips`` this module indexes. Not
         mutated. Masks stay frozen.
 
     Attributes
     ----------
-    spec : GraphSpec
+    spec : LayeredSpec
         The constructor spec.
     skip_weights : nn.ParameterList
         One scalar parameter per ``spec.skips``, initialized to
@@ -43,7 +43,7 @@ class SkipAdd(nn.Module):
     Raises
     ------
     Kpnn2Error
-        If ``spec`` is not a ``GraphSpec``. ``forward`` also
+        If ``spec`` is not a ``LayeredSpec``. ``forward`` also
         raises if ``target_layer`` is invalid, a needed
         ``saved`` layer is missing, or a tensor width does not
         match ``layer_nodes``.
@@ -58,7 +58,7 @@ class SkipAdd(nn.Module):
     ``MaskedLinear`` casting the mask onto the hop.
 
     ``copy.deepcopy`` succeeds. Parameters on the copy are
-    distinct. Copied ``GraphSpec`` masks stay frozen float32.
+    distinct. Copied ``LayeredSpec`` masks stay frozen float32.
 
     Examples
     --------
@@ -74,7 +74,7 @@ class SkipAdd(nn.Module):
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_edgelist(edgelist)
+    >>> spec = k2.parse_layered(edgelist)
     >>> skips = k2.SkipAdd(spec)
     >>> len(skips.skip_weights)
     1
@@ -89,16 +89,16 @@ class SkipAdd(nn.Module):
     True
     """
 
-    spec: GraphSpec
+    spec: LayeredSpec
     skip_weights: nn.ParameterList
 
     def __init__(
         self,
-        spec: GraphSpec,
+        spec: LayeredSpec,
     ) -> None:
         super().__init__()
-        if not isinstance(spec, GraphSpec):
-            raise Kpnn2Error("'spec' must be a GraphSpec.")
+        if not isinstance(spec, LayeredSpec):
+            raise Kpnn2Error("'spec' must be a LayeredSpec.")
         self.spec = spec
         weights = []
         for _skip in spec.skips:

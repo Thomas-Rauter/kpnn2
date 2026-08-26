@@ -11,7 +11,7 @@ from kpnn2 import (
     Kpnn2Error,
     MaskedLinear,
     SkipAdd,
-    parse_edgelist,
+    parse_layered,
 )
 from kpnn2._frozen_mask import FrozenMask
 
@@ -124,7 +124,7 @@ class _ThreeHopNet(nn.Module):
 
 
 def test_skip_add_empty_skips_is_identity():
-    spec = parse_edgelist(_chain_edgelist())
+    spec = parse_layered(_chain_edgelist())
     module = SkipAdd(spec)
     assert len(module.skip_weights) == 0
     hidden = torch.tensor(
@@ -157,7 +157,7 @@ def test_skip_add_empty_skips_is_identity():
 
 
 def test_skip_add_one_skip_injects_weight_times_source():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     assert len(module.skip_weights) == 1
     assert module.skip_weights[0].item() == 0.0
@@ -201,7 +201,7 @@ def test_skip_add_one_skip_injects_weight_times_source():
 
 
 def test_skip_add_zero_weight_matches_adjacent_hidden():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     hidden = torch.tensor(
         [[2.0], [-1.0], [0.5]],
@@ -222,7 +222,7 @@ def test_skip_add_zero_weight_matches_adjacent_hidden():
 
 
 def test_skip_add_several_skips_to_different_layers():
-    spec = parse_edgelist(_three_hop_edgelist())
+    spec = parse_layered(_three_hop_edgelist())
     assert spec.layer_nodes == (
         ("A", "B"),
         ("H1",),
@@ -297,7 +297,7 @@ def test_skip_add_several_skips_to_different_layers():
 
 
 def test_skip_add_numerical_pin_relu_then_last_hop_linear():
-    spec = parse_edgelist(_three_hop_edgelist())
+    spec = parse_layered(_three_hop_edgelist())
     net = _ThreeHopNet(spec)
     with torch.no_grad():
         net.lin0.raw_weight.fill_(1.0)
@@ -398,7 +398,7 @@ def test_skip_add_numerical_pin_relu_then_last_hop_linear():
 
 
 def test_skip_add_shape_and_device_match_hidden():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     _pin_skip_weights(
         module,
@@ -445,7 +445,7 @@ def test_skip_add_shape_and_device_match_hidden():
 
 
 def test_skip_add_deepcopy_independent_params_frozen_spec():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     _pin_skip_weights(
         module,
@@ -518,13 +518,13 @@ def test_skip_add_deepcopy_independent_params_frozen_spec():
 def test_skip_add_rejects_bad_spec():
     with pytest.raises(
         Kpnn2Error,
-        match="GraphSpec",
+        match="LayeredSpec",
     ):
         SkipAdd(None)
 
 
 def test_skip_add_rejects_invalid_target_layer():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     hidden = torch.ones(
         1,
@@ -557,7 +557,7 @@ def test_skip_add_rejects_invalid_target_layer():
 
 
 def test_skip_add_rejects_missing_saved_layer():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     hidden = torch.ones(
         1,
@@ -575,7 +575,7 @@ def test_skip_add_rejects_missing_saved_layer():
 
 
 def test_skip_add_rejects_width_mismatch():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     hidden = torch.ones(
         1,
@@ -618,7 +618,7 @@ def test_skip_add_rejects_width_mismatch():
 
 
 def test_skip_add_does_not_mutate_saved_or_hidden():
-    spec = parse_edgelist(_one_skip_edgelist())
+    spec = parse_layered(_one_skip_edgelist())
     module = SkipAdd(spec)
     _pin_skip_weights(
         module,

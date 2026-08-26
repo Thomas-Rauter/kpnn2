@@ -5,7 +5,7 @@ Feature score: median (or max) absolute gradient of the attributed
 output with respect to the input column.
 
 Hidden-node score: |activation × ∂output/∂activation| at that
-node's GraphSpec layer only (not max-over-layers). Gradient×input
+node's LayeredSpec layer only (not max-over-layers). Gradient×input
 is zero when a dead incoming hop leaves the activation at 0, even
 if downstream weights still exist. Raw |∂output/∂h| would not
 match reachability-from-inputs. Output nodes are not scored.
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from kpnn2 import GraphSpec, align_inputs, map_node_attributions
+from kpnn2 import LayeredSpec, align_inputs, map_node_attributions
 from tests.helpers.layered_net import (
     LayeredNet,
     pin_all_weights,
@@ -33,7 +33,7 @@ SEED = 42
 
 
 def independent_gaussian_features(
-    spec: GraphSpec,
+    spec: LayeredSpec,
     n_samples: int = N_SAMPLES,
     seed: int = SEED,
 ) -> pd.DataFrame:
@@ -74,7 +74,7 @@ def pin_scenario_weights(
 
 def feature_grad_table(
     input_grad: torch.Tensor,
-    spec: GraphSpec,
+    spec: LayeredSpec,
 ) -> pd.DataFrame:
     """
     Name input gradients with ``map_node_attributions`` at layer 0.
@@ -88,7 +88,7 @@ def feature_grad_table(
 
 def hidden_score_table(
     model: LayeredNet,
-    spec: GraphSpec,
+    spec: LayeredSpec,
 ) -> pd.DataFrame:
     """
     Name hidden-node gradient×input scores at each node's layer.
@@ -143,7 +143,7 @@ def max_abs_scores(
 
 def attributed_output_sum(
     output: torch.Tensor,
-    spec: GraphSpec,
+    spec: LayeredSpec,
     attributed_outputs: tuple[str, ...],
 ) -> torch.Tensor:
     """
@@ -156,7 +156,7 @@ def attributed_output_sum(
 
 def align_and_enable_grad(
     features: pd.DataFrame,
-    spec: GraphSpec,
+    spec: LayeredSpec,
 ) -> torch.Tensor:
     """
     Align a named table and mark the tensor as requiring grad.

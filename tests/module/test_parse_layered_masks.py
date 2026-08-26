@@ -1,10 +1,10 @@
 import pandas as pd
 import torch
 
-from kpnn2 import parse_edgelist
+from kpnn2 import parse_layered
 
 
-def test_parse_edgelist_masks_chain_shapes_and_dtype():
+def test_parse_layered_masks_chain_shapes_and_dtype():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "B"],
@@ -12,7 +12,7 @@ def test_parse_edgelist_masks_chain_shapes_and_dtype():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert len(spec.masks) == 2
     assert spec.masks[0].shape == (1, 1)
@@ -33,7 +33,7 @@ def test_parse_edgelist_masks_chain_shapes_and_dtype():
     )
 
 
-def test_parse_edgelist_masks_include_adjacent_exclude_skip():
+def test_parse_layered_masks_include_adjacent_exclude_skip():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "H", "A"],
@@ -41,7 +41,7 @@ def test_parse_edgelist_masks_include_adjacent_exclude_skip():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.layer_nodes == (("A",), ("H",), ("C",))
     assert len(spec.masks) == 2
@@ -65,7 +65,7 @@ def test_parse_edgelist_masks_include_adjacent_exclude_skip():
     assert n_ones == 2
 
 
-def test_parse_edgelist_masks_early_output_indexing():
+def test_parse_layered_masks_early_output_indexing():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "A", "H"],
@@ -73,7 +73,7 @@ def test_parse_edgelist_masks_early_output_indexing():
         }
     )
 
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
 
     assert spec.layer_nodes == (("A",), ("E", "H"), ("C",))
     assert spec.masks[0].shape == (2, 1)

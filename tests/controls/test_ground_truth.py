@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from kpnn2 import parse_edgelist
+from kpnn2 import parse_layered
 from tests.controls.graphs import (
     dead_edge_graph,
     multi_output_graph,
@@ -192,7 +192,7 @@ def test_wide_layer_live_middle_index_and_solver() -> None:
         for item in STRUCTURAL_SCENARIOS
         if item.id == "wide_layer_live_middle"
     )
-    spec = parse_edgelist(scenario.edgelist)
+    spec = parse_layered(scenario.edgelist)
     hidden_layer = spec.layer_nodes[1]
     assert hidden_layer == (
         "alpha_dead",
@@ -214,7 +214,7 @@ def test_wide_layer_live_gap_index_and_solver() -> None:
         for item in STRUCTURAL_SCENARIOS
         if item.id == "wide_layer_live_gap"
     )
-    spec = parse_edgelist(scenario.edgelist)
+    spec = parse_layered(scenario.edgelist)
     hidden_layer = spec.layer_nodes[1]
     assert hidden_layer == (
         "left_live",

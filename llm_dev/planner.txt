@@ -16,7 +16,7 @@ CONTEXT.md is the implementation contract. If a later prompt
 disagrees with it, CONTEXT.md wins unless the TASK / human
 explicitly overrides it. Do not paste CONTEXT.md into briefs.
 
-kpnn2 parses a named edgelist into a GraphSpec (ranks, adjacent
+kpnn2 parses a named edgelist into a LayeredSpec (ranks, adjacent
 masks, skip metadata). The user writes ordinary PyTorch with
 MaskedLinear. There is no graph compiler and no ready-made
 model.

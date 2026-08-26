@@ -27,7 +27,7 @@ body:
       label: Area
       description: Which part of the package is this related to?
       options:
-        - parse_edgelist / GraphSpec
+        - parse_layered / LayeredSpec
         - MaskedLinear
         - align_inputs
         - map_node_attributions
@@ -59,14 +59,14 @@ body:
       render: python
       placeholder: |
         import pandas as pd
-        from kpnn2 import parse_edgelist
+        from kpnn2 import parse_layered
 
         edgelist = pd.DataFrame({
             "source": ["x1", "h1"],
             "target": ["h1", "y"],
         })
 
-        spec = parse_edgelist(edgelist)
+        spec = parse_layered(edgelist)
     validations:
       required: false
 

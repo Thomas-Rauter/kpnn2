@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from kpnn2 import MaskedLinear, parse_edgelist
+from kpnn2 import MaskedLinear, parse_layered
 
 
 class SkipResidualNet(nn.Module):
@@ -121,7 +121,7 @@ def test_skip_residual_forward_shape_and_skip_effect():
     np.random.seed(42)
     torch.manual_seed(42)
 
-    spec = parse_edgelist(_skip_edgelist())
+    spec = parse_layered(_skip_edgelist())
     model = SkipResidualNet(spec)
     x = torch.randn(
         4,
@@ -145,7 +145,7 @@ def test_skip_residual_forward_shape_and_skip_effect():
 
 
 def test_skip_residual_matches_w_times_saved_source():
-    spec = parse_edgelist(_skip_edgelist())
+    spec = parse_layered(_skip_edgelist())
     w_skip = 0.3
     model = _pinned_adjacent_net(
         spec,
@@ -178,7 +178,7 @@ def test_skip_residual_matches_w_times_saved_source():
 
 
 def test_skip_weight_zero_matches_adjacent_only_forward():
-    spec = parse_edgelist(_skip_edgelist())
+    spec = parse_layered(_skip_edgelist())
     model = _pinned_adjacent_net(
         spec,
         0.0,
@@ -194,7 +194,7 @@ def test_skip_weight_zero_matches_adjacent_only_forward():
 
 
 def test_skip_ac_is_absent_from_masks():
-    spec = parse_edgelist(_skip_edgelist())
+    spec = parse_layered(_skip_edgelist())
     n_ones = sum(int(mask.sum().item()) for mask in spec.masks)
     assert n_ones == 2
     skip = spec.skips[0]
@@ -203,7 +203,7 @@ def test_skip_ac_is_absent_from_masks():
 
 
 def test_skip_path_changes_output_when_adjacent_weights_are_zero():
-    spec = parse_edgelist(_skip_edgelist())
+    spec = parse_layered(_skip_edgelist())
     model = _pinned_adjacent_net(
         spec,
         0.3,

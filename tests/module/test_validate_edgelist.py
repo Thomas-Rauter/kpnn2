@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from kpnn2.errors import Kpnn2Error
-from kpnn2.parse_edgelist import _validate_edgelist
+from kpnn2.parse_layered import _validate_edgelist
 
 
 def test_validate_edgelist_returns_string_source_target_copy():

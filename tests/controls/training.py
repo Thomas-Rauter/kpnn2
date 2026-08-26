@@ -51,10 +51,10 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from kpnn2 import (
-    GraphSpec,
+    LayeredSpec,
     align_inputs,
     map_node_attributions,
-    parse_edgelist,
+    parse_layered,
 )
 from tests.helpers.layered_net import LayeredNet
 
@@ -146,7 +146,7 @@ class TrainedRun:
     """One trained model, spec, held-out features, and val ROC-AUC."""
 
     model: LayeredNet
-    spec: GraphSpec
+    spec: LayeredSpec
     x_eval_df: pd.DataFrame
     val_roc_auc: float
     graph: TwoTowerGraph
@@ -433,7 +433,7 @@ def train_matched_linear_towers(
         rng,
         n_eval,
     )
-    spec = parse_edgelist(graph.edgelist)
+    spec = parse_layered(graph.edgelist)
     model = LayeredNet(
         spec,
         bias=bias,
@@ -516,7 +516,7 @@ def train_trained_scenario(
 
 def autograd_feature_table(
     model: LayeredNet,
-    spec: GraphSpec,
+    spec: LayeredSpec,
     features: pd.DataFrame,
 ) -> pd.DataFrame:
     """
@@ -541,7 +541,7 @@ def autograd_feature_table(
 
 def autograd_hidden_tables(
     model: LayeredNet,
-    spec: GraphSpec,
+    spec: LayeredSpec,
     features: pd.DataFrame,
 ) -> dict[int, pd.DataFrame]:
     """
@@ -643,7 +643,7 @@ def trained_separations(
 def _fit_binary_classifier(
     model: nn.Module,
     *,
-    spec: GraphSpec,
+    spec: LayeredSpec,
     x_train: torch.Tensor,
     y_train: torch.Tensor,
     n_epochs: int,
@@ -684,7 +684,7 @@ def _fit_binary_classifier(
 def _evaluate_roc_auc(
     model: nn.Module,
     *,
-    spec: GraphSpec,
+    spec: LayeredSpec,
     x_eval: torch.Tensor,
     y_eval: torch.Tensor,
 ) -> float:
@@ -708,7 +708,7 @@ def _evaluate_roc_auc(
 
 def _prediction_column(
     output: torch.Tensor,
-    spec: GraphSpec,
+    spec: LayeredSpec,
 ) -> torch.Tensor:
     """
     Last-layer logit named ``prediction``, shape ``(n, 1)``.

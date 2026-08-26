@@ -7,7 +7,7 @@ class Kpnn2Error(Exception):
     """
     User-facing failure from the public ``kpnn2`` API.
 
-    Raised for invalid edgelists, illegal ``GraphSpec`` operations,
+    Raised for invalid edgelists, illegal ``LayeredSpec`` operations,
     bad ``MaskedLinear`` masks, ``SkipAdd`` arguments that do not
     match the spec, and input or attribution tensors that do not
     match the spec.
@@ -22,7 +22,7 @@ class Kpnn2Error(Exception):
     ...         "target": ["A"],
     ...     }
     ... )
-    >>> k2.parse_edgelist(edgelist)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> k2.parse_layered(edgelist)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     Kpnn2Error: Edgelist contains 1 self-loop(s): A. ...

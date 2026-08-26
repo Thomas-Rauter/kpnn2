@@ -23,7 +23,7 @@ from sklearn.preprocessing import StandardScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from kpnn2 import GraphSpec, align_inputs, parse_edgelist
+from kpnn2 import LayeredSpec, align_inputs, parse_layered
 from tests.helpers.layered_net import LayeredNet
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
@@ -35,12 +35,12 @@ DROPOUT = 0.10
 
 class _TabularClassifier(nn.Module):
     """
-    GraphSpec core plus dropout and a one-logit head.
+    LayeredSpec core plus dropout and a one-logit head.
     """
 
     def __init__(
         self,
-        spec: GraphSpec,
+        spec: LayeredSpec,
         dropout: float = DROPOUT,
     ) -> None:
         super().__init__()
@@ -77,7 +77,7 @@ def _run_real_tabular_task() -> dict[str, float]:
     _set_seed(SEED)
     x_train_df, x_test_df, y_train, y_test = _make_breast_cancer_data()
     edgelist = _make_feedforward_architecture_edgelist(list(x_train_df.columns))
-    spec = parse_edgelist(edgelist)
+    spec = parse_layered(edgelist)
     x_train_shuffled = x_train_df.loc[
         :,
         list(reversed(x_train_df.columns)),

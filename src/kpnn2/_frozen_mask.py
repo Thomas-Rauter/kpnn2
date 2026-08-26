@@ -1,5 +1,5 @@
 """
-Read-only connectivity tensors for GraphSpec and MaskedLinear.
+Read-only connectivity tensors for LayeredSpec and MaskedLinear.
 """
 
 import numpy as np
@@ -8,8 +8,8 @@ import torch
 from .errors import Kpnn2Error
 
 _READ_ONLY_MSG = (
-    "Connectivity mask is read-only. Rebuild from the edgelist "
-    "GraphSpec if the wiring should change."
+    "Connectivity mask is read-only. Rebuild from the "
+    "LayeredSpec if the wiring should change."
 )
 
 

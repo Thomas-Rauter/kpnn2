@@ -1,5 +1,5 @@
 """
-Map layer attribution tensors onto ``GraphSpec`` node names.
+Map layer attribution tensors onto ``LayeredSpec`` node names.
 """
 
 from collections.abc import Mapping, Sequence
@@ -9,7 +9,7 @@ import torch
 import xarray as xr
 
 from .errors import Kpnn2Error
-from .graph_spec import GraphSpec
+from .layered_spec import LayeredSpec
 
 _NODE_DIM = "node"
 _LAYER_COORD = "layer"
@@ -19,14 +19,14 @@ _STEP_DIM = "step"
 
 def map_node_attributions(
     attributions: torch.Tensor | Sequence[torch.Tensor],
-    spec: GraphSpec,
+    spec: LayeredSpec,
     layer: int,
     *,
     dims: Sequence[str] | None = None,
     coords: Mapping[str, Sequence] | None = None,
 ) -> xr.DataArray:
     """
-    Label a layer attribution tensor with ``GraphSpec`` node names.
+    Label a layer attribution tensor with ``LayeredSpec`` node names.
 
     Values are copied with ``detach()`` onto CPU. This function does
     not run an attribution method and does not import Captum. Pass
@@ -44,7 +44,7 @@ def map_node_attributions(
         Scores whose ``node`` axis length equals
         ``len(spec.layer_nodes[layer])``. A sequence is stacked
         along ``step``.
-    spec : GraphSpec
+    spec : LayeredSpec
         Graph structure. ``layer_nodes[layer]`` become the ``node``
         coordinate.
     layer : int
@@ -70,7 +70,7 @@ def map_node_attributions(
     Raises
     ------
     Kpnn2Error
-        If ``spec`` is not a ``GraphSpec``; ``layer`` is not a
+        If ``spec`` is not a ``LayeredSpec``; ``layer`` is not a
         valid int; ``attributions`` is not a tensor or a non-empty
         sequence of equal-shaped tensors; ``dims`` is missing or
         inconsistent; a ``node`` axis length does not match the
@@ -81,7 +81,7 @@ def map_node_attributions(
     For a ``MaskedLinear`` built from ``spec.masks[i]``, the layer
     index to pass here is ``i + 1`` (the hop output), not ``i``.
     Do not name-map tensors from BatchNorm or other unnamed
-    modules; only map units that are GraphSpec nodes.
+    modules; only map units that are LayeredSpec nodes.
 
     Examples
     --------
@@ -96,7 +96,7 @@ def map_node_attributions(
     ...         "target": ["H", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_edgelist(edgelist)
+    >>> spec = k2.parse_layered(edgelist)
     >>> spec.layer_nodes
     (('A',), ('H',), ('C',))
     >>> scores = torch.tensor([[0.5], [1.0]])
@@ -122,8 +122,8 @@ def map_node_attributions(
     >>> hidden["node"].values.tolist()
     ['H']
     """
-    if not isinstance(spec, GraphSpec):
-        raise Kpnn2Error("'spec' must be a GraphSpec.")
+    if not isinstance(spec, LayeredSpec):
+        raise Kpnn2Error("'spec' must be a LayeredSpec.")
     if not isinstance(layer, int) or isinstance(layer, bool):
         raise Kpnn2Error("'layer' must be an int.")
 

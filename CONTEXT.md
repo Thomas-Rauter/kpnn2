@@ -22,10 +22,10 @@ edgelist, using native nn.Module layers.
 
 ## What this package does
 
-1. **Parse:** `parse_edgelist()` reads a pandas DataFrame with columns
+1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
    `source` and `target` only, validates a layered DAG, and returns a
-   `GraphSpec`.
-2. **Specify:** `GraphSpec` holds named nodes by layer, adjacent-hop
+   `LayeredSpec`.
+2. **Specify:** `LayeredSpec` holds named nodes by layer, adjacent-hop
    mask tensors, and skip-edge metadata. It does not construct an
    `nn.Module`.
 3. **Build:** The user writes a PyTorch `nn.Module` using
@@ -37,7 +37,7 @@ edgelist, using native nn.Module layers.
    go straight to the model.
 5. **Train:** The user owns loss, optimizer, and the training loop.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
-   at one GraphSpec layer as an `xarray.DataArray` (`node` names
+   at one LayeredSpec layer as an `xarray.DataArray` (`node` names
    from `layer_nodes[layer]`). Captum is not a library dependency;
    the user runs Captum (or any other method) themselves. `xarray`
    is a core dependency used only here.
@@ -79,7 +79,7 @@ Division of labor:
 
 | Layer | Owner |
 |-------|--------|
-| Edgelist → `GraphSpec` (ranks, masks, skips) | kpnn2 |
+| Edgelist → `LayeredSpec` (ranks, masks, skips) | kpnn2 |
 | `MaskedLinear` (frozen mask) | kpnn2 |
 | `SkipAdd` (skip indexing onto a layer tensor) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
@@ -95,8 +95,8 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 
 | Symbol | Role |
 |--------|------|
-| `parse_edgelist` | Edgelist DataFrame → `GraphSpec` |
-| `GraphSpec` | Frozen structural dataclass (masks, layers, skips) |
+| `parse_layered` | Edgelist DataFrame → `LayeredSpec` |
+| `LayeredSpec` | Frozen structural dataclass (masks, layers, skips) |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
 | `SkipAdd` | `nn.Module`: inject skip sources into a layer pre-activation |
@@ -111,6 +111,8 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 Do **not** export or implement: `compile_graph`, `customize_model`,
 `interpret_model`, `align_features_to_input_nodes`, `edge_weights`,
 `CompileArtifact`, backends, `ConstrainedMaskedLinear`.
+Do **not** export `parse_edgelist` or `GraphSpec`; those names
+were replaced by `parse_layered` and `LayeredSpec`.
 
 ---
 
@@ -139,7 +141,7 @@ Node names are stored as strings. Non-string values in `source` /
 
 ## Graph rules (v1)
 
-`parse_edgelist()` enforces:
+`parse_layered()` enforces:
 
 | Rule | On violation |
 |------|----------------|
@@ -201,14 +203,14 @@ and `target` values only.
 
 ---
 
-## `GraphSpec` fields
+## `LayeredSpec` fields
 
-`GraphSpec` is a frozen dataclass. It holds structure only: no
+`LayeredSpec` is a frozen dataclass. It holds structure only: no
 `nn.Module`, no parameters, no execution plan object. Sequences
 are tuples. Do not reassign fields. Mask tensors reject in-place
 writes, `out=` writes into the mask, and numpy aliases of stored
 storage (`Kpnn2Error` for torch writes). `copy.deepcopy` of a
-`GraphSpec` succeeds; copied masks stay frozen float32 and do
+`LayeredSpec` succeeds; copied masks stay frozen float32 and do
 not share storage with the original.
 
 | Field | Type | Meaning |
@@ -313,7 +315,7 @@ MaskedLinear(mask, bias=True)
   Inferred `in_features` / `out_features` from `mask.shape`.
   Do not take separate size arguments.
 - Register `mask` as a **non-persistent buffer** (not a
-  parameter, not in `state_dict`), `float32`. GraphSpec masks
+  parameter, not in `state_dict`), `float32`. LayeredSpec masks
   stay float32. After `Module.half()`, `.to(dtype=torch.bfloat16)`,
   or `.double()`, `layer.mask.dtype` is still `float32`. In-place
   writes (`fill_`, `copy_`, item assignment, `out=` into the
@@ -321,11 +323,11 @@ MaskedLinear(mask, bias=True)
   `register_buffer("mask", ...)`) raise `Kpnn2Error`. `numpy()`
   does not yield a writable view of the stored storage.
   `MaskedLinear(spec.masks[i])` stores an independent frozen
-  copy. Rebuild from the edgelist / `GraphSpec` to change
+  copy. Rebuild from the edgelist / `LayeredSpec` to change
   wiring. The stored mask does not follow the module floating
   dtype. `copy.deepcopy` of a `MaskedLinear` (and of a user
   `nn.Module` that holds `MaskedLinear` layers and a
-  `GraphSpec`) succeeds. Parameters on the copy are distinct
+  `LayeredSpec`) succeeds. Parameters on the copy are distinct
   objects. Copied masks stay frozen float32.
 - Trainable `raw_weight`: same shape as `mask`.
 - Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
@@ -374,7 +376,7 @@ SkipAdd(spec)
 - The add uses `hidden.dtype` / `hidden.device` (skip weight
   and source are cast like `MaskedLinear` casts the mask).
 - `copy.deepcopy` succeeds. Parameters on the copy are
-  distinct. The stored `GraphSpec` stays frozen (do not
+  distinct. The stored `LayeredSpec` stays frozen (do not
   mutate `spec.skips` or masks).
 - Public failures: `Kpnn2Error` (bad spec, invalid
   `target_layer`, missing saved layer, width mismatch).
@@ -436,7 +438,7 @@ Unopinionated name mapping. No Captum import. Returns
 
 The user obtains `attributions` however they like (Captum
 LayerConductance, IntegratedGradients, custom grads, etc.). This
-function only attaches GraphSpec names to the `node` axis. Pass
+function only attaches LayeredSpec names to the `node` axis. Pass
 `layer=i+1` for `MaskedLinear(spec.masks[i])`. Do not name-map
 BatchNorm or other unnamed modules.
 
@@ -468,10 +470,10 @@ edgelist = pd.DataFrame(
 )
 # add a skip with another row A -> C when needed
 
-spec = k2.parse_edgelist(edgelist)
+spec = k2.parse_layered(edgelist)
 
 class Net(nn.Module):
-    def __init__(self, spec: k2.GraphSpec):
+    def __init__(self, spec: k2.LayeredSpec):
         super().__init__()
         self.lin0 = k2.MaskedLinear(spec.masks[0])
         self.lin1 = k2.MaskedLinear(spec.masks[1])
@@ -519,7 +521,7 @@ Call it after `MaskedLinear` and before the hop's nonlinearity
 There is no graph compiler and no ready-made model. Write ordinary
 PyTorch:
 
-1. `spec = k2.parse_edgelist(edgelist)`
+1. `spec = k2.parse_layered(edgelist)`
 2. `self.layer_i = k2.MaskedLinear(spec.masks[i])` for each hop
 3. `self.skips = k2.SkipAdd(spec)` once
 4. Put ReLU / BatchNorm / Dropout in `forward()` yourself.
@@ -543,8 +545,8 @@ Do not rename them.
 ```
 src/kpnn2/
   __init__.py                 # public exports only
-  parse_edgelist.py           # parse_edgelist
-  graph_spec.py               # GraphSpec, Skip
+  parse_layered.py            # parse_layered
+  layered_spec.py             # LayeredSpec, Skip
   masked_linear.py            # MaskedLinear
   skip_add.py                 # SkipAdd
   align_inputs.py
@@ -597,7 +599,7 @@ disagree with CI.
   adapters, edge constraints, or AnnData in v1.
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks.
-- `parse_edgelist` must not instantiate `nn.Module`.
+- `parse_layered` must not instantiate `nn.Module`.
 - `MaskedLinear` must not store other layers' activations or
   implement skip routing. `SkipAdd` owns skip indexing; the
   user owns call order and nonlinearities.

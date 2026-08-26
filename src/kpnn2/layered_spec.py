@@ -14,7 +14,7 @@ class Skip:
     """
     One original edge whose endpoints are more than one layer apart.
 
-    Adjacent edges (depth gap exactly 1) live in ``GraphSpec.masks``,
+    Adjacent edges (depth gap exactly 1) live in ``LayeredSpec.masks``,
     not here. A skip is metadata for ``SkipAdd`` (or a residual add
     in user ``forward()`` code). It is not expanded into a dummy
     neuron.
@@ -26,7 +26,7 @@ class Skip:
     target : str
         Target node name.
     source_layer : int
-        Depth of ``source`` in ``GraphSpec.layer_nodes``.
+        Depth of ``source`` in ``LayeredSpec.layer_nodes``.
     target_layer : int
         Depth of ``target``. Always satisfies
         ``target_layer - source_layer > 1``.
@@ -47,9 +47,9 @@ class Skip:
 
 
 @dataclass(frozen=True)
-class GraphSpec:
+class LayeredSpec:
     """
-    Frozen blueprint from ``parse_edgelist``.
+    Frozen blueprint from ``parse_layered``.
 
     Structure only: not an ``nn.Module`` and no parameters. Use
     ``masks`` for ``MaskedLinear`` hops and ``skips`` for
@@ -106,7 +106,7 @@ class GraphSpec:
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_edgelist(edgelist)
+    >>> spec = k2.parse_layered(edgelist)
     >>> spec.layer_nodes
     (('A',), ('H',), ('C',))
     >>> spec.layer_dims

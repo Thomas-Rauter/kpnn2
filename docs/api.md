@@ -4,18 +4,18 @@ toc_depth: 2
 
 # API reference
 
-::: kpnn2.parse_edgelist.parse_edgelist
+::: kpnn2.parse_layered.parse_layered
     options:
       show_root_heading: true
       show_root_toc_entry: true
 
-::: kpnn2.graph_spec.GraphSpec
+::: kpnn2.layered_spec.LayeredSpec
     options:
       show_root_heading: true
       show_root_toc_entry: true
       members: false
 
-::: kpnn2.graph_spec.Skip
+::: kpnn2.layered_spec.Skip
     options:
       show_root_heading: true
       show_root_toc_entry: true

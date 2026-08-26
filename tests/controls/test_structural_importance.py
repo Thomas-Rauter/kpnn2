@@ -3,7 +3,7 @@ Tier 1: pinned-weight structural importance, no training.
 
 Scores are autograd magnitudes, not Captum. Feature scores are
 |input grad|. Hidden scores are |activation × layer grad| at that
-node's GraphSpec layer. ``LayeredNet`` is linear (relu=False) so
+node's LayeredSpec layer. ``LayeredNet`` is linear (relu=False) so
 live paths have deterministic nonzero scores.
 """
 
@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import parse_edgelist
+from kpnn2 import parse_layered
 from tests.controls.diagnostics import score_report
 from tests.controls.scenario import (
     STRUCTURAL_SCENARIOS,
@@ -55,7 +55,7 @@ def _run_scenario(
     Pin weights, forward, backward, return feature and hidden grads.
     """
     _set_seeds()
-    spec = parse_edgelist(scenario.edgelist)
+    spec = parse_layered(scenario.edgelist)
     model = LayeredNet(
         spec,
         bias=scenario.bias,
