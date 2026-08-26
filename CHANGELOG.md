@@ -29,6 +29,8 @@ This project follows semantic versioning.
 - `align_inputs` rejects `torch.Tensor`. Pass a pandas DataFrame
   for name alignment, or a pre-ordered tensor straight to the
   model.
+- Duplicate-column failures from `align_inputs` name the unique
+  duplicated labels after `str(...)`, sorted, comma-separated.
 - The `dev` extra now includes `captum` so tests can run the
   documented Captum mapping workflow. Captum remains optional
   for library users and is not a core dependency.

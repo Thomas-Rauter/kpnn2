@@ -8,10 +8,6 @@ import torch
 from .errors import Kpnn2Error
 from .graph_spec import GraphSpec
 
-_DF_DUPLICATE_COLUMNS_MSG = (
-    "Input DataFrame must not contain duplicate column names "
-    "(including after converting labels to strings)."
-)
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'data' is a tensor; a pandas DataFrame is required. "
     "Pass a DataFrame so columns can be matched to "
@@ -58,8 +54,9 @@ def align_inputs(
     Kpnn2Error
         If ``spec`` is not a ``GraphSpec``; ``data`` is a tensor;
         ``data`` is not a DataFrame; required DataFrame columns are
-        missing or duplicated (including after ``str`` conversion);
-        or required columns are non-numeric.
+        missing or duplicated (including after ``str`` conversion;
+        the message names the unique duplicated labels, sorted,
+        comma-separated); or required columns are non-numeric.
 
     Notes
     -----
@@ -130,12 +127,20 @@ def _align_dataframe(
     """
     Reorder numeric DataFrame columns to ``spec.input_nodes``.
     """
-    if data.columns.duplicated().any():
-        raise Kpnn2Error(_DF_DUPLICATE_COLUMNS_MSG)
-
     str_columns = [str(name) for name in data.columns]
-    if len(set(str_columns)) != len(str_columns):
-        raise Kpnn2Error(_DF_DUPLICATE_COLUMNS_MSG)
+    label_counts: dict[str, int] = {}
+    for label in str_columns:
+        label_counts[label] = label_counts.get(label, 0) + 1
+    duplicated_labels = sorted(
+        label for label, count in label_counts.items() if count > 1
+    )
+    if duplicated_labels:
+        labels_str = ", ".join(duplicated_labels)
+        raise Kpnn2Error(
+            "Input DataFrame must not contain duplicate column names "
+            "(including after converting labels to strings): "
+            f"{labels_str}."
+        )
 
     renamed = data.copy(deep=False)
     renamed.columns = str_columns

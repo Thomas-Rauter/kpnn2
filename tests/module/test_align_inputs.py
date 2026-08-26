@@ -213,3 +213,70 @@ def test_align_inputs_rejects_invalid_data_and_spec(
             data,
             spec,
         )
+
+
+def test_align_inputs_duplicate_columns_name_label_a():
+    spec = _tiny_spec()
+    data = pd.DataFrame(
+        [[1.0, 2.0, 3.0]],
+        columns=["A", "B", "A"],
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="duplicate column",
+    ) as caught:
+        align_inputs(
+            data,
+            spec,
+        )
+
+    message = str(caught.value)
+    assert "A" in message
+    assert "converting labels to strings" in message
+
+
+def test_align_inputs_duplicate_after_str_names_label_1():
+    spec = _tiny_spec()
+    data = pd.DataFrame(
+        {
+            "A": [1.0],
+            "B": [2.0],
+            1: [3.0],
+            "1": [4.0],
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="duplicate column",
+    ) as caught:
+        align_inputs(
+            data,
+            spec,
+        )
+
+    message = str(caught.value)
+    assert "1" in message
+    assert "converting labels to strings" in message
+
+
+def test_align_inputs_duplicate_labels_sorted_comma_separated():
+    spec = _tiny_spec()
+    data = pd.DataFrame(
+        [[1.0, 2.0, 3.0, 4.0, 5.0]],
+        columns=["A", "B", "A", 1, "1"],
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="duplicate column",
+    ) as caught:
+        align_inputs(
+            data,
+            spec,
+        )
+
+    message = str(caught.value)
+    assert "1, A" in message
+    assert "converting labels to strings" in message

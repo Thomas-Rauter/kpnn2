@@ -351,7 +351,8 @@ Returns `torch.float32` tensor of shape
 - Extra columns are ignored.
 - Missing required columns: `Kpnn2Error`.
 - Duplicate column names (including after string conversion):
-  `Kpnn2Error`.
+  `Kpnn2Error`. The message names the unique duplicated labels
+  after `str(...)`, sorted, comma-separated.
 - Required columns must be numeric; non-numeric: `Kpnn2Error`.
 - Reorder columns to `spec.input_nodes`.
 
