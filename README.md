@@ -219,8 +219,9 @@ If you are new to the package, start with:
 - [**Installation**](docs/installation.md) for package setup
 - [**Getting started**](docs/getting-started.ipynb) for a full
   end-to-end feedforward example
-- [**Recurrent example**](docs/recurrent-example.ipynb) for a
-  cyclic graph with a shared masked update
+- [**Recurrent example**](docs/recurrent-example.ipynb) for user
+  `forward()` with a shared `MaskedLinear` when the graph is
+  cyclic (`parse_edgelist` still requires a DAG)
 - [**Mapping attributions**](docs/map-node-attributions.ipynb) for
   labeling layer tensors with node names
 - [**Skip edges**](docs/skip-edges.ipynb) for `SkipAdd` instead of
