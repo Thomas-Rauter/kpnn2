@@ -40,7 +40,11 @@ a `source` node to a `target` node. For example:
 
 `parse_layered()` layers that table into a `LayeredSpec`. You write
 a normal `torch.nn.Module`, train with standard PyTorch, and can
-map attributions back onto the named nodes.
+map attributions back onto the named nodes. That parser needs a
+DAG; a graph with feedback loops goes through `parse_adjacency()`
+instead, which puts every node into one state vector behind a
+single square mask (see the
+[Recurrent example](docs/recurrent-example.ipynb)).
 
 Sparse connectivity is often used for speed or memory, without
 needing control over which nodes are linked. A newer line of work
@@ -67,7 +71,9 @@ graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
 
 1. Define a model architecture as an edgelist with named `source`
    and `target` nodes.
-2. Parse it with `parse_layered()` to a `LayeredSpec`.
+2. Parse it with `parse_layered()` to a `LayeredSpec`. For a graph
+   with feedback loops, use `parse_adjacency()` and an
+   `AdjacencySpec` instead.
 3. Write an `nn.Module` with `MaskedLinear` for adjacent hops
    and `SkipAdd` for skip edges. Construct `SkipAdd` once; call
    it after every hop, before ReLU or BatchNorm. Skip edges stay
@@ -169,15 +175,19 @@ print(node_attr.to_pandas().abs().mean())
 The documented public names are:
 
 - `parse_layered()`
+- `parse_adjacency()`
 - `LayeredSpec`
 - `Skip`
+- `AdjacencySpec`
 - `MaskedLinear`
 - `SkipAdd`
 - `align_inputs()`
 - `map_node_attributions()`
 
 Skip-edge fields live on `LayeredSpec.skips`. Inject them with
-`SkipAdd`.
+`SkipAdd`. An `AdjacencySpec` has no layers and no skips: it
+carries one square `mask` over all `nodes`, plus `input_index`
+and `output_index` into that state vector.
 
 See the [**API reference**](docs/api.md) for details, and
 [**Skip edges**](docs/skip-edges.ipynb) for the call order.
@@ -219,9 +229,10 @@ If you are new to the package, start with:
 - [**Installation**](docs/installation.md) for package setup
 - [**Getting started**](docs/getting-started.ipynb) for a full
   end-to-end feedforward example
-- [**Recurrent example**](docs/recurrent-example.ipynb) for user
-  `forward()` with a shared `MaskedLinear` when the graph is
-  cyclic (`parse_layered` still requires a DAG)
+- [**Recurrent example**](docs/recurrent-example.ipynb) for
+  `parse_adjacency()` and a shared `MaskedLinear` over one state
+  vector when the graph has feedback loops (`parse_layered` still
+  requires a DAG)
 - [**Mapping attributions**](docs/map-node-attributions.ipynb) for
   labeling layer tensors with node names
 - [**Skip edges**](docs/skip-edges.ipynb) for `SkipAdd` instead of
