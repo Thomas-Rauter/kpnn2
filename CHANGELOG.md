@@ -32,6 +32,27 @@ This project follows semantic versioning.
   read. The result is always `len(spec.input_nodes)` wide, which
   for an `AdjacencySpec` is narrower than the square mask, so
   scatter it into the state vector with `spec.input_index`.
+- `MaskedLinear` now applies its mask through
+  `torch.nn.utils.parametrize.register_parametrization`, so the
+  effective masked weight is `layer.weight` and the trainable
+  tensor is `layer.parametrizations.weight.original`. The old
+  `raw_weight` parameter is gone. `weight` is the attribute name
+  that optimizer param-group filters, weight-decay rules,
+  adapter libraries, and `state_dict` scripts look for, and
+  nothing could ask this layer for its weight matrix under that
+  name before. Consequences worth knowing:
+  `state_dict` keys are now `parametrizations.weight.original`
+  and `bias`, so 0.1.0-style checkpoints with a `raw_weight` key
+  do not load; `repr` reports `ParametrizedMaskedLinear` while
+  `isinstance(layer, MaskedLinear)` stays `True`; `repr` also
+  gained `nn.Linear`-style `in_features` / `out_features` /
+  `bias`; in-place writes to `layer.weight` are discarded, while
+  assignment (`layer.weight = w`) copies into the trainable
+  tensor; and pickling the module object raises, as for any
+  parametrized module (`copy.deepcopy` and `state_dict` still
+  work). Forward math, the degree-aware initialization, the RNG
+  draw order, mask independence, dtype casts, and
+  `torch.compile(fullgraph=True)` are all unchanged.
 - Connectivity masks are plain `torch.Tensor` again. The
   `FrozenMask` subclass that rejected in-place writes is gone,
   together with the `Kpnn2Error` it raised from

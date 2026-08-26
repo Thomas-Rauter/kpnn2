@@ -299,9 +299,9 @@ def test_skip_add_numerical_pin_relu_then_last_hop_linear():
     spec = parse_layered(_three_hop_edgelist())
     net = _ThreeHopNet(spec)
     with torch.no_grad():
-        net.lin0.raw_weight.fill_(1.0)
-        net.lin1.raw_weight.fill_(1.0)
-        net.lin2.raw_weight.fill_(1.0)
+        net.lin0.parametrizations.weight.original.fill_(1.0)
+        net.lin1.parametrizations.weight.original.fill_(1.0)
+        net.lin2.parametrizations.weight.original.fill_(1.0)
     _pin_skip_weights(
         net.skips,
         [0.3, 0.2, 0.1],

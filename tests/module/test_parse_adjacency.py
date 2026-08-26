@@ -290,7 +290,7 @@ def test_parse_adjacency_mask_drives_a_masked_linear():
 
     n_nodes = len(spec.nodes)
     assert layer.mask.tolist() == spec.mask.tolist()
-    assert layer.raw_weight.shape == (n_nodes, n_nodes)
+    assert layer.weight.shape == (n_nodes, n_nodes)
 
     state = torch.zeros(
         2,

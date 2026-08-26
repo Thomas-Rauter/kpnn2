@@ -75,11 +75,12 @@ def pin_all_weights(
     """
     Set live adjacent weights and skip scalars to ``value``.
 
-    Masked-out ``raw_weight`` entries are set to 0.
+    Masked-out trainable entries are set to 0.
     """
     with torch.no_grad():
         for layer in module.layers:
-            layer.raw_weight.copy_(layer.mask * value)
+            trainable = layer.parametrizations.weight.original
+            trainable.copy_(layer.mask * value)
         for weight in module.skip_weights:
             weight.fill_(value)
 
@@ -91,7 +92,7 @@ def pin_edge(
     value: float,
 ) -> None:
     """
-    Set one adjacent ``raw_weight`` entry or skip scalar.
+    Set one adjacent trainable weight entry or skip scalar.
 
     Raises
     ------
@@ -110,7 +111,8 @@ def pin_edge(
             target_index = targets.index(target)
             if layer.mask[target_index, source_index].item() != 1.0:
                 continue
-            layer.raw_weight[target_index, source_index] = value
+            trainable = layer.parametrizations.weight.original
+            trainable[target_index, source_index] = value
             return
         for skip, weight in zip(
             spec.skips,

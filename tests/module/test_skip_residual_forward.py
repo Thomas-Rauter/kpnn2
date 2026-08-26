@@ -81,8 +81,8 @@ def _pinned_adjacent_net(
         bias=False,
     )
     with torch.no_grad():
-        model.layer0.raw_weight.fill_(1.0)
-        model.layer1.raw_weight.fill_(1.0)
+        model.layer0.parametrizations.weight.original.fill_(1.0)
+        model.layer1.parametrizations.weight.original.fill_(1.0)
         model.w_skip.fill_(w_skip)
     return model
 
@@ -209,8 +209,8 @@ def test_skip_path_changes_output_when_adjacent_weights_are_zero():
         0.3,
     )
     with torch.no_grad():
-        model.layer0.raw_weight.zero_()
-        model.layer1.raw_weight.zero_()
+        model.layer0.parametrizations.weight.original.zero_()
+        model.layer1.parametrizations.weight.original.zero_()
     skip = spec.skips[0]
     a_low = torch.zeros(
         1,

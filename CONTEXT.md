@@ -411,9 +411,37 @@ MaskedLinear(mask, bias=True)
 - `mask`: `torch.Tensor`, shape `(out_features, in_features)`.
   Inferred `in_features` / `out_features` from `mask.shape`.
   Do not take separate size arguments.
+- The mask is applied through
+  **`torch.nn.utils.parametrize.register_parametrization`** on
+  the parameter named `weight`. That is the blessed PyTorch
+  mechanism for "the effective weight is a function of a stored
+  parameter". Do not replace it with a hand-rolled second
+  parameter name.
+- `layer.weight` is therefore the **effective masked weight**,
+  recomputed on access. It is not an `nn.Parameter`: in-place
+  writes to it are discarded. Assigning
+  (`layer.weight = w`, under `torch.no_grad()`) copies `w` into
+  the trainable tensor; the mask then hides the entries it
+  zeroes.
+- The trainable tensor is
+  `layer.parametrizations.weight.original`, same shape as
+  `mask`. Masked-out entries may be nonzero there and never
+  reach the output. There is no `raw_weight`.
+- `state_dict` keys are `parametrizations.weight.original` and
+  `bias`. `repr` reports `ParametrizedMaskedLinear` (PyTorch
+  swaps in a subclass to install the `weight` property);
+  `isinstance(layer, MaskedLinear)` stays `True`, and
+  `extra_repr` reports `in_features`, `out_features`, `bias`
+  as `nn.Linear` does. Pickling the module object raises, as
+  for any parametrized module; `copy.deepcopy` and
+  `state_dict` work. Do not call `remove_parametrizations` on
+  `weight`: that drops the mask.
 - Register `mask` as a **non-persistent buffer** (not a
   parameter, not in `state_dict`), `float32`, and a **plain
-  `torch.Tensor`**. LayeredSpec masks stay float32. After
+  `torch.Tensor`**. It lives on the parametrization module, so
+  its `named_buffers` key is `parametrizations.weight.0.mask`,
+  and `layer.mask` is a property onto it that also accepts
+  assignment. LayeredSpec masks stay float32. After
   `Module.half()`, `.to(dtype=torch.bfloat16)`, or `.double()`,
   `layer.mask.dtype` is still `float32`: the stored mask does
   not follow the module floating dtype.
@@ -426,13 +454,12 @@ MaskedLinear(mask, bias=True)
   `MaskedLinear` layers and a `LayeredSpec`) succeeds.
   Parameters on the copy are distinct objects. Copied masks
   stay float32.
-- Trainable `raw_weight`: same shape as `mask`.
 - Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
   parameter.
 - Forward multiplies in the parameter dtype:
-  `effective = raw_weight * mask.to(dtype=raw_weight.dtype,
-  device=raw_weight.device)`, then
-  `Y = F.linear(X, effective, bias)`.
+  `weight = original * mask.to(dtype=original.dtype,
+  device=original.device)`, then
+  `Y = F.linear(X, weight, bias)`.
   Equivalently `Y = X @ (W ⊙ M).T + b` with `M` cast to `W`'s
   dtype/device. This is why `.half()` / bfloat16 / `.double()`
   work like `nn.Linear`. In the common float32 case that `.to`
@@ -440,14 +467,17 @@ MaskedLinear(mask, bias=True)
   for the mask.
 - The forward path holds no tensor subclass, so
   `torch.compile(layer, fullgraph=True)` traces it without a
-  graph break. Keep it that way.
+  graph break, parametrization included. Keep it that way.
 - **Degree-aware init:** for each output row `j`,
   `fan_in = int(mask[j].sum())` (count of 1s in that row).
   Use that `fan_in` for kaiming/uniform scale of that row (and for
   bias, use a documented rule: e.g. bias bound from that row's
   `fan_in`, or from mean fan_in; prefer **per-row fan_in** for
   weights). If `fan_in == 0`, leave that row at 0 and use bias
-  bound 0.
+  bound 0. `reset_parameters` writes into
+  `parametrizations.weight.original`, row by row, in that
+  order: the RNG draw order is load-bearing for the control
+  tests in `tests/controls/`.
 - Do **not** use full `in_features` as `fan_in`.
 - No edge constraints, no `initial_weight`, no softplus.
 - Masked-out weights still exist as parameters but are multiplied
@@ -793,6 +823,14 @@ disagree with CI.
   PyTorch does not write-protect buffers either.
   `tests/module/test_masked_linear.py` keeps a `fullgraph`
   regression test.
+- `MaskedLinear` masks its weight with
+  `torch.nn.utils.parametrize`. The public attribute is
+  `weight` (effective, masked); the trainable tensor is
+  `parametrizations.weight.original`. Do not reintroduce a
+  second name such as `raw_weight`, do not shadow `weight`
+  with a plain property, and do not make `MaskedLinear` a
+  subclass of `nn.Linear` (its `__init__` signature and its
+  own `reset_parameters` would fight ours).
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks.
 - `parse_layered` and `parse_adjacency` must not instantiate
