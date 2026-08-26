@@ -25,7 +25,7 @@ anonymous neurons.
 
 Mechanically, `kpnn2` turns a source/target edgelist into a
 `GraphSpec` (adjacent masks, layer names, skip list) so you write
-ordinary PyTorch with `MaskedLinear`.
+ordinary PyTorch with `MaskedLinear` and `SkipAdd`.
 
 An **edgelist** is a table of directed connections: each row links a
 `source` node to a `target` node. For example:
@@ -58,17 +58,20 @@ of domain networks, for example in biology (more on the
 
 `kpnn2` is a set of primitives, not a graph compiler. There is no
 ready-made model object. It leaves training loops, losses,
-optimizers, activations, heads, and skip residuals to you. That
-keeps the package flexible.
+optimizers, activations, and heads to you. Adjacent hops use
+`MaskedLinear`. Skips use `SkipAdd` (construct once, call after
+every hop, before ReLU or BatchNorm). That keeps the package
+flexible.
 
 ## Core workflow
 
 1. Define a model architecture as an edgelist with named `source`
    and `target` nodes.
 2. Parse it with `parse_edgelist()` to a `GraphSpec`.
-3. Write an `nn.Module` with `MaskedLinear` for adjacent hops.
-   Skip edges stay out of the masks: keep the source activation
-   and add it in `forward()`.
+3. Write an `nn.Module` with `MaskedLinear` for adjacent hops
+   and `SkipAdd` for skip edges. Construct `SkipAdd` once; call
+   it after every hop, before ReLU or BatchNorm. Skip edges stay
+   out of the masks.
 4. Align named input tables with `align_inputs()`.
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
@@ -169,22 +172,23 @@ The documented public names are:
 - `GraphSpec`
 - `Skip`
 - `MaskedLinear`
+- `SkipAdd`
 - `align_inputs()`
 - `map_node_attributions()`
 
-Skip-edge fields live on `GraphSpec.skips`. The package does not
-return a ready-made model.
+Skip-edge fields live on `GraphSpec.skips`. Inject them with
+`SkipAdd`. The package does not return a ready-made model.
 
 See the [**API reference**](docs/api.md) for details, and
-[**Skip edges**](docs/skip-edges.ipynb) for residual wiring.
+[**Skip edges**](docs/skip-edges.ipynb) for the call order.
 
 ## Package philosophy
 
 `kpnn2` is intentionally minimally opinionated.
 
-It owns edgelist parsing, mask tensors, named input alignment, and
-attribution column names. It does not impose broader modeling
-choices such as:
+It owns edgelist parsing, mask tensors, skip indexing, named
+input alignment, and attribution column names. It does not impose
+broader modeling choices such as:
 
 - activation functions
 - output heads
@@ -203,8 +207,9 @@ Those remain part of the normal PyTorch workflow:
 ## Skip edges and cycles
 
 Adjacent hops go through `MaskedLinear`. Skip edges stay out of the
-masks: you keep the source activation and add a residual in
-`forward()`. See [**Skip edges**](docs/skip-edges.ipynb).
+masks. Construct `SkipAdd` once from the `GraphSpec`, then call it
+after every hop, before ReLU or BatchNorm. See
+[**Skip edges**](docs/skip-edges.ipynb).
 
 Cycles are not parsed in v1. A recurrent (fixed-step) update is
 ordinary user `forward()`. See the
@@ -232,8 +237,8 @@ If you are new to the package, start with:
   cyclic graph with a shared masked update
 - [**Mapping attributions**](docs/map-node-attributions.ipynb) for
   labeling layer tensors with node names
-- [**Skip edges**](docs/skip-edges.ipynb) for keeping activations
-  in memory instead of pseudo nodes
+- [**Skip edges**](docs/skip-edges.ipynb) for `SkipAdd` instead of
+  dummy nodes in the masks
 - [**API reference**](docs/api.md) for function- and object-level
   documentation
 
