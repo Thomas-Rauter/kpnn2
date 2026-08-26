@@ -354,7 +354,7 @@ that does not share storage.
 | Field | Type | Meaning |
 |-------|------|---------|
 | `nodes` | `tuple[str, ...]` | Every node name, alphabetical. Row and column order of `mask`, and the unit order of the state vector. |
-| `input_nodes` | `tuple[str, ...]` | In-degree 0 nodes, alphabetical. Column order of an input tensor. |
+| `input_nodes` | `tuple[str, ...]` | In-degree 0 nodes, alphabetical. Column order for `align_inputs`. |
 | `output_nodes` | `tuple[str, ...]` | Out-degree 0 nodes, alphabetical. |
 | `hidden_nodes` | `tuple[str, ...]` | Neither input nor output, alphabetical. |
 | `mask` | `torch.Tensor` | Square connectivity (see below). Singular, not a tuple. |
@@ -377,13 +377,11 @@ here. `SkipAdd` does not accept an `AdjacencySpec`.
 
 ### Two consequences
 
-1. **Input width is not mask width.** An input tensor is
-   `len(spec.input_nodes)` wide, the state vector is `n` wide.
+1. **Input width is not mask width.** `align_inputs` returns
+   `len(spec.input_nodes)` columns, the state vector is `n` wide.
    The inputs are scattered into the state vector via
    `spec.input_index`. In the layered case an aligned tensor
    feeds `masks[0]` directly; here it does not.
-   (`align_inputs` accepts only a `LayeredSpec` today; widening
-   it to `AdjacencySpec` is a separate change.)
 2. **Input rows are structurally zero.** Input nodes have
    in-degree 0, so their rows of `mask` are all zeros and
    `fan_in == 0`. Under the degree-aware init of `MaskedLinear`
@@ -394,7 +392,8 @@ here. `SkipAdd` does not accept an `AdjacencySpec`.
 spec = k2.parse_adjacency(edgelist)
 core = k2.MaskedLinear(spec.mask)     # one square hop
 
-state = torch.zeros(n_samples, len(spec.nodes))
+x = k2.align_inputs(df, spec)         # width len(input_nodes)
+state = torch.zeros(x.shape[0], len(spec.nodes))
 state[:, spec.input_index] = x        # required, see above
 state = torch.relu(core(state))       # one step; loop as needed
 logits = state[:, spec.output_index]
@@ -485,8 +484,26 @@ SkipAdd(spec)
 
 ## `align_inputs(data, spec)`
 
+`spec` is a `LayeredSpec` **or** an `AdjacencySpec`. Only
+`spec.input_nodes` is read, so the DataFrame rules below are
+identical for both. Anything else raises `Kpnn2Error`.
+
 Returns `torch.float32` tensor of shape
 `(n_samples, len(spec.input_nodes))`.
+
+**Width differs by layout.** For a `LayeredSpec` that width is
+`layer_dims[0]`, so the tensor feeds `MaskedLinear(spec.masks[0])`
+directly. For an `AdjacencySpec` it is **not** the mask width:
+`mask` is `(n, n)` over every node, while the aligned tensor is
+only `len(input_nodes)` wide. Scatter it into the `n`-wide state
+vector via `spec.input_index` before calling
+`MaskedLinear(spec.mask)`:
+
+```python
+x = k2.align_inputs(df, spec)
+state = torch.zeros(x.shape[0], len(spec.nodes))
+state[:, spec.input_index] = x
+```
 
 **`pandas.DataFrame`:**
 

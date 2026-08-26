@@ -21,6 +21,11 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `align_inputs()` accepts a `LayeredSpec` or an `AdjacencySpec`.
+  The DataFrame rules are unchanged; only `spec.input_nodes` is
+  read. The result is always `len(spec.input_nodes)` wide, which
+  for an `AdjacencySpec` is narrower than the square mask, so
+  scatter it into the state vector with `spec.input_index`.
 - Internal modules are now private (`_parse.py`, `_spec.py`,
   `_masked_linear.py`, `_skip_add.py`, `_align.py`,
   `_attributions.py`, `_errors.py`). `kpnn2/__init__.py` is the

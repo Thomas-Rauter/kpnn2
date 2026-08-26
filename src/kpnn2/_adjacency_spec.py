@@ -30,7 +30,7 @@ class AdjacencySpec:
         order of ``mask`` and the unit order of the state vector.
     input_nodes : tuple[str, ...]
         In-degree 0 names, alphabetical. This is the column order
-        of an input tensor for this spec.
+        of tensors returned by ``align_inputs``.
     output_nodes : tuple[str, ...]
         Out-degree 0 names, alphabetical.
     hidden_nodes : tuple[str, ...]
@@ -55,11 +55,12 @@ class AdjacencySpec:
     storage. ``MaskedLinear`` clones the mask into a
     non-persistent buffer independent of ``spec.mask``.
 
-    An input tensor is ``len(input_nodes)`` wide, which is not the
-    mask width. Scatter it into the ``n``-wide state vector with
-    ``input_index``. Input rows of ``mask`` are all zeros, so
-    under the degree-aware init of ``MaskedLinear`` they stay
-    zero: writing the inputs in is required, not cosmetic.
+    ``align_inputs`` returns ``len(input_nodes)`` columns, which
+    is not the mask width. Scatter that tensor into the ``n``-wide
+    state vector with ``input_index``. Input rows of ``mask`` are
+    all zeros, so under the degree-aware init of ``MaskedLinear``
+    they stay zero: writing the inputs in is required, not
+    cosmetic.
 
     Examples
     --------

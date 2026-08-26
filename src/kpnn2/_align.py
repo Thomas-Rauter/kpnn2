@@ -1,10 +1,11 @@
 """
-Align named DataFrame columns to ``LayeredSpec.input_nodes``.
+Align named DataFrame columns to ``spec.input_nodes``.
 """
 
 import pandas as pd
 import torch
 
+from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
 from ._spec import LayeredSpec
 
@@ -18,7 +19,7 @@ _TENSOR_NOT_ACCEPTED_MSG = (
 
 def align_inputs(
     data: pd.DataFrame,
-    spec: LayeredSpec,
+    spec: LayeredSpec | AdjacencySpec,
 ) -> torch.Tensor:
     """
     Return a float32 tensor whose columns follow ``spec.input_nodes``.
@@ -40,8 +41,10 @@ def align_inputs(
     ----------
     data : DataFrame
         Feature table with named columns.
-    spec : LayeredSpec
+    spec : LayeredSpec or AdjacencySpec
         Graph structure whose ``input_nodes`` define column order.
+        Both spec types work the same way here; only
+        ``input_nodes`` is read.
 
     Returns
     -------
@@ -52,10 +55,11 @@ def align_inputs(
     Raises
     ------
     Kpnn2Error
-        If ``spec`` is not a ``LayeredSpec``; ``data`` is a tensor;
-        ``data`` is not a DataFrame; required DataFrame columns are
-        missing or duplicated (including after ``str`` conversion;
-        the message names the unique duplicated labels, sorted,
+        If ``spec`` is neither a ``LayeredSpec`` nor an
+        ``AdjacencySpec``; ``data`` is a tensor; ``data`` is not a
+        DataFrame; required DataFrame columns are missing or
+        duplicated (including after ``str`` conversion; the message
+        names the unique duplicated labels, sorted,
         comma-separated); or required columns are non-numeric.
 
     Notes
@@ -67,6 +71,13 @@ def align_inputs(
     ``DataFrame.to_numpy()`` (or any hand-stacked array) into the
     model can silently wire the wrong features if the column order
     differs.
+
+    The returned width is always ``len(spec.input_nodes)``. For a
+    ``LayeredSpec`` that is the width of ``masks[0]``, so the
+    tensor feeds the first hop directly. For an ``AdjacencySpec``
+    it is **not** the mask width: scatter the tensor into the
+    ``len(spec.nodes)``-wide state vector with ``spec.input_index``
+    before calling ``MaskedLinear(spec.mask)``.
 
     Examples
     --------
@@ -98,6 +109,29 @@ def align_inputs(
     >>> x.tolist()
     [[0.5], [1.5]]
 
+    An ``AdjacencySpec`` works the same way, but the result is
+    ``len(input_nodes)`` wide and must be scattered into the state
+    vector before it reaches ``MaskedLinear(spec.mask)``:
+
+    >>> cyclic = pd.DataFrame(
+    ...     {
+    ...         "source": ["x", "a", "b", "a"],
+    ...         "target": ["a", "b", "a", "y"],
+    ...     }
+    ... )
+    >>> state_spec = k2.parse_adjacency(cyclic)
+    >>> inputs = pd.DataFrame({"x": [0.5, 1.5]})
+    >>> x = k2.align_inputs(inputs, state_spec)
+    >>> tuple(x.shape), state_spec.mask.shape
+    ((2, 1), (4, 4))
+    >>> state = torch.zeros(
+    ...     2,
+    ...     len(state_spec.nodes),
+    ... )
+    >>> state[:, state_spec.input_index] = x
+    >>> state.tolist()
+    [[0.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.5, 0.0]]
+
     A tensor is not accepted; pass a DataFrame instead:
 
     >>> t = torch.tensor([[0.5], [1.5]])
@@ -106,8 +140,11 @@ def align_inputs(
     ...
     Kpnn2Error: 'data' is a tensor; a pandas DataFrame is required. ...
     """
-    if not isinstance(spec, LayeredSpec):
-        raise Kpnn2Error("'spec' must be a LayeredSpec.")
+    if not isinstance(
+        spec,
+        (LayeredSpec, AdjacencySpec),
+    ):
+        raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
     if isinstance(data, torch.Tensor):
         raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
     if isinstance(data, pd.DataFrame):
@@ -122,7 +159,7 @@ def align_inputs(
 
 def _align_dataframe(
     data: pd.DataFrame,
-    spec: LayeredSpec,
+    spec: LayeredSpec | AdjacencySpec,
 ) -> torch.Tensor:
     """
     Reorder numeric DataFrame columns to ``spec.input_nodes``.
