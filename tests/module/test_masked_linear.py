@@ -7,7 +7,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn.utils import parametrize
+from torch.nn.utils import parametrize, prune
 
 from kpnn2 import Kpnn2Error, MaskedLinear, parse_layered
 
@@ -19,6 +19,14 @@ def _original(layer):
     Spelled out in full in the parametrization tests below.
     """
     return layer.parametrizations.weight.original
+
+
+class _TimesOne(nn.Module):
+    def forward(
+        self,
+        weight,
+    ):
+        return weight * 1.0
 
 
 def test_masked_linear_output_shape():
@@ -953,6 +961,109 @@ def test_masked_linear_optimizer_step_keeps_blocked_edges_dead():
             2,
         ),
     )
+
+
+def test_masked_linear_prune_refuses_parametrized_weight():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+    )
+    linear = nn.Linear(
+        2,
+        2,
+        bias=False,
+    )
+    parametrize.register_parametrization(
+        linear,
+        "weight",
+        _TimesOne(),
+    )
+    with pytest.raises(TypeError):
+        prune.l1_unstructured(
+            layer,
+            name="weight",
+            amount=1,
+        )
+    with pytest.raises(TypeError):
+        prune.l1_unstructured(
+            linear,
+            name="weight",
+            amount=1,
+        )
+
+
+def test_masked_linear_prune_on_original_composes_with_mask():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+    )
+    with torch.no_grad():
+        _original(layer).copy_(
+            torch.tensor(
+                [
+                    [0.1, 10.0],
+                    [10.0, 0.2],
+                ],
+                dtype=torch.float32,
+            )
+        )
+    holder = layer.parametrizations.weight
+    prune.l1_unstructured(
+        holder,
+        name="original",
+        amount=1,
+    )
+    torch.testing.assert_close(
+        layer.weight,
+        holder.original_orig * holder.original_mask * layer.mask,
+    )
+    torch.testing.assert_close(
+        layer.weight,
+        torch.tensor(
+            [
+                [0.0, 0.0],
+                [0.0, 0.2],
+            ],
+            dtype=torch.float32,
+        ),
+    )
+
+
+def test_masked_linear_substring_weight_filter_includes_original():
+    net = nn.Sequential(
+        MaskedLinear(
+            _diag_mask(),
+            bias=False,
+        ),
+        nn.Linear(
+            2,
+            1,
+            bias=False,
+        ),
+    )
+    selected = [name for name, _ in net.named_parameters() if "weight" in name]
+    assert selected == [
+        "0.parametrizations.weight.original",
+        "1.weight",
+    ]
+
+
+def test_masked_linear_suffix_weight_filter_misses_original():
+    net = nn.Sequential(
+        MaskedLinear(
+            _diag_mask(),
+            bias=False,
+        ),
+        nn.Linear(
+            2,
+            1,
+            bias=False,
+        ),
+    )
+    selected = [
+        name for name, _ in net.named_parameters() if name.endswith(".weight")
+    ]
+    assert selected == ["1.weight"]
 
 
 def test_masked_linear_stays_an_instance_of_its_own_class():
