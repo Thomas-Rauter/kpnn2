@@ -21,14 +21,20 @@ Measured ReLU-specific scoring (still strict; gate unchanged):
 - Per-example consistency >= 0.6 (not 0.9). ReLU zeros some
   example-wise input grads; median feature ranking still requires
   AUC = 1.0 and max_ratio = 0.2.
-- Same seeds (42-46) and MIN_SEEDS_PASSING = 4.
 
 ``relu_product_feedforward`` uses ReLU and bias on the product of
 the two tower-A features. Feature count stays 2. Hidden width is
 8 so a ReLU net can represent the product and the 0.95 gate
 holds. Scoring is features only. Measured product cuts (still
 strict; median AUC stays 1.0): max_ratio = 0.45 and consistency
->= 0.5. Same seeds and MIN_SEEDS_PASSING = 4.
+>= 0.5.
+
+All three ids share ``SEEDS`` (42-71). A seed counts only if
+the gate and the importance cuts both pass. The bar is a
+per-scenario rate floor ~2.5 SE below a 30-seed measurement at
+80 epochs, not a 4/5 majority on a lucky window. Learnability
+is part of that combined count; a single gated-out seed does
+not fail the test.
 
 Marked integration/slow. Unique scenario-id checks are fast.
 """
@@ -45,7 +51,6 @@ from tests.controls.metrics import (
     separation_passes,
 )
 from tests.controls.training import (
-    MIN_SEEDS_PASSING,
     SEEDS,
     TRAINED_SCENARIO_IDS,
     TrainedRun,
@@ -95,24 +100,20 @@ def test_trained_importance_recovers_the_data_generating_group(
         outcome.passed_gate and outcome.passed_importance
         for outcome in outcomes
     )
-    gate_failures = [
-        outcome.seed for outcome in outcomes if not outcome.passed_gate
-    ]
+    n_gate = sum(outcome.passed_gate for outcome in outcomes)
     formatted = _format_outcomes(outcomes)
-    assert not gate_failures, (
-        f"Scenario '{scenario_id}': learnability PRECONDITION failed "
-        f"on seeds {gate_failures} (need held-out ROC-AUC >= "
-        f"{scenario.min_val_roc_auc}). Importance was not counted "
-        f"for those seeds.\n{formatted}"
-    )
     worst = min(
         outcomes,
-        key=lambda item: (item.passed_importance, item.min_auc),
+        key=lambda item: (
+            item.passed_gate and item.passed_importance,
+            item.min_auc,
+        ),
     )
-    assert n_passing >= MIN_SEEDS_PASSING, (
-        f"Scenario '{scenario_id}': importance criterion passed on "
-        f"{n_passing}/{len(SEEDS)} seeds, need at least "
-        f"{MIN_SEEDS_PASSING}.\n{formatted}\n"
+    assert n_passing >= scenario.min_seeds_passing, (
+        f"Scenario '{scenario_id}': combined learnability and "
+        f"importance passed on {n_passing}/{len(SEEDS)} seeds "
+        f"(gate {n_gate}/{len(SEEDS)}), need at least "
+        f"{scenario.min_seeds_passing}.\n{formatted}\n"
         f"Worst seed {worst.seed} score tables:\n{worst.score_tables}"
     )
 

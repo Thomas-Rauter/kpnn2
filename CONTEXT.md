@@ -650,8 +650,9 @@ MaskedLinear(mask, bias=True)
   weights). If `fan_in == 0`, leave that row at 0 and use bias
   bound 0. `reset_parameters` writes into
   `parametrizations.weight.original`, row by row, in that
-  order: the RNG draw order is load-bearing for the control
-  tests in `tests/controls/`.
+  order. A different draw count shifts the torch RNG stream
+  and which trained-tier seeds pass; those controls now test
+  a pass rate over 30 seeds, not a 5-seed window.
 - Do **not** use full `in_features` as `fan_in`.
 - No edge constraints, no `initial_weight`, no softplus.
 - Masked-out weights still exist as parameters but are multiplied

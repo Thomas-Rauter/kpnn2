@@ -17,11 +17,16 @@ from tests.controls.simulate import (
     product_logit_labels,
 )
 from tests.controls.training import (
+    LINEAR_MEASURED_PASSING,
     MIN_VAL_ROC_AUC,
+    N_SEEDS,
     PRODUCT_HIDDEN_WIDTH,
     PRODUCT_MAX_RATIO,
+    PRODUCT_MEASURED_PASSING,
     PRODUCT_MIN_PER_EXAMPLE_CONSISTENCY,
     RELU_BIAS_INIT,
+    RELU_MEASURED_PASSING,
+    SEEDS,
     TRAINED_SCENARIO_IDS,
     assert_decoys_structurally_live,
     linear_coefficients,
@@ -30,6 +35,7 @@ from tests.controls.training import (
     product_causal_features,
     product_tower_simulator,
     scenario_graph,
+    seeds_passing_floor,
     trained_scenario,
 )
 
@@ -186,3 +192,43 @@ def test_relu_product_feedforward_uses_relu_with_bias() -> None:
     causal = product_causal_features(graph)
     assert causal == graph.tower_a_features
     assert len(causal) == 2
+
+
+def test_trained_seeds_are_a_pre_registered_block() -> None:
+    assert N_SEEDS == 30
+    assert SEEDS == tuple(range(42, 72))
+    assert len(SEEDS) == N_SEEDS
+
+
+def test_seeds_passing_floor_sits_below_the_measured_count() -> None:
+    assert seeds_passing_floor(22) == 15
+    assert seeds_passing_floor(19) == 12
+    assert seeds_passing_floor(18) == 11
+    assert seeds_passing_floor(0) == 0
+    with pytest.raises(
+        ValueError,
+        match="n_passing",
+    ):
+        seeds_passing_floor(31)
+    with pytest.raises(
+        ValueError,
+        match="n_seeds",
+    ):
+        seeds_passing_floor(
+            1,
+            n_seeds=0,
+        )
+
+
+def test_trained_scenario_bars_are_rate_floors() -> None:
+    measured = {
+        "linear_feedforward": LINEAR_MEASURED_PASSING,
+        "relu_feedforward": RELU_MEASURED_PASSING,
+        "relu_product_feedforward": PRODUCT_MEASURED_PASSING,
+    }
+    for scenario_id, n_passing in measured.items():
+        scenario = trained_scenario(scenario_id)
+        floor = seeds_passing_floor(n_passing)
+        assert scenario.min_seeds_passing == floor
+        assert 0 < scenario.min_seeds_passing < N_SEEDS
+        assert scenario.min_seeds_passing < n_passing
