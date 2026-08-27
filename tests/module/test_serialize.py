@@ -1,3 +1,4 @@
+import ast
 import inspect
 
 import pandas as pd
@@ -45,6 +46,17 @@ def _n_ones_layered(spec):
     for hop in spec.hops:
         total += int((hop.mask == 1.0).sum().item())
     return total
+
+
+def _top_level_imported_modules(module):
+    tree = ast.parse(inspect.getsource(module))
+    imported = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            imported.append(node.module)
+        elif isinstance(node, ast.Import):
+            imported.extend(alias.name for alias in node.names)
+    return imported
 
 
 def test_canonical_edges_is_not_a_public_name():
@@ -162,7 +174,11 @@ def test_only_ones_count_as_edges():
     assert _n_ones_layered(spec) == 0
 
 
-def test_serialize_module_does_not_import_parsers():
-    source = inspect.getsource(serialize_mod)
-    assert "parse_layered" not in source
-    assert "parse_adjacency" not in source
+def test_serialize_module_does_not_import_parsers_at_top_level():
+    imported = _top_level_imported_modules(serialize_mod)
+    assert "_parse" not in imported
+    assert "_parse_adjacency" not in imported
+    layered_src = inspect.getsource(serialize_mod.layered_spec_from_dict)
+    adjacency_src = inspect.getsource(serialize_mod.adjacency_spec_from_dict)
+    assert "from ._parse import parse_layered" in layered_src
+    assert "from ._parse_adjacency import parse_adjacency" in adjacency_src

@@ -57,6 +57,9 @@ read-only.
       show_root_toc_entry: true
       members:
         - to_edgelist
+        - to_dict
+        - from_dict
+        - fingerprint
 
 ::: kpnn2.Hop
     options:
@@ -77,6 +80,9 @@ read-only.
       show_root_toc_entry: true
       members:
         - to_edgelist
+        - to_dict
+        - from_dict
+        - fingerprint
 
 ## Errors and version {: .api-group }
 

@@ -71,6 +71,13 @@ class AdjacencySpec:
     ``parse_adjacency`` on that table reconstructs this spec's
     node lists, mask, and input/output indices.
 
+    ``to_dict()`` returns a JSON-safe tagged dict
+    (``kpnn2_spec``, ``layout``, ``edges``). ``from_dict``
+    rebuilds this spec by calling ``parse_adjacency``.
+    ``fingerprint`` is the SHA-256 of that canonical JSON.
+    Pickle / ``torch.save`` of the dataclass is not the
+    supported interchange.
+
     Examples
     --------
     An input feeding a two-node feedback core plus one output:
@@ -186,3 +193,127 @@ class AdjacencySpec:
         from ._serialize import spec_to_edgelist
 
         return spec_to_edgelist(self)
+
+    def to_dict(self) -> dict:
+        """
+        Return this spec as a JSON-safe tagged dict.
+
+        Keys are ``kpnn2_spec`` (integer ``1``), ``layout``
+        (``"adjacency"``), and ``edges`` (list of
+        ``[source, target]`` lists in the same order as
+        ``to_edgelist()`` rows, including cycle edges and
+        self-loops). The returned dict is new on every call.
+
+        Returns
+        -------
+        dict
+            Tagged edge list plus layout.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_adjacency(edgelist)
+        >>> payload = spec.to_dict()
+        >>> payload["kpnn2_spec"]
+        1
+        >>> payload["layout"]
+        'adjacency'
+        >>> payload["edges"]
+        [['a', 'b'], ['a', 'y'], ['b', 'a'], ['x', 'a']]
+        """
+        from ._serialize import spec_to_dict
+
+        return spec_to_dict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "AdjacencySpec":
+        """
+        Rebuild an ``AdjacencySpec`` from ``to_dict()`` output.
+
+        Calls ``parse_adjacency`` on a DataFrame built from
+        ``payload["edges"]``. The square mask is not assembled
+        by hand. Extra unknown keys are ignored.
+
+        Parameters
+        ----------
+        payload : dict
+            A dict with ``kpnn2_spec``, ``layout``, and
+            ``edges``. ``layout`` must be ``"adjacency"``.
+
+        Returns
+        -------
+        AdjacencySpec
+            The parsed spec.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``payload`` is not a dict; ``kpnn2_spec`` is
+            missing or not ``1``; ``layout`` is missing, not a
+            known layout, or is ``"layered"``; or ``edges`` is
+            missing or not a sequence of two nonempty names.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_adjacency(edgelist)
+        >>> roundtrip = k2.AdjacencySpec.from_dict(spec.to_dict())
+        >>> roundtrip.nodes == spec.nodes
+        True
+        """
+        from ._serialize import adjacency_spec_from_dict
+
+        return adjacency_spec_from_dict(payload)
+
+    @property
+    def fingerprint(self) -> str:
+        """
+        SHA-256 hex digest of the canonical ``to_dict()`` JSON.
+
+        The payload is ``json.dumps(self.to_dict(),
+        sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False)`` encoded as UTF-8. The result is
+        64 lowercase hex characters. It is not Python
+        ``hash()``.
+
+        Returns
+        -------
+        str
+            Hex digest of the tagged spec dict.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_adjacency(edgelist)
+        >>> len(spec.fingerprint)
+        64
+        >>> (
+        ...     spec.fingerprint
+        ...     == k2.parse_adjacency(spec.to_edgelist()).fingerprint
+        ... )
+        True
+        """
+        from ._serialize import spec_fingerprint
+
+        return spec_fingerprint(self)

@@ -19,7 +19,8 @@ PyTorch.
 
 A sparsely connected NN with skip edges is not. Only some pairs of
 nodes are linked, and some edges skip layers. That is the gap
-`kpnn2` fills: the same PyTorch workflow, with that connectivity.
+`kpnn2` (**K**nowledge **P**rimed **N**eural **N**etworks) fills: the same
+PyTorch workflow, with that connectivity.
 Figure 1 shows a dense NN next to a sparse NN with skip edges.
 
 ![Fully connected versus sparse](docs/figures/dense_vs_sparse.svg)

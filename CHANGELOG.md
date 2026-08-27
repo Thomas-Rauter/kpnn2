@@ -9,6 +9,12 @@ This project follows semantic versioning.
 
 ### Added
 
+- `LayeredSpec.to_dict()`, `LayeredSpec.from_dict()`, and
+  `LayeredSpec.fingerprint`, and the same three on
+  `AdjacencySpec`. The dict is JSON-safe with `kpnn2_spec`,
+  `layout`, and `edges`. `fingerprint` is the SHA-256 of that
+  canonical JSON. Pickle / `torch.save` of the dataclass is
+  not the supported interchange.
 - `LayeredSpec.to_edgelist()` and `AdjacencySpec.to_edgelist()`
   return the original edges as a two-column `source` /
   `target` DataFrame, rows sorted lexicographically by

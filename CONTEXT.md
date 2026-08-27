@@ -75,6 +75,11 @@ edgelist, using native nn.Module layers.
 - **Not pseudo-node expansion.** A skip edge is a column of its
   target's hop mask, never a dummy neuron and never an extra
   channel inserted into an intermediate layer.
+- **Not sparse-tensor accelerated.** Connectivity is sparse in
+  the graph (many mask zeros). Storage and compute stay dense.
+  Sparse tensor formats (`torch.sparse`, COO/CSR) and sparse
+  matmul are **not planned**. Correctness, ease of maintenance,
+  and explainability of the code outrank memory and speed.
 
 ---
 
@@ -84,6 +89,12 @@ edgelist, using native nn.Module layers.
 parsing, mask tensors, hop input assembly, named I/O alignment,
 and attribution column names. The user owns `nn.Module.forward()`,
 call order, nonlinearities, and training.
+
+**Correctness over speed.** Masks are dense float32 tensors,
+not `torch.sparse` layouts. Sparse-tensor acceleration is **not
+planned**, now or later. This package values correctness, ease
+of maintenance, and explainability of the code more than memory
+and speed performance.
 
 Division of labor:
 
@@ -489,6 +500,68 @@ logits = state[:, spec.output_index]
 
 ---
 
+## Spec interchange (`to_dict`, `from_dict`, `fingerprint`)
+
+A DataFrame of edges does not record which parser produced the
+spec: a DAG is valid for both layouts. Checkpoints use a
+JSON-safe tagged dict, not pickle or `torch.save` of the
+dataclass.
+
+```python
+payload = spec.to_dict()
+spec = LayeredSpec.from_dict(payload)  # or AdjacencySpec
+digest = spec.fingerprint
+```
+
+`to_dict()` returns a **new** dict with these keys:
+
+```python
+{
+    "kpnn2_spec": 1,
+    "layout": "layered",
+    "edges": [["A", "H"], ["H", "C"]],
+}
+```
+
+| Key | Value |
+|-----|--------|
+| `kpnn2_spec` | Integer `1` (schema version). |
+| `layout` | `"layered"` for `LayeredSpec`, `"adjacency"` for `AdjacencySpec`. Must not be omitted. |
+| `edges` | List of `[source, target]` lists (JSON-safe, not tuples), same order as `to_edgelist()` rows / `canonical_edges`. |
+
+Unknown extra keys on an otherwise valid payload are ignored
+(forward compatible). `to_dict()` does not emit extra keys.
+
+`LayeredSpec.from_dict(payload)` calls `parse_layered` on a
+DataFrame built from `payload["edges"]`.
+`AdjacencySpec.from_dict` calls `parse_adjacency`. Hops and
+masks are not hand-rebuilt. A layout mismatch (an adjacency
+dict into `LayeredSpec.from_dict`, or the reverse) raises
+`Kpnn2Error` naming the mismatch.
+
+`from_dict` also raises `Kpnn2Error` when: `payload` is not a
+dict; `kpnn2_spec` is missing or not `1`; `layout` is missing
+or not `"layered"` / `"adjacency"`; `edges` is missing, is not
+a sequence of pairs, or a pair is not two nonempty
+string-convertible names.
+
+`fingerprint` is a property: the SHA-256 hex digest (64
+lowercase hex characters) of
+`json.dumps(spec.to_dict(), sort_keys=True, separators=(",", ":"),
+ensure_ascii=False).encode("utf-8")`. Do not use Python
+`hash()`. `parse_layered(edgelist).fingerprint` equals
+`parse_layered(spec.to_edgelist()).fingerprint`. The same DAG
+parsed layered vs adjacency yields different fingerprints
+because `layout` differs. Adding, removing, or renaming a
+node, or changing an edge, changes the fingerprint.
+
+These three names are methods / a property on the spec
+classes. They are not package-level exports. There is no
+module-level `spec_from_dict`. Pickle and `torch.save` of the
+dataclass are **not** the supported interchange.
+
+---
+
 ## `MaskedLinear`
 
 Drop-in sparse linear layer. Same job as `torch.nn.Linear`
@@ -554,7 +627,9 @@ MaskedLinear(mask, bias=True)
   dtype/device. This is why `.half()` / bfloat16 / `.double()`
   work like `nn.Linear`. In the common float32 case that `.to`
   returns the buffer itself, so forward allocates nothing extra
-  for the mask.
+  for the mask. The multiply is **dense** on purpose.
+  Sparse-tensor acceleration is not planned; see Package
+  philosophy.
 - The forward path holds no tensor subclass, so
   `torch.compile(layer, fullgraph=True)` traces it without a
   graph break, parametrization included. Keep it that way.
@@ -856,7 +931,7 @@ src/kpnn2/
   _errors.py                  # Kpnn2Error
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis
-  _serialize.py               # private spec edge reconstruction
+  _serialize.py               # private spec edges, dicts, fingerprints
 
 tests/
   api/                        # public import surface
@@ -913,6 +988,11 @@ disagree with CI.
 - Do not rename the package, import, or `src/kpnn2/` directory.
 - Do not reintroduce compilers, backends, pseudo nodes, Captum
   adapters, edge constraints, or AnnData in v1.
+- Do **not** add sparse-tensor acceleration (`torch.sparse`,
+  COO/CSR storage, sparse mm). Masks stay dense float32 tensors
+  times `F.linear`. This is not a v1 deferral: it is not
+  planned. Correctness, ease of maintenance, and explainability
+  of the code outrank memory and speed.
 - Masks are plain `torch.Tensor`. Do not add a tensor subclass,
   a `__torch_function__` override, or any other write guard.
   A previous `FrozenMask` subclass broke

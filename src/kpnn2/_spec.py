@@ -220,6 +220,13 @@ class LayeredSpec:
     lexicographically. ``parse_layered`` on that table
     reconstructs the same node lists, hops, and hop masks.
 
+    ``to_dict()`` returns a JSON-safe tagged dict
+    (``kpnn2_spec``, ``layout``, ``edges``). ``from_dict``
+    rebuilds this spec by calling ``parse_layered``.
+    ``fingerprint`` is the SHA-256 of that canonical JSON.
+    Pickle / ``torch.save`` of the dataclass is not the
+    supported interchange.
+
     Because a hop mask carries every parent of its target, the
     per-row degree ``MaskedLinear`` initializes from is the real
     fan-in of that unit, skips included.
@@ -340,3 +347,127 @@ class LayeredSpec:
         from ._serialize import spec_to_edgelist
 
         return spec_to_edgelist(self)
+
+    def to_dict(self) -> dict:
+        """
+        Return this spec as a JSON-safe tagged dict.
+
+        Keys are ``kpnn2_spec`` (integer ``1``), ``layout``
+        (``"layered"``), and ``edges`` (list of
+        ``[source, target]`` lists in the same order as
+        ``to_edgelist()`` rows). The returned dict is new on
+        every call.
+
+        Returns
+        -------
+        dict
+            Tagged edge list plus layout.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H"],
+        ...         "target": ["H", "C"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_layered(edgelist)
+        >>> payload = spec.to_dict()
+        >>> payload["kpnn2_spec"]
+        1
+        >>> payload["layout"]
+        'layered'
+        >>> payload["edges"]
+        [['A', 'H'], ['H', 'C']]
+        """
+        from ._serialize import spec_to_dict
+
+        return spec_to_dict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "LayeredSpec":
+        """
+        Rebuild a ``LayeredSpec`` from ``to_dict()`` output.
+
+        Calls ``parse_layered`` on a DataFrame built from
+        ``payload["edges"]``. Hops and masks are not assembled
+        by hand. Extra unknown keys are ignored.
+
+        Parameters
+        ----------
+        payload : dict
+            A dict with ``kpnn2_spec``, ``layout``, and
+            ``edges``. ``layout`` must be ``"layered"``.
+
+        Returns
+        -------
+        LayeredSpec
+            The parsed spec.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``payload`` is not a dict; ``kpnn2_spec`` is
+            missing or not ``1``; ``layout`` is missing, not a
+            known layout, or is ``"adjacency"``; or ``edges``
+            is missing or not a sequence of two nonempty names.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H"],
+        ...         "target": ["H", "C"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_layered(edgelist)
+        >>> roundtrip = k2.LayeredSpec.from_dict(spec.to_dict())
+        >>> roundtrip.layer_nodes == spec.layer_nodes
+        True
+        """
+        from ._serialize import layered_spec_from_dict
+
+        return layered_spec_from_dict(payload)
+
+    @property
+    def fingerprint(self) -> str:
+        """
+        SHA-256 hex digest of the canonical ``to_dict()`` JSON.
+
+        The payload is ``json.dumps(self.to_dict(),
+        sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False)`` encoded as UTF-8. The result is
+        64 lowercase hex characters. It is not Python
+        ``hash()``.
+
+        Returns
+        -------
+        str
+            Hex digest of the tagged spec dict.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H"],
+        ...         "target": ["H", "C"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_layered(edgelist)
+        >>> len(spec.fingerprint)
+        64
+        >>> (
+        ...     spec.fingerprint
+        ...     == k2.parse_layered(spec.to_edgelist()).fingerprint
+        ... )
+        True
+        """
+        from ._serialize import spec_fingerprint
+
+        return spec_fingerprint(self)
