@@ -4,6 +4,7 @@ Structural blueprint for an edgelist-defined node network.
 
 from dataclasses import dataclass
 
+import pandas as pd
 from torch import Tensor
 
 from ._mask_tensor import as_mask_tensor
@@ -63,6 +64,12 @@ class AdjacencySpec:
     all zeros, so under the degree-aware init of ``MaskedLinear``
     they stay zero: writing the inputs in is required, not
     cosmetic.
+
+    ``to_edgelist()`` returns the original edges as a
+    two-column ``source`` / ``target`` DataFrame, rows sorted
+    lexicographically, including cycle edges and self-loops.
+    ``parse_adjacency`` on that table reconstructs this spec's
+    node lists, mask, and input/output indices.
 
     Examples
     --------
@@ -135,3 +142,47 @@ class AdjacencySpec:
             "output_index",
             tuple(self.output_index),
         )
+
+    def to_edgelist(self) -> pd.DataFrame:
+        """
+        Return this spec's edges as a two-column table.
+
+        Columns are exactly ``source`` then ``target``. Rows
+        follow the square mask in canonical order: sorted
+        lexicographically by ``(source, target)``, one row per
+        original edge, names as strings, including cycle edges
+        and self-loops. Extra columns from the DataFrame that
+        was parsed are not reproduced.
+
+        ``parse_adjacency`` on this table reconstructs the same
+        node lists, mask, and input/output indices.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per original edge.
+
+        Examples
+        --------
+        A cycle comes back as sorted pairs:
+
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_adjacency(edgelist)
+        >>> table = spec.to_edgelist()
+        >>> list(table.columns)
+        ['source', 'target']
+        >>> table["source"].tolist()
+        ['a', 'a', 'b', 'x']
+        >>> table["target"].tolist()
+        ['b', 'y', 'a', 'a']
+        """
+        from ._serialize import spec_to_edgelist
+
+        return spec_to_edgelist(self)

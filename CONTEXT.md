@@ -154,6 +154,11 @@ edge in the direction of computation (source feeds target).
 and must not change parsing. There is no `initial_weight` or
 `constraint` support.
 
+A spec returns this two-column form from `to_edgelist()`. Rows
+are sorted lexicographically by `(source, target)`, not the
+original parse input order. Extra columns from the DataFrame
+that was parsed are not reproduced.
+
 Node names are stored as strings. Non-string values in `source` /
 `target` are converted with `str(...)`.
 
@@ -325,6 +330,29 @@ Every original edgelist edge with depth gap `> 1` appears once in
 Membership in `skips` changes nothing about how the edge is
 computed.
 
+### `LayeredSpec.to_edgelist()`
+
+```python
+layered_spec.to_edgelist() -> pandas.DataFrame
+```
+
+Returns the original edges as a two-column table. Columns are
+exactly `source` then `target`; no other columns are present.
+Rows are the canonical sorted pairs: lexicographic order by
+`(source, target)`, one row per original edge, names as
+strings. This is **not** the original parse input order, and
+extra columns from the pre-parse DataFrame are not
+reproduced.
+
+`parse_layered(spec.to_edgelist())` reconstructs the same
+`input_nodes`, `output_nodes`, `hidden_nodes`, `layer_nodes`,
+`layer_dims`, hop `source_layers` / `source_dims` /
+`source_nodes`, and hop masks (`torch.equal` on each
+`hop.mask`). Skip *tuple* order may follow the sorted
+edgelist rather than the original parse input; the skip
+*set* of `(source, target, source_layer, target_layer,
+source_index, target_index)` matches.
+
 ---
 
 ## Skip connections (no pseudo nodes, no second mechanism)
@@ -408,6 +436,22 @@ no `skips`. Skips are a depth concept and depth does not exist
 here: in this layout every edge, however far it would span, is
 already an entry of the one square mask. `gather_hop_inputs`
 does not accept an `AdjacencySpec`.
+
+### `AdjacencySpec.to_edgelist()`
+
+```python
+adjacency_spec.to_edgelist() -> pandas.DataFrame
+```
+
+Same two-column canonical table as
+`LayeredSpec.to_edgelist()`: columns exactly `source` then
+`target`, rows sorted lexicographically by `(source,
+target)`, including cycle edges and self-loops. Extra
+columns from the pre-parse DataFrame are not reproduced.
+
+`parse_adjacency(spec.to_edgelist())` reconstructs the same
+`nodes`, `input_nodes`, `output_nodes`, `hidden_nodes`,
+`mask` (`torch.equal`), `input_index`, and `output_index`.
 
 ### The square mask
 

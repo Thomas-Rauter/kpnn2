@@ -5,6 +5,7 @@ Structural blueprint for an edgelist-defined DAG.
 from dataclasses import dataclass
 from itertools import accumulate
 
+import pandas as pd
 from torch import Tensor
 
 from ._mask_tensor import as_mask_tensor
@@ -214,6 +215,11 @@ class LayeredSpec:
     buffer independent of ``spec.hops[i].mask``, so a layer built
     earlier keeps its own connectivity either way.
 
+    ``to_edgelist()`` returns the original edges as a two-column
+    ``source`` / ``target`` DataFrame, rows sorted
+    lexicographically. ``parse_layered`` on that table
+    reconstructs the same node lists, hops, and hop masks.
+
     Because a hop mask carries every parent of its target, the
     per-row degree ``MaskedLinear`` initializes from is the real
     fan-in of that unit, skips included.
@@ -289,3 +295,48 @@ class LayeredSpec:
             "skips",
             tuple(self.skips),
         )
+
+    def to_edgelist(self) -> pd.DataFrame:
+        """
+        Return this spec's edges as a two-column table.
+
+        Columns are exactly ``source`` then ``target``. Rows
+        follow the hop masks in canonical order: sorted
+        lexicographically by ``(source, target)``, one row per
+        original edge, names as strings. Extra columns from the
+        DataFrame that was parsed are not reproduced.
+
+        ``parse_layered`` on this table reconstructs the same
+        node lists, hops, and hop masks. Skip tuple order
+        follows these sorted rows rather than the original
+        parse input order; the skip *set* matches.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per original edge.
+
+        Examples
+        --------
+        Unsorted input comes back sorted:
+
+        >>> import pandas as pd
+        >>> import kpnn2 as k2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["H", "A", "A"],
+        ...         "target": ["C", "C", "H"],
+        ...     }
+        ... )
+        >>> spec = k2.parse_layered(edgelist)
+        >>> table = spec.to_edgelist()
+        >>> list(table.columns)
+        ['source', 'target']
+        >>> table["source"].tolist()
+        ['A', 'A', 'H']
+        >>> table["target"].tolist()
+        ['C', 'H', 'C']
+        """
+        from ._serialize import spec_to_edgelist
+
+        return spec_to_edgelist(self)

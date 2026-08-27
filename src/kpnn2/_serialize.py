@@ -2,6 +2,7 @@
 Private reconstruction of spec edges as sorted pairs.
 """
 
+import pandas as pd
 import torch
 
 from ._adjacency_spec import AdjacencySpec
@@ -43,6 +44,41 @@ def canonical_edges(
     if isinstance(spec, AdjacencySpec):
         return _adjacency_edges(spec)
     raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
+
+
+def spec_to_edgelist(
+    spec: LayeredSpec | AdjacencySpec,
+) -> pd.DataFrame:
+    """
+    Build a two-column edgelist from a spec's masks.
+
+    Rows follow ``canonical_edges(spec)``: sorted
+    lexicographically by ``(source, target)``, one row per
+    original edge, names as strings. Columns are exactly
+    ``source`` then ``target``. Extra columns from a pre-parse
+    DataFrame are not reproduced.
+
+    Parameters
+    ----------
+    spec : LayeredSpec or AdjacencySpec
+        Spec whose masks store the original edges.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per original edge.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``spec`` is neither a ``LayeredSpec`` nor an
+        ``AdjacencySpec``.
+    """
+    edges = canonical_edges(spec)
+    return pd.DataFrame(
+        edges,
+        columns=["source", "target"],
+    )
 
 
 def _layered_edges(

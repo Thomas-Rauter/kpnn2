@@ -55,7 +55,8 @@ read-only.
     options:
       show_root_heading: true
       show_root_toc_entry: true
-      members: false
+      members:
+        - to_edgelist
 
 ::: kpnn2.Hop
     options:
@@ -74,7 +75,8 @@ read-only.
     options:
       show_root_heading: true
       show_root_toc_entry: true
-      members: false
+      members:
+        - to_edgelist
 
 ## Errors and version {: .api-group }
 

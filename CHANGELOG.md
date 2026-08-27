@@ -9,6 +9,12 @@ This project follows semantic versioning.
 
 ### Added
 
+- `LayeredSpec.to_edgelist()` and `AdjacencySpec.to_edgelist()`
+  return the original edges as a two-column `source` /
+  `target` DataFrame, rows sorted lexicographically by
+  `(source, target)`. Parsing that table with the matching
+  parser round-trips the spec's structure. Extra columns from
+  the pre-parse DataFrame are not reproduced.
 - `parse_adjacency()` and `AdjacencySpec`: a second layout that
   puts every node in one state vector with a single square
   `(n, n)` mask. Cycles and self-loops are allowed, so a
