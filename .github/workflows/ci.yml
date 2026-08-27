@@ -174,33 +174,7 @@ jobs:
 
       - name: Execute docs notebooks
         run: |
-          python -m jupyter nbconvert \
-            --to notebook \
-            --execute \
-            --inplace \
-            --ExecutePreprocessor.kernel_name=python3 \
-            docs/getting-started.ipynb
-
-          python -m jupyter nbconvert \
-            --to notebook \
-            --execute \
-            --inplace \
-            --ExecutePreprocessor.kernel_name=python3 \
-            docs/recurrent-example.ipynb
-
-          python -m jupyter nbconvert \
-            --to notebook \
-            --execute \
-            --inplace \
-            --ExecutePreprocessor.kernel_name=python3 \
-            docs/map-node-attributions.ipynb
-
-          python -m jupyter nbconvert \
-            --to notebook \
-            --execute \
-            --inplace \
-            --ExecutePreprocessor.kernel_name=python3 \
-            docs/skip-edges.ipynb
+          python scripts/docs_notebooks.py
 
       - name: Build documentation
         run: |

@@ -9,6 +9,12 @@ This project follows semantic versioning.
 
 ### Added
 
+- `scripts/docs_notebooks.py` executes the docs notebooks with
+  this interpreter and repairs stream outputs that are missing
+  `name` (required by nbformat; mkdocs-jupyter rejects the
+  notebook without it). `mkdocs serve` / `build` run the same
+  repair on pre-build. CI uses the script in place of four
+  `nbconvert` invocations.
 - Docs record the supported checkpoint: `spec.to_dict()` plus
   the model `state_dict`. Weights alone cannot reconstruct
   names or layout. Pickling a `MaskedLinear` module raises;
@@ -44,6 +50,11 @@ This project follows semantic versioning.
   There is no `layout=` flag and no dispatch on cycles.
 
 ### Changed
+
+- `gather_hop_inputs` docstring now states that it sits between
+  hops, concatenates whole source layers (the mask, not the
+  gather, selects skip nodes), and raises on a missing saved
+  **layer** rather than a missing named node.
 
 - **Skip edges are now ordinary mask entries, and `SkipAdd` is
   gone.** `LayeredSpec.masks` is replaced by `LayeredSpec.hops`,

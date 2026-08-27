@@ -1,16 +1,5 @@
 python -m pip install --upgrade pip
 pip install -e ".[docs]"
-python -m ipykernel install --user --name python3
-
-python -m jupyter nbconvert \
-  --to notebook \
-  --execute \
-  --inplace \
-  --ExecutePreprocessor.kernel_name=python3 \
-  docs/getting-started.ipynb \
-  docs/recurrent-example.ipynb \
-  docs/map-node-attributions.ipynb \
-  docs/skip-edges.ipynb
-
+python scripts/docs_notebooks.py
 mkdocs build --strict
 mkdocs serve

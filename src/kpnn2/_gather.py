@@ -15,21 +15,37 @@ def gather_hop_inputs(
     hop: Hop,
 ) -> torch.Tensor:
     """
-    Concatenate the layer activations one hop reads.
+    Concatenate the layer tensors one hop reads, in mask-column
+    order.
 
-    A hop mask spans every layer that feeds its target, so its
-    input is those layers side by side in ``hop.source_layers``
-    order. This builds that tensor and checks it against
-    ``hop``, which is the step that makes a missing activation
-    an error instead of a quietly dropped edge.
+    Call this in ``forward()`` just before
+    ``MaskedLinear(hop.mask)``. It sits between hops. It does
+    not inject values into the previous layer, does not pick
+    skip nodes by name, and holds no weights.
+
+    A hop mask's columns are **whole** source layers laid side
+    by side (``hop.source_layers``). This function builds that
+    tensor from ``saved``:
+
+    - Adjacent hop (no skips): one source, the layer below.
+      That saved tensor is returned as-is, with no copy.
+    - Hop with skips: the previous layer plus older layers,
+      concatenated on the last axis. The hop mask, not this
+      gather, zeros columns that are not edges. Example: skip
+      ``A → C`` with ``[A, B]`` then ``[H]`` yields
+      ``[A, B, H]``.
+
+    Store every layer you produce in ``saved``. A missing
+    source **layer** (not a missing node) raises
+    ``Kpnn2Error`` instead of silently dropping those edges.
+    Unused keys are ignored; saved tensors are not modified.
 
     Parameters
     ----------
     saved : mapping of int to torch.Tensor
         Layer index to that layer's activation. Width of
         ``saved[i]`` must be ``layer_dims[i]``. Only the layers
-        in ``hop.source_layers`` are read, and they are not
-        modified.
+        in ``hop.source_layers`` are read.
     hop : Hop
         The hop about to be applied, from ``spec.hops``.
 
@@ -37,9 +53,7 @@ def gather_hop_inputs(
     -------
     torch.Tensor
         Shape ``(..., hop.mask.shape[1])``, ready for
-        ``MaskedLinear(hop.mask)``. An adjacent-only hop reads
-        one layer, and then the saved tensor itself is returned
-        without a copy.
+        ``MaskedLinear(hop.mask)``.
 
     Raises
     ------

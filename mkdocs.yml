@@ -40,6 +40,9 @@ nav:
       - Citing: citing.md
       - Feedback: feedback.md
 
+hooks:
+  - scripts/docs_notebooks.py
+
 plugins:
   - search
   - include-markdown

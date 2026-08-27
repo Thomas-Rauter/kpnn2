@@ -1,3 +1,10 @@
+/* Paper SVGs are sized in millimetres; stretch them to the
+   content column when a notebook marks the image. */
+.md-typeset img.figure-full {
+  width: 100%;
+  height: auto;
+}
+
 /* Grouping headers on the API reference page. */
 .md-typeset h2.api-group {
   font-size: 1.85em;

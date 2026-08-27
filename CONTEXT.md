@@ -664,8 +664,13 @@ Typical construction: `MaskedLinear(spec.hops[i].mask)`.
 
 ## `gather_hop_inputs(saved, hop)`
 
-The source axis of one hop. This is the only thing the layered
-layout needs beyond `MaskedLinear`, and it holds no parameters.
+The source axis of one hop. Call it in `forward()` just before
+`MaskedLinear(hop.mask)`; it sits between hops. This is the only
+thing the layered layout needs beyond `MaskedLinear`, and it
+holds no parameters. It does not inject values into the previous
+layer and does not pick skip nodes by name: it concatenates
+**whole** source layers. The hop mask zeros columns that are not
+edges.
 
 ```text
 gather_hop_inputs(saved, hop) -> torch.Tensor
@@ -678,17 +683,20 @@ gather_hop_inputs(saved, hop) -> torch.Tensor
 - Returns the source layers concatenated on the last axis in
   `hop.source_layers` order, shape `(..., hop.mask.shape[1])`,
   ready for `MaskedLinear(hop.mask)`.
-- A hop with one source layer returns that saved tensor itself,
-  without a copy. That is the common adjacent-only case, so a
-  skip-free network pays nothing for the gather.
+- A hop with one source layer (adjacent, no skips) returns that
+  saved tensor itself, without a copy. A hop with skips
+  concatenates the previous layer plus older layers beside it.
+- Store every produced layer in `saved`. A missing source
+  **layer** (not a missing named node) raises `Kpnn2Error`
+  instead of silently dropping those edges. The message names
+  the layer and the hop that wanted it.
 - Differentiable into every source: `torch.cat` passes gradient
   back to each part.
 - All parts must share dtype and device; mismatches raise rather
   than promote silently.
 - Public failures: `Kpnn2Error` (not a mapping, not a `Hop`,
   missing layer, non-tensor entry, wrong unit count, mixed
-  dtype or device). The missing-layer message names the layer
-  and the hop that wanted it.
+  dtype or device).
 
 There is **no** module here on purpose. Anything with parameters
 would reintroduce a second place for edge weights to live.
@@ -979,6 +987,9 @@ tests/
   api/                        # public import surface
   module/                     # unit tests per primitive
 
+scripts/
+  docs_notebooks.py           # execute/repair docs notebooks
+
 CONTEXT.md                    # this file
 README.md
 docs/
@@ -1077,3 +1088,9 @@ disagree with CI.
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the
   `dev` extra. Do not use a global `ruff` on `PATH`.
+- Docs notebooks must be valid nbformat v4. Stream outputs need
+  `name` (`stdout` / `stderr`); editors often drop it and
+  mkdocs-jupyter then fails. Execute with
+  `python scripts/docs_notebooks.py` (venv kernel, not
+  `ipykernel install --user --name python3`). `mkdocs serve`
+  repairs missing stream names on pre-build.
