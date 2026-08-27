@@ -897,6 +897,35 @@ Every edge, including `A → C` when that row is present, is
 already inside a hop mask. The loop applies each hop once, so
 nothing has to be remembered per skip edge.
 
+### Checkpoints
+
+A `MaskedLinear` `state_dict` is not self-describing: it cannot
+reconstruct node names or layout. Pickling a `MaskedLinear`
+module raises, because the mask is a parametrization; save
+`state_dict`, not the module. `torch.save(spec)` pickles the
+dataclass and will break when spec fields move. `to_dict()` is
+the interchange. Alphabetical unit identity is unchanged after
+`from_dict`. The connectivity mask stays out of `state_dict`.
+`mask_digest` only checks that the rebuilt layer's mask matches
+training; it does not restore names. There is no `layout=`
+parser flag: choose `LayeredSpec.from_dict` or
+`AdjacencySpec.from_dict` from `blob["spec"]["layout"]`.
+
+```python
+payload = {
+    "spec": spec.to_dict(),
+    "state_dict": model.state_dict(),
+}
+torch.save(payload, path)
+
+blob = torch.load(path, weights_only=False)
+spec = k2.LayeredSpec.from_dict(blob["spec"])
+# or AdjacencySpec.from_dict when blob["spec"]["layout"]
+# is "adjacency"
+model = Net(spec)
+model.load_state_dict(blob["state_dict"])
+```
+
 ---
 
 ## Typical `nn.Module` shape
@@ -914,6 +943,9 @@ PyTorch:
 5. `x = k2.align_inputs(df, spec)`
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
+7. Save `spec.to_dict()` next to `state_dict`. Rebuild from
+   `from_dict`, then `load_state_dict`. Weights alone cannot
+   reconstruct names or layout.
 
 Do not add a compiled core or mutate connectivity after parse.
 `copy.deepcopy` of this module shape succeeds. Copied masks

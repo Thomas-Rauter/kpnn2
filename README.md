@@ -84,6 +84,8 @@ graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
    layer tensor with `map_node_attributions()` (returns xarray).
+7. A checkpoint is `spec.to_dict()` plus `state_dict`, not
+   weights alone.
 
 The snippet below is a complete toy run of that loop, using the
 edgelist from the table above. Column order in the input table

@@ -9,6 +9,11 @@ This project follows semantic versioning.
 
 ### Added
 
+- Docs record the supported checkpoint: `spec.to_dict()` plus
+  the model `state_dict`. Weights alone cannot reconstruct
+  names or layout. Pickling a `MaskedLinear` module raises;
+  pickle / `torch.save` of the spec dataclass is not the
+  interchange.
 - `MaskedLinear` `state_dict` carries a `mask_digest` (SHA-256
   of the live mask bits) and `load_state_dict` raises
   `Kpnn2Error` when a present digest does not match this
