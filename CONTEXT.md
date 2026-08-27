@@ -812,6 +812,7 @@ src/kpnn2/
   _errors.py                  # Kpnn2Error
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis
+  _serialize.py               # private spec edge reconstruction
 
 tests/
   api/                        # public import surface
