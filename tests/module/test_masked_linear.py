@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import math
 
 import pandas as pd
@@ -309,6 +310,13 @@ def test_masked_linear_mask_is_not_in_state_dict():
     keys = set(layer.state_dict().keys())
     assert not any(key.endswith("mask") for key in keys)
     assert "parametrizations.weight.original" in keys
+    assert "mask_digest" in keys
+    digest = layer.state_dict()["mask_digest"]
+    assert digest.dtype == torch.uint8
+    assert digest.shape == (32,)
+    assert digest.device.type == "cpu"
+    buffers = dict(layer.named_buffers())
+    assert not any("mask_digest" in name for name in buffers)
 
 
 def test_masked_linear_mask_is_a_plain_tensor():
@@ -459,17 +467,123 @@ def test_masked_linear_state_dict_roundtrip_keeps_mask():
     )
     with torch.no_grad():
         _original(src).fill_(0.5)
-    dst.load_state_dict(src.state_dict())
+        _original(dst).fill_(0.25)
+    mask_before = dst.mask.clone()
+    mask_ptr = dst.mask.data_ptr()
+    result = dst.load_state_dict(src.state_dict())
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
     torch.testing.assert_close(
         _original(dst),
         _original(src),
     )
-    assert (
-        dst.mask.tolist()
-        == torch.ones(
+    torch.testing.assert_close(
+        dst.mask,
+        mask_before,
+    )
+    assert dst.mask.data_ptr() == mask_ptr
+    buffers = dict(dst.named_buffers())
+    assert not any("mask_digest" in name for name in buffers)
+
+
+def test_masked_linear_load_rejects_foreign_mask():
+    src = MaskedLinear(
+        torch.tensor(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+            ]
+        ),
+        bias=False,
+    )
+    dst = MaskedLinear(
+        torch.tensor(
+            [
+                [0.0, 1.0],
+                [1.0, 0.0],
+            ]
+        ),
+        bias=False,
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    before = _original(dst).clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint mask does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        _original(dst),
+        before,
+    )
+
+
+def test_masked_linear_load_without_mask_digest():
+    src = MaskedLinear(
+        torch.ones(
             2,
             3,
-        ).tolist()
+        ),
+        bias=False,
+    )
+    dst = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    state = src.state_dict()
+    del state["mask_digest"]
+    result = dst.load_state_dict(
+        state,
+        strict=True,
+    )
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
+    torch.testing.assert_close(
+        _original(dst),
+        _original(src),
+    )
+
+
+def test_masked_linear_mask_digest_uses_live_mask():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+    )
+    payload = layer.mask.detach().cpu().contiguous().numpy().tobytes()
+    expected = torch.tensor(
+        tuple(hashlib.sha256(payload).digest()),
+        dtype=torch.uint8,
+    )
+    assert torch.equal(
+        layer.state_dict()["mask_digest"],
+        expected,
+    )
+    with torch.no_grad():
+        layer.mask.zero_()
+    payload_after = layer.mask.detach().cpu().contiguous().numpy().tobytes()
+    expected_after = torch.tensor(
+        tuple(hashlib.sha256(payload_after).digest()),
+        dtype=torch.uint8,
+    )
+    digest_after = layer.state_dict()["mask_digest"]
+    assert torch.equal(
+        digest_after,
+        expected_after,
+    )
+    assert not torch.equal(
+        digest_after,
+        expected,
     )
 
 

@@ -9,6 +9,13 @@ This project follows semantic versioning.
 
 ### Added
 
+- `MaskedLinear` `state_dict` carries a `mask_digest` (SHA-256
+  of the live mask bits) and `load_state_dict` raises
+  `Kpnn2Error` when a present digest does not match this
+  layer's mask. The connectivity mask itself stays out of the
+  checkpoint. A dict with the digest stripped still loads.
+  This catches same-shape rewiring, not a rename that leaves
+  the 0/1 pattern unchanged (that is `spec.fingerprint`).
 - `LayeredSpec.to_dict()`, `LayeredSpec.from_dict()`, and
   `LayeredSpec.fingerprint`, and the same three on
   `AdjacencySpec`. The dict is JSON-safe with `kpnn2_spec`,

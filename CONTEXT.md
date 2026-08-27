@@ -590,15 +590,24 @@ MaskedLinear(mask, bias=True)
   `layer.parametrizations.weight.original`, same shape as
   `mask`. Masked-out entries may be nonzero there and never
   reach the output. There is no `raw_weight`.
-- `state_dict` keys are `parametrizations.weight.original` and
-  `bias`. `repr` reports `ParametrizedMaskedLinear` (PyTorch
-  swaps in a subclass to install the `weight` property);
-  `isinstance(layer, MaskedLinear)` stays `True`, and
-  `extra_repr` reports `in_features`, `out_features`, `bias`
-  as `nn.Linear` does. Pickling the module object raises, as
-  for any parametrized module; `copy.deepcopy` and
-  `state_dict` work. Do not call `remove_parametrizations` on
-  `weight`: that drops the mask.
+- `state_dict` keys are `parametrizations.weight.original`,
+  optional `bias`, and `mask_digest`. `mask` stays out: it
+  remains a non-persistent float32 buffer. `mask_digest` is a
+  1-D CPU `torch.uint8` tensor of length 32, the SHA-256 of
+  the live mask's float32 C-contiguous bytes at save time, not
+  a registered persistent buffer. `load_state_dict` raises
+  `Kpnn2Error` when a present digest does not match the live
+  mask, and does not load the weights. A missing digest is not
+  an error, even with `strict=True`. This catches same-shape
+  rewiring, not a rename that leaves the 0/1 pattern unchanged
+  (that is `spec.fingerprint`). `repr` reports
+  `ParametrizedMaskedLinear` (PyTorch swaps in a subclass to
+  install the `weight` property); `isinstance(layer,
+  MaskedLinear)` stays `True`, and `extra_repr` reports
+  `in_features`, `out_features`, `bias` as `nn.Linear` does.
+  Pickling the module object raises, as for any parametrized
+  module; `copy.deepcopy` and `state_dict` work. Do not call
+  `remove_parametrizations` on `weight`: that drops the mask.
 - Register `mask` as a **non-persistent buffer** (not a
   parameter, not in `state_dict`), `float32`, and a **plain
   `torch.Tensor`**. It lives on the parametrization module, so

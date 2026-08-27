@@ -2,6 +2,7 @@
 Masked linear layer for edgelist-defined connectivity.
 """
 
+import hashlib
 import math
 from typing import Any, cast
 
@@ -12,6 +13,34 @@ from torch.nn.utils import parametrize
 
 from ._errors import Kpnn2Error
 from ._mask_tensor import as_mask_tensor
+
+_MASK_DIGEST_KEY = "mask_digest"
+
+
+def _mask_digest(mask: torch.Tensor) -> torch.Tensor:
+    payload = mask.detach().cpu().contiguous().numpy().tobytes()
+    digest = hashlib.sha256(payload).digest()
+    return torch.tensor(
+        tuple(digest),
+        dtype=torch.uint8,
+    )
+
+
+def _mask_digest_matches(
+    saved: object,
+    current: torch.Tensor,
+) -> bool:
+    if not isinstance(saved, torch.Tensor):
+        return False
+    saved_flat = saved.detach().cpu().contiguous().reshape(-1)
+    if saved_flat.shape != current.shape or saved_flat.dtype != current.dtype:
+        return False
+    return bool(
+        torch.equal(
+            saved_flat,
+            current,
+        )
+    )
 
 
 class _MaskParametrization(nn.Module):
@@ -159,8 +188,17 @@ class MaskedLinear(nn.Module):
     "the effective weight is a function of a stored parameter",
     and it comes with that machinery's conventions:
 
-    - ``state_dict`` keys are ``parametrizations.weight.original``
-      and ``bias``; ``mask`` stays out of it.
+    - ``state_dict`` keys are ``parametrizations.weight.original``,
+      optional ``bias``, and ``mask_digest``; ``mask`` stays out
+      of it. ``mask_digest`` is a 1-D CPU ``uint8`` tensor of
+      length 32: the SHA-256 of the live mask's float32
+      C-contiguous bytes at save time, not a registered buffer.
+      ``load_state_dict`` raises ``Kpnn2Error`` when a present
+      digest does not match this layer's mask, and does not
+      load the weights. A missing digest is not an error, even
+      with ``strict=True``. The digest catches same-shape
+      rewiring, not a rename that leaves the 0/1 pattern
+      unchanged (that is ``spec.fingerprint``).
     - ``repr`` reports ``ParametrizedMaskedLinear``, because
       PyTorch swaps in a subclass to install the ``weight``
       property. ``isinstance(layer, MaskedLinear)`` is still
@@ -351,6 +389,50 @@ class MaskedLinear(nn.Module):
             f"in_features={self.in_features}, "
             f"out_features={self.out_features}, "
             f"bias={self.bias is not None}"
+        )
+
+    def _save_to_state_dict(
+        self,
+        destination: dict[str, Any],
+        prefix: str,
+        keep_vars: bool,
+    ) -> None:
+        super()._save_to_state_dict(
+            destination,
+            prefix,
+            keep_vars,
+        )
+        destination[prefix + _MASK_DIGEST_KEY] = _mask_digest(self.mask)
+
+    def _load_from_state_dict(
+        self,
+        state_dict: dict[str, Any],
+        prefix: str,
+        local_metadata: Any,
+        strict: bool,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
+    ) -> None:
+        key = prefix + _MASK_DIGEST_KEY
+        saved = state_dict.pop(key, None)
+        if saved is not None:
+            current = _mask_digest(self.mask)
+            if not _mask_digest_matches(
+                saved,
+                current,
+            ):
+                raise Kpnn2Error(
+                    "The checkpoint mask does not match this layer."
+                )
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
