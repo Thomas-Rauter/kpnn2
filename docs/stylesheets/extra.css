@@ -1,0 +1,11 @@
+/* Grouping headers on the API reference page. */
+.md-typeset h2.api-group {
+  font-size: 1.85em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+  padding-bottom: 0.25em;
+  border-bottom: 2px solid
+    var(--md-default-fg-color--lightest);
+}

@@ -16,6 +16,9 @@ theme:
     - search.suggest
     - search.highlight
 
+extra_css:
+  - stylesheets/extra.css
+
 extra:
   version:
     provider: mike
@@ -46,6 +49,7 @@ plugins:
           paths: [src]
           options:
             docstring_style: numpy
+            heading_level: 3
             show_root_heading: false
             show_root_toc_entry: false
             show_root_full_path: false
