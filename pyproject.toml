@@ -101,6 +101,13 @@ follow_imports = "skip"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
+addopts = [
+    "--doctest-modules",
+]
+testpaths = [
+    "tests",
+    "src",
+]
 pythonpath = [
     "src",
     ".",
