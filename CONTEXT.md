@@ -590,6 +590,10 @@ MaskedLinear(mask, bias=True)
   `layer.parametrizations.weight.original`, same shape as
   `mask`. Masked-out entries may be nonzero there and never
   reach the output. There is no `raw_weight`.
+  `model.parameters()` includes that tensor. A param-group
+  filter that uses `"weight" in name` matches it;
+  `name.endswith(".weight")` does not. Do not describe this
+  as "the usual `weight` name."
 - `state_dict` keys are `parametrizations.weight.original`,
   optional `bias`, and `mask_digest`. `mask` stays out: it
   remains a non-persistent float32 buffer. `mask_digest` is a
@@ -1057,11 +1061,14 @@ disagree with CI.
 - `MaskedLinear` masks its weight with
   `torch.nn.utils.parametrize`. The public attribute is
   `weight` (effective, masked); the trainable tensor is
-  `parametrizations.weight.original`. Do not reintroduce a
-  second name such as `raw_weight`, do not shadow `weight`
-  with a plain property, and do not make `MaskedLinear` a
-  subclass of `nn.Linear` (its `__init__` signature and its
-  own `reset_parameters` would fight ours).
+  `parametrizations.weight.original`. `named_parameters` /
+  `state_dict` keys use that path, not `weight`. Do not
+  claim suffix-`.weight` filters or "the usual weight
+  name" see it. Do not reintroduce a second name such as
+  `raw_weight`, do not shadow `weight` with a plain
+  property, and do not make `MaskedLinear` a subclass of
+  `nn.Linear` (its `__init__` signature and its own
+  `reset_parameters` would fight ours).
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks.
 - `parse_layered` and `parse_adjacency` must not instantiate

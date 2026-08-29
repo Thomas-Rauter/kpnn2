@@ -111,11 +111,13 @@ class MaskedLinear(nn.Module):
 
     The mask is applied with
     ``torch.nn.utils.parametrize.register_parametrization``, so
-    ``layer.weight`` is the **effective** masked weight, under
-    the attribute name that optimizer param-group filters,
-    weight-decay rules, adapter libraries, and ``state_dict``
-    scripts look for. The trainable tensor lives at
+    ``layer.weight`` is the **effective** masked weight
+    (recomputed, not an ``nn.Parameter``). The trainable
+    tensor lives at
     ``layer.parametrizations.weight.original``.
+    ``model.parameters()`` includes that tensor. A
+    param-group filter that uses ``"weight" in name``
+    matches it; ``name.endswith(".weight")`` does not.
 
     Parameters
     ----------
@@ -190,7 +192,10 @@ class MaskedLinear(nn.Module):
 
     - ``state_dict`` keys are ``parametrizations.weight.original``,
       optional ``bias``, and ``mask_digest``; ``mask`` stays out
-      of it. ``mask_digest`` is a 1-D CPU ``uint8`` tensor of
+      of it. ``"weight" in name`` matches that parameter key;
+      ``name.endswith(".weight")`` misses it. Default
+      ``Adam(model.parameters())`` needs no filter.
+      ``mask_digest`` is a 1-D CPU ``uint8`` tensor of
       length 32: the SHA-256 of the live mask's float32
       C-contiguous bytes at save time, not a registered buffer.
       ``load_state_dict`` raises ``Kpnn2Error`` when a present

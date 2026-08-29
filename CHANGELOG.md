@@ -51,6 +51,12 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `MaskedLinear` docs no longer claim that optimizers,
+  weight-decay recipes, and `state_dict` see the usual
+  `weight` name. The trainable key is
+  `parametrizations.weight.original`. `"weight" in name`
+  matches it; `name.endswith(".weight")` does not.
+  `model.parameters()` is unchanged.
 - `gather_hop_inputs` docstring now states that it sits between
   hops, concatenates whole source layers (the mask, not the
   gather, selects skip nodes), and raises on a missing saved
@@ -112,11 +118,12 @@ This project follows semantic versioning.
   `torch.nn.utils.parametrize.register_parametrization`, so the
   effective masked weight is `layer.weight` and the trainable
   tensor is `layer.parametrizations.weight.original`. The old
-  `raw_weight` parameter is gone. `weight` is the attribute name
-  that optimizer param-group filters, weight-decay rules,
-  adapter libraries, and `state_dict` scripts look for, and
-  nothing could ask this layer for its weight matrix under that
-  name before. Consequences worth knowing:
+  `raw_weight` parameter is gone. `layer.weight` is the
+  effective product, not a parameter. The trainable
+  `named_parameters` / `state_dict` key is
+  `parametrizations.weight.original`. `"weight" in name`
+  matches that key; `name.endswith(".weight")` does not.
+  Consequences worth knowing:
   `state_dict` keys are now `parametrizations.weight.original`
   and `bias`, so 0.1.0-style checkpoints with a `raw_weight` key
   do not load; `repr` reports `ParametrizedMaskedLinear` while
