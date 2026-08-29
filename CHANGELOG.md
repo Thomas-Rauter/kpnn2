@@ -51,6 +51,23 @@ This project follows semantic versioning.
 
 ### Changed
 
+- Docs, README, and doctests import the package as
+  `import kpnn2` and call `kpnn2.parse_layered(...)` (and
+  the other public names the same way). They no longer use
+  `import kpnn2 as k2`.
+- The home-page core workflow snippet is now parse,
+  `MaskedLinear`, `align_inputs`, and one forward pass. Training
+  and Captum stay out of that first copy-paste; Getting started
+  still covers them.
+- The Recurrent example names `step_1` / `step_2` (and `step_3`
+  in the controls) instead of a `ModuleList` loop, matching the
+  explicit hops in Getting started.
+- Skip edges is now three sections: Algorithm (store, hold,
+  pass), Hop masks (`MaskedLinear` plus `gather_hop_inputs`),
+  and one worked Example.
+- Mapping attributions is now three sections: the naming rule
+  (`layer=` on one graph), tensor layouts (2-D, 1-D, extra
+  axes, `step`, wrong width), and what to map.
 - `MaskedLinear` docs no longer claim that optimizers,
   weight-decay recipes, and `state_dict` see the usual
   `weight` name. The trainable key is

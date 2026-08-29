@@ -70,19 +70,19 @@ def gather_hop_inputs(
 
     >>> import pandas as pd
     >>> import torch
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A", "H", "A"],
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_layered(edgelist)
+    >>> spec = kpnn2.parse_layered(edgelist)
     >>> saved = {
     ...     0: torch.tensor([[2.0]]),
     ...     1: torch.tensor([[5.0]]),
     ... }
-    >>> x = k2.gather_hop_inputs(
+    >>> x = kpnn2.gather_hop_inputs(
     ...     saved,
     ...     spec.hops[1],
     ... )
@@ -92,7 +92,7 @@ def gather_hop_inputs(
     Forgetting to store a layer raises instead of silently
     dropping the edges that read it:
 
-    >>> k2.gather_hop_inputs(
+    >>> kpnn2.gather_hop_inputs(
     ...     {1: torch.tensor([[5.0]])},
     ...     spec.hops[1],
     ... )  # doctest: +IGNORE_EXCEPTION_DETAIL

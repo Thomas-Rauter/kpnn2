@@ -69,14 +69,14 @@ class Hop:
     A chain ``A -> H -> C`` plus the skip ``A -> C``:
 
     >>> import pandas as pd
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A", "H", "A"],
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_layered(edgelist)
+    >>> spec = kpnn2.parse_layered(edgelist)
     >>> hop = spec.hops[1]
     >>> hop.target_layer, hop.source_layers
     (2, (0, 1))
@@ -236,14 +236,14 @@ class LayeredSpec:
     Inspect layers, a hop, and a skip after parsing:
 
     >>> import pandas as pd
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A", "H", "A"],
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_layered(edgelist)
+    >>> spec = kpnn2.parse_layered(edgelist)
     >>> spec.layer_nodes
     (('A',), ('H',), ('C',))
     >>> spec.layer_dims
@@ -328,14 +328,14 @@ class LayeredSpec:
         Unsorted input comes back sorted:
 
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["H", "A", "A"],
         ...         "target": ["C", "C", "H"],
         ...     }
         ... )
-        >>> spec = k2.parse_layered(edgelist)
+        >>> spec = kpnn2.parse_layered(edgelist)
         >>> table = spec.to_edgelist()
         >>> list(table.columns)
         ['source', 'target']
@@ -366,14 +366,14 @@ class LayeredSpec:
         Examples
         --------
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["A", "H"],
         ...         "target": ["H", "C"],
         ...     }
         ... )
-        >>> spec = k2.parse_layered(edgelist)
+        >>> spec = kpnn2.parse_layered(edgelist)
         >>> payload = spec.to_dict()
         >>> payload["kpnn2_spec"]
         1
@@ -417,15 +417,15 @@ class LayeredSpec:
         Examples
         --------
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["A", "H"],
         ...         "target": ["H", "C"],
         ...     }
         ... )
-        >>> spec = k2.parse_layered(edgelist)
-        >>> roundtrip = k2.LayeredSpec.from_dict(spec.to_dict())
+        >>> spec = kpnn2.parse_layered(edgelist)
+        >>> roundtrip = kpnn2.LayeredSpec.from_dict(spec.to_dict())
         >>> roundtrip.layer_nodes == spec.layer_nodes
         True
         """
@@ -452,19 +452,19 @@ class LayeredSpec:
         Examples
         --------
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["A", "H"],
         ...         "target": ["H", "C"],
         ...     }
         ... )
-        >>> spec = k2.parse_layered(edgelist)
+        >>> spec = kpnn2.parse_layered(edgelist)
         >>> len(spec.fingerprint)
         64
         >>> (
         ...     spec.fingerprint
-        ...     == k2.parse_layered(spec.to_edgelist()).fingerprint
+        ...     == kpnn2.parse_layered(spec.to_edgelist()).fingerprint
         ... )
         True
         """

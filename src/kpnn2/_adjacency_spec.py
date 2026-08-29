@@ -83,14 +83,14 @@ class AdjacencySpec:
     An input feeding a two-node feedback core plus one output:
 
     >>> import pandas as pd
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["x", "a", "b", "a"],
     ...         "target": ["a", "b", "a", "y"],
     ...     }
     ... )
-    >>> spec = k2.parse_adjacency(edgelist)
+    >>> spec = kpnn2.parse_adjacency(edgelist)
     >>> spec.nodes
     ('a', 'b', 'x', 'y')
     >>> spec.input_nodes, spec.output_nodes
@@ -174,14 +174,14 @@ class AdjacencySpec:
         A cycle comes back as sorted pairs:
 
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["x", "a", "b", "a"],
         ...         "target": ["a", "b", "a", "y"],
         ...     }
         ... )
-        >>> spec = k2.parse_adjacency(edgelist)
+        >>> spec = kpnn2.parse_adjacency(edgelist)
         >>> table = spec.to_edgelist()
         >>> list(table.columns)
         ['source', 'target']
@@ -212,14 +212,14 @@ class AdjacencySpec:
         Examples
         --------
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["x", "a", "b", "a"],
         ...         "target": ["a", "b", "a", "y"],
         ...     }
         ... )
-        >>> spec = k2.parse_adjacency(edgelist)
+        >>> spec = kpnn2.parse_adjacency(edgelist)
         >>> payload = spec.to_dict()
         >>> payload["kpnn2_spec"]
         1
@@ -263,15 +263,15 @@ class AdjacencySpec:
         Examples
         --------
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["x", "a", "b", "a"],
         ...         "target": ["a", "b", "a", "y"],
         ...     }
         ... )
-        >>> spec = k2.parse_adjacency(edgelist)
-        >>> roundtrip = k2.AdjacencySpec.from_dict(spec.to_dict())
+        >>> spec = kpnn2.parse_adjacency(edgelist)
+        >>> roundtrip = kpnn2.AdjacencySpec.from_dict(spec.to_dict())
         >>> roundtrip.nodes == spec.nodes
         True
         """
@@ -298,19 +298,19 @@ class AdjacencySpec:
         Examples
         --------
         >>> import pandas as pd
-        >>> import kpnn2 as k2
+        >>> import kpnn2
         >>> edgelist = pd.DataFrame(
         ...     {
         ...         "source": ["x", "a", "b", "a"],
         ...         "target": ["a", "b", "a", "y"],
         ...     }
         ... )
-        >>> spec = k2.parse_adjacency(edgelist)
+        >>> spec = kpnn2.parse_adjacency(edgelist)
         >>> len(spec.fingerprint)
         64
         >>> (
         ...     spec.fingerprint
-        ...     == k2.parse_adjacency(spec.to_edgelist()).fingerprint
+        ...     == kpnn2.parse_adjacency(spec.to_edgelist()).fingerprint
         ... )
         True
         """

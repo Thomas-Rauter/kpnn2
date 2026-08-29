@@ -110,18 +110,18 @@ def map_node_attributions(
 
     >>> import pandas as pd
     >>> import torch
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A", "H"],
     ...         "target": ["H", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_layered(edgelist)
+    >>> spec = kpnn2.parse_layered(edgelist)
     >>> spec.layer_nodes
     (('A',), ('H',), ('C',))
     >>> scores = torch.tensor([[0.5], [1.0]])
-    >>> da = k2.map_node_attributions(
+    >>> da = kpnn2.map_node_attributions(
     ...     attributions=scores,
     ...     spec=spec,
     ...     layer=2,
@@ -135,7 +135,7 @@ def map_node_attributions(
 
     The ``layer`` argument is an index into ``spec.layer_nodes``:
 
-    >>> hidden = k2.map_node_attributions(
+    >>> hidden = kpnn2.map_node_attributions(
     ...     attributions=torch.zeros(2, 1),
     ...     spec=spec,
     ...     layer=1,
@@ -153,8 +153,8 @@ def map_node_attributions(
     ...         "target": ["a", "b", "a", "y"],
     ...     }
     ... )
-    >>> state_spec = k2.parse_adjacency(cyclic)
-    >>> per_step = k2.map_node_attributions(
+    >>> state_spec = kpnn2.parse_adjacency(cyclic)
+    >>> per_step = kpnn2.map_node_attributions(
     ...     attributions=[
     ...         torch.zeros(2, 4),
     ...         torch.ones(2, 4),

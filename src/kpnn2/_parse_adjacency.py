@@ -132,14 +132,14 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     An input feeding a two-node feedback core plus one output:
 
     >>> import pandas as pd
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["x", "a", "b", "a"],
     ...         "target": ["a", "b", "a", "y"],
     ...     }
     ... )
-    >>> spec = k2.parse_adjacency(edgelist)
+    >>> spec = kpnn2.parse_adjacency(edgelist)
     >>> spec.nodes
     ('a', 'b', 'x', 'y')
     >>> spec.input_nodes

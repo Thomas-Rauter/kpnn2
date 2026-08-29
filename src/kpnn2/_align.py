@@ -87,14 +87,14 @@ def align_inputs(
 
     >>> import pandas as pd
     >>> import torch
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A", "H"],
     ...         "target": ["H", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_layered(edgelist)
+    >>> spec = kpnn2.parse_layered(edgelist)
     >>> spec.input_nodes
     ('A',)
     >>> df = pd.DataFrame(
@@ -103,7 +103,7 @@ def align_inputs(
     ...         "A": [0.5, 1.5],
     ...     }
     ... )
-    >>> x = k2.align_inputs(df, spec)
+    >>> x = kpnn2.align_inputs(df, spec)
     >>> x.dtype
     torch.float32
     >>> tuple(x.shape)
@@ -121,9 +121,9 @@ def align_inputs(
     ...         "target": ["a", "b", "a", "y"],
     ...     }
     ... )
-    >>> state_spec = k2.parse_adjacency(cyclic)
+    >>> state_spec = kpnn2.parse_adjacency(cyclic)
     >>> inputs = pd.DataFrame({"x": [0.5, 1.5]})
-    >>> x = k2.align_inputs(inputs, state_spec)
+    >>> x = kpnn2.align_inputs(inputs, state_spec)
     >>> tuple(x.shape), tuple(state_spec.mask.shape)
     ((2, 1), (4, 4))
     >>> state = torch.zeros(
@@ -137,7 +137,7 @@ def align_inputs(
     A tensor is not accepted; pass a DataFrame instead:
 
     >>> t = torch.tensor([[0.5], [1.5]])
-    >>> k2.align_inputs(t, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> kpnn2.align_inputs(t, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     Kpnn2Error: 'data' is a tensor; a pandas DataFrame is required. ...

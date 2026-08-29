@@ -396,7 +396,7 @@ order and nonlinearities.
 ```python
 saved = {0: x}
 for index, hop in enumerate(spec.hops):
-    sources = k2.gather_hop_inputs(saved, hop)   # concat, checked
+    sources = kpnn2.gather_hop_inputs(saved, hop)   # concat, checked
     h = self.hops[index](sources)                # MaskedLinear
     if hop.target_layer < len(spec.layer_nodes) - 1:
         h = torch.relu(h)
@@ -488,10 +488,10 @@ columns from the pre-parse DataFrame are not reproduced.
    state vector each step is therefore required, not cosmetic.
 
 ```python
-spec = k2.parse_adjacency(edgelist)
-core = k2.MaskedLinear(spec.mask)     # one square hop
+spec = kpnn2.parse_adjacency(edgelist)
+core = kpnn2.MaskedLinear(spec.mask)     # one square hop
 
-x = k2.align_inputs(df, spec)         # width len(input_nodes)
+x = kpnn2.align_inputs(df, spec)         # width len(input_nodes)
 state = torch.zeros(x.shape[0], len(spec.nodes))
 state[:, spec.input_index] = x        # required, see above
 state = torch.relu(core(state))       # one step; loop as needed
@@ -726,7 +726,7 @@ vector via `spec.input_index` before calling
 `MaskedLinear(spec.mask)`:
 
 ```python
-x = k2.align_inputs(df, spec)
+x = kpnn2.align_inputs(df, spec)
 state = torch.zeros(x.shape[0], len(spec.nodes))
 state[:, spec.input_index] = x
 ```
@@ -861,7 +861,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-import kpnn2 as k2
+import kpnn2
 
 edgelist = pd.DataFrame(
     {
@@ -871,14 +871,14 @@ edgelist = pd.DataFrame(
 )
 # add a skip with another row A -> C when needed
 
-spec = k2.parse_layered(edgelist)
+spec = kpnn2.parse_layered(edgelist)
 
 class Net(nn.Module):
-    def __init__(self, spec: k2.LayeredSpec):
+    def __init__(self, spec: kpnn2.LayeredSpec):
         super().__init__()
         self.spec = spec
         self.hops = nn.ModuleList(
-            [k2.MaskedLinear(hop.mask) for hop in spec.hops]
+            [kpnn2.MaskedLinear(hop.mask) for hop in spec.hops]
         )
 
     def forward(self, x):
@@ -886,7 +886,7 @@ class Net(nn.Module):
         last = len(self.hops) - 1
         hidden = x
         for index, hop in enumerate(self.spec.hops):
-            sources = k2.gather_hop_inputs(saved, hop)
+            sources = kpnn2.gather_hop_inputs(saved, hop)
             hidden = self.hops[index](sources)
             if index < last:
                 hidden = F.relu(hidden)
@@ -895,11 +895,11 @@ class Net(nn.Module):
 
 model = Net(spec)
 x_df = pd.DataFrame({"A": [0.1, 0.2]})
-x = k2.align_inputs(x_df, spec)
+x = kpnn2.align_inputs(x_df, spec)
 y = model(x)
 
 # optional: user ran some attribution method themselves
-da = k2.map_node_attributions(
+da = kpnn2.map_node_attributions(
     attributions=y.detach(),
     spec=spec,
     layer=len(spec.layer_nodes) - 1,
@@ -932,7 +932,7 @@ payload = {
 torch.save(payload, path)
 
 blob = torch.load(path, weights_only=False)
-spec = k2.LayeredSpec.from_dict(blob["spec"])
+spec = kpnn2.LayeredSpec.from_dict(blob["spec"])
 # or AdjacencySpec.from_dict when blob["spec"]["layout"]
 # is "adjacency"
 model = Net(spec)
@@ -946,14 +946,14 @@ model.load_state_dict(blob["state_dict"])
 There is no graph compiler and no ready-made model. Write ordinary
 PyTorch:
 
-1. `spec = k2.parse_layered(edgelist)`
-2. `k2.MaskedLinear(hop.mask)` for each `hop` in `spec.hops`
+1. `spec = kpnn2.parse_layered(edgelist)`
+2. `kpnn2.MaskedLinear(hop.mask)` for each `hop` in `spec.hops`
 3. In `forward()`, keep a `saved` dict of layer index → tensor,
-   and feed each hop `k2.gather_hop_inputs(saved, hop)`
+   and feed each hop `kpnn2.gather_hop_inputs(saved, hop)`
 4. Put ReLU / BatchNorm / Dropout in `forward()` yourself, after
    the hop that produced the tensor. Store the value you want
    later hops to read.
-5. `x = k2.align_inputs(df, spec)`
+5. `x = kpnn2.align_inputs(df, spec)`
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
 7. Save `spec.to_dict()` next to `state_dict`. Rebuild from
@@ -1003,7 +1003,9 @@ docs/
 
 `src/kpnn2/__init__.py` is the **only** public import path. Users
 write `import kpnn2` or `from kpnn2 import MaskedLinear`, never
-`from kpnn2._masked_linear import MaskedLinear`.
+`from kpnn2._masked_linear import MaskedLinear`. Examples and
+docs use `import kpnn2` and qualify names as `kpnn2.parse_layered`,
+not `import kpnn2 as k2`.
 
 Every implementation module carries a leading underscore and is
 private. Private modules may be renamed, split, merged, or promoted
@@ -1095,6 +1097,9 @@ disagree with CI.
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the
   `dev` extra. Do not use a global `ruff` on `PATH`.
+- Docs, README, and doctests use `import kpnn2` and
+  `kpnn2.parse_layered(...)` (same for the other public names).
+  Do not introduce `import kpnn2 as k2`.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
   mkdocs-jupyter then fails. Execute with

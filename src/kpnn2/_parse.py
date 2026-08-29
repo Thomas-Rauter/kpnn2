@@ -564,14 +564,14 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     A chain plus one skip ``A -> C``:
 
     >>> import pandas as pd
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A", "H", "A"],
     ...         "target": ["H", "C", "C"],
     ...     }
     ... )
-    >>> spec = k2.parse_layered(edgelist)
+    >>> spec = kpnn2.parse_layered(edgelist)
     >>> spec.input_nodes
     ('A',)
     >>> spec.hidden_nodes

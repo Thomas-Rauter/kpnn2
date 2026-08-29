@@ -15,14 +15,14 @@ class Kpnn2Error(Exception):
     Examples
     --------
     >>> import pandas as pd
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
     ...         "source": ["A"],
     ...         "target": ["A"],
     ...     }
     ... )
-    >>> k2.parse_layered(edgelist)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> kpnn2.parse_layered(edgelist)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     Kpnn2Error: Edgelist contains 1 self-loop(s): A. ...

@@ -87,23 +87,19 @@ graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
 7. A checkpoint is `spec.to_dict()` plus `state_dict`, not
    weights alone.
 
-The snippet below is a complete toy run of that loop, using the
+The snippet below is a minimal run of steps 1–4, using the
 edgelist from the table above. Column order in the input table
-does not matter: `align_inputs()` matches names. Captum is not a
-`kpnn2` dependency (`pip install captum`). Skip edges are omitted
-here; see [**Skip edges**](docs/skip-edges.ipynb). A full
-walkthrough is in [**Getting started**](docs/getting-started.ipynb).
+does not matter: `align_inputs()` matches names. Skip edges are
+omitted here; see [**Skip edges**](docs/skip-edges.ipynb). A full
+walkthrough, including training and attribution, is in
+[**Getting started**](docs/getting-started.ipynb).
 
 ```python
 import pandas as pd
-import torch
 import torch.nn.functional as F
-from captum.attr import IntegratedGradients, LayerConductance
 from torch import nn
 
-import kpnn2 as k2
-
-torch.manual_seed(42)
+import kpnn2
 
 edgelist = pd.DataFrame(
     {
@@ -111,14 +107,14 @@ edgelist = pd.DataFrame(
         "target": ["H", "H", "C"],
     }
 )
-spec = k2.parse_layered(edgelist)
+spec = kpnn2.parse_layered(edgelist)
 
 
 class Net(nn.Module):
-    def __init__(self, spec: k2.LayeredSpec):
+    def __init__(self, spec: kpnn2.LayeredSpec):
         super().__init__()
-        self.lin0 = k2.MaskedLinear(spec.hops[0].mask)
-        self.lin1 = k2.MaskedLinear(spec.hops[1].mask)
+        self.lin0 = kpnn2.MaskedLinear(spec.hops[0].mask)
+        self.lin1 = kpnn2.MaskedLinear(spec.hops[1].mask)
 
     def forward(self, x):
         h = F.relu(self.lin0(x))
@@ -126,52 +122,12 @@ class Net(nn.Module):
 
 
 model = Net(spec)
-
-n = 16
-a = torch.rand(n)
-b = torch.rand(n)
-x_df = pd.DataFrame(
-    {
-        "B": b.numpy(),
-        "A": a.numpy(),
-    }
-)
-x = k2.align_inputs(
-    x_df,
+x = kpnn2.align_inputs(
+    pd.DataFrame({"B": [0.2, 0.4], "A": [0.1, 0.3]}),
     spec,
 )
-y = a.unsqueeze(1)  # C should track A, not B
-
-optimizer = torch.optim.Adam(
-    model.parameters(),
-    lr=1e-1,
-)
-loss_fn = nn.MSELoss()
-model.train()
-for _ in range(40):
-    optimizer.zero_grad()
-    loss = loss_fn(model(x), y)
-    loss.backward()
-    optimizer.step()
-
-model.eval()
-ig = IntegratedGradients(model)
-feature_attr = k2.map_node_attributions(
-    attributions=ig.attribute(x, target=0),
-    spec=spec,
-    layer=0,
-)
-
-# lin0 is the hop into H, which is LayeredSpec layer 1.
-lc = LayerConductance(model, model.lin0)
-node_attr = k2.map_node_attributions(
-    attributions=lc.attribute(x, target=0),
-    spec=spec,
-    layer=1,
-)
-
-print(feature_attr.to_pandas().abs().mean())
-print(node_attr.to_pandas().abs().mean())
+y = model(x)
+# Continue training with ordinary PyTorch.
 ```
 
 ## API

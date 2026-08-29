@@ -233,14 +233,14 @@ class MaskedLinear(nn.Module):
     input:
 
     >>> import torch
-    >>> import kpnn2 as k2
+    >>> import kpnn2
     >>> mask = torch.tensor(
     ...     [
     ...         [1.0, 1.0],
     ...         [0.0, 1.0],
     ...     ]
     ... )
-    >>> layer = k2.MaskedLinear(
+    >>> layer = kpnn2.MaskedLinear(
     ...     mask,
     ...     bias=False,
     ... )
@@ -264,7 +264,7 @@ class MaskedLinear(nn.Module):
     A zero in the mask blocks that input column:
 
     >>> mask = torch.tensor([[1.0, 0.0]])
-    >>> layer = k2.MaskedLinear(
+    >>> layer = kpnn2.MaskedLinear(
     ...     mask,
     ...     bias=False,
     ... )
