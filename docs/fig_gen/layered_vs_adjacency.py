@@ -4,7 +4,8 @@ Writes ``docs/figures/layered_vs_adjacency.svg``, 108 mm by 47 mm.
 
 The same three-node DAG (A -> H -> C plus skip A -> C) is parsed
 two ways. Panel (a) ranks it into hops. Panel (b) puts every node
-in one alphabetical state vector behind a square mask.
+in one alphabetical state vector; the dense square is
+``to_mask()``.
 """
 
 from pathlib import Path
@@ -332,7 +333,7 @@ def svg_text() -> str:
             _box(_RH, "H"),
             _matrix(
                 (195.0, 70.0),
-                "spec.mask",
+                "to_mask()",
                 ("A", "C", "H"),
                 ("A", "C", "H"),
                 (

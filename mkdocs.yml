@@ -33,6 +33,7 @@ nav:
       - Skip edges: skip-edges.ipynb
   - Additional examples:
       - Recurrent example: recurrent-example.ipynb
+      - PackedLinear: packed_linear.md
       - Mapping attributions: map-node-attributions.ipynb
   - Reference:
       - API: api.md

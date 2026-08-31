@@ -59,7 +59,7 @@
   <text x="138" y="117.2" text-anchor="middle" fill="#000" font-weight="400">C</text>
   <text x="162" y="117.2" text-anchor="middle" fill="#000" font-weight="400">H</text>
   <rect x="190" y="108" width="48" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
-  <text x="214" y="117.2" text-anchor="middle" fill="#000">spec.mask</text>
+  <text x="214" y="117.2" text-anchor="middle" fill="#000">to_mask()</text>
   <rect x="254" y="108" width="22" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
   <text x="265" y="117.2" text-anchor="middle" fill="#000">y</text>
   <line x1="32" y1="115" x2="44.5" y2="115" stroke="#000" stroke-width="0.6"

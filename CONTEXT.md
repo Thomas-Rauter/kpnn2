@@ -1157,6 +1157,7 @@ scripts/
 CONTEXT.md                    # this file
 README.md
 docs/
+  packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
   fig_gen/                    # SVG generators; write to figures/
   figures/
 ```
@@ -1273,6 +1274,11 @@ disagree with CI.
 - Docs, README, and doctests use `import kpnn2` and
   `kpnn2.parse_layered(...)` (same for the other public names).
   Do not introduce `import kpnn2 as k2`.
+- Docs tutorials (getting-started, skip-edges,
+  map-node-attributions, layered vs adjacency, recurrent
+  example) stay on `MaskedLinear`. `PackedLinear` has its
+  own page (`docs/packed_linear.md`). Do not sprinkle
+  `PackedLinear` through getting-started.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
   mkdocs-jupyter then fails. Execute with

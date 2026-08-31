@@ -26,7 +26,7 @@ The toy is `A -> H -> C` plus the skip `A -> C`:
 **Figure 1.** The same DAG parsed two ways. Layered ranks nodes
 and puts every incoming edge in one hop mask (the skip is a
 column of `hops[1]`). Adjacency puts every node in one
-alphabetical state vector and every edge in one square mask.
+alphabetical state vector and every edge in packed indices.
 
 `parse_layered()` assigns depth by longest path from the
 inputs: `A` is layer 0, `H` is layer 1, `C` is layer 2.
@@ -36,11 +36,12 @@ layers because `C` has the skip parent `A` as well as `H`.
 column.
 
 `parse_adjacency()` does not rank. `spec.nodes` is `A`, `C`,
-`H` in alphabetical order, and `spec.mask` is 3×3 over that
-order. `mask[target, source]` is `1` for an original edge. Row
-`A` is all zeros because `A` is an input. The skip is just
-`mask[C, A] = 1`. There are no hops and no `skips`: depth does
-not exist in this layout.
+`H` in alphabetical order. Edges are packed as
+`source_index` / `target_index`. `spec.to_mask()` is 3×3 over
+that order. `mask[target, source]` is `1` for an original
+edge. Row `A` is all zeros because `A` is an input. The skip
+is just `mask[C, A] = 1`. There are no hops and no `skips`:
+depth does not exist in this layout.
 
 `input_nodes`, `hidden_nodes`, and `output_nodes` are the same
 on both specs (`A`, `H`, and `C`).
@@ -51,8 +52,8 @@ on both specs (`A`, `H`, and `C`).
 
 **Figure 2.** How you compute on that toy. Layered is one
 sweep: hold `A`, gather it with `H`, then `hops[1]`. Adjacency
-scatters `A` into the state and applies `spec.mask` in a loop
-you own.
+scatters `A` into the state and applies
+`MaskedLinear(spec.to_mask())` in a loop you own.
 
 On a `LayeredSpec` you apply one `MaskedLinear` per hop. Keep
 every produced layer in `saved`. `gather_hop_inputs()`
@@ -82,12 +83,12 @@ source layer was never stored.
 On an `AdjacencySpec` there is one square multiply.
 `align_inputs()` returns `len(spec.input_nodes)` columns, not
 `len(spec.nodes)`, so you scatter into the state vector. Input
-rows of `spec.mask` are structurally zero (`fan_in == 0`), so
+rows of `to_mask()` are structurally zero (`fan_in == 0`), so
 that scatter is required, and so is writing the inputs again if
 you loop.
 
 ```python
-core = kpnn2.MaskedLinear(spec.mask)
+core = kpnn2.MaskedLinear(spec.to_mask())
 state = torch.zeros(
     x.shape[0],
     len(spec.nodes),
@@ -100,7 +101,9 @@ y = state[:, spec.output_index]
 
 `n_steps` is yours. `kpnn2` does not unroll time.
 [Recurrent example](recurrent-example.ipynb) trains this loop
-on a graph with a feedback edge.
+on a graph with a feedback edge. This toy is small, so
+`MaskedLinear` is appropriate; for large node counts and RAM
+see [PackedLinear](packed_linear.md).
 
 ## How to choose a parser
 

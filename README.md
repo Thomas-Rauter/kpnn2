@@ -44,8 +44,8 @@ a `source` node to a `target` node. For example:
 a normal `torch.nn.Module`, train with standard PyTorch, and can
 map attributions back onto the named nodes. That parser needs a
 DAG; a graph with feedback loops goes through `parse_adjacency()`
-instead, which puts every node into one state vector behind a
-single square mask (see the
+instead, which puts every node into one state vector with packed
+edge indices (see the
 [Recurrent example](docs/recurrent-example.ipynb)).
 
 Sparse connectivity is often used for speed or memory, without
@@ -141,6 +141,7 @@ The documented public names are:
 - `Skip`
 - `AdjacencySpec`
 - `MaskedLinear`
+- `PackedLinear`
 - `gather_hop_inputs()`
 - `align_inputs()`
 - `map_node_attributions()`
@@ -148,9 +149,10 @@ The documented public names are:
 `LayeredSpec.hops` holds one `Hop` per layer after the first, and
 a hop's mask carries every edge entering that layer, skip edges
 included. `LayeredSpec.skips` lists which edges span layers, as
-metadata. An `AdjacencySpec` has no layers and no skips: it
-carries one square `mask` over all `nodes`, plus `input_index`
-and `output_index` into that state vector.
+metadata. An `AdjacencySpec` has no layers and no skips: it carries
+packed `source_index` / `target_index` over all `nodes`, plus
+`input_index` and `output_index` into that state vector.
+`to_mask()` densifies for `MaskedLinear` on small graphs.
 
 See the [**API reference**](docs/api.md) for details, and
 [**Skip edges**](docs/skip-edges.ipynb) for a worked example.
@@ -195,7 +197,8 @@ If you are new to the package, start with:
 - [**Recurrent example**](docs/recurrent-example.ipynb) for
   `parse_adjacency()` and a shared `MaskedLinear` over one state
   vector when the graph has feedback loops (`parse_layered` still
-  requires a DAG)
+  requires a DAG). For large node counts, see
+  [PackedLinear](docs/packed_linear.md)
 - [**Mapping attributions**](docs/map-node-attributions.ipynb) for
   labeling layer tensors with node names
 - [**Skip edges**](docs/skip-edges.ipynb) for edges that jump a

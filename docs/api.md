@@ -31,6 +31,15 @@ Names you call or construct.
         - reset_parameters
         - forward
 
+::: kpnn2.PackedLinear
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+      merge_init_into_class: true
+      members:
+        - reset_parameters
+        - forward
+
 ::: kpnn2.gather_hop_inputs
     options:
       show_root_heading: true
@@ -80,6 +89,7 @@ read-only.
       show_root_toc_entry: true
       members:
         - to_edgelist
+        - to_mask
         - to_dict
         - from_dict
         - fingerprint

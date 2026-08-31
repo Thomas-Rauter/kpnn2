@@ -53,7 +53,7 @@
   <text x="223" y="36.7" text-anchor="middle" fill="#000">C</text>
   <rect x="252" y="28" width="26" height="13" fill="#fff" stroke="#000" stroke-width="0.6"/>
   <text x="265" y="36.7" text-anchor="middle" fill="#000">H</text>
-  <text x="223" y="70" text-anchor="middle" fill="#000" font-weight="700">spec.mask</text>
+  <text x="223" y="70" text-anchor="middle" fill="#000" font-weight="700">to_mask()</text>
   <text x="211" y="80" text-anchor="middle" fill="#000" font-weight="400">A</text>
   <text x="223" y="80" text-anchor="middle" fill="#000" font-weight="400">C</text>
   <text x="235" y="80" text-anchor="middle" fill="#000" font-weight="400">H</text>
