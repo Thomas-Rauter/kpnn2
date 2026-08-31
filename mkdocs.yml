@@ -29,6 +29,7 @@ nav:
   - Getting started:
       - Installation: installation.md
       - Getting started: getting-started.ipynb
+      - Layered vs. Adjacency: layered_vs_adjacency.md
       - Skip edges: skip-edges.ipynb
   - Additional examples:
       - Recurrent example: recurrent-example.ipynb
