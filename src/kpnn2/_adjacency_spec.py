@@ -5,9 +5,10 @@ Structural blueprint for an edgelist-defined node network.
 from dataclasses import dataclass
 
 import pandas as pd
+import torch
 from torch import Tensor
 
-from ._mask_tensor import as_mask_tensor
+from ._layout import build_layout
 
 
 @dataclass(frozen=True)
@@ -16,19 +17,21 @@ class AdjacencySpec:
     Frozen blueprint from ``parse_adjacency``.
 
     Structure only: not an ``nn.Module`` and no parameters. Every
-    node lives in one state vector and connectivity is one square
-    mask, so the graph may contain cycles and self-loops.
+    node lives in one state vector and connectivity is packed as
+    source/target index tuples, so the graph may contain cycles
+    and self-loops. There is no stored square mask.
 
     There are no depths here: no ``layer_nodes``, no ``hops``
     tuple, and no ``skips``. This is not a one-layer
-    ``LayeredSpec``. Use ``MaskedLinear(spec.mask)`` for one state
-    update and write the recurrence in ``forward()``.
+    ``LayeredSpec``. Use ``MaskedLinear(spec.to_mask())`` for
+    one state update and write the recurrence in ``forward()``.
 
     Parameters
     ----------
     nodes : tuple[str, ...]
-        Every node name, alphabetical. This is the row and column
-        order of ``mask`` and the unit order of the state vector.
+        Every node name, alphabetical. This is the unit order of
+        the state vector and the row and column order of
+        ``to_mask()``.
     input_nodes : tuple[str, ...]
         In-degree 0 names, alphabetical. This is the column order
         of tensors returned by ``align_inputs``.
@@ -36,13 +39,17 @@ class AdjacencySpec:
         Out-degree 0 names, alphabetical.
     hidden_nodes : tuple[str, ...]
         Names that are neither input nor output, alphabetical.
-    mask : torch.Tensor
-        Square connectivity, dtype float32, shape ``(n, n)`` with
-        ``n == len(nodes)``. Entry ``[target_index, source_index]``
-        is ``1.0`` for every original edge, otherwise ``0.0``.
-        Self-loops land on the diagonal. Treat it as read-only:
-        it is an ordinary tensor, so writing to it silently
-        changes the wiring this spec describes.
+    source_index : tuple[int, ...]
+        For each original edge, the column in ``nodes`` (the
+        source). Same length as ``target_index`` and as the
+        edge count. Order is canonical: lexicographic by
+        ``(source name, target name)``, identical to
+        ``to_edgelist()`` row order. Cycles and self-loops are
+        included.
+    target_index : tuple[int, ...]
+        For each original edge, the row in ``nodes`` (the
+        target). A dense square would have ``1.0`` at
+        ``[target_index[i], source_index[i]]``.
     input_index : tuple[int, ...]
         Position of each ``input_nodes`` name in ``nodes``.
     output_index : tuple[int, ...]
@@ -51,25 +58,25 @@ class AdjacencySpec:
     Notes
     -----
     Fields cannot be reassigned and sequences are tuples, so the
-    structure itself is fixed. The mask is a plain float32
-    tensor and is not write-protected; treat it as read-only and
-    rebuild from the edgelist to change wiring. ``MaskedLinear``
-    clones the mask into a non-persistent buffer independent of
-    ``spec.mask``, so a layer built earlier keeps its own
-    connectivity either way.
+    structure itself is fixed. There is no ``mask`` field and no
+    densifying ``mask`` property. ``to_mask()`` allocates a
+    fresh dense square on every call; mutating that tensor does
+    not change this spec. ``MaskedLinear(spec.to_mask())``
+    clones the square into a non-persistent buffer, so a layer
+    built earlier keeps its own connectivity.
 
     ``align_inputs`` returns ``len(input_nodes)`` columns, which
-    is not the mask width. Scatter that tensor into the ``n``-wide
-    state vector with ``input_index``. Input rows of ``mask`` are
-    all zeros, so under the degree-aware init of ``MaskedLinear``
-    they stay zero: writing the inputs in is required, not
-    cosmetic.
+    is not the state width. Scatter that tensor into the
+    ``n``-wide state vector with ``input_index``. Input rows of
+    ``to_mask()`` are all zeros, so under the degree-aware init
+    of ``MaskedLinear`` they stay zero: writing the inputs in
+    is required, not cosmetic.
 
     ``to_edgelist()`` returns the original edges as a
     two-column ``source`` / ``target`` DataFrame, rows sorted
     lexicographically, including cycle edges and self-loops.
     ``parse_adjacency`` on that table reconstructs this spec's
-    node lists, mask, and input/output indices.
+    node lists, packed indices, and input/output indices.
 
     ``to_dict()`` returns a JSON-safe tagged dict
     (``kpnn2_spec``, ``layout``, ``edges``). ``from_dict``
@@ -99,9 +106,13 @@ class AdjacencySpec:
     ('a', 'b')
     >>> spec.input_index, spec.output_index
     ((2,), (3,))
-    >>> tuple(spec.mask.shape)
+    >>> spec.source_index
+    (0, 0, 1, 2)
+    >>> spec.target_index
+    (1, 3, 0, 0)
+    >>> tuple(spec.to_mask().shape)
     (4, 4)
-    >>> spec.mask[0].tolist()
+    >>> spec.to_mask()[0].tolist()
     [0.0, 1.0, 1.0, 0.0]
     """
 
@@ -109,7 +120,8 @@ class AdjacencySpec:
     input_nodes: tuple[str, ...]
     output_nodes: tuple[str, ...]
     hidden_nodes: tuple[str, ...]
-    mask: Tensor
+    source_index: tuple[int, ...]
+    target_index: tuple[int, ...]
     input_index: tuple[int, ...]
     output_index: tuple[int, ...]
 
@@ -136,8 +148,13 @@ class AdjacencySpec:
         )
         object.__setattr__(
             self,
-            "mask",
-            as_mask_tensor(self.mask),
+            "source_index",
+            tuple(self.source_index),
+        )
+        object.__setattr__(
+            self,
+            "target_index",
+            tuple(self.target_index),
         )
         object.__setattr__(
             self,
@@ -150,19 +167,68 @@ class AdjacencySpec:
             tuple(self.output_index),
         )
 
+    def to_mask(self) -> Tensor:
+        """
+        Allocate a dense float32 square from the packed edges.
+
+        Shape is ``(n, n)`` with ``n`` from the node layout
+        (``len(nodes)`` at width 1). The result starts at zeros;
+        each live edge sets ``1.0`` at
+        ``[target_index[i], source_index[i]]``. Every call
+        returns a fresh tensor. Mutating it does not change this
+        spec or the next ``to_mask()`` call.
+
+        Returns
+        -------
+        torch.Tensor
+            New dense connectivity square. This allocates.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_adjacency(edgelist)
+        >>> mask = spec.to_mask()
+        >>> tuple(mask.shape)
+        (4, 4)
+        >>> mask[0, 1].item(), mask[1, 0].item()
+        (1.0, 1.0)
+        """
+        layout = build_layout(self.nodes)
+        n_units = layout.n_units
+        mask = torch.zeros(
+            (
+                n_units,
+                n_units,
+            ),
+            dtype=torch.float32,
+        )
+        for source, target in zip(
+            self.source_index,
+            self.target_index,
+        ):
+            mask[target, source] = 1.0
+        return mask
+
     def to_edgelist(self) -> pd.DataFrame:
         """
         Return this spec's edges as a two-column table.
 
         Columns are exactly ``source`` then ``target``. Rows
-        follow the square mask in canonical order: sorted
+        follow the packed indices in canonical order: sorted
         lexicographically by ``(source, target)``, one row per
         original edge, names as strings, including cycle edges
         and self-loops. Extra columns from the DataFrame that
         was parsed are not reproduced.
 
         ``parse_adjacency`` on this table reconstructs the same
-        node lists, mask, and input/output indices.
+        node lists, packed indices, and input/output indices.
 
         Returns
         -------
@@ -238,7 +304,7 @@ class AdjacencySpec:
         Rebuild an ``AdjacencySpec`` from ``to_dict()`` output.
 
         Calls ``parse_adjacency`` on a DataFrame built from
-        ``payload["edges"]``. The square mask is not assembled
+        ``payload["edges"]``. Packed indices are not assembled
         by hand. Extra unknown keys are ignored.
 
         Parameters

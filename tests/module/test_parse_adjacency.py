@@ -66,7 +66,15 @@ def test_parse_adjacency_accepts_a_self_loop_layered_rejects():
 
     spec = parse_adjacency(edgelist)
     loop = spec.nodes.index("a")
-    assert spec.mask[loop, loop].item() == 1.0
+    mask = spec.to_mask()
+    assert mask[loop, loop].item() == 1.0
+    pairs = list(
+        zip(
+            spec.source_index,
+            spec.target_index,
+        )
+    )
+    assert (loop, loop) in pairs
 
     with pytest.raises(
         Kpnn2Error,
@@ -75,36 +83,42 @@ def test_parse_adjacency_accepts_a_self_loop_layered_rejects():
         parse_layered(edgelist)
 
 
-def test_parse_adjacency_mask_shape_and_dtype():
+def test_parse_adjacency_to_mask_shape_and_dtype():
     spec = parse_adjacency(_cyclic_edgelist())
 
     n_nodes = len(spec.nodes)
+    mask = spec.to_mask()
     assert n_nodes == 4
-    assert tuple(spec.mask.shape) == (n_nodes, n_nodes)
-    assert spec.mask.dtype == torch.float32
+    assert tuple(mask.shape) == (n_nodes, n_nodes)
+    assert mask.dtype == torch.float32
+    assert not hasattr(spec, "mask")
 
 
-def test_parse_adjacency_mask_uses_target_source_indexing():
+def test_parse_adjacency_packed_indices_use_target_source_indexing():
     spec = parse_adjacency(_cyclic_edgelist())
     position = {name: i for i, name in enumerate(spec.nodes)}
+    mask = spec.to_mask()
 
     # x -> a is asymmetric: only [a, x] is set, never [x, a].
-    assert spec.mask[position["a"], position["x"]].item() == 1.0
-    assert spec.mask[position["x"], position["a"]].item() == 0.0
+    assert mask[position["a"], position["x"]].item() == 1.0
+    assert mask[position["x"], position["a"]].item() == 0.0
 
     # The feedback pair sets both directions, one per edge.
-    assert spec.mask[position["b"], position["a"]].item() == 1.0
-    assert spec.mask[position["a"], position["b"]].item() == 1.0
+    assert mask[position["b"], position["a"]].item() == 1.0
+    assert mask[position["a"], position["b"]].item() == 1.0
 
-    assert spec.mask[position["y"], position["a"]].item() == 1.0
-    assert spec.mask.sum().item() == 4.0
+    assert mask[position["y"], position["a"]].item() == 1.0
+    n_ones = int((mask == 1.0).sum().item())
+    assert n_ones == len(spec.source_index)
+    assert n_ones == 4
 
 
 def test_parse_adjacency_input_rows_are_all_zero():
     spec = parse_adjacency(_cyclic_edgelist())
+    mask = spec.to_mask()
 
     for index in spec.input_index:
-        assert spec.mask[index].sum().item() == 0.0
+        assert mask[index].sum().item() == 0.0
 
 
 def test_parse_adjacency_node_roles_are_alphabetical():
@@ -143,7 +157,7 @@ def test_parse_adjacency_ignores_extra_columns():
     spec = parse_adjacency(edgelist)
 
     assert spec.nodes == ("a", "b", "x", "y")
-    assert spec.mask.sum().item() == 4.0
+    assert len(spec.source_index) == 4
 
 
 def test_parse_adjacency_converts_names_with_str():
@@ -284,12 +298,13 @@ def test_parse_adjacency_rejects_a_graph_with_no_output():
         parse_adjacency(edgelist)
 
 
-def test_parse_adjacency_mask_drives_a_masked_linear():
+def test_parse_adjacency_to_mask_drives_a_masked_linear():
     spec = parse_adjacency(_cyclic_edgelist())
-    layer = MaskedLinear(spec.mask)
+    mask = spec.to_mask()
+    layer = MaskedLinear(mask)
 
     n_nodes = len(spec.nodes)
-    assert layer.mask.tolist() == spec.mask.tolist()
+    assert layer.mask.tolist() == mask.tolist()
     assert layer.weight.shape == (n_nodes, n_nodes)
 
     state = torch.zeros(
@@ -309,7 +324,27 @@ def test_parse_adjacency_does_not_build_a_module():
         spec,
         torch.nn.Module,
     )
-    assert not isinstance(
-        spec.mask,
-        torch.nn.Module,
-    )
+    assert not hasattr(spec, "mask")
+
+
+def test_packed_indices_match_edgelist_row_order():
+    spec = parse_adjacency(_cyclic_edgelist())
+    table = spec.to_edgelist()
+    n_edges = len(spec.source_index)
+
+    assert n_edges == len(spec.target_index)
+    assert n_edges == len(table)
+    for index in range(n_edges):
+        source = spec.nodes[spec.source_index[index]]
+        target = spec.nodes[spec.target_index[index]]
+        assert source == table["source"].iloc[index]
+        assert target == table["target"].iloc[index]
+
+
+def test_to_mask_has_one_entry_per_edge():
+    spec = parse_adjacency(_cyclic_edgelist())
+    mask = spec.to_mask()
+    n_ones = int((mask == 1.0).sum().item())
+
+    assert n_ones == len(spec.source_index)
+    assert n_ones == len(spec.to_edgelist())

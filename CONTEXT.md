@@ -25,20 +25,24 @@ edgelist, using native nn.Module layers.
 1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
    `source` and `target` only, validates a layered DAG, and returns a
    `LayeredSpec`. `parse_adjacency()` reads the same table and
-   returns an `AdjacencySpec` instead: one square mask over every
-   node, cycles and self-loops allowed. The user picks the layout;
-   a DAG is valid input to both.
+   returns an `AdjacencySpec` instead: packed source/target indices
+   over every node, cycles and self-loops allowed. It never
+   allocates an `(n, n)` tensor. The user picks the layout; a DAG
+   is valid input to both.
 2. **Specify:** `LayeredSpec` holds named nodes by layer and one
    `Hop` per layer after the first. A hop's mask carries **every**
    edge entering its layer, skips included. `AdjacencySpec` holds
-   all node names, one square mask, and the input/output positions
-   in it. Neither constructs an `nn.Module`.
+   all node names, packed edge indices, and the input/output
+   positions in the state vector. Neither constructs an
+   `nn.Module`.
 3. **Build:** The user writes a PyTorch `nn.Module` using one
    `MaskedLinear(spec.hops[i].mask)` per hop,
    `gather_hop_inputs(saved, hop)` to assemble that hop's input,
    and their own activations, norms, loops, and heads. On an
-   `AdjacencySpec` the state update is `MaskedLinear(spec.mask)`
-   and the recurrence is the user's `forward()`.
+   `AdjacencySpec` the state update is
+   `MaskedLinear(spec.to_mask())` and the recurrence is the
+   user's `forward()`. Training via `MaskedLinear` still
+   densifies; the spec itself is O(edges).
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a `float32` tensor. Pre-ordered tensors
    go straight to the model.
@@ -70,16 +74,19 @@ edgelist, using native nn.Module layers.
 - **Not a time machine.** `parse_adjacency` accepts cycles and
   self-loops, but nothing here unrolls time, picks a step count, or
   re-injects inputs between steps. Recurrence is user `forward()`
-  over `AdjacencySpec.mask`. `parse_layered` stays DAG-only and
-  still raises `Kpnn2Error` on a cycle.
+  over `MaskedLinear(spec.to_mask())`. `parse_layered` stays
+  DAG-only and still raises `Kpnn2Error` on a cycle.
 - **Not pseudo-node expansion.** A skip edge is a column of its
   target's hop mask, never a dummy neuron and never an extra
   channel inserted into an intermediate layer.
 - **Not sparse-tensor accelerated.** Connectivity is sparse in
-  the graph (many mask zeros). Storage and compute stay dense.
-  Sparse tensor formats (`torch.sparse`, COO/CSR) and sparse
-  matmul are **not planned**. Correctness, ease of maintenance,
-  and explainability of the code outrank memory and speed.
+  the graph. `AdjacencySpec` stores O(edges) index tuples; hop
+  masks and `MaskedLinear` stay dense (`parametrize` +
+  `F.linear`). Training via `MaskedLinear(spec.to_mask())`
+  still densifies. Sparse tensor formats (`torch.sparse`,
+  COO/CSR) and sparse matmul are **not planned**. Correctness,
+  ease of maintenance, and explainability of the code outrank
+  memory and speed.
 
 ---
 
@@ -90,18 +97,20 @@ parsing, mask tensors, hop input assembly, named I/O alignment,
 and attribution column names. The user owns `nn.Module.forward()`,
 call order, nonlinearities, and training.
 
-**Correctness over speed.** Masks are dense float32 tensors,
-not `torch.sparse` layouts. Sparse-tensor acceleration is **not
-planned**, now or later. This package values correctness, ease
-of maintenance, and explainability of the code more than memory
-and speed performance.
+**Correctness over speed.** Hop masks and `MaskedLinear` stay
+dense float32 tensors times `F.linear`, not `torch.sparse`
+layouts. `AdjacencySpec` itself is O(edges); `to_mask()` is
+the allocating dense escape hatch. Sparse-tensor acceleration
+is **not planned**, now or later. This package values
+correctness, ease of maintenance, and explainability of the
+code more than memory and speed performance.
 
 Division of labor:
 
 | Layer | Owner |
 |-------|--------|
 | Edgelist → `LayeredSpec` (ranks, hop masks, skip metadata) | kpnn2 |
-| Edgelist → `AdjacencySpec` (nodes, one square mask) | kpnn2 |
+| Edgelist → `AdjacencySpec` (nodes, packed edge indices) | kpnn2 |
 | `MaskedLinear` (fixed mask) | kpnn2 |
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
@@ -122,7 +131,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `LayeredSpec` | Frozen structural dataclass (layers, hops, skip metadata) |
 | `Hop` | One layer's incoming mask (see below); exported because `spec.hops` uses it |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
-| `AdjacencySpec` | Frozen structural dataclass (nodes, one square mask) |
+| `AdjacencySpec` | Frozen structural dataclass (nodes, packed edge indices; no stored square) |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
 | `gather_hop_inputs` | Saved layer tensors + `Hop` → that hop's input tensor |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
@@ -416,37 +425,44 @@ parse_adjacency(edgelist) -> AdjacencySpec
 ```
 
 The second layout. Every node goes into one state vector, sorted
-alphabetically, and every edge goes into one square mask. Nothing
-is ranked, so **cycles and self-loops are allowed**. This is the
-layout for recurrent networks; the recurrence itself is user
-`forward()` code.
+alphabetically, and every edge goes into packed source/target
+index tuples. Nothing is ranked, so **cycles and self-loops are
+allowed**. This is the layout for recurrent networks; the
+recurrence itself is user `forward()` code.
 
 `parse_adjacency` must not instantiate an `nn.Module`, unroll
 time, choose a step count, or re-inject inputs between steps.
+It must not allocate an `(n, n)` tensor.
 
 ### `AdjacencySpec` fields
 
 Frozen dataclass, same rules as `LayeredSpec`: no reassignment,
-sequences are tuples, the mask is a plain `torch.Tensor` that is
-documented read-only but not write-protected, and
-`copy.deepcopy` succeeds with a float32 copy that does not share
-storage.
+sequences are tuples. There is no stored mask tensor and no
+densifying `mask` property. `copy.deepcopy` succeeds and copies
+the index tuples; two `to_mask()` results do not share storage.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `nodes` | `tuple[str, ...]` | Every node name, alphabetical. Row and column order of `mask`, and the unit order of the state vector. |
+| `nodes` | `tuple[str, ...]` | Every node name, alphabetical. Unit order of the state vector, and the row/column order of `to_mask()`. |
 | `input_nodes` | `tuple[str, ...]` | In-degree 0 nodes, alphabetical. Column order for `align_inputs`. |
 | `output_nodes` | `tuple[str, ...]` | Out-degree 0 nodes, alphabetical. |
 | `hidden_nodes` | `tuple[str, ...]` | Neither input nor output, alphabetical. |
-| `mask` | `torch.Tensor` | Square connectivity (see below). Singular, not a tuple. |
+| `source_index` | `tuple[int, ...]` | For each original edge, the column in `nodes` (the source). |
+| `target_index` | `tuple[int, ...]` | For each original edge, the row in `nodes` (the target). |
 | `input_index` | `tuple[int, ...]` | Position of each `input_nodes` name in `nodes`. |
 | `output_index` | `tuple[int, ...]` | Position of each `output_nodes` name in `nodes`. |
 
-There is no `layer_nodes`, no `layer_dims`, no `hops` tuple, and
-no `skips`. Skips are a depth concept and depth does not exist
-here: in this layout every edge, however far it would span, is
-already an entry of the one square mask. `gather_hop_inputs`
-does not accept an `AdjacencySpec`.
+`source_index` and `target_index` have the same length as the
+edge count. They include cycles and self-loops. Order is
+canonical: lexicographic by `(source name, target name)`,
+identical to `to_edgelist()` row order. A dense square would
+still have `1.0` at `[target_index[i], source_index[i]]`.
+
+There is no `mask` field, no `layer_nodes`, no `layer_dims`, no
+`hops` tuple, and no `skips`. Skips are a depth concept and
+depth does not exist here: in this layout every edge, however
+far it would span, is already a packed index pair.
+`gather_hop_inputs` does not accept an `AdjacencySpec`.
 
 ### `AdjacencySpec.to_edgelist()`
 
@@ -462,34 +478,48 @@ columns from the pre-parse DataFrame are not reproduced.
 
 `parse_adjacency(spec.to_edgelist())` reconstructs the same
 `nodes`, `input_nodes`, `output_nodes`, `hidden_nodes`,
-`mask` (`torch.equal`), `input_index`, and `output_index`.
+`source_index`, `target_index`, `input_index`, and
+`output_index`.
 
-### The square mask
+### `to_mask()` (allocating dense escape hatch)
 
-- Dtype `torch.float32`, shape `(n, n)` with `n == len(nodes)`.
-- `mask[target_index, source_index] = 1.0` for **every** original
-  edgelist edge; all other entries `0.0`. Same
-  `(out_features, in_features)` convention as the hop masks.
+```python
+adjacency_spec.to_mask() -> torch.Tensor
+```
+
+The spec does **not** store a square. `to_mask()` is the only
+way to build the old dense mask so
+`MaskedLinear(spec.to_mask())` still works.
+
+- Every call allocates a new dense `float32` tensor of shape
+  `(n, n)` with `n` from the node layout (`len(nodes)` at
+  width 1).
+- The tensor starts at zeros; then `1.0` is written at each
+  `[target_index[i], source_index[i]]`.
+- Mutating the result does not change the spec or the next
+  `to_mask()` call.
 - Self-loops land on the diagonal.
-- A plain tensor exactly like `LayeredSpec.hops[i].mask`.
-  `MaskedLinear(spec.mask)` stores an independent copy.
+- `MaskedLinear(spec.to_mask())` stores an independent copy.
+
+Do not add a `mask` field or a `@property mask` that densifies
+on access: that would silently allocate.
 
 ### Two consequences
 
-1. **Input width is not mask width.** `align_inputs` returns
+1. **Input width is not state width.** `align_inputs` returns
    `len(spec.input_nodes)` columns, the state vector is `n` wide.
    The inputs are scattered into the state vector via
    `spec.input_index`. In the layered case an aligned tensor
    feeds `hops[0].mask` directly; here it does not.
 2. **Input rows are structurally zero.** Input nodes have
-   in-degree 0, so their rows of `mask` are all zeros and
+   in-degree 0, so their rows of `to_mask()` are all zeros and
    `fan_in == 0`. Under the degree-aware init of `MaskedLinear`
    those rows stay at 0 forever. Writing the inputs into the
    state vector each step is therefore required, not cosmetic.
 
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
-core = kpnn2.MaskedLinear(spec.mask)     # one square hop
+core = kpnn2.MaskedLinear(spec.to_mask())  # allocates a square
 
 x = kpnn2.align_inputs(df, spec)         # width len(input_nodes)
 state = torch.zeros(x.shape[0], len(spec.nodes))
@@ -719,11 +749,11 @@ Returns `torch.float32` tensor of shape
 **Width differs by layout.** For a `LayeredSpec` that width is
 `layer_dims[0]`, and `hops[0]` reads layer 0 alone, so the tensor
 feeds `MaskedLinear(spec.hops[0].mask)` directly with no
-gathering. For an `AdjacencySpec` it is **not** the mask width:
-`mask` is `(n, n)` over every node, while the aligned tensor is
-only `len(input_nodes)` wide. Scatter it into the `n`-wide state
-vector via `spec.input_index` before calling
-`MaskedLinear(spec.mask)`:
+gathering. For an `AdjacencySpec` it is **not** the state width:
+`to_mask()` is `(n, n)` over every node, while the aligned tensor
+is only `len(input_nodes)` wide. Scatter it into the `n`-wide
+state vector via `spec.input_index` before calling
+`MaskedLinear(spec.to_mask())`:
 
 ```python
 x = kpnn2.align_inputs(df, spec)
@@ -819,15 +849,20 @@ column index by hand.
   shape documented above is unchanged.
 - A `Layout` places the nodes of one axis in order without gaps.
   `layout.n_units` is that axis length. `layer_dims[i]` and the
-  square mask size come from `n_units`, not from `len(names)`.
+  `to_mask()` axis length come from `n_units`, not from
+  `len(names)`.
 - A hop's column axis is `concat_layouts` of its source layers'
   layouts, so a source node's block on that axis is its own
   block shifted by the widths in front of it. `source_dims` and
   `Hop.column_offsets` come from the same widths.
-- Masks are written with `fill_block`, which sets the whole
+- Hop masks are written with `fill_block`, which sets the whole
   `(target.width, source.width)` block of an edge. At width 1
   that is one entry per edge. Adjacent and skip edges go through
   the same call, so both block-expand.
+- `AdjacencySpec.source_index` / `target_index` store
+  `layout.start_of` (the block start) for each original edge.
+  `to_mask()` writes `1.0` at each
+  `[target_index[i], source_index[i]]`.
 - `Skip.source_index` and `Skip.target_index` store a **block
   start** inside their own layer.
 - `align_inputs` passes its ordered columns through
@@ -1048,10 +1083,14 @@ disagree with CI.
 - Do not reintroduce compilers, backends, pseudo nodes, Captum
   adapters, edge constraints, or AnnData in v1.
 - Do **not** add sparse-tensor acceleration (`torch.sparse`,
-  COO/CSR storage, sparse mm). Masks stay dense float32 tensors
-  times `F.linear`. This is not a v1 deferral: it is not
-  planned. Correctness, ease of maintenance, and explainability
-  of the code outrank memory and speed.
+  COO/CSR storage, sparse mm). `MaskedLinear` stays dense
+  float32 tensors times `F.linear`. This is not a v1 deferral:
+  it is not planned. Correctness, ease of maintenance, and
+  explainability of the code outrank memory and speed.
+- `parse_adjacency` must not allocate an `(n, n)` tensor. Do
+  not add a densifying `mask` property on `AdjacencySpec`.
+  Materialize the square only through `to_mask()`. Still no
+  `layout=` parser flag.
 - Masks are plain `torch.Tensor`. Do not add a tensor subclass,
   a `__torch_function__` override, or any other write guard.
   A previous `FrozenMask` subclass broke

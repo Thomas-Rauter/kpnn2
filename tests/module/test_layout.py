@@ -13,7 +13,7 @@ from kpnn2._layout import (
     fill_block,
 )
 from kpnn2._parse import _build_hops, _build_skips, _node_placement
-from kpnn2._parse_adjacency import _build_square_mask
+from kpnn2._parse_adjacency import _packed_edge_indices
 
 
 def _wide_layouts():
@@ -391,7 +391,7 @@ def test_build_skips_records_the_block_start():
     assert skips[0].target_layer == 2
 
 
-def test_build_square_mask_block_expands_a_wider_layout():
+def test_packed_edge_indices_use_slot_starts():
     edgelist = pd.DataFrame(
         {
             "source": ["a", "b"],
@@ -400,18 +400,22 @@ def test_build_square_mask_block_expands_a_wider_layout():
     )
     layout = build_layout(
         ["a", "b"],
-        [1, 2],
+        [2, 1],
     )
-    mask = _build_square_mask(
+    source_index, target_index = _packed_edge_indices(
         edgelist,
         layout,
     )
-    assert tuple(mask.shape) == (3, 3)
-    assert mask.tolist() == [
-        [0.0, 0.0, 0.0],
-        [1.0, 1.0, 1.0],
-        [1.0, 1.0, 1.0],
-    ]
+    assert source_index == (
+        layout.start_of("a"),
+        layout.start_of("b"),
+    )
+    assert target_index == (
+        layout.start_of("b"),
+        layout.start_of("b"),
+    )
+    assert source_index == (0, 2)
+    assert target_index == (2, 2)
 
 
 def test_parsers_still_place_one_unit_per_node():
@@ -431,9 +435,10 @@ def test_parsers_still_place_one_unit_per_node():
     assert skip.target_index == spec.layer_nodes[2].index(skip.target)
 
     state_spec = parse_adjacency(edgelist)
-    assert tuple(state_spec.mask.shape) == (
-        len(state_spec.nodes),
-        len(state_spec.nodes),
+    n_nodes = len(state_spec.nodes)
+    assert tuple(state_spec.to_mask().shape) == (
+        n_nodes,
+        n_nodes,
     )
     assert state_spec.input_index == tuple(
         state_spec.nodes.index(name) for name in state_spec.input_nodes

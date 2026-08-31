@@ -77,9 +77,9 @@ def align_inputs(
     ``LayeredSpec`` that is the width of ``hops[0].mask``, whose
     only source layer is layer 0, so the tensor feeds the first
     hop directly and needs no gathering. For an ``AdjacencySpec``
-    it is **not** the mask width: scatter the tensor into the
+    it is **not** the state width: scatter the tensor into the
     ``len(spec.nodes)``-wide state vector with ``spec.input_index``
-    before calling ``MaskedLinear(spec.mask)``.
+    before calling ``MaskedLinear(spec.to_mask())``.
 
     Examples
     --------
@@ -113,7 +113,7 @@ def align_inputs(
 
     An ``AdjacencySpec`` works the same way, but the result is
     ``len(input_nodes)`` wide and must be scattered into the state
-    vector before it reaches ``MaskedLinear(spec.mask)``:
+    vector before it reaches ``MaskedLinear(spec.to_mask())``:
 
     >>> cyclic = pd.DataFrame(
     ...     {
@@ -124,7 +124,7 @@ def align_inputs(
     >>> state_spec = kpnn2.parse_adjacency(cyclic)
     >>> inputs = pd.DataFrame({"x": [0.5, 1.5]})
     >>> x = kpnn2.align_inputs(inputs, state_spec)
-    >>> tuple(x.shape), tuple(state_spec.mask.shape)
+    >>> tuple(x.shape), tuple(state_spec.to_mask().shape)
     ((2, 1), (4, 4))
     >>> state = torch.zeros(
     ...     2,

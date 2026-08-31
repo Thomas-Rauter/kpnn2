@@ -39,15 +39,18 @@ def canonical_edges(
     Return every original edge as a sorted ``(source, target)``
     tuple.
 
-    Pairs come from mask entries that equal ``1.0``. A
-    ``LayeredSpec`` is read from hop masks only; skip metadata
-    is not consulted. An ``AdjacencySpec`` is read from the
-    square mask, including the diagonal.
+    A ``LayeredSpec`` is read from hop-mask entries that equal
+    ``1.0``; skip metadata is not consulted. An
+    ``AdjacencySpec`` is read from packed
+    ``(nodes[source_index[i]], nodes[target_index[i]])``
+    pairs, including cycles and self-loops, never from a dense
+    mask.
 
     Parameters
     ----------
     spec : LayeredSpec or AdjacencySpec
-        Spec whose masks store the original edges.
+        Spec whose edges are stored as hop masks or packed
+        indices.
 
     Returns
     -------
@@ -72,7 +75,7 @@ def spec_to_edgelist(
     spec: LayeredSpec | AdjacencySpec,
 ) -> pd.DataFrame:
     """
-    Build a two-column edgelist from a spec's masks.
+    Build a two-column edgelist from a spec's edges.
 
     Rows follow ``canonical_edges(spec)``: sorted
     lexicographically by ``(source, target)``, one row per
@@ -83,7 +86,8 @@ def spec_to_edgelist(
     Parameters
     ----------
     spec : LayeredSpec or AdjacencySpec
-        Spec whose masks store the original edges.
+        Spec whose edges are stored as hop masks or packed
+        indices.
 
     Returns
     -------
@@ -116,7 +120,8 @@ def spec_to_dict(
     Parameters
     ----------
     spec : LayeredSpec or AdjacencySpec
-        Spec whose masks store the original edges.
+        Spec whose edges are stored as hop masks or packed
+        indices.
 
     Returns
     -------
@@ -319,11 +324,17 @@ def _layered_edges(
 def _adjacency_edges(
     spec: AdjacencySpec,
 ) -> tuple[tuple[str, str], ...]:
-    pairs = _pairs_from_mask(
-        spec.mask,
-        spec.nodes,
-        spec.nodes,
-    )
+    pairs: list[tuple[str, str]] = []
+    for source, target in zip(
+        spec.source_index,
+        spec.target_index,
+    ):
+        pairs.append(
+            (
+                spec.nodes[source],
+                spec.nodes[target],
+            )
+        )
     return tuple(sorted(pairs))
 
 

@@ -7,7 +7,7 @@ ordinary PyTorch with ``MaskedLinear``. Pick the layout yourself:
 ``parse_layered`` ranks a DAG into a ``LayeredSpec``, one ``Hop``
 per layer whose mask carries every edge entering it, skips
 included, while ``parse_adjacency`` puts every node in one state
-vector with a single square mask (``AdjacencySpec``) and allows
+vector with packed edge indices (``AdjacencySpec``) and allows
 cycles.
 
 It is not a graph compiler: there is no ready-made model object

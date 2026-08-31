@@ -115,9 +115,11 @@ def _assert_adjacency_structure(
     assert roundtrip.input_nodes == original.input_nodes
     assert roundtrip.output_nodes == original.output_nodes
     assert roundtrip.hidden_nodes == original.hidden_nodes
+    assert roundtrip.source_index == original.source_index
+    assert roundtrip.target_index == original.target_index
     assert torch.equal(
-        roundtrip.mask,
-        original.mask,
+        roundtrip.to_mask(),
+        original.to_mask(),
     )
     assert roundtrip.input_index == original.input_index
     assert roundtrip.output_index == original.output_index

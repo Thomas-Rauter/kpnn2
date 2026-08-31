@@ -3,10 +3,9 @@ Adjacency parsing for kpnn2.
 """
 
 import pandas as pd
-import torch
 
 from ._adjacency_spec import AdjacencySpec
-from ._layout import Layout, build_layout, fill_block
+from ._layout import Layout, build_layout
 from ._parse import (
     _SOURCE,
     _TARGET,
@@ -16,17 +15,17 @@ from ._parse import (
 )
 
 
-def _build_square_mask(
+def _packed_edge_indices(
     edgelist: pd.DataFrame,
     layout: Layout,
-) -> torch.Tensor:
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """
-    Build one square mask over every node.
+    Record live edges as source and target unit indices.
 
-    Shape is ``(n, n)`` with ``n == layout.n_units``, dtype
-    float32. Each edge fills the block its endpoints own, which
-    is the single entry ``[target_index, source_index]`` while
-    nodes are one unit wide. Self-loops land on the diagonal.
+    Walks the normalized edgelist, records ``layout.start_of``
+    for each endpoint, and sorts lexicographically by
+    ``(source name, target name)``. Does not allocate an
+    ``(n, n)`` tensor.
 
     Parameters
     ----------
@@ -37,28 +36,23 @@ def _build_square_mask(
 
     Returns
     -------
-    torch.Tensor
-        Square float32 connectivity mask.
+    tuple[tuple[int, ...], tuple[int, ...]]
+        Canonical ``source_index`` then ``target_index``.
     """
-    mask = torch.zeros(
-        (
-            layout.n_units,
-            layout.n_units,
-        ),
-        dtype=torch.float32,
-    )
     sources = edgelist[_SOURCE].tolist()
     targets = edgelist[_TARGET].tolist()
-    for source, target in zip(
-        sources,
-        targets,
-    ):
-        fill_block(
-            mask,
-            layout.slot(target),
-            layout.slot(source),
+    rows = sorted(
+        zip(
+            sources,
+            targets,
         )
-    return mask
+    )
+    source_index = tuple(layout.start_of(source) for source, _ in rows)
+    target_index = tuple(layout.start_of(target) for _, target in rows)
+    return (
+        source_index,
+        target_index,
+    )
 
 
 def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
@@ -66,10 +60,10 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     Parse a source/target edgelist into an ``AdjacencySpec``.
 
     Every node goes into one state vector, sorted alphabetically,
-    and every edge goes into one square mask. Nothing is ranked,
-    so cycles and self-loops are allowed. Use this layout for
-    recurrent networks; use ``parse_layered`` for a DAG that
-    should become one mask per layer.
+    and every edge goes into packed source/target index tuples.
+    Nothing is ranked, so cycles and self-loops are allowed. Use
+    this layout for recurrent networks; use ``parse_layered``
+    for a DAG that should become one mask per layer.
 
     A DAG is valid input to both parsers. The layout is a choice,
     not a property of the graph, so this function never inspects
@@ -90,8 +84,8 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     Returns
     -------
     AdjacencySpec
-        Frozen structure: node names, one square mask, and the
-        input and output positions in that mask.
+        Frozen structure: node names, packed edge indices, and
+        the input and output positions in the state vector.
 
     Raises
     ------
@@ -117,11 +111,13 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     having no input node. A pure ring such as ``A -> B, B -> A``
     raises for the same reason.
 
-    ``mask`` has shape ``(n, n)`` with ``n == len(nodes)`` and
-    dtype float32. ``mask[target_index, source_index]`` is ``1.0``
-    for an original edge from ``nodes[source_index]`` to
-    ``nodes[target_index]``, matching the ``nn.Linear.weight``
-    layout used by the layered hop masks.
+    This function does not allocate an ``(n, n)`` tensor. Packed
+    indices have the same length as the edge count. Order is
+    canonical: lexicographic by ``(source name, target name)``.
+    A dense square would have ``1.0`` at
+    ``[target_index[i], source_index[i]]``, matching the
+    ``nn.Linear.weight`` layout used by the layered hop masks.
+    Call ``spec.to_mask()`` to materialize that square.
 
     This function does not build an ``nn.Module``, unroll time,
     choose a step count, or re-inject inputs between steps. The
@@ -146,13 +142,18 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     ('x',)
     >>> spec.input_index
     (2,)
-    >>> tuple(spec.mask.shape)
+    >>> spec.source_index
+    (0, 0, 1, 2)
+    >>> spec.target_index
+    (1, 3, 0, 0)
+    >>> tuple(spec.to_mask().shape)
     (4, 4)
 
     The feedback edge ``b -> a`` and the forward edge ``a -> b``
     are both present:
 
-    >>> spec.mask[0, 1].item(), spec.mask[1, 0].item()
+    >>> mask = spec.to_mask()
+    >>> mask[0, 1].item(), mask[1, 0].item()
     (1.0, 1.0)
     """
     normalized = _validate_edgelist(edgelist)
@@ -170,7 +171,7 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     )
     nodes = sorted(node_set)
     layout = build_layout(nodes)
-    mask = _build_square_mask(
+    source_index, target_index = _packed_edge_indices(
         normalized,
         layout,
     )
@@ -179,7 +180,8 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
         input_nodes=tuple(input_nodes),
         output_nodes=tuple(output_nodes),
         hidden_nodes=tuple(hidden_nodes),
-        mask=mask,
+        source_index=source_index,
+        target_index=target_index,
         input_index=tuple(layout.start_of(name) for name in input_nodes),
         output_index=tuple(layout.start_of(name) for name in output_nodes),
     )

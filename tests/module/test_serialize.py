@@ -133,7 +133,7 @@ def test_adjacency_includes_cycle_and_self_loop():
     assert ("a", "a") in edges
     assert ("a", "b") in edges
     assert ("b", "a") in edges
-    n_ones = int((spec.mask == 1.0).sum().item())
+    n_ones = len(spec.source_index)
     assert len(edges) == n_ones
 
 

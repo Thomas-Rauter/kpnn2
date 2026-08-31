@@ -360,7 +360,7 @@ def test_align_inputs_reorders_columns_for_adjacency_spec():
     )
 
 
-def test_align_inputs_adjacency_width_is_narrower_than_mask():
+def test_align_inputs_adjacency_width_is_narrower_than_state():
     spec = _tiny_adjacency_spec()
     data = pd.DataFrame(
         {
@@ -374,13 +374,13 @@ def test_align_inputs_adjacency_width_is_narrower_than_mask():
         spec,
     )
 
-    n_nodes = spec.mask.shape[0]
+    n_nodes = len(spec.nodes)
     assert spec.hidden_nodes == ("H", "K")
     assert n_nodes == len(spec.nodes)
     assert aligned.shape[1] == len(spec.input_nodes)
     assert aligned.shape[1] < n_nodes
 
-    # The aligned tensor only reaches the mask after a scatter.
+    # The aligned tensor only reaches the layer after a scatter.
     state = torch.zeros(
         aligned.shape[0],
         n_nodes,
