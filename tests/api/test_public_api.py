@@ -8,6 +8,7 @@ _PUBLIC_NAMES = [
     "Skip",
     "AdjacencySpec",
     "MaskedLinear",
+    "PackedLinear",
     "gather_hop_inputs",
     "align_inputs",
     "map_node_attributions",

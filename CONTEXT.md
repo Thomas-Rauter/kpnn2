@@ -39,10 +39,11 @@ edgelist, using native nn.Module layers.
    `MaskedLinear(spec.hops[i].mask)` per hop,
    `gather_hop_inputs(saved, hop)` to assemble that hop's input,
    and their own activations, norms, loops, and heads. On an
-   `AdjacencySpec` the state update is
-   `MaskedLinear(spec.to_mask())` and the recurrence is the
-   user's `forward()`. Training via `MaskedLinear` still
-   densifies; the spec itself is O(edges).
+   `AdjacencySpec` the large-n path is
+   `PackedLinear(spec.source_index, spec.target_index, n, n)`
+   with `n = len(spec.nodes)`; that never allocates `(n, n)`.
+   `MaskedLinear(spec.to_mask())` densifies and remains valid
+   for small graphs. The recurrence is the user's `forward()`.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a `float32` tensor. Pre-ordered tensors
    go straight to the model.
@@ -74,17 +75,21 @@ edgelist, using native nn.Module layers.
 - **Not a time machine.** `parse_adjacency` accepts cycles and
   self-loops, but nothing here unrolls time, picks a step count, or
   re-injects inputs between steps. Recurrence is user `forward()`
-  over `MaskedLinear(spec.to_mask())`. `parse_layered` stays
-  DAG-only and still raises `Kpnn2Error` on a cycle.
+  over `PackedLinear(...)` or `MaskedLinear(spec.to_mask())`.
+  `parse_layered` stays DAG-only and still raises `Kpnn2Error`
+  on a cycle.
 - **Not pseudo-node expansion.** A skip edge is a column of its
   target's hop mask, never a dummy neuron and never an extra
   channel inserted into an intermediate layer.
 - **Not sparse-tensor accelerated.** Connectivity is sparse in
   the graph. `AdjacencySpec` stores O(edges) index tuples; hop
   masks and `MaskedLinear` stay dense (`parametrize` +
-  `F.linear`). Training via `MaskedLinear(spec.to_mask())`
-  still densifies. Sparse tensor formats (`torch.sparse`,
-  COO/CSR) and sparse matmul are **not planned**. Correctness,
+  `F.linear`). `PackedLinear` is a 1-D dense weight of length
+  `nnz` plus `index_add` on ordinary dense tensors; it is not
+  `torch.sparse`, COO/CSR, or sparse matmul. Sparse tensor
+  formats and sparse mm are **not planned**. Do not fold packed
+  into `MaskedLinear`. `PackedLinear` is for RAM when
+  `n_nodes` is large; it is not a better default. Correctness,
   ease of maintenance, and explainability of the code outrank
   memory and speed.
 
@@ -99,11 +104,18 @@ call order, nonlinearities, and training.
 
 **Correctness over speed.** Hop masks and `MaskedLinear` stay
 dense float32 tensors times `F.linear`, not `torch.sparse`
-layouts. `AdjacencySpec` itself is O(edges); `to_mask()` is
-the allocating dense escape hatch. Sparse-tensor acceleration
-is **not planned**, now or later. This package values
-correctness, ease of maintenance, and explainability of the
-code more than memory and speed performance.
+layouts. `PackedLinear` is a 1-D weight plus `index_add`
+(ordinary dense tensors, length `nnz`); it never uses
+`torch.sparse` / COO / CSR / sparse mm and never densifies
+inside the module. `MaskedLinear` stays the dense GEMM
+default. `PackedLinear` is for RAM when `n_nodes` is large;
+it is not a better default, and must not be folded into
+`MaskedLinear`. `AdjacencySpec` itself is O(edges);
+`to_mask()` is the allocating dense escape hatch.
+Sparse-tensor acceleration is **not planned**, now or later.
+This package values correctness, ease of maintenance, and
+explainability of the code more than memory and speed
+performance.
 
 Division of labor:
 
@@ -111,7 +123,8 @@ Division of labor:
 |-------|--------|
 | Edgelist → `LayeredSpec` (ranks, hop masks, skip metadata) | kpnn2 |
 | Edgelist → `AdjacencySpec` (nodes, packed edge indices) | kpnn2 |
-| `MaskedLinear` (fixed mask) | kpnn2 |
+| `MaskedLinear` (fixed mask, dense GEMM) | kpnn2 |
+| `PackedLinear` (1-D weight per live edge, `index_add`) | kpnn2 |
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
@@ -133,6 +146,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
 | `AdjacencySpec` | Frozen structural dataclass (nodes, packed edge indices; no stored square) |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
+| `PackedLinear` | `nn.Module`: one trainable scalar per live edge |
 | `gather_hop_inputs` | Saved layer tensors + `Hop` → that hop's input tensor |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
@@ -146,7 +160,8 @@ other public symbols.
 
 Do **not** export or implement: `compile_graph`, `customize_model`,
 `interpret_model`, `align_features_to_input_nodes`, `edge_weights`,
-`CompileArtifact`, backends, `ConstrainedMaskedLinear`, `SkipAdd`.
+`CompileArtifact`, backends, `ConstrainedMaskedLinear`, `SkipAdd`,
+`SparseMaskedLinear`.
 
 There are **two parsers and two specs, never a dispatcher**. Do not
 add `parse(..., layout=...)`, do not choose a parser by inspecting
@@ -489,7 +504,9 @@ adjacency_spec.to_mask() -> torch.Tensor
 
 The spec does **not** store a square. `to_mask()` is the only
 way to build the old dense mask so
-`MaskedLinear(spec.to_mask())` still works.
+`MaskedLinear(spec.to_mask())` still works. The large-n path
+is `PackedLinear` on the packed indices and never allocates
+`(n, n)`.
 
 - Every call allocates a new dense `float32` tensor of shape
   `(n, n)` with `n` from the node layout (`len(nodes)` at
@@ -512,17 +529,26 @@ on access: that would silently allocate.
    `spec.input_index`. In the layered case an aligned tensor
    feeds `hops[0].mask` directly; here it does not.
 2. **Input rows are structurally zero.** Input nodes have
-   in-degree 0, so their rows of `to_mask()` are all zeros and
-   `fan_in == 0`. Under the degree-aware init of `MaskedLinear`
-   those rows stay at 0 forever. Writing the inputs into the
-   state vector each step is therefore required, not cosmetic.
+   in-degree 0, so they have no packed incoming edges, their
+   rows of `to_mask()` are all zeros, and `fan_in == 0`.
+   Under the degree-aware init of `PackedLinear` and
+   `MaskedLinear` those units stay at 0 forever. Writing
+   the inputs into the state vector each step is therefore
+   required, not cosmetic.
 
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
-core = kpnn2.MaskedLinear(spec.to_mask())  # allocates a square
+n = len(spec.nodes)
+core = kpnn2.PackedLinear(
+    spec.source_index,
+    spec.target_index,
+    n,
+    n,
+)
+# MaskedLinear(spec.to_mask()) densifies; valid for small graphs
 
 x = kpnn2.align_inputs(df, spec)         # width len(input_nodes)
-state = torch.zeros(x.shape[0], len(spec.nodes))
+state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x        # required, see above
 state = torch.relu(core(state))       # one step; loop as needed
 logits = state[:, spec.output_index]
@@ -693,6 +719,104 @@ MaskedLinear(mask, bias=True)
   by 0 in the forward pass.
 
 Typical construction: `MaskedLinear(spec.hops[i].mask)`.
+
+---
+
+## `PackedLinear`
+
+Packed-edge linear layer. Same job as `torch.nn.Linear` (call
+as `layer(x)`); not a subclass. Not a full model. One
+trainable scalar per live edge; not `torch.sparse`; forward
+is `index_add` on ordinary dense tensors.
+
+```text
+PackedLinear(
+    source_index,
+    target_index,
+    out_features,
+    in_features,
+    bias=True,
+)
+```
+
+- `source_index`, `target_index`: 1-D integer tensor or
+  sequence of int, length `nnz >= 1`, copied to int64
+  buffers. `0 <= source_index < in_features` and
+  `0 <= target_index < out_features`. Duplicate
+  `(source, target)` pairs, empty indices, bad types /
+  ndim, or length mismatch raise `Kpnn2Error`.
+- `out_features`, `in_features`: positive ints.
+- Optional `bias`: shape `(out_features,)`. If
+  `bias=False`, no bias parameter.
+- `weight` is an `nn.Parameter` of shape `(nnz,)`. No
+  `parametrize`. No dense `(out, in)` `layer.weight`.
+  The parameter name is `weight`.
+- Index buffers `source_index` and `target_index` are
+  persistent so the module round-trips. They stay integer
+  after `.half()` / bfloat16 / `.double()`; `weight` and
+  `bias` follow the module floating dtype like `nn.Linear`.
+- Forward, `x` shape `(..., in_features)`:
+
+  ```text
+  contrib = x[..., source_index] * weight
+  y = zeros(..., out_features)  # same batch dims, dtype, device
+  y.index_add_(-1, target_index, contrib)
+  if bias is not None:
+      y = y + bias
+  ```
+
+  Never allocate `(out, in)`. Never scatter into a dense
+  `(out, in)` matrix in forward. Never import
+  `torch.sparse`. Never take a dense mask or an
+  `AdjacencySpec`.
+- **Degree-aware init:** `fan_in` for output row `j` is
+  the number of packed edges with `target_index == j`
+  (`bincount`, `minlength=out_features`). Each live edge
+  into row `j` (and `bias[j]`, if present) is drawn from
+  `[-1/sqrt(fan_in), 1/sqrt(fan_in)]`. `fan_in == 0`: no
+  weights in that row; `bias[j]` stays 0. Input nodes on
+  an `AdjacencySpec` have in-degree 0, so they have no
+  packed incoming edges; do not invent identity
+  connections. The user still writes inputs into the
+  state vector each step.
+- `extra_repr` reports `in_features`, `out_features`,
+  `nnz`, and `bias`.
+- `state_dict` keys are `weight`, optional `bias`,
+  `source_index`, `target_index`, and `index_digest`.
+  `index_digest` is a 1-D CPU `torch.uint8` tensor of
+  length 32, the SHA-256 of the int64 C-contiguous bytes
+  of `source_index`, then `target_index`, plus
+  `out_features` and `in_features` as fixed-width
+  integers so a reshape cannot collide. It is not a
+  registered persistent buffer. `load_state_dict` raises
+  `Kpnn2Error` when a present digest does not match, and
+  does not load the weights. A missing digest is not an
+  error, even with `strict=True`. `copy.deepcopy` works.
+- The forward path holds no tensor subclass and no sparse
+  layout, so `torch.compile(layer, fullgraph=True)` traces
+  it without a graph break. Keep it that way.
+
+Typical construction:
+
+```python
+spec = kpnn2.parse_adjacency(edgelist)
+core = kpnn2.PackedLinear(
+    spec.source_index,
+    spec.target_index,
+    len(spec.nodes),
+    len(spec.nodes),
+)
+```
+
+`MaskedLinear(spec.to_mask())` remains valid for small
+graphs. Do not change `LayeredSpec` or hop masks to use
+this layer. `PackedLinear` does not add model capacity
+relative to `MaskedLinear`: dead edges already did not
+affect training. `MaskedLinear` remains better for usual
+hops (dense GEMM, `(out, in)` weight).
+
+Do not name this `SparseMaskedLinear`, `SparseLinear`, or
+`PackedMaskedLinear`.
 
 ---
 
@@ -1014,6 +1138,7 @@ src/kpnn2/
   _spec.py                    # LayeredSpec, Hop, Skip
   _adjacency_spec.py          # AdjacencySpec
   _masked_linear.py           # MaskedLinear
+  _packed_linear.py           # PackedLinear
   _gather.py                  # gather_hop_inputs
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions
@@ -1084,9 +1209,18 @@ disagree with CI.
   adapters, edge constraints, or AnnData in v1.
 - Do **not** add sparse-tensor acceleration (`torch.sparse`,
   COO/CSR storage, sparse mm). `MaskedLinear` stays dense
-  float32 tensors times `F.linear`. This is not a v1 deferral:
-  it is not planned. Correctness, ease of maintenance, and
-  explainability of the code outrank memory and speed.
+  float32 tensors times `F.linear`. `PackedLinear` is a 1-D
+  dense `weight` of length `nnz` plus `index_add` on
+  ordinary dense tensors; it must not densify to `(out, in)`
+  inside the module, must not take a dense mask, and must
+  not import `torch.sparse`. Do not fold packed into
+  `MaskedLinear`. Do not replace `MaskedLinear` as the
+  dense default for usual hops. `PackedLinear` is for RAM
+  when `n_nodes` is large; it is not a better default. Do
+  not add `parse(..., sparse=)`. Sparse-tensor formats are
+  not a v1 deferral: they are not planned. Correctness,
+  ease of maintenance, and explainability of the code
+  outrank memory and speed.
 - `parse_adjacency` must not allocate an `(n, n)` tensor. Do
   not add a densifying `mask` property on `AdjacencySpec`.
   Materialize the square only through `to_mask()`. Still no

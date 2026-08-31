@@ -3,12 +3,13 @@ Build sparsely connected PyTorch neural networks from a named
 edgelist, using native nn.Module layers.
 
 ``kpnn2`` turns a source/target edgelist into a spec so you write
-ordinary PyTorch with ``MaskedLinear``. Pick the layout yourself:
-``parse_layered`` ranks a DAG into a ``LayeredSpec``, one ``Hop``
-per layer whose mask carries every edge entering it, skips
-included, while ``parse_adjacency`` puts every node in one state
-vector with packed edge indices (``AdjacencySpec``) and allows
-cycles.
+ordinary PyTorch. Pick the layout yourself: ``parse_layered``
+ranks a DAG into a ``LayeredSpec``, one ``Hop`` per layer whose
+mask carries every edge entering it, skips included, while
+``parse_adjacency`` puts every node in one state vector with
+packed edge indices (``AdjacencySpec``) and allows cycles. Use
+``PackedLinear`` on those packed indices, or
+``MaskedLinear(spec.to_mask())`` for the dense path.
 
 It is not a graph compiler: there is no ready-made model object
 and no training loop.
@@ -20,6 +21,7 @@ from ._attributions import map_node_attributions
 from ._errors import Kpnn2Error
 from ._gather import gather_hop_inputs
 from ._masked_linear import MaskedLinear
+from ._packed_linear import PackedLinear
 from ._parse import parse_layered
 from ._parse_adjacency import parse_adjacency
 from ._spec import Hop, LayeredSpec, Skip
@@ -34,6 +36,7 @@ __all__ = [
     "Skip",
     "AdjacencySpec",
     "MaskedLinear",
+    "PackedLinear",
     "gather_hop_inputs",
     "align_inputs",
     "map_node_attributions",

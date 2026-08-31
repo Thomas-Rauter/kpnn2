@@ -23,8 +23,10 @@ class AdjacencySpec:
 
     There are no depths here: no ``layer_nodes``, no ``hops``
     tuple, and no ``skips``. This is not a one-layer
-    ``LayeredSpec``. Use ``MaskedLinear(spec.to_mask())`` for
-    one state update and write the recurrence in ``forward()``.
+    ``LayeredSpec``. Use ``PackedLinear`` on ``source_index`` /
+    ``target_index`` for a state update that never allocates
+    ``(n, n)``, or ``MaskedLinear(spec.to_mask())`` for the
+    dense path, and write the recurrence in ``forward()``.
 
     Parameters
     ----------
