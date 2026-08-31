@@ -29,12 +29,12 @@ nav:
   - Getting started:
       - Installation: installation.md
       - Getting started: getting-started.ipynb
+      - Recurrent example: recurrent-example.ipynb
+  - How it works:
       - Layered vs. Adjacency: layered_vs_adjacency.md
       - Skip edges: skip-edges.ipynb
-  - Additional examples:
-      - Recurrent example: recurrent-example.ipynb
-      - PackedLinear: packed_linear.md
       - Mapping attributions: map-node-attributions.ipynb
+      - PackedLinear: packed_linear.md
   - Reference:
       - API: api.md
   - Project:

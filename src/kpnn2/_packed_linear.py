@@ -5,6 +5,7 @@ Packed linear layer: one trainable scalar per live edge.
 import hashlib
 import math
 import struct
+from collections.abc import Iterable
 from typing import Any
 
 import torch
@@ -39,7 +40,7 @@ def _copy_index(
             )
         return value.detach().to(dtype=torch.int64).contiguous().clone()
 
-    if isinstance(value, (str, bytes)):
+    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
         raise Kpnn2Error(
             f"'{name}' must be a 1-dimensional integer tensor "
             "or a sequence of int."

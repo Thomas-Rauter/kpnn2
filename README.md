@@ -189,7 +189,7 @@ pip install kpnn2
 
 ## Start here
 
-If you are new to the package, start with:
+If you are new to the package, start with a tutorial:
 
 - [**Installation**](docs/installation.md) for package setup
 - [**Getting started**](docs/getting-started.ipynb) for a full
@@ -197,12 +197,19 @@ If you are new to the package, start with:
 - [**Recurrent example**](docs/recurrent-example.ipynb) for
   `parse_adjacency()` and a shared `MaskedLinear` over one state
   vector when the graph has feedback loops (`parse_layered` still
-  requires a DAG). For large node counts, see
-  [PackedLinear](docs/packed_linear.md)
-- [**Mapping attributions**](docs/map-node-attributions.ipynb) for
-  labeling layer tensors with node names
+  requires a DAG)
+
+The other pages explain a design choice; they are not second
+examples:
+
+- [**Layered vs. Adjacency**](docs/layered_vs_adjacency.md) for
+  how the two parsers differ and when to pick one
 - [**Skip edges**](docs/skip-edges.ipynb) for edges that jump a
   layer, and why they need no separate mechanism
+- [**Mapping attributions**](docs/map-node-attributions.ipynb) for
+  labeling layer tensors with node names
+- [**PackedLinear**](docs/packed_linear.md) when `n` is large on
+  an `AdjacencySpec`
 - [**API reference**](docs/api.md) for function- and object-level
   documentation
 

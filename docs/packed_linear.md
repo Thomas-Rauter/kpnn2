@@ -1,13 +1,22 @@
 # PackedLinear
 
-`MaskedLinear` is the default. Usual KPNNs and small recurrent
-graphs stay on `MaskedLinear(hop.mask)` or
-`MaskedLinear(spec.to_mask())`. Use `kpnn2.PackedLinear` only
-when `n_nodes` is large enough that the square would hurt RAM.
+`MaskedLinear` is the default. The RAM problem on this page is
+`parse_adjacency()` only. That layout puts every node in one
+state vector, so `MaskedLinear(spec.to_mask())` stores an
+`(n, n)` parameter. Use `kpnn2.PackedLinear` on that spec's
+packed indices when `n` is large enough that the square would
+hurt RAM. Small recurrent graphs stay on
+`MaskedLinear(spec.to_mask())`.
+
+`parse_layered()` does not build that square. Each hop mask is
+only that hop's `(out, in)`, and the layer is
+`MaskedLinear(hop.mask)`. `PackedLinear` does not take a hop
+mask or a `LayeredSpec`; there is no combined
+`parse_layered` + `PackedLinear` path.
 
 [Layered vs. Adjacency](layered_vs_adjacency.md) and the
 [Recurrent example](recurrent-example.ipynb) stay on
-`MaskedLinear`. This page is the large-n path.
+`MaskedLinear`. This page is the large-n adjacency path.
 
 ## The RAM problem
 
