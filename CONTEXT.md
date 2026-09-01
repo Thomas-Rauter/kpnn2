@@ -1158,7 +1158,7 @@ CONTEXT.md                    # this file
 README.md
 docs/
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
-  fig_gen/                    # SVG generators; write to figures/
+  fig_gen/                    # figure generators; write to figures/
   figures/
 ```
 

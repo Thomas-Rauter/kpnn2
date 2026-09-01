@@ -1,8 +1,11 @@
 """Generate the Home dense-versus-sparse Graphviz figure.
 
-Writes ``docs/figures/dense_vs_sparse.svg``.
+Writes ``docs/figures/dense_vs_sparse.svg`` and a matching PNG.
+The PNG is 4× 96 dpi so it stays sharp on the docs site when the
+figure is stretched to the content column, and on PyPI.
 """
 
+import subprocess
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -13,6 +16,7 @@ _OUT_PATH = _DOCS_DIR / "figures" / "dense_vs_sparse.svg"
 _FONT = "Liberation Sans"
 _FONTSIZE = "6"
 _GAP_PT = 20.0
+_PNG_DPI = 384
 
 ET.register_namespace("", "http://www.w3.org/2000/svg")
 ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
@@ -251,8 +255,29 @@ def _combine_side_by_side(
     )
 
 
+def _rasterize_png(
+    svg_path: Path,
+    png_path: Path,
+) -> None:
+    subprocess.run(
+        [
+            "rsvg-convert",
+            "--dpi-x",
+            str(_PNG_DPI),
+            "--dpi-y",
+            str(_PNG_DPI),
+            "--format",
+            "png",
+            "--output",
+            str(png_path),
+            str(svg_path),
+        ],
+        check=True,
+    )
+
+
 def write_figure(out_path: Path | None = None) -> Path:
-    """Render both panels and write the combined SVG."""
+    """Render both panels and write the combined SVG and PNG."""
     path = _OUT_PATH if out_path is None else out_path
     path.parent.mkdir(parents=True, exist_ok=True)
     svg = _combine_side_by_side(
@@ -260,12 +285,18 @@ def write_figure(out_path: Path | None = None) -> Path:
         _sparse_panel().pipe().decode("utf-8"),
     )
     path.write_text(svg)
+    _rasterize_png(
+        path,
+        path.with_suffix(".png"),
+    )
     return path
 
 
 def main() -> None:
     path = write_figure()
+    png_path = path.with_suffix(".png")
     print(f"Wrote {path}")
+    print(f"Wrote {png_path}")
 
 
 if __name__ == "__main__":

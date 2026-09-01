@@ -23,7 +23,7 @@ nodes are linked, and some edges skip layers. That is the gap
 PyTorch workflow, with that connectivity.
 Figure 1 shows a dense NN next to a sparse NN with skip edges.
 
-![Fully connected versus sparse](docs/figures/dense_vs_sparse.svg)
+![Fully connected versus sparse](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/dense_vs_sparse.png)
 
 **Figure 1.** (a) Dense adjacent layers, the usual PyTorch case.
 (b) A sparsely connected DAG with skip edges (dashed), the same graph as on
