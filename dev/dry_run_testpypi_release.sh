@@ -141,7 +141,7 @@ data = pd.DataFrame(
     }
 )
 x = align_inputs(data, spec)
-layer = MaskedLinear(spec.masks[0])
+layer = MaskedLinear(spec.hops[0].mask)
 with torch.no_grad():
     h = layer(x)
 
@@ -150,5 +150,3 @@ print("aligned_shape:", tuple(x.shape))
 print("hidden_shape:", tuple(h.shape))
 print("TestPyPI install smoke test passed.")
 PY
-
-echo "Done. Temporary environment removed."

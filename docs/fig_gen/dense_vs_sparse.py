@@ -106,7 +106,7 @@ def _dense_panel() -> Digraph:
 
 
 def _sparse_panel() -> Digraph:
-    graph = _panel_graph("(b) Sparse with skip edges")
+    graph = _panel_graph("(b) Sparsely connected with skip edges")
     _same_rank(
         graph,
         ["A", "B"],

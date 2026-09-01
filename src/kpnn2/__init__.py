@@ -1,6 +1,6 @@
 """
-Build sparsely connected PyTorch neural networks from a named
-edgelist, using native nn.Module layers.
+Turn a named edgelist into sparsely connected PyTorch layers
+you assemble yourself.
 
 ``kpnn2`` turns a source/target edgelist into a spec so you write
 ordinary PyTorch. Pick the layout yourself: ``parse_layered``

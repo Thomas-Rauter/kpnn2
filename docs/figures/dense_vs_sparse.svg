@@ -126,7 +126,7 @@
 </g>
 </svg><svg x="206.28" y="0.00" width="253.28" height="98.29" viewBox="0.00 0.00 253.28 98.29"><g id="b_graph0" class="graph" transform="scale(1 1) rotate(0) translate(8.64 89.65)">
 <title>%3</title>
-<text text-anchor="middle" x="118" y="-72.21" font-family="Liberation Sans" font-size="6.00">(b) Sparse with skip edges</text>
+<text text-anchor="middle" x="118" y="-72.21" font-family="Liberation Sans" font-size="6.00">(b) Sparsely connected with skip edges</text>
 
 <g id="b_node1" class="node">
 <title>A</title>

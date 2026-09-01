@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use kpnn2 in your research, please cite it using the metadata from this file."
-title: "kpnn2: Build sparsely connected PyTorch neural networks from a named edgelist, using native nn.Module layers."
+title: "kpnn2: Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself."
 type: software
 authors:
   - family-names: "Rauter"
@@ -8,7 +8,7 @@ authors:
     orcid: "https://orcid.org/0009-0004-5578-3628"
 repository-code: "https://github.com/Thomas-Rauter/kpnn2"
 url: "https://thomas-rauter.github.io/kpnn2/"
-abstract: "Build sparsely connected PyTorch neural networks from a named edgelist, using native nn.Module layers."
+abstract: "Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself."
 keywords:
   - pytorch
   - sparse-neural-networks
@@ -16,4 +16,4 @@ keywords:
   - knowledge-primed-neural-networks
 license: "MIT"
 version: "0.1.0"
-date-released: 2026-08-26
+date-released: 2026-09-01

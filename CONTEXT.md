@@ -15,8 +15,8 @@ from `kpnn2`.
 
 ## One-sentence summary
 
-Build sparsely connected PyTorch neural networks from a named
-edgelist, using native nn.Module layers.
+Turn a named edgelist into sparsely connected PyTorch layers
+you assemble yourself.
 
 ---
 
