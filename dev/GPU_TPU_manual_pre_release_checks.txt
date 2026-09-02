@@ -1,0 +1,12 @@
+# Colab accelerator smoke
+
+Open the committed notebook on main. Do not upload a local copy.
+
+https://colab.research.google.com/github/Thomas-Rauter/kpnn2/blob/main/tests/manual/colab_gpu_tpu.ipynb
+
+Run twice before a release, after the candidate is on TestPyPI:
+
+- Runtime -> Change runtime type -> T4 GPU
+- Runtime -> Change runtime type -> TPU v2
+
+Details: tests/manual/README.md.

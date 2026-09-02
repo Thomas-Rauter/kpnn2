@@ -1150,6 +1150,7 @@ src/kpnn2/
 tests/
   api/                        # public import surface
   module/                     # unit tests per primitive
+  manual/                     # Colab GPU/TPU smoke; not pytest
 
 scripts/
   docs_notebooks.py           # execute/repair docs notebooks
@@ -1285,3 +1286,7 @@ disagree with CI.
   `python scripts/docs_notebooks.py` (venv kernel, not
   `ipykernel install --user --name python3`). `mkdocs serve`
   repairs missing stream names on pre-build.
+- `tests/manual/` is Colab GPU/TPU smoke, not pytest and not
+  docs. Do not execute it in CI or with
+  `scripts/docs_notebooks.py`. Open from GitHub via
+  `dev/colab.txt`. Install from TestPyPI with `--no-deps`.
