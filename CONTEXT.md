@@ -20,6 +20,58 @@ you assemble yourself.
 
 ---
 
+## Locked contrasts
+
+"Sparse" means two different things. Do not collapse them.
+
+| Axis | Meaning | Owner | Lock |
+|------|---------|--------|------|
+| Graph / network | Which edges exist | kpnn2 | Always dense compute |
+| Data / X | Feature-matrix storage | User | Host may stay sparse; minibatches are dense |
+
+**Graph / network.** Connectivity is sparse in the edgelist.
+Hop masks and `MaskedLinear` stay dense float32 tensors times
+`F.linear`. `PackedLinear` is a 1-D dense `weight` of length
+`nnz` plus `index_add` on ordinary dense tensors. Not
+`torch.sparse`, not COO/CSR storage, not sparse mm.
+Sparse-tensor acceleration is **not planned**, now or later.
+Do not add it for biology, RAM, or a convenience layer.
+
+**Data / X.** Host feature storage, row-block slicing, and
+device copies are the caller's (a training loop, or a
+convenience package built on these primitives). kpnn2 has
+no minibatcher and no device policy. If the host matrix is
+sparse, it stays sparse for the whole call. Each step: take
+the next row block → densify **that block** → move that
+dense tensor to the device → dense forward. If X is already
+a dense DataFrame, host stays dense; only the batch is
+copied to the device. Never: the full feature matrix on
+GPU/TPU, sparse minibatches, sparse kernels, or a silent
+full densify of the host matrix.
+
+**Module boundary.** `MaskedLinear`, `PackedLinear`,
+`gather_hop_inputs`, and `map_node_attributions` take and
+return ordinary dense `torch.Tensor`s. Captum is not in
+this package; when the caller runs it, that call stays
+dense (no sparse IG here, and none to add).
+
+**`align_inputs` is the dense-table path.** It maps a named
+pandas DataFrame onto `spec.input_nodes` as a dense
+`float32` CPU tensor of **all rows**. It is not a minibatch
+helper and not the sparse-host path. Do not convert sparse
+AnnData (or a scipy sparse matrix) to a DataFrame and pass
+it through `align_inputs`: that densifies the whole matrix.
+A caller with sparse host X column-aligns on the sparse
+layout themselves, densifies only each row block, then
+feeds a dense tensor to the model. Pre-ordered dense
+tensors already skip `align_inputs`.
+
+Do not add AnnData, scipy sparse, a sparse-preserving
+`align_inputs`, minibatching, or device-copy helpers to
+this package unless a later prompt asks.
+
+---
+
 ## What this package does
 
 1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
@@ -45,8 +97,10 @@ you assemble yourself.
    `MaskedLinear(spec.to_mask())` densifies and remains valid
    for small graphs. The recurrence is the user's `forward()`.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
-   `spec.input_nodes` as a `float32` tensor. Pre-ordered tensors
-   go straight to the model.
+   `spec.input_nodes` as a dense `float32` CPU tensor of all
+   rows. Pre-ordered dense tensors go straight to the model.
+   Sparse host matrices are not a kpnn2 input type; see
+   **Locked contrasts**.
 5. **Train:** The user owns loss, optimizer, and the training loop.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
    at one LayeredSpec layer as an `xarray.DataArray` (`node` names
@@ -69,9 +123,17 @@ you assemble yourself.
 - **Not a GNN library.** No message passing, batched variable graphs,
   or edge-feature convolutions.
 - **Not a trainer.** No losses, optimizers, or training loops.
+- **Not a data-residency layer.** No minibatcher, no device
+  policy, no "keep X sparse" helper, and no rule that moves
+  the full feature matrix to GPU. Host-sparse storage (for
+  example AnnData `.X` as scipy CSR) is valid in the
+  **caller's** loop; this package does not implement that
+  path. See **Locked contrasts**.
 - **Not Captum.** No Captum import anywhere in the library. Attribution
   mapping is name alignment only.
 - **Not AnnData (v1).** No `anndata` support in `align_inputs`.
+  Callers may keep sparse AnnData in their own code; do not
+  add AnnData here to enable that.
 - **Not a time machine.** `parse_adjacency` accepts cycles and
   self-loops, but nothing here unrolls time, picks a step count, or
   re-injects inputs between steps. Recurrence is user `forward()`
@@ -81,17 +143,20 @@ you assemble yourself.
 - **Not pseudo-node expansion.** A skip edge is a column of its
   target's hop mask, never a dummy neuron and never an extra
   channel inserted into an intermediate layer.
-- **Not sparse-tensor accelerated.** Connectivity is sparse in
-  the graph. `AdjacencySpec` stores O(edges) index tuples; hop
-  masks and `MaskedLinear` stay dense (`parametrize` +
-  `F.linear`). `PackedLinear` is a 1-D dense weight of length
-  `nnz` plus `index_add` on ordinary dense tensors; it is not
+- **Not sparse-tensor accelerated.** This is the **graph**
+  axis, not a ban on sparse feature matrices in the caller's
+  host RAM. Connectivity is sparse in the graph.
+  `AdjacencySpec` stores O(edges) index tuples; hop masks and
+  `MaskedLinear` stay dense (`parametrize` + `F.linear`).
+  `PackedLinear` is a 1-D dense weight of length `nnz` plus
+  `index_add` on ordinary dense tensors; it is not
   `torch.sparse`, COO/CSR, or sparse matmul. Sparse tensor
   formats and sparse mm are **not planned**. Do not fold packed
   into `MaskedLinear`. `PackedLinear` is for RAM when
   `n_nodes` is large; it is not a better default. Correctness,
   ease of maintenance, and explainability of the code outrank
-  memory and speed.
+  memory and speed. Host-sparse scipy CSR in a caller loop
+  does not violate this bullet.
 
 ---
 
@@ -101,6 +166,14 @@ you assemble yourself.
 parsing, mask tensors, hop input assembly, named I/O alignment,
 and attribution column names. The user owns `nn.Module.forward()`,
 call order, nonlinearities, and training.
+
+**Two sparsity axes.** Graph connectivity is kpnn2's: always
+dense compute, sparse only as "which edges exist." Feature
+matrix X is the user's: sparse host storage is allowed in
+**their** code; tensors that enter `forward()` are always
+dense. See **Locked contrasts**. Do not add `torch.sparse`
+kernels to "support sparse X." Do not route sparse X through
+`align_inputs`.
 
 **Correctness over speed.** Hop masks and `MaskedLinear` stay
 dense float32 tensors times `F.linear`, not `torch.sparse`
@@ -126,10 +199,14 @@ Division of labor:
 | `MaskedLinear` (fixed mask, dense GEMM) | kpnn2 |
 | `PackedLinear` (1-D weight per live edge, `index_add`) | kpnn2 |
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
+| Named DataFrame → dense CPU tensor (`align_inputs`) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
+| Host feature layout (dense table vs sparse AnnData `.X`) | User |
+| Minibatch slice → densify that block → device copy | User |
 | Captum / other attribution algorithms | User |
 | Tensor → named `xarray.DataArray` | kpnn2 |
+| Sparse-tensor kernels (`torch.sparse`, sparse mm) | Not planned |
 
 ---
 
@@ -697,8 +774,9 @@ MaskedLinear(mask, bias=True)
   work like `nn.Linear`. In the common float32 case that `.to`
   returns the buffer itself, so forward allocates nothing extra
   for the mask. The multiply is **dense** on purpose.
-  Sparse-tensor acceleration is not planned; see Package
-  philosophy.
+  `x` is an ordinary dense activation tensor, not a sparse
+  host feature matrix. Sparse-tensor acceleration is not
+  planned; see **Locked contrasts**.
 - The forward path holds no tensor subclass, so
   `torch.compile(layer, fullgraph=True)` traces it without a
   graph break, parametrization included. Keep it that way.
@@ -768,7 +846,8 @@ PackedLinear(
   Never allocate `(out, in)`. Never scatter into a dense
   `(out, in)` matrix in forward. Never import
   `torch.sparse`. Never take a dense mask or an
-  `AdjacencySpec`.
+  `AdjacencySpec`. `x` is an ordinary dense activation
+  tensor, not a sparse host feature matrix.
 - **Degree-aware init:** `fan_in` for output row `j` is
   the number of packed edges with `target_index == j`
   (`bincount`, `minlength=out_features`). Each live edge
@@ -868,7 +947,11 @@ would reintroduce a second place for edge weights to live.
 identical for both. Anything else raises `Kpnn2Error`.
 
 Returns `torch.float32` tensor of shape
-`(n_samples, len(spec.input_nodes))`.
+`(n_samples, len(spec.input_nodes))`. The tensor is dense and
+lives on CPU. This function materializes **every row** of the
+DataFrame. It is not a minibatch API, not a device-copy
+helper, and not the sparse-host path. See **Locked
+contrasts**.
 
 **Width differs by layout.** For a `LayeredSpec` that width is
 `layer_dims[0]`, and `hops[0]` reads layer 0 alone, so the tensor
@@ -905,10 +988,16 @@ state[:, spec.input_index] = x
   pandas DataFrame is required.
 - Do not check width / ndim as a substitute for alignment.
 - Do not return a cast tensor.
-- Pre-ordered tensors go **straight to the model**. Users who
+- Pre-ordered dense tensors go **straight to the model**. Users who
   need alignment pass a DataFrame.
 
-**Not supported in v1:** AnnData, numpy arrays, dicts of columns.
+**Not supported in v1:** AnnData, numpy arrays, dicts of columns,
+scipy sparse matrices. Do not add them here so a caller can
+keep host X sparse. That caller column-aligns on the sparse
+layout themselves and densifies only each row block before
+the model. Passing `adata.to_df()` (or any full densify)
+into `align_inputs` is exactly the silent full densify
+**Locked contrasts** forbids.
 
 ---
 
@@ -950,7 +1039,8 @@ report and none is invented. Do not fabricate `layer=0` for it.
 
 The user obtains `attributions` however they like (Captum
 LayerConductance, IntegratedGradients, custom grads, etc.). This
-function only attaches spec names to the `node` axis. For the
+function only attaches spec names to the `node` axis. The input
+is already dense scores, not a host feature matrix. For the
 output of `MaskedLinear(spec.hops[i].mask)` pass
 `layer=spec.hops[i].target_layer`, that is `i+1`. Do not
 name-map BatchNorm or other unnamed modules.
@@ -1069,6 +1159,15 @@ Every edge, including `A → C` when that row is present, is
 already inside a hop mask. The loop applies each hop once, so
 nothing has to be remembered per skip edge.
 
+That snippet is the dense-DataFrame path: `align_inputs`
+materializes the whole table on CPU. A caller who already has
+a sparse host matrix (for example AnnData `.X`) must not
+densify it through `align_inputs` or DataFrame conversion.
+They column-align on the sparse layout, densify only each
+row block, move that dense tensor, and call `model`. Tensors
+at the module boundary are always dense. See **Locked
+contrasts**.
+
 ### Checkpoints
 
 A `MaskedLinear` `state_dict` is not self-describing: it cannot
@@ -1112,7 +1211,10 @@ PyTorch:
 4. Put ReLU / BatchNorm / Dropout in `forward()` yourself, after
    the hop that produced the tensor. Store the value you want
    later hops to read.
-5. `x = kpnn2.align_inputs(df, spec)`
+5. `x = kpnn2.align_inputs(df, spec)` when X is a named
+   DataFrame. Pre-ordered dense tensors skip this. Sparse
+   host X is the caller's loop (row block → densify →
+   device); do not send it through `align_inputs`.
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
 7. Save `spec.to_dict()` next to `state_dict`. Rebuild from
@@ -1209,6 +1311,12 @@ disagree with CI.
 - Do not rename the package, import, or `src/kpnn2/` directory.
 - Do not reintroduce compilers, backends, pseudo nodes, Captum
   adapters, edge constraints, or AnnData in v1.
+- Two sparsity axes (see **Locked contrasts**). Graph
+  connectivity is always dense compute in this package.
+  Feature-matrix storage is the caller's. Do not collapse
+  "sparse X" into `torch.sparse` kernels, and do not treat
+  host-sparse scipy CSR in a caller loop as a violation of
+  the graph rule.
 - Do **not** add sparse-tensor acceleration (`torch.sparse`,
   COO/CSR storage, sparse mm). `MaskedLinear` stays dense
   float32 tensors times `F.linear`. `PackedLinear` is a 1-D
@@ -1223,6 +1331,17 @@ disagree with CI.
   not a v1 deferral: they are not planned. Correctness,
   ease of maintenance, and explainability of the code
   outrank memory and speed.
+- Do not add AnnData, scipy sparse, a sparse-preserving
+  `align_inputs`, a minibatcher, or device-copy helpers so
+  this package can "support sparse X." `align_inputs` stays
+  a full named-DataFrame densifier on CPU. Sparse host X
+  must not go through `align_inputs` (including via
+  `adata.to_df()`). Callers densify only each row block and
+  pass a dense tensor to the model. Do not put the full
+  feature matrix on GPU inside this package; this package
+  never moves X to a device.
+- Do not add sparse minibatches or sparse Captum / IG.
+  Module inputs stay ordinary dense tensors.
 - `parse_adjacency` must not allocate an `(n, n)` tensor. Do
   not add a densifying `mask` property on `AdjacencySpec`.
   Materialize the square only through `to_mask()`. Still no

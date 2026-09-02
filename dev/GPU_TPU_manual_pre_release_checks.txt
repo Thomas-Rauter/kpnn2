@@ -2,7 +2,7 @@
 
 Open the committed notebook on main. Do not upload a local copy.
 
-https://colab.research.google.com/github/Thomas-Rauter/kpnn2/blob/main/tests/manual/colab_gpu_tpu.ipynb
+https://colab.research.google.com/github/Thomas-Rauter/kpnn2/blob/main/tests/manual/colab_gpu_tpu.ipynb#sandboxMode=true
 
 Run twice before a release, after the candidate is on TestPyPI:
 
