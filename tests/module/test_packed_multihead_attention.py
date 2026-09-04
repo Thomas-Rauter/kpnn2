@@ -493,6 +493,75 @@ def test_key_padding_mask_all_true_output_finite():
     assert torch.isfinite(attn_out).all()
 
 
+def test_key_padding_mask_float_raises():
+    torch.manual_seed(42)
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+    )
+    query = torch.randn(
+        3,
+        2,
+        8,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match="boolean",
+    ):
+        layer(
+            query,
+            query,
+            query,
+            key_padding_mask=torch.zeros(
+                3,
+                2,
+            ),
+            need_weights=False,
+        )
+
+
+def test_key_padding_mask_moves_to_scores_device():
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+    torch.manual_seed(42)
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+    )
+    layer = layer.to("cuda")
+    query = torch.randn(
+        3,
+        2,
+        8,
+        device="cuda",
+    )
+    key_padding_mask = torch.zeros(
+        3,
+        2,
+        dtype=torch.bool,
+    )
+    assert key_padding_mask.device.type == "cpu"
+    attn_out, weights = layer(
+        query,
+        query,
+        query,
+        key_padding_mask=key_padding_mask,
+        need_weights=False,
+    )
+    assert attn_out.device.type == "cuda"
+    assert attn_out.shape == query.shape
+    assert weights is None
+    assert torch.isfinite(attn_out).all()
+
+
 def test_bias_false_has_no_projection_bias():
     torch.manual_seed(42)
     layer = PackedMultiheadAttention(

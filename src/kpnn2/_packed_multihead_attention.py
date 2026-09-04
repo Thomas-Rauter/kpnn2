@@ -237,6 +237,7 @@ def _padding_participate(
     source_index: torch.Tensor,
     batch_shape: tuple[int, ...],
     key_features: int,
+    device: torch.device,
 ) -> torch.Tensor | None:
     if key_padding_mask is None:
         return None
@@ -273,7 +274,13 @@ def _padding_participate(
                 "'key_padding_mask' shape must be (S,) "
                 "unbatched or (N, S) batched."
             )
-    padded = key_padding_mask[..., source_index]
+    mask = key_padding_mask.to(
+        device=device,
+    )
+    index = source_index.to(
+        device=device,
+    )
+    padded = mask[..., index]
     participate = ~padded
     return participate.unsqueeze(-1)
 
@@ -501,7 +508,9 @@ class PackedMultiheadAttention(nn.Module):
     self-loops) stay zeros after the mix, then still go
     through ``out_proj``. There is no NaN softmax. After
     ``key_padding_mask``, a query with no remaining keys also
-    stays zeros.
+    stays zeros. A boolean padding mask is copied onto the
+    scores' device; it stays boolean. Float padding masks
+    still raise ``Kpnn2Error``.
 
     Index buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``. ``state_dict`` includes ``index_digest``, a
@@ -788,7 +797,8 @@ class PackedMultiheadAttention(nn.Module):
         ``False``. ``key_padding_mask`` is ``None`` or a
         boolean mask: ``True`` means ignore that key. Shape
         ``(S,)`` unbatched or ``(N, S)`` batched. Applied in
-        packed space; does not allocate ``(n, n)``. Float
+        packed space; does not allocate ``(n, n)``. Copied
+        onto the scores' device; stays boolean. Float
         padding masks raise ``Kpnn2Error``. After padding, a
         query with no remaining keys stays zeros, not NaN.
         """
@@ -843,6 +853,7 @@ class PackedMultiheadAttention(nn.Module):
             self.source_index,
             tuple(query_bf.shape[:-2]),
             self.key_features,
+            query_bf.device,
         )
         mixed = _packed_attention(
             q,

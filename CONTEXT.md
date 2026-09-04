@@ -1012,7 +1012,8 @@ forward(
 - `key_padding_mask` is `None` or a packed boolean
   mask: `True` means ignore that key. Shape `(S,)`
   unbatched or `(N, S)` batched. Applied in packed
-  space; does not allocate `(n, n)`. Float padding
+  space; does not allocate `(n, n)`. Copied onto
+  the scores' device; stays boolean. Float padding
   masks raise `Kpnn2Error`.
 - Isolated queries (no packed keys, and none added by
   self-loops) stay zeros after the mix, then still go
