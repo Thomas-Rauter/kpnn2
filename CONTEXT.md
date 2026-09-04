@@ -4,7 +4,7 @@ This file is **AI-first documentation** for assistants working in this
 repository or explaining the package to users. It is more detailed and
 operational than `README.md`.
 
-**Release:** `0.1.0` as package `kpnn2` (`import kpnn2`).
+**Release:** `0.2.0` as package `kpnn2` (`import kpnn2`).
 This document is the implementation contract.
 
 Do not reintroduce a graph compiler or a ready-made model object.
@@ -32,8 +32,9 @@ you assemble yourself.
 **Graph / network.** Connectivity is sparse in the edgelist.
 Hop masks and `MaskedLinear` stay dense float32 tensors times
 `F.linear`. `PackedLinear` is a 1-D dense `weight` of length
-`nnz` plus `index_add` on ordinary dense tensors. Not
-`torch.sparse`, not COO/CSR storage, not sparse mm.
+`nnz` plus `index_add` on ordinary dense tensors.
+`PackedMultiheadAttention` scores only live edgelist pairs.
+Not `torch.sparse`, not COO/CSR storage, not sparse mm.
 Sparse-tensor acceleration is **not planned**, now or later.
 Do not add it for biology, RAM, or a convenience layer.
 
@@ -50,10 +51,11 @@ GPU/TPU, sparse minibatches, sparse kernels, or a silent
 full densify of the host matrix.
 
 **Module boundary.** `MaskedLinear`, `PackedLinear`,
-`gather_hop_inputs`, and `map_node_attributions` take and
-return ordinary dense `torch.Tensor`s. Captum is not in
-this package; when the caller runs it, that call stays
-dense (no sparse IG here, and none to add).
+`PackedMultiheadAttention`, `gather_hop_inputs`, and
+`map_node_attributions` take and return ordinary dense
+`torch.Tensor`s. Captum is not in this package; when the
+caller runs it, that call stays dense (no sparse IG here,
+and none to add).
 
 **`align_inputs` is the dense-table path.** It maps a named
 pandas DataFrame onto `spec.input_nodes` as a dense
@@ -94,8 +96,10 @@ this package unless a later prompt asks.
    `AdjacencySpec` the large-n path is
    `PackedLinear(spec.source_index, spec.target_index, n, n)`
    with `n = len(spec.nodes)`; that never allocates `(n, n)`.
-   `MaskedLinear(spec.to_mask())` densifies and remains valid
-   for small graphs. The recurrence is the user's `forward()`.
+   The same packed indices can feed
+   `PackedMultiheadAttention`. `MaskedLinear(spec.to_mask())`
+   densifies and remains valid for small graphs. The
+   recurrence is the user's `forward()`.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a dense `float32` CPU tensor of all
    rows. Pre-ordered dense tensors go straight to the model.
@@ -122,6 +126,11 @@ this package unless a later prompt asks.
   a backend.
 - **Not a GNN library.** No message passing, batched variable graphs,
   or edge-feature convolutions.
+- **Not a ready-made Transformer.** `PackedMultiheadAttention`
+  is a contraction primitive on live edgelist pairs. It is
+  not an encoder, not a Transformer stack, and not a reason
+  to add `parse_attention`. Do not reuse `Hop.mask` as a
+  square attention matrix.
 - **Not a trainer.** No losses, optimizers, or training loops.
 - **Not a data-residency layer.** No minibatcher, no device
   policy, no "keep X sparse" helper, and no rule that moves
@@ -150,13 +159,17 @@ this package unless a later prompt asks.
   `MaskedLinear` stay dense (`parametrize` + `F.linear`).
   `PackedLinear` is a 1-D dense weight of length `nnz` plus
   `index_add` on ordinary dense tensors; it is not
-  `torch.sparse`, COO/CSR, or sparse matmul. Sparse tensor
-  formats and sparse mm are **not planned**. Do not fold packed
-  into `MaskedLinear`. `PackedLinear` is for RAM when
-  `n_nodes` is large; it is not a better default. Correctness,
-  ease of maintenance, and explainability of the code outrank
-  memory and speed. Host-sparse scipy CSR in a caller loop
-  does not violate this bullet.
+  `torch.sparse`, COO/CSR, or sparse matmul.
+  `PackedMultiheadAttention` scores only live pairs; it is
+  not `torch.sparse` and never allocates `(n, n)`. Sparse
+  tensor formats and sparse mm are **not planned**. Do not
+  fold packed into `MaskedLinear`. Do not fold attention
+  into `PackedLinear` or `MaskedLinear`. `PackedLinear` is
+  for RAM when `n_nodes` is large; it is not a better
+  default. Correctness, ease of maintenance, and
+  explainability of the code outrank memory and speed.
+  Host-sparse scipy CSR in a caller loop does not violate
+  this bullet.
 
 ---
 
@@ -183,7 +196,10 @@ layouts. `PackedLinear` is a 1-D weight plus `index_add`
 inside the module. `MaskedLinear` stays the dense GEMM
 default. `PackedLinear` is for RAM when `n_nodes` is large;
 it is not a better default, and must not be folded into
-`MaskedLinear`. `AdjacencySpec` itself is O(edges);
+`MaskedLinear`. `PackedMultiheadAttention` is the same
+kind of packed primitive for attention; it must not be
+folded into `PackedLinear` or `MaskedLinear`.
+`AdjacencySpec` itself is O(edges);
 `to_mask()` is the allocating dense escape hatch.
 Sparse-tensor acceleration is **not planned**, now or later.
 This package values correctness, ease of maintenance, and
@@ -198,9 +214,11 @@ Division of labor:
 | Edgelist → `AdjacencySpec` (nodes, packed edge indices) | kpnn2 |
 | `MaskedLinear` (fixed mask, dense GEMM) | kpnn2 |
 | `PackedLinear` (1-D weight per live edge, `index_add`) | kpnn2 |
+| `PackedMultiheadAttention` (packed MHA on live pairs) | kpnn2 |
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
 | Named DataFrame → dense CPU tensor (`align_inputs`) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
+| Encoder stack, FFN, residuals | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
 | Host feature layout (dense table vs sparse AnnData `.X`) | User |
 | Minibatch slice → densify that block → device copy | User |
@@ -224,6 +242,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `AdjacencySpec` | Frozen structural dataclass (nodes, packed edge indices; no stored square) |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
 | `PackedLinear` | `nn.Module`: one trainable scalar per live edge |
+| `PackedMultiheadAttention` | `nn.Module`: packed multi-head attention on live edgelist pairs |
 | `gather_hop_inputs` | Saved layer tensors + `Hop` → that hop's input tensor |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
@@ -899,6 +918,148 @@ Do not name this `SparseMaskedLinear`, `SparseLinear`, or
 
 ---
 
+## `PackedMultiheadAttention`
+
+Packed multi-head attention on live edgelist pairs. Same
+job as `torch.nn.MultiheadAttention` (call as
+`layer(query, key, value)`); not a subclass. Not a
+Transformer block and not a full model. Scores exist only
+for live `(source, target)` pairs: query = target, key /
+value = source. Forward never allocates an `(n, n)` or
+`(L, S)` score matrix and does not import `torch.sparse`.
+This module does not take an `AdjacencySpec`; pass packed
+indices (typically from `parse_adjacency`).
+
+```text
+PackedMultiheadAttention(
+    source_index,
+    target_index,
+    query_features,
+    key_features,
+    embed_dim,
+    num_heads,
+    dropout=0.0,
+    bias=True,
+    kdim=None,
+    vdim=None,
+    batch_first=True,
+    add_self_loops=False,
+)
+```
+
+- `source_index`, `target_index`: 1-D integer tensor or
+  sequence of int, length `nnz >= 1`, copied to int64
+  buffers. `0 <= source_index < key_features` and
+  `0 <= target_index < query_features`. Duplicate
+  `(source, target)` pairs, empty indices, bad types /
+  ndim, or length mismatch raise `Kpnn2Error`.
+- `query_features`, `key_features`: positive ints.
+  Sequence lengths of `query` and of `key` / `value`.
+- `embed_dim`: positive int, divisible by `num_heads`.
+- `num_heads`: positive int.
+- `dropout`: float `>= 0` on packed attention weights.
+  Integer `0` is accepted. `bool` and negatives raise
+  `Kpnn2Error`.
+- Optional `bias`: on the four `nn.Linear` projections.
+- `kdim`, `vdim`: must be `None` or equal to
+  `embed_dim`. Other values raise `Kpnn2Error`.
+- `batch_first`: default `True` (kpnn2 sample-major).
+  That differs from `nn.MultiheadAttention`, whose
+  default is sequence-major. Batched tensors are
+  `(..., seq, embed_dim)` when True;
+  `(seq, batch, embed_dim)` when False. Unbatched 2-D
+  `(seq, embed)` ignores this flag.
+- `add_self_loops`: if `True`, OR missing `(i, i)`
+  pairs into the module buffers when
+  `query_features == key_features`. Caller index
+  objects are not mutated. Existing self-loops are
+  kept, not duplicated. If
+  `query_features != key_features`, raise
+  `Kpnn2Error`.
+- Projections are four separate
+  `embed_dim → embed_dim` `nn.Linear`s (`q_proj`,
+  `k_proj`, `v_proj`, `out_proj`), not a fused
+  `in_proj_weight`.
+- Index buffers `source_index` and `target_index` are
+  persistent so the module round-trips. They stay
+  integer after `.half()` / bfloat16 / `.double()`.
+
+```text
+forward(
+    query,
+    key,
+    value,
+    key_padding_mask=None,
+    need_weights=False,
+    attn_mask=None,
+    average_attn_weights=True,
+    is_causal=False,
+) -> (output, None)
+```
+
+- Always returns a 2-tuple. The second entry is always
+  `None`. `need_weights` defaults to `False` (MHA
+  defaults `True`). If `need_weights` is `True`, raise
+  `Kpnn2Error`: returning weights would allocate a
+  dense `(L, S)` matrix. `average_attn_weights` is
+  kept for call-site drop-in and has no effect while
+  that raise stands.
+- `query`, `key`, and `value` are required; `key` is
+  not defaulted to `query`.
+- `attn_mask` must be `None` (the edgelist is the
+  structural mask). `is_causal` must be `False`. Both
+  raise `Kpnn2Error` otherwise.
+- `key_padding_mask` is `None` or a packed boolean
+  mask: `True` means ignore that key. Shape `(S,)`
+  unbatched or `(N, S)` batched. Applied in packed
+  space; does not allocate `(n, n)`. Float padding
+  masks raise `Kpnn2Error`.
+- Isolated queries (no packed keys, and none added by
+  self-loops) stay zeros after the mix, then still go
+  through `out_proj`. After `key_padding_mask`, a
+  query with no remaining keys also stays zeros.
+  There is no NaN softmax.
+- Never allocate `(n, n)` or `(L, S)`. Never import
+  `torch.sparse`. Never take a dense mask or an
+  `AdjacencySpec`. `query` / `key` / `value` are
+  ordinary dense activation tensors.
+- `extra_repr` reports `query_features`,
+  `key_features`, `embed_dim`, `num_heads`, `nnz`,
+  `dropout`, `batch_first`, and `add_self_loops`.
+- `state_dict` includes `index_digest`, a 1-D CPU
+  `uint8` tensor of length 32: the SHA-256 of the
+  int64 C-contiguous bytes of `source_index`, then
+  `target_index`, plus `query_features` and
+  `key_features` as fixed-width integers so a reshape
+  cannot collide. It is not a registered persistent
+  buffer. `load_state_dict` raises `Kpnn2Error` when
+  a present digest does not match, and does not load
+  the weights. A missing digest is not an error, even
+  with `strict=True`. Same pattern as `PackedLinear`.
+  `copy.deepcopy` works.
+
+Typical construction:
+
+```python
+spec = kpnn2.parse_adjacency(edgelist)
+n = len(spec.nodes)
+attn = kpnn2.PackedMultiheadAttention(
+    spec.source_index,
+    spec.target_index,
+    n,
+    n,
+    embed_dim,
+    num_heads,
+)
+```
+
+Do not name this a Transformer. Do not add
+`parse_attention`. Do not reuse `Hop.mask` as a square
+attention matrix. Do not fold this layer into
+`PackedLinear` or `MaskedLinear`.
+
+---
+
 ## `gather_hop_inputs(saved, hop)`
 
 The source axis of one hop. Call it in `forward()` just before
@@ -1241,6 +1402,7 @@ src/kpnn2/
   _adjacency_spec.py          # AdjacencySpec
   _masked_linear.py           # MaskedLinear
   _packed_linear.py           # PackedLinear
+  _packed_multihead_attention.py  # PackedMultiheadAttention
   _gather.py                  # gather_hop_inputs
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions
@@ -1324,13 +1486,15 @@ disagree with CI.
   ordinary dense tensors; it must not densify to `(out, in)`
   inside the module, must not take a dense mask, and must
   not import `torch.sparse`. Do not fold packed into
-  `MaskedLinear`. Do not replace `MaskedLinear` as the
-  dense default for usual hops. `PackedLinear` is for RAM
-  when `n_nodes` is large; it is not a better default. Do
-  not add `parse(..., sparse=)`. Sparse-tensor formats are
-  not a v1 deferral: they are not planned. Correctness,
-  ease of maintenance, and explainability of the code
-  outrank memory and speed.
+  `MaskedLinear`. Do not fold `PackedMultiheadAttention`
+  into `PackedLinear` or `MaskedLinear`. Do not replace
+  `MaskedLinear` as the dense default for usual hops.
+  `PackedLinear` is for RAM when `n_nodes` is large; it
+  is not a better default. Do not add `parse(...,
+  sparse=)`. Sparse-tensor formats are not a v1
+  deferral: they are not planned. Correctness, ease of
+  maintenance, and explainability of the code outrank
+  memory and speed.
 - Do not add AnnData, scipy sparse, a sparse-preserving
   `align_inputs`, a minibatcher, or device-copy helpers so
   this package can "support sparse X." `align_inputs` stays
@@ -1366,7 +1530,9 @@ disagree with CI.
   `nn.Linear` (its `__init__` signature and its own
   `reset_parameters` would fight ours).
 - Do not add a high-level `LayeredNet` / convenience model unless
-  a later prompt explicitly asks.
+  a later prompt explicitly asks. Do not add an encoder
+  class, Transformer block, or `parse_attention`.
+  `PackedMultiheadAttention` is a contraction primitive.
 - `parse_layered` and `parse_adjacency` must not instantiate
   `nn.Module`.
 - Keep the two parsers separate: no `layout=` flag, no dispatch
@@ -1397,8 +1563,10 @@ disagree with CI.
 - Docs tutorials (getting-started, skip-edges,
   map-node-attributions, layered vs adjacency, recurrent
   example) stay on `MaskedLinear`. `PackedLinear` has its
-  own page (`docs/packed_linear.md`). Do not sprinkle
-  `PackedLinear` through getting-started.
+  own page (`docs/packed_linear.md`). This commit does
+  not add a docs page for `PackedMultiheadAttention`. Do
+  not sprinkle `PackedLinear` or
+  `PackedMultiheadAttention` through getting-started.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
   mkdocs-jupyter then fails. Execute with

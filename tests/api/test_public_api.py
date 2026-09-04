@@ -9,6 +9,7 @@ _PUBLIC_NAMES = [
     "AdjacencySpec",
     "MaskedLinear",
     "PackedLinear",
+    "PackedMultiheadAttention",
     "gather_hop_inputs",
     "align_inputs",
     "map_node_attributions",
