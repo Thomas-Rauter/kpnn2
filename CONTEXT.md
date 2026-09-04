@@ -1030,14 +1030,15 @@ forward(
 - `state_dict` includes `index_digest`, a 1-D CPU
   `uint8` tensor of length 32: the SHA-256 of the
   int64 C-contiguous bytes of `source_index`, then
-  `target_index`, plus `query_features` and
-  `key_features` as fixed-width integers so a reshape
-  cannot collide. It is not a registered persistent
-  buffer. `load_state_dict` raises `Kpnn2Error` when
-  a present digest does not match, and does not load
-  the weights. A missing digest is not an error, even
-  with `strict=True`. Same pattern as `PackedLinear`.
-  `copy.deepcopy` works.
+  `target_index`, plus `query_features`,
+  `key_features`, `embed_dim`, and `num_heads` as
+  fixed-width integers so a reshape or a different
+  head split cannot collide. It is not a registered
+  persistent buffer. `load_state_dict` raises
+  `Kpnn2Error` when a present digest does not match,
+  and does not load the weights. A missing digest is
+  not an error, even with `strict=True`. Same
+  pattern as `PackedLinear`. `copy.deepcopy` works.
 
 Typical construction:
 

@@ -78,14 +78,17 @@ def _index_digest(
     target_index: torch.Tensor,
     query_features: int,
     key_features: int,
+    embed_dim: int,
+    num_heads: int,
 ) -> torch.Tensor:
     """
     SHA-256 of packed indices plus layer sizes.
 
     Payload is the int64 C-contiguous bytes of ``source_index``,
-    then ``target_index``, then ``query_features`` and
-    ``key_features`` as little-endian int64 so a reshape cannot
-    collide.
+    then ``target_index``, then ``query_features``,
+    ``key_features``, ``embed_dim``, and ``num_heads`` as
+    little-endian int64 so a reshape or a different head
+    split cannot collide.
     """
     source_bytes = (
         source_index.detach()
@@ -104,9 +107,11 @@ def _index_digest(
         .tobytes()
     )
     sizes = struct.pack(
-        "<qq",
+        "<qqqq",
         int(query_features),
         int(key_features),
+        int(embed_dim),
+        int(num_heads),
     )
     digest = hashlib.sha256(source_bytes + target_bytes + sizes).digest()
     return torch.tensor(
@@ -514,7 +519,9 @@ class PackedMultiheadAttention(nn.Module):
 
     Index buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``. ``state_dict`` includes ``index_digest``, a
-    1-D CPU ``uint8`` tensor of length 32, not a registered
+    1-D CPU ``uint8`` tensor of length 32: SHA-256 of the
+    packed indices plus ``query_features``, ``key_features``,
+    ``embed_dim``, and ``num_heads``. It is not a registered
     persistent buffer. ``load_state_dict`` raises
     ``Kpnn2Error`` when a present digest does not match this
     layer, and does not load the weights. A missing digest is
@@ -708,6 +715,8 @@ class PackedMultiheadAttention(nn.Module):
             self.target_index,
             self.query_features,
             self.key_features,
+            self.embed_dim,
+            self.num_heads,
         )
 
     def _load_from_state_dict(
@@ -728,6 +737,8 @@ class PackedMultiheadAttention(nn.Module):
                 self.target_index,
                 self.query_features,
                 self.key_features,
+                self.embed_dim,
+                self.num_heads,
             )
             if not _digest_matches(
                 saved,

@@ -1,4 +1,6 @@
 import copy
+import hashlib
+import struct
 
 import pandas as pd
 import pytest
@@ -710,6 +712,90 @@ def test_load_rejects_foreign_indices():
             tensor,
             before[name],
         )
+
+
+def test_index_digest_includes_embed_dim_and_num_heads():
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        bias=False,
+    )
+    source_bytes = (
+        layer.source_index.detach()
+        .cpu()
+        .contiguous()
+        .to(torch.int64)
+        .numpy()
+        .tobytes()
+    )
+    target_bytes = (
+        layer.target_index.detach()
+        .cpu()
+        .contiguous()
+        .to(torch.int64)
+        .numpy()
+        .tobytes()
+    )
+    sizes = struct.pack(
+        "<qqqq",
+        2,
+        2,
+        8,
+        2,
+    )
+    digest = hashlib.sha256(source_bytes + target_bytes + sizes).digest()
+    expected = torch.tensor(
+        tuple(digest),
+        dtype=torch.uint8,
+    )
+    assert torch.equal(
+        layer.state_dict()["index_digest"],
+        expected,
+    )
+
+
+def test_load_rejects_foreign_num_heads():
+    src = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        bias=False,
+    )
+    dst = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        4,
+        bias=False,
+    )
+    with torch.no_grad():
+        src.q_proj.weight.fill_(0.5)
+        dst.q_proj.weight.fill_(0.25)
+        src.k_proj.weight.fill_(0.5)
+        dst.k_proj.weight.fill_(0.25)
+        src.v_proj.weight.fill_(0.5)
+        dst.v_proj.weight.fill_(0.25)
+        src.out_proj.weight.fill_(0.5)
+        dst.out_proj.weight.fill_(0.25)
+    before = dst.q_proj.weight.detach().clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint indices do not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        dst.q_proj.weight,
+        before,
+    )
 
 
 def test_load_without_index_digest():
