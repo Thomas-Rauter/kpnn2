@@ -1426,6 +1426,7 @@ CONTEXT.md                    # this file
 README.md
 docs/
   reference/                  # index + one page per public name
+  supported.md                # architecture-family support table
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
   cyclic-graph-example.ipynb  # cyclic graph; tutorials stay MaskedLinear
   transformer-example.ipynb   # PackedMultiheadAttention walkthrough

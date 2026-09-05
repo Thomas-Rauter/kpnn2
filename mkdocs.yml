@@ -46,6 +46,7 @@ nav:
   - Home: index.md
   - Getting started:
       - Installation: installation.md
+      - Supported architectures: supported.md
       - Getting started: getting-started.ipynb
   - Additional examples:
       - Cyclic graph example: cyclic-graph-example.ipynb

@@ -11,7 +11,9 @@ pip install kpnn2
 The core installation supports parsing an edgelist into a
 `LayeredSpec`, building `MaskedLinear` layers, aligning named inputs,
 and mapping a layer tensor back to named nodes. Training stays
-ordinary PyTorch.
+ordinary PyTorch. [**Supported architectures**](supported.md)
+lists which architecture families you can assemble from those
+primitives.
 
 `kpnn2` requires Python 3.10 or later. See the tested Python
 versions in the badge on the [**Home**](index.md) page.

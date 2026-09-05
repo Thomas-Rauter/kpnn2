@@ -68,6 +68,8 @@ activations, and heads stay yours.
 
 As a further note, "graph" here means the architecture specification, not a
 graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
+See [**Supported architectures**](docs/supported.md) for that split
+and the other families this package does or does not cover.
 
 ## Core workflow
 
@@ -193,6 +195,8 @@ pip install kpnn2
 If you are new to the package, start with a tutorial:
 
 - [**Installation**](docs/installation.md) for package setup
+- [**Supported architectures**](docs/supported.md) for which
+  architecture families this package covers
 - [**Getting started**](docs/getting-started.ipynb) for a full
   end-to-end feedforward example
 

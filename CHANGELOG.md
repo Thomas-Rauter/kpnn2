@@ -14,6 +14,8 @@ This project follows semantic versioning.
 - Transformer example docs notebook: a tiny
   prior-gated encoder on an edgelist, using
   `PackedMultiheadAttention`.
+- Supported architectures docs page: a table of
+  which architecture families `kpnn2` covers.
 
 ### Changed
 
