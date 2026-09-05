@@ -19,6 +19,8 @@ This project follows semantic versioning.
 
 - Split the API reference into a grouped index and one page
   per public name. The site nav lists only that index.
+- Move the recurrent and transformer notebooks under
+  Additional examples in the site nav.
 - Rewrite the one-line summaries on that index so each name
   states its role, not an implementation detail.
 

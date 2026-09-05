@@ -47,6 +47,7 @@ nav:
   - Getting started:
       - Installation: installation.md
       - Getting started: getting-started.ipynb
+  - Additional examples:
       - Recurrent example: recurrent-example.ipynb
       - Transformer example: transformer-example.ipynb
   - How it works:

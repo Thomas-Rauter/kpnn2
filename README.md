@@ -195,6 +195,9 @@ If you are new to the package, start with a tutorial:
 - [**Installation**](docs/installation.md) for package setup
 - [**Getting started**](docs/getting-started.ipynb) for a full
   end-to-end feedforward example
+
+## Additional examples
+
 - [**Recurrent example**](docs/recurrent-example.ipynb) for
   `parse_adjacency()` and a shared `MaskedLinear` over one state
   vector when the graph has feedback loops (`parse_layered` still
