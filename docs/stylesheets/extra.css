@@ -1,3 +1,12 @@
+/* Package logo in the header and the mobile drawer. */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg,
+.md-nav__button.md-logo img,
+.md-nav__button.md-logo svg {
+  height: 1.8rem;
+  width: 1.8rem;
+}
+
 /* Paper SVGs are sized in millimetres; stretch them to the
    content column when a notebook marks the image. */
 .md-typeset img.figure-full {

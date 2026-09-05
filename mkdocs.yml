@@ -8,6 +8,8 @@ repo_name: Thomas-Rauter/kpnn2
 
 theme:
   name: material
+  logo: figures/kpnn2_logo.svg
+  favicon: figures/kpnn2_logo.svg
   features:
     - navigation.sections
     - navigation.expand
