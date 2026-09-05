@@ -46,7 +46,7 @@ map attributions back onto the named nodes. That parser needs a
 DAG; a graph with feedback loops goes through `parse_adjacency()`
 instead, which puts every node into one state vector with packed
 edge indices (see the
-[Recurrent example](docs/recurrent-example.ipynb)).
+[Cyclic graph example](docs/cyclic-graph-example.ipynb)).
 
 Sparse connectivity is often used for speed or memory, without
 needing control over which nodes are linked. A newer line of work
@@ -198,10 +198,10 @@ If you are new to the package, start with a tutorial:
 
 ## Additional examples
 
-- [**Recurrent example**](docs/recurrent-example.ipynb) for
-  `parse_adjacency()` and a shared `MaskedLinear` over one state
-  vector when the graph has feedback loops (`parse_layered` still
-  requires a DAG)
+- [**Cyclic graph example**](docs/cyclic-graph-example.ipynb) for
+  a graph with a feedback loop: `parse_adjacency()`, one shared
+  `MaskedLinear` over the state vector, train, and interpret
+  named nodes (`parse_layered` still requires a DAG)
 - [**Transformer example**](docs/transformer-example.ipynb) for
   `PackedMultiheadAttention` on those packed indices, as a
   prior-gated encoder you write yourself

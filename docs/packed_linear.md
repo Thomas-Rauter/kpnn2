@@ -5,7 +5,7 @@
 state vector, so `MaskedLinear(spec.to_mask())` stores an
 `(n, n)` parameter. Use `kpnn2.PackedLinear` on that spec's
 packed indices when `n` is large enough that the square would
-hurt RAM. Small recurrent graphs stay on
+hurt RAM. Small cyclic graphs stay on
 `MaskedLinear(spec.to_mask())`.
 
 `parse_layered()` does not build that square. Each hop mask is
@@ -15,7 +15,7 @@ mask or a `LayeredSpec`; there is no combined
 `parse_layered` + `PackedLinear` path.
 
 [Layered vs. Adjacency](layered_vs_adjacency.md) and the
-[Recurrent example](recurrent-example.ipynb) stay on
+[Cyclic graph example](cyclic-graph-example.ipynb) stay on
 `MaskedLinear`. This page is the large-n adjacency path.
 
 ## The RAM problem
@@ -52,8 +52,8 @@ core = kpnn2.PackedLinear(
 ```
 
 Scatter inputs the same way as the
-[Recurrent example](recurrent-example.ipynb). Input nodes have
-in-degree 0, so writing them into the state each step is
+[Cyclic graph example](cyclic-graph-example.ipynb). Input nodes
+have in-degree 0, so writing them into the state each step is
 required:
 
 ```python

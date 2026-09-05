@@ -99,7 +99,7 @@ this package unless a later prompt asks.
    The same packed indices can feed
    `PackedMultiheadAttention`. `MaskedLinear(spec.to_mask())`
    densifies and remains valid for small graphs. The
-   recurrence is the user's `forward()`.
+   shared-state loop is the user's `forward()`.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a dense `float32` CPU tensor of all
    rows. Pre-ordered dense tensors go straight to the model.
@@ -145,7 +145,7 @@ this package unless a later prompt asks.
   add AnnData here to enable that.
 - **Not a time machine.** `parse_adjacency` accepts cycles and
   self-loops, but nothing here unrolls time, picks a step count, or
-  re-injects inputs between steps. Recurrence is user `forward()`
+  re-injects inputs between steps. The loop is user `forward()`
   over `PackedLinear(...)` or `MaskedLinear(spec.to_mask())`.
   `parse_layered` stays DAG-only and still raises `Kpnn2Error`
   on a cycle.
@@ -538,8 +538,8 @@ parse_adjacency(edgelist) -> AdjacencySpec
 The second layout. Every node goes into one state vector, sorted
 alphabetically, and every edge goes into packed source/target
 index tuples. Nothing is ranked, so **cycles and self-loops are
-allowed**. This is the layout for recurrent networks; the
-recurrence itself is user `forward()` code.
+allowed**. This is the layout for cyclic graphs; the
+shared-state loop itself is user `forward()` code.
 
 `parse_adjacency` must not instantiate an `nn.Module`, unroll
 time, choose a step count, or re-inject inputs between steps.
@@ -1208,9 +1208,10 @@ output of `MaskedLinear(spec.hops[i].mask)` pass
 `layer=spec.hops[i].target_layer`, that is `i+1`. Do not
 name-map BatchNorm or other unnamed modules.
 
-For a recurrent net on an `AdjacencySpec` there is no layer to
-index; the natural extra axis is `step`. Pass one tensor per time
-step as a sequence and they stack onto `(step, observation, node)`.
+For a cyclic net on an `AdjacencySpec` there is no layer to
+index; the natural extra axis is `step`. Pass one tensor per
+unrolled step as a sequence and they stack onto
+`(step, observation, node)`.
 
 ---
 
@@ -1426,6 +1427,7 @@ README.md
 docs/
   reference/                  # index + one page per public name
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
+  cyclic-graph-example.ipynb  # cyclic graph; tutorials stay MaskedLinear
   transformer-example.ipynb   # PackedMultiheadAttention walkthrough
   fig_gen/                    # figure generators; write to figures/
   figures/
@@ -1566,7 +1568,7 @@ disagree with CI.
   `kpnn2.parse_layered(...)` (same for the other public names).
   Do not introduce `import kpnn2 as k2`.
 - Docs tutorials (getting-started, skip-edges,
-  map-node-attributions, layered vs adjacency, recurrent
+  map-node-attributions, layered vs adjacency, cyclic graph
   example) stay on `MaskedLinear`. `PackedLinear` has its
   own page (`docs/packed_linear.md`). The transformer
   example (`docs/transformer-example.ipynb`) is the

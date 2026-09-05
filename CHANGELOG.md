@@ -19,8 +19,12 @@ This project follows semantic versioning.
 
 - Split the API reference into a grouped index and one page
   per public name. The site nav lists only that index.
-- Move the recurrent and transformer notebooks under
+- Move the cyclic-graph and transformer notebooks under
   Additional examples in the site nav.
+- Rename the Additional examples notebook from Recurrent
+  example to Cyclic graph example
+  (`docs/cyclic-graph-example.ipynb`). The page is a cyclic
+  knowledge graph with a shared `MaskedLinear`, not an RNN.
 - Rewrite the one-line summaries on that index so each name
   states its role, not an implementation detail.
 

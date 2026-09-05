@@ -7,9 +7,9 @@ valid for both. Cycles and self-loops are allowed only by
 
 [Getting started](getting-started.ipynb) is a feedforward
 `parse_layered()` workflow.
-[Recurrent example](recurrent-example.ipynb) is a cyclic
-`parse_adjacency()` workflow. This page is the difference
-between the two specs.
+[Cyclic graph example](cyclic-graph-example.ipynb) is a
+`parse_adjacency()` workflow on a graph with a feedback loop.
+This page is the difference between the two specs.
 
 ## How edges are stored
 
@@ -100,8 +100,8 @@ y = state[:, spec.output_index]
 ```
 
 `n_steps` is yours. `kpnn2` does not unroll time.
-[Recurrent example](recurrent-example.ipynb) trains this loop
-on a graph with a feedback edge. This toy is small, so
+[Cyclic graph example](cyclic-graph-example.ipynb) trains this
+loop on a graph with a feedback edge. This toy is small, so
 `MaskedLinear` is appropriate; for large node counts and RAM
 see [PackedLinear](packed_linear.md). The same packed indices
 can feed `PackedMultiheadAttention`; that walkthrough is the
