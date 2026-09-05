@@ -332,23 +332,22 @@ def test_distinct_qkv_matches_mha():
     assert mha_out.shape == packed_out.shape
 
 
-def test_do_not_compare_isolated_queries_to_mha():
-    # Building MHA on cyclic_edgelist() without self-loops is
-    # out of scope: input queries have in-degree 0, and MHA
-    # softmax over all -inf is NaN. Do not expect MHA zeros.
+def test_mha_comparison_needs_a_query_with_a_live_key():
+    # MHA softmax over all -inf is NaN. cyclic_edgelist has
+    # isolated inputs, so it is not an MHA reference graph.
+    # three_cycle_indices covers every query; that is the
+    # graph the tests above compare to MHA.
     spec = parse_adjacency(cyclic_edgelist())
     n = len(spec.nodes)
-    allow = allow_matrix(
+    cyclic_allow = allow_matrix(
         spec.source_index,
         spec.target_index,
         n,
         n,
     )
-    isolated = allow.sum(dim=1) == 0
-    assert isolated.any()
-    pytest.skip(
-        "MHA comparison is out of scope for isolated queries.",
-    )
+    assert (cyclic_allow.sum(dim=1) == 0).any()
+    _source, _target, _n_cycle, cycle_allow = _three_cycle()
+    assert torch.all(cycle_allow.sum(dim=1) > 0)
 
 
 def test_packed_rejects_mha_attn_mask():
