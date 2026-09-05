@@ -11,6 +11,9 @@ This project follows semantic versioning.
 ### Added
 
 - `PackedMultiheadAttention`.
+- Transformer example docs notebook: a tiny
+  prior-gated encoder on an edgelist, using
+  `PackedMultiheadAttention`.
 
 ### Changed
 

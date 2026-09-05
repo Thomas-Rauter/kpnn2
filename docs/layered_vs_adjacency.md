@@ -103,7 +103,9 @@ y = state[:, spec.output_index]
 [Recurrent example](recurrent-example.ipynb) trains this loop
 on a graph with a feedback edge. This toy is small, so
 `MaskedLinear` is appropriate; for large node counts and RAM
-see [PackedLinear](packed_linear.md).
+see [PackedLinear](packed_linear.md). The same packed indices
+can feed `PackedMultiheadAttention`; that walkthrough is the
+[Transformer example](transformer-example.ipynb).
 
 ## How to choose a parser
 

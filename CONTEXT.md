@@ -1426,6 +1426,7 @@ README.md
 docs/
   reference/                  # index + one page per public name
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
+  transformer-example.ipynb   # PackedMultiheadAttention walkthrough
   fig_gen/                    # figure generators; write to figures/
   figures/
 ```
@@ -1567,10 +1568,11 @@ disagree with CI.
 - Docs tutorials (getting-started, skip-edges,
   map-node-attributions, layered vs adjacency, recurrent
   example) stay on `MaskedLinear`. `PackedLinear` has its
-  own page (`docs/packed_linear.md`). This commit does
-  not add a docs page for `PackedMultiheadAttention`. Do
-  not sprinkle `PackedLinear` or
-  `PackedMultiheadAttention` through getting-started.
+  own page (`docs/packed_linear.md`). The transformer
+  example (`docs/transformer-example.ipynb`) is the
+  `PackedMultiheadAttention` walkthrough. Do not sprinkle
+  `PackedLinear` or `PackedMultiheadAttention` through
+  getting-started. Do not add `parse_attention`.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
   mkdocs-jupyter then fails. Execute with

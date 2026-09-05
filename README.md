@@ -142,6 +142,7 @@ The documented public names are:
 - `AdjacencySpec`
 - `MaskedLinear`
 - `PackedLinear`
+- `PackedMultiheadAttention`
 - `gather_hop_inputs()`
 - `align_inputs()`
 - `map_node_attributions()`
@@ -198,6 +199,9 @@ If you are new to the package, start with a tutorial:
   `parse_adjacency()` and a shared `MaskedLinear` over one state
   vector when the graph has feedback loops (`parse_layered` still
   requires a DAG)
+- [**Transformer example**](docs/transformer-example.ipynb) for
+  `PackedMultiheadAttention` on those packed indices, as a
+  prior-gated encoder you write yourself
 
 The other pages explain a design choice; they are not second
 examples:
