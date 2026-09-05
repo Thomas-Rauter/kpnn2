@@ -154,7 +154,7 @@ packed `source_index` / `target_index` over all `nodes`, plus
 `input_index` and `output_index` into that state vector.
 `to_mask()` densifies for `MaskedLinear` on small graphs.
 
-See the [**API reference**](docs/api.md) for details, and
+See the [**API reference**](docs/reference/index.md) for details, and
 [**Skip edges**](docs/skip-edges.ipynb) for a worked example.
 
 ## Package philosophy
@@ -210,7 +210,7 @@ examples:
   labeling layer tensors with node names
 - [**PackedLinear**](docs/packed_linear.md) when `n` is large on
   an `AdjacencySpec`
-- [**API reference**](docs/api.md) for function- and object-level
+- [**API reference**](docs/reference/index.md) for function- and object-level
   documentation
 
 ## Citation

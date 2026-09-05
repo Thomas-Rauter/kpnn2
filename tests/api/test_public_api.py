@@ -1,4 +1,9 @@
+from pathlib import Path
+
 import kpnn2
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REFERENCE = _REPO_ROOT / "docs" / "reference"
 
 _PUBLIC_NAMES = [
     "parse_layered",
@@ -46,3 +51,22 @@ def test_compiler_symbols_are_not_exported():
             kpnn2,
             name,
         )
+
+
+def _reference_filename(name: str) -> str:
+    if name == "__version__":
+        return "version.md"
+    return f"{name}.md"
+
+
+def test_each_public_name_has_a_reference_page():
+    leftover = {path.name for path in _REFERENCE.glob("*.md")}
+    leftover.discard("index.md")
+    for name in _PUBLIC_NAMES:
+        filename = _reference_filename(name)
+        path = _REFERENCE / filename
+        leftover.discard(filename)
+        assert path.is_file()
+        text = path.read_text(encoding="utf-8")
+        assert f"::: kpnn2.{name}" in text
+    assert leftover == set()

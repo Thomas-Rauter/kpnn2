@@ -12,6 +12,7 @@ theme:
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - toc.follow
     - content.code.copy
     - search.suggest
     - search.highlight
@@ -36,11 +37,14 @@ nav:
       - Mapping attributions: map-node-attributions.ipynb
       - PackedLinear: packed_linear.md
   - Reference:
-      - API: api.md
+      - Index: reference/index.md
   - Project:
       - Changelog: changelog.md
       - Citing: citing.md
       - Feedback: feedback.md
+
+not_in_nav: |
+  /reference/*.md
 
 hooks:
   - scripts/docs_notebooks.py
@@ -54,12 +58,14 @@ plugins:
           paths: [src]
           options:
             docstring_style: numpy
-            heading_level: 3
-            show_root_heading: false
-            show_root_toc_entry: false
+            heading_level: 1
+            show_root_heading: true
+            show_root_toc_entry: true
             show_root_full_path: false
             show_symbol_type_heading: false
             show_symbol_type_toc: false
+            show_category_heading: true
+            parameter_headings: true
             show_signature: true
             show_signature_annotations: true
             separate_signature: true

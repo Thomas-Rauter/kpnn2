@@ -1424,6 +1424,7 @@ scripts/
 CONTEXT.md                    # this file
 README.md
 docs/
+  reference/                  # index + one page per public name
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
   fig_gen/                    # figure generators; write to figures/
   figures/
@@ -1442,9 +1443,10 @@ breaking change, as long as `kpnn2.__all__` and the documented
 signatures stay identical. Do not add a second public path for a
 symbol that `__init__.py` already exports.
 
-`docs/api.md` therefore points mkdocstrings at the façade paths
-(`::: kpnn2.MaskedLinear`), not at module paths. Tests may import
-private modules directly to reach internal helpers.
+`docs/reference/` therefore points mkdocstrings at the façade paths
+(`::: kpnn2.MaskedLinear`), not at module paths. Each public name
+has its own page; `docs/reference/index.md` is the grouped index.
+Tests may import private modules directly to reach internal helpers.
 
 ---
 
