@@ -3,5 +3,5 @@ python -m ruff format .
 python -m ruff check . --fix
 python -m ruff format --check .
 python -m mypy src
-# python -m pytest -m "not slow"
+# python -m pytest --fast-only
 python -m pytest
