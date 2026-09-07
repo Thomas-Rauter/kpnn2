@@ -19,14 +19,16 @@ class AdjacencySpec:
     Structure only: not an ``nn.Module`` and no parameters. Every
     node lives in one state vector and connectivity is packed as
     source/target index tuples, so the graph may contain cycles
-    and self-loops. There is no stored square mask.
+    and self-loops. There is no stored square mask. This is the
+    packed layout, not a cyclic-only spec: the same indices feed
+    ``PackedLinear``, ``MaskedLinear(spec.to_mask())``, or
+    ``PackedMultiheadAttention``.
 
     There are no depths here: no ``layer_nodes``, no ``hops``
     tuple, and no ``skips``. This is not a one-layer
-    ``LayeredSpec``. Use ``PackedLinear`` on ``source_index`` /
-    ``target_index`` for a state update that never allocates
-    ``(n, n)``, or ``MaskedLinear(spec.to_mask())`` for the
-    dense path, and write the recurrence in ``forward()``.
+    ``LayeredSpec``. Write the update in ``forward()``: a shared
+    state loop, a time-series cell, attention, or any other
+    PyTorch module that consumes those packed indices.
 
     Parameters
     ----------

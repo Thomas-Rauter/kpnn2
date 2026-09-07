@@ -9,7 +9,10 @@ valid for both. Cycles and self-loops are allowed only by
 `parse_layered()` workflow.
 [Cyclic graph example](cyclic-graph-example.ipynb) is a
 `parse_adjacency()` workflow on a graph with a feedback loop.
-This page is the difference between the two specs.
+[Transformer example](transformer-example.ipynb) and
+[Time-series example](time-series-example.ipynb) use that same
+packed layout: they need named nodes and packed pairs, not hop
+masks. This page is the difference between the two specs.
 
 ## How edges are stored
 
@@ -113,9 +116,10 @@ is the [Transformer example](transformer-example.ipynb).
 
 - A feedforward DAG goes through `parse_layered()`. That is the
   usual KPNN.
-- Cycles, self-loops, or a shared state update go through
-  `parse_adjacency()`. `parse_layered()` raises on a cycle or a
-  self-loop.
+- `parse_adjacency()` is the packed layout: one state vector
+  and packed edge indices. Use it for cycles and self-loops
+  (`parse_layered()` raises on those), a shared-state or
+  time-series loop, or packed attention.
 - A DAG may go through `parse_adjacency()` if you want that
   layout. The package never inspects the graph to pick a
   parser.

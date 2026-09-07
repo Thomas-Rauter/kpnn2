@@ -99,7 +99,7 @@ this package unless a later prompt asks.
    The same packed indices can feed
    `PackedMultiheadAttention`. `MaskedLinear(spec.to_mask())`
    densifies and remains valid for small graphs. The
-   shared-state loop is the user's `forward()`.
+   update (loop, attention, head) is the user's `forward()`.
 4. **Align:** `align_inputs()` maps a named DataFrame onto
    `spec.input_nodes` as a dense `float32` CPU tensor of all
    rows. Pre-ordered dense tensors go straight to the model.
@@ -235,7 +235,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | Symbol | Role |
 |--------|------|
 | `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only) |
-| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (cycles allowed) |
+| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed) |
 | `LayeredSpec` | Frozen structural dataclass (layers, hops, skip metadata) |
 | `Hop` | One layer's incoming mask (see below); exported because `spec.hops` uses it |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
@@ -538,8 +538,10 @@ parse_adjacency(edgelist) -> AdjacencySpec
 The second layout. Every node goes into one state vector, sorted
 alphabetically, and every edge goes into packed source/target
 index tuples. Nothing is ranked, so **cycles and self-loops are
-allowed**. This is the layout for cyclic graphs; the
-shared-state loop itself is user `forward()` code.
+allowed**. This is the general packed form, not a cyclic-only
+parser: the same spec is what a shared-state loop, a time-series
+cell, and packed attention use. The update itself is user
+`forward()` code.
 
 `parse_adjacency` must not instantiate an `nn.Module`, unroll
 time, choose a step count, or re-inject inputs between steps.

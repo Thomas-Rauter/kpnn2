@@ -15,7 +15,7 @@ Names you call or construct.
 | Name | Description |
 | --- | --- |
 | [`parse_layered`][kpnn2.parse_layered] | Parse a source/target edgelist into a `LayeredSpec` (DAG only). |
-| [`parse_adjacency`][kpnn2.parse_adjacency] | Parse a source/target edgelist into an `AdjacencySpec` (cycles allowed). |
+| [`parse_adjacency`][kpnn2.parse_adjacency] | Parse a source/target edgelist into an `AdjacencySpec` (packed layout; cycles allowed). |
 | [`MaskedLinear`][kpnn2.MaskedLinear] | Linear layer that keeps only the connections in a fixed mask. |
 | [`PackedLinear`][kpnn2.PackedLinear] | Linear layer with one weight per live edge, not a dense matrix. |
 | [`PackedMultiheadAttention`][kpnn2.PackedMultiheadAttention] | Attention that scores only live edgelist pairs, not a full matrix. |
@@ -33,7 +33,7 @@ read-only.
 | [`LayeredSpec`][kpnn2.LayeredSpec] | A DAG as named layers and hop masks; not a ready-made model. |
 | [`Hop`][kpnn2.Hop] | Incoming wiring of one layer; pass its mask to `MaskedLinear`. |
 | [`Skip`][kpnn2.Skip] | Record of an edge that jumps layers; already in the hop mask. |
-| [`AdjacencySpec`][kpnn2.AdjacencySpec] | Every node in one state vector, with packed edges; cycles allowed. |
+| [`AdjacencySpec`][kpnn2.AdjacencySpec] | Every node in one state vector, with packed edges; the general packed layout. |
 
 ## Errors and version {: .api-group }
 

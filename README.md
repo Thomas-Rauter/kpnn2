@@ -76,9 +76,11 @@ and the other families this package does or does not cover.
 
 1. Define a model architecture as an edgelist with named `source`
    and `target` nodes.
-2. Parse it with `parse_layered()` to a `LayeredSpec`. For a graph
-   with feedback loops, use `parse_adjacency()` and an
-   `AdjacencySpec` instead.
+2. Parse it with `parse_layered()` to a `LayeredSpec` when the
+   graph is a DAG that should become one mask per layer. Use
+   `parse_adjacency()` for the packed layout (`AdjacencySpec`):
+   one state vector, packed indices, cycles allowed. A DAG is
+   valid for both; pick the layout, do not inspect the graph.
 3. Write an `nn.Module` with one `MaskedLinear` per
    `spec.hops`, feeding each one
    `gather_hop_inputs(saved, hop)`. Skip edges are already

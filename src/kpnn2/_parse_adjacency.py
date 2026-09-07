@@ -59,11 +59,14 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     """
     Parse a source/target edgelist into an ``AdjacencySpec``.
 
-    Every node goes into one state vector, sorted alphabetically,
-    and every edge goes into packed source/target index tuples.
-    Nothing is ranked, so cycles and self-loops are allowed. Use
-    this layout for recurrent networks; use ``parse_layered``
-    for a DAG that should become one mask per layer.
+    This is the packed layout. Every node goes into one state
+    vector, sorted alphabetically, and every edge goes into
+    packed source/target index tuples. Nothing is ranked, so
+    cycles and self-loops are allowed. It is not only for
+    cyclic graphs: the same spec feeds a shared-state loop, a
+    time-series cell, or ``PackedMultiheadAttention`` on live
+    pairs. Use ``parse_layered`` when a DAG should become one
+    mask per layer.
 
     A DAG is valid input to both parsers. The layout is a choice,
     not a property of the graph, so this function never inspects
@@ -99,6 +102,8 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     See Also
     --------
     parse_layered : Rank a DAG into one incoming mask per layer.
+    PackedLinear : One weight per packed edge; the large-n path.
+    PackedMultiheadAttention : Packed attention on the same indices.
 
     Notes
     -----
@@ -120,12 +125,15 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     Call ``spec.to_mask()`` to materialize that square.
 
     This function does not build an ``nn.Module``, unroll time,
-    choose a step count, or re-inject inputs between steps. The
-    recurrence stays in user ``forward()`` code.
+    choose a step count, or re-inject inputs between steps. Any
+    loop, attention block, or other update stays in user
+    ``forward()`` code.
 
     Examples
     --------
-    An input feeding a two-node feedback core plus one output:
+    A DAG is valid here too; nodes still sit in one vector with
+    packed indices. The table below has a feedback edge, which
+    ``parse_layered`` would reject:
 
     >>> import pandas as pd
     >>> import kpnn2

@@ -40,6 +40,9 @@ This project follows semantic versioning.
   architectures: maps are `MaskedLinear` / `PackedLinear`,
   the time loop is yours, and `nn.RNN` cannot take an
   edgelist.
+- Generalize `parse_adjacency` docs: the packed layout is
+  for shared-state loops, sequences, and attention, not only
+  recurrent or cyclic graphs.
 
 
 ## [0.1.0] - 1. September 2026

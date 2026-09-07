@@ -7,7 +7,8 @@ ordinary PyTorch. Pick the layout yourself: ``parse_layered``
 ranks a DAG into a ``LayeredSpec``, one ``Hop`` per layer whose
 mask carries every edge entering it, skips included, while
 ``parse_adjacency`` puts every node in one state vector with
-packed edge indices (``AdjacencySpec``) and allows cycles. Use
+packed edge indices (``AdjacencySpec``). That packed layout
+allows cycles and self-loops; a DAG is valid too. Use
 ``PackedLinear`` on those packed indices, or
 ``MaskedLinear(spec.to_mask())`` for the dense path. Those
 packed indices can also feed ``PackedMultiheadAttention``;
