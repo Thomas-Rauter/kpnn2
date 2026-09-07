@@ -67,10 +67,33 @@ through a biological example.
 is no ready-made model object. Training loops, losses, optimizers,
 activations, and heads stay yours.
 
-As a further note, "graph" here means the architecture specification, not a
-graph neural network, which cannot be implemented using `kpnn2` in PyTorch.
-See [**Supported architectures**](docs/supported.md) for that split
-and the other families this package does or does not cover.
+## Why not PyG?
+
+[PyTorch Geometric](https://pyg.org/) already builds neural nets
+from edgelists. That is the right tool when the prior should
+become a GNN. It is not a drop-in for what this package does in
+PyTorch.
+
+A knowledge graph (a pathway map, an ontology, a sensor network)
+says which interactions exist. Turning that prior into a neural
+net is a second choice: which architecture is a faithful
+computational analogue of those interactions?
+
+When that analogue is message passing, use PyG. There are
+knowledge-primed GNN papers; this project will not wrap or
+replace PyG for them.
+
+When the analogue is a feedforward cascade, a cyclic or sequence
+map, or attention on known pairs, the graph is the
+**architecture**, not the data. Each named node is a unit, each
+prior edge has its own weight, and the batch is samples. A GNN is
+the other object: each node carries a feature vector, message and
+update maps are often shared, and the batch is graphs or nodes.
+Same edgelist, different hypothesis about how the world computes.
+
+`kpnn2` is the PyTorch side of that split: sparsely connected
+layers you assemble yourself. See
+[**Supported architectures**](docs/supported.md).
 
 ## Core workflow
 
