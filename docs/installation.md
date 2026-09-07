@@ -26,7 +26,8 @@ Core dependencies are `torch`, `pandas`, `numpy`, and `xarray`.
 dependency.
 
 If you want Captum (as in
-[**Feedforward example**](feedforward-example.ipynb) and the
+[**Feedforward example**](feedforward-example.ipynb), the
+[**Time-series example**](time-series-example.ipynb), and the
 [**Transformer example**](transformer-example.ipynb)), install
 it yourself:
 

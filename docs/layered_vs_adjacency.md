@@ -101,11 +101,13 @@ y = state[:, spec.output_index]
 
 `n_steps` is yours. `kpnn2` does not unroll time.
 [Cyclic graph example](cyclic-graph-example.ipynb) trains this
-loop on a graph with a feedback edge. This toy is small, so
-`MaskedLinear` is appropriate; for large node counts and RAM
-see [PackedLinear](packed_linear.md). The same packed indices
-can feed `PackedMultiheadAttention`; that walkthrough is the
-[Transformer example](transformer-example.ipynb).
+loop on a graph with a feedback edge. When `x` changes at each
+step, that loop is a time-series KPNN; see
+[Time-series example](time-series-example.ipynb). This toy is
+small, so `MaskedLinear` is appropriate; for large node counts
+and RAM see [PackedLinear](packed_linear.md). The same packed
+indices can feed `PackedMultiheadAttention`; that walkthrough
+is the [Transformer example](transformer-example.ipynb).
 
 ## How to choose a parser
 

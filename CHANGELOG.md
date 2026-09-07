@@ -14,6 +14,9 @@ This project follows semantic versioning.
 - Transformer example docs notebook: a tiny
   prior-gated encoder on an edgelist, using
   `PackedMultiheadAttention`.
+- Time-series example docs notebook: a shared
+  `MaskedLinear` loop over a sequence `x_t`, with
+  a self-loop so named nodes carry state.
 - Supported architectures docs page: a table of
   which architecture families `kpnn2` covers.
 
@@ -33,6 +36,10 @@ This project follows semantic versioning.
   (`docs/feedforward-example.ipynb`). The Getting started
   section still holds Installation, Supported architectures,
   and this page.
+- Spell out the Sequence RNN / GRU / LSTM row on Supported
+  architectures: maps are `MaskedLinear` / `PackedLinear`,
+  the time loop is yours, and `nn.RNN` cannot take an
+  edgelist.
 
 
 ## [0.1.0] - 1. September 2026

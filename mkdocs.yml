@@ -50,6 +50,7 @@ nav:
       - Feedforward example: feedforward-example.ipynb
   - Additional examples:
       - Cyclic graph example: cyclic-graph-example.ipynb
+      - Time-series example: time-series-example.ipynb
       - Transformer example: transformer-example.ipynb
   - How it works:
       - Layered vs. Adjacency: layered_vs_adjacency.md
