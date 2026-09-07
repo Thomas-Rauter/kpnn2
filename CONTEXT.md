@@ -1426,6 +1426,7 @@ scripts/
 
 CONTEXT.md                    # this file
 README.md
+CHANGELOG.md                  # notable API / core only; see below
 docs/
   reference/                  # index + one page per public name
   supported.md                # architecture-family support table
@@ -1475,6 +1476,37 @@ closing `)` on its own line. Format Python with
 `python -m ruff` from the `dev` extra (exact pin in
 `pyproject.toml`). Do not use a global `ruff` on `PATH`; it can
 disagree with CI.
+
+---
+
+## Changelog
+
+`CHANGELOG.md` is for **important API and core changes**
+only, written concisely. It is not a diary of the
+repository.
+
+**Do add a line** when callers must know: a new public
+name, a removed or renamed public name, a breaking
+signature or behavior change, or a core-dependency /
+contract change. Keep the bullet short (the name and
+what it is). `[0.2.0]` Unreleased already has
+`PackedMultiheadAttention`; that is the bar.
+
+**Do not add a line** for documentation, examples,
+notebooks, site nav, wording, spelling, architecture
+tables, tests, CI, refactors with no user-visible
+behavior change, or any other small edit. A new docs
+page is not a changelog event. Clarifying that sequence
+models use `MaskedLinear` / `PackedLinear` and a user
+time loop is not a changelog event.
+
+If the change is not notable by that bar, **leave
+`CHANGELOG.md` untouched**. Do not pad Unreleased. Do
+not write "also updated docs." Public-API lockstep still
+updates `__init__.py`, this file, `docs/reference/`, and
+`tests/api/test_public_api.py` when the export set or a
+public signature moves; that lockstep does **not** by
+itself justify a changelog line.
 
 ---
 
@@ -1592,3 +1624,7 @@ disagree with CI.
   docs. Do not execute it in CI or with
   `scripts/docs_notebooks.py`. Open from GitHub via
   `dev/colab.txt`. Install from TestPyPI with `--no-deps`.
+- `CHANGELOG.md`: important API and core changes only,
+  concise. See **Changelog**. Do not log docs pages,
+  notebooks, nav, wording, tests, or other small edits.
+  Leave the file alone when nothing notable shipped.
