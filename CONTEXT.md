@@ -1428,6 +1428,7 @@ docs/
   reference/                  # index + one page per public name
   supported.md                # architecture-family support table
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
+  feedforward-example.ipynb   # feedforward DAG; tutorials stay MaskedLinear
   cyclic-graph-example.ipynb  # cyclic graph; tutorials stay MaskedLinear
   transformer-example.ipynb   # PackedMultiheadAttention walkthrough
   fig_gen/                    # figure generators; write to figures/
@@ -1568,14 +1569,14 @@ disagree with CI.
 - Docs, README, and doctests use `import kpnn2` and
   `kpnn2.parse_layered(...)` (same for the other public names).
   Do not introduce `import kpnn2 as k2`.
-- Docs tutorials (getting-started, skip-edges,
+- Docs tutorials (feedforward-example, skip-edges,
   map-node-attributions, layered vs adjacency, cyclic graph
   example) stay on `MaskedLinear`. `PackedLinear` has its
   own page (`docs/packed_linear.md`). The transformer
   example (`docs/transformer-example.ipynb`) is the
   `PackedMultiheadAttention` walkthrough. Do not sprinkle
   `PackedLinear` or `PackedMultiheadAttention` through
-  getting-started. Do not add `parse_attention`.
+  feedforward-example. Do not add `parse_attention`.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
   mkdocs-jupyter then fails. Execute with

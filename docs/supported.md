@@ -6,7 +6,7 @@ assemble from these primitives.
 
 | Type | Supported | What to use |
 | --- | --- | --- |
-| Feedforward | Yes | `parse_layered`, `MaskedLinear`, `gather_hop_inputs` → [Getting started](getting-started.ipynb) |
+| Feedforward | Yes | `parse_layered`, `MaskedLinear`, `gather_hop_inputs` → [Feedforward example](feedforward-example.ipynb) |
 | Cyclic | Yes | `parse_adjacency`, `PackedLinear` or `MaskedLinear(spec.to_mask())`, loop you own → [Cyclic graph example](cyclic-graph-example.ipynb) |
 | Transformer | Yes | `parse_adjacency` + `PackedMultiheadAttention`; encoder / FFN / head are yours → [Transformer example](transformer-example.ipynb) |
 | Sequence RNN / GRU / LSTM | Yes | `MaskedLinear` / `PackedLinear` as the maps; cell and time loop are yours (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) |

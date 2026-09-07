@@ -59,7 +59,7 @@ In biology this is an active research area, including pathway-based models
 ([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5))
 and ontology-based models
 ([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).
-The [Getting started](docs/getting-started.ipynb) notebook walks
+The [Feedforward example](docs/feedforward-example.ipynb) notebook walks
 through a biological example.
 
 `kpnn2` is a set of (domain-agnostic) primitives, not a graph compiler. There
@@ -94,7 +94,7 @@ edgelist from the table above. Column order in the input table
 does not matter: `align_inputs()` matches names. Skip edges are
 omitted here; see [**Skip edges**](docs/skip-edges.ipynb). A full
 walkthrough, including training and attribution, is in
-[**Getting started**](docs/getting-started.ipynb).
+[**Feedforward example**](docs/feedforward-example.ipynb).
 
 ```python
 import pandas as pd
@@ -197,8 +197,8 @@ If you are new to the package, start with a tutorial:
 - [**Installation**](docs/installation.md) for package setup
 - [**Supported architectures**](docs/supported.md) for which
   architecture families this package covers
-- [**Getting started**](docs/getting-started.ipynb) for a full
-  end-to-end feedforward example
+- [**Feedforward example**](docs/feedforward-example.ipynb) for a
+  full end-to-end feedforward network
 
 ## Additional examples
 

@@ -5,7 +5,7 @@
 valid for both. Cycles and self-loops are allowed only by
 `parse_adjacency()`.
 
-[Getting started](getting-started.ipynb) is a feedforward
+[Feedforward example](feedforward-example.ipynb) is a feedforward
 `parse_layered()` workflow.
 [Cyclic graph example](cyclic-graph-example.ipynb) is a
 `parse_adjacency()` workflow on a graph with a feedback loop.
@@ -76,7 +76,7 @@ for index, hop in enumerate(spec.hops):
 ```
 
 `self.hops[index]` is `MaskedLinear(hop.mask)`.
-[Getting started](getting-started.ipynb) writes that module.
+[Feedforward example](feedforward-example.ipynb) writes that module.
 [Skip edges](skip-edges.ipynb) shows why gather raises if a
 source layer was never stored.
 

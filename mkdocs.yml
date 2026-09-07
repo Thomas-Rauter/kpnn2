@@ -47,7 +47,7 @@ nav:
   - Getting started:
       - Installation: installation.md
       - Supported architectures: supported.md
-      - Getting started: getting-started.ipynb
+      - Feedforward example: feedforward-example.ipynb
   - Additional examples:
       - Cyclic graph example: cyclic-graph-example.ipynb
       - Transformer example: transformer-example.ipynb

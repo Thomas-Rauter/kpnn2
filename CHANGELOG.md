@@ -29,6 +29,10 @@ This project follows semantic versioning.
   knowledge graph with a shared `MaskedLinear`, not an RNN.
 - Rewrite the one-line summaries on that index so each name
   states its role, not an implementation detail.
+- Rename the Getting started notebook to Feedforward example
+  (`docs/feedforward-example.ipynb`). The Getting started
+  section still holds Installation, Supported architectures,
+  and this page.
 
 
 ## [0.1.0] - 1. September 2026
