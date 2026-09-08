@@ -14,6 +14,14 @@
   height: auto;
 }
 
+/* Small conceptual icons on the Correctness page. */
+.md-typeset img.correctness-icon {
+  width: 4.75rem;
+  height: 4.75rem;
+  display: block;
+  margin: 0.1rem 0 0.75rem;
+}
+
 /* Grouping headers on the API reference index. */
 .md-typeset h2.api-group {
   font-size: 1.85em;

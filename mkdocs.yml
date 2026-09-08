@@ -60,6 +60,7 @@ nav:
   - Reference:
       - Index: reference/index.md
   - Project:
+      - Correctness: correctness.md
       - Changelog: changelog.md
       - Citing: citing.md
       - Feedback: feedback.md

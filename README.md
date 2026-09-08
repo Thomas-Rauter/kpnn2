@@ -26,10 +26,9 @@ Figure 1 shows a dense NN next to a sparse NN with skip edges.
 ![Fully connected versus sparse](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/dense_vs_sparse.png)
 
 **Figure 1.** (a) Dense adjacent layers, the usual PyTorch case.
-(b) A sparsely connected DAG with skip edges (dashed), the same graph as on
-the [Skip edges](docs/skip-edges.ipynb) page. `kpnn2` turns (b)
-into ordinary `MaskedLinear` hops, one per layer, with the skip
-edges inside those masks.
+(b) A sparsely connected directed NN with skip edges (dashed), the same graph
+as on the [Skip edges](docs/skip-edges.ipynb) page. `kpnn2` turns graphs like (b) into ordinary
+PyTorch layers you assemble yourself. Skip edges stay in the wiring.
 
 An **edgelist** is a table of directed connections: each row links
 a `source` node to a `target` node. For example:
@@ -40,12 +39,15 @@ a `source` node to a `target` node. For example:
 | B | H |
 | H | C |
 
-`parse_layered()` layers that table into a `LayeredSpec`. You write
-a normal `torch.nn.Module`, train with standard PyTorch, and can
-map attributions back onto the named nodes. That parser needs a
-DAG; a graph with feedback loops goes through `parse_adjacency()`
-instead, which puts every node into one state vector with packed
-edge indices (see the
+`parse_layered()` layers that table into a `LayeredSpec`. You
+write the `nn.Module` yourself, but the maps that carry the
+wiring are this package's (`MaskedLinear`, or `PackedLinear` /
+`PackedMultiheadAttention` after `parse_adjacency()`), not
+`nn.Linear`. Training stays standard PyTorch, and you can map
+attributions back onto the named nodes. That parser needs a
+directed acyclic graph (DAG); a graph with feedback loops goes
+through `parse_adjacency()` instead, which puts every node into
+one state vector with packed edge indices (see the
 [Cyclic graph example](docs/cyclic-graph-example.ipynb) and the
 [Time-series example](docs/time-series-example.ipynb)).
 
@@ -65,7 +67,9 @@ through a biological example.
 
 `kpnn2` is a set of (domain-agnostic) primitives, not a graph compiler. There
 is no ready-made model object. Training loops, losses, optimizers,
-activations, and heads stay yours.
+activations, and heads stay yours. The
+[**Correctness**](docs/correctness.md) page is an overview of the
+tests that pin those wiring and interpretation claims.
 
 ## Why not PyG?
 
@@ -240,8 +244,7 @@ If you are new to the package, start with a tutorial:
   `PackedMultiheadAttention` on those packed indices, as a
   prior-gated encoder you write yourself
 
-The other pages explain a design choice; they are not second
-examples:
+The other pages are not second examples:
 
 - [**Layered vs. Adjacency**](docs/layered_vs_adjacency.md) for
   how the two parsers differ and when to pick one
@@ -251,6 +254,8 @@ examples:
   labeling layer tensors with node names
 - [**PackedLinear**](docs/packed_linear.md) when `n` is large on
   an `AdjacencySpec`
+- [**Correctness**](docs/correctness.md) for the tests that pin
+  wiring and interpretation claims
 - [**API reference**](docs/reference/index.md) for function- and object-level
   documentation
 

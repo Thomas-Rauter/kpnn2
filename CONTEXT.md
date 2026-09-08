@@ -1419,6 +1419,8 @@ src/kpnn2/
 tests/
   api/                        # public import surface
   module/                     # unit tests per primitive
+  controls/                   # live-path and importance controls
+  integration/                # real tabular task
   manual/                     # Colab GPU/TPU smoke; not pytest
 
 scripts/
@@ -1431,12 +1433,15 @@ docs/
   reference/                  # index + one page per public name
   supported.md                # architecture-family support table
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
+  correctness.md              # test overview; scientific + technical
   feedforward-example.ipynb   # feedforward DAG; tutorials stay MaskedLinear
   cyclic-graph-example.ipynb  # cyclic graph; tutorials stay MaskedLinear
   time-series-example.ipynb   # sequence x_t; tutorials stay MaskedLinear
   transformer-example.ipynb   # PackedMultiheadAttention walkthrough
   fig_gen/                    # figure generators; write to figures/
+  fig_gen/correctness/        # scientific-correctness icons
   figures/
+  figures/correctness/
 ```
 
 `src/kpnn2/__init__.py` is the **only** public import path. Users
@@ -1489,7 +1494,7 @@ repository.
 name, a removed or renamed public name, a breaking
 signature or behavior change, or a core-dependency /
 contract change. Keep the bullet short (the name and
-what it is). `[0.2.0]` Unreleased already has
+what it is). `[0.2.0]` already has
 `PackedMultiheadAttention`; that is the bar.
 
 **Do not add a line** for documentation, examples,
