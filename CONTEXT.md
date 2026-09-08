@@ -1419,7 +1419,7 @@ src/kpnn2/
 tests/
   api/                        # public import surface
   module/                     # unit tests per primitive
-  controls/                   # live-path and importance controls
+  controls/                   # live-path, importance, unrolled-adjacency
   integration/                # real tabular task
   manual/                     # Colab GPU/TPU smoke; not pytest
 

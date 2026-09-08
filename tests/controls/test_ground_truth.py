@@ -16,6 +16,7 @@ from tests.controls.graphs import (
     skip_edge_graph,
     wide_layer_live_gap_graph,
     wide_layer_live_middle_graph,
+    wrap_cycle_graph,
 )
 from tests.controls.ground_truth import (
     assert_all_structurally_live,
@@ -239,6 +240,7 @@ def test_graph_builders_keep_source_target_only() -> None:
         multi_output_graph(),
         wide_layer_live_middle_graph(),
         wide_layer_live_gap_graph(),
+        wrap_cycle_graph(),
     ]
     for graph in graphs:
         assert list(graph.edgelist.columns) == ["source", "target"]

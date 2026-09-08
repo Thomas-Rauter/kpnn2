@@ -6,8 +6,10 @@ from one construction applied twice, so degree sequences and depths
 cannot drift. ``dead_edge_graph`` and ``skip_edge_graph`` isolate
 pinned-zero hops and skip residuals. ``wide_layer_live_middle_graph``
 and ``wide_layer_live_gap_graph`` put live hidden units at non-zero
-or gapped tensor indices in one layer. Edgelists are source/target
-only; intended zero pins live on ``dead_edges``, not parser columns.
+or gapped tensor indices in one layer. ``wrap_cycle_graph`` and
+``memory_self_loop_graph`` are adjacency unroll controls. Edgelists
+are source/target only; intended zero pins live on ``dead_edges``,
+not parser columns.
 """
 
 from __future__ import annotations
@@ -247,6 +249,61 @@ def wide_layer_live_gap_graph() -> ImportanceGraph:
         outputs=(PREDICTION_OUTPUT, DECOY_OUTPUT),
         dead_edges=frozenset(),
     )
+
+
+def wrap_cycle_graph() -> ImportanceGraph:
+    """
+    Fast path live at ``T=2``; wrap path live only at ``T=3``.
+
+    ``fast_in -> fast_h -> prediction`` has length 2.
+    ``wrap_in -> wrap_u -> wrap_v -> prediction`` has length 3,
+    plus ``wrap_v -> wrap_u`` so the wrap is a cycle.
+    ``decoy_in -> decoy_h -> decoy_readout`` never reaches
+    ``prediction``. Labels are not stored here: they depend on
+    ``T``. No intended zero pins.
+    """
+    edges: list[Edge] = [
+        ("fast_in", "fast_h"),
+        ("fast_h", PREDICTION_OUTPUT),
+        ("wrap_in", "wrap_u"),
+        ("wrap_u", "wrap_v"),
+        ("wrap_v", "wrap_u"),
+        ("wrap_v", PREDICTION_OUTPUT),
+        ("decoy_in", "decoy_h"),
+        ("decoy_h", DECOY_OUTPUT),
+    ]
+    return ImportanceGraph(
+        edgelist=_make_edgelist(edges),
+        important_features=(),
+        unimportant_features=(),
+        important_nodes=(),
+        unimportant_nodes=(),
+        outputs=(PREDICTION_OUTPUT, DECOY_OUTPUT),
+        dead_edges=frozenset(),
+    )
+
+
+def memory_self_loop_graph(
+    *,
+    self_loop: bool = True,
+) -> pd.DataFrame:
+    """
+    Time-series memory graph from the time-series example.
+
+    ``input_signal -> node_a``, optional ``node_a -> node_a``,
+    ``input_noise -> node_b``, both hiddens ``-> output``.
+    Dropping the self-loop keeps the names and the last-frame
+    readout but removes memory of an early pulse.
+    """
+    edges: list[Edge] = [
+        ("input_signal", "node_a"),
+        ("input_noise", "node_b"),
+        ("node_a", "output"),
+        ("node_b", "output"),
+    ]
+    if self_loop:
+        edges.append(("node_a", "node_a"))
+    return _make_edgelist(edges)
 
 
 def multi_output_graph() -> ImportanceGraph:

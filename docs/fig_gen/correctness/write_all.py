@@ -12,10 +12,11 @@ import negative_controls
 import pinned_weights
 import rewired_prior
 import trained_importance
+import unrolled_adjacency
 
 
 def write_all() -> list[str]:
-    """Write all seven icons; return the output paths."""
+    """Write all eight icons; return the output paths."""
     writers = (
         live_path.write_figure,
         pinned_weights.write_figure,
@@ -23,6 +24,7 @@ def write_all() -> list[str]:
         negative_controls.write_figure,
         rewired_prior.write_figure,
         absent_edge.write_figure,
+        unrolled_adjacency.write_figure,
         name_mapping.write_figure,
     )
     paths = [str(write()) for write in writers]

@@ -162,6 +162,37 @@ Pinned in
 [`tests/module/test_hop_forward.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_hop_forward.py).
 [Skip edges](skip-edges.ipynb) is the design.
 
+### Unrolled adjacency
+
+<img class="correctness-icon" src="../figures/correctness/unrolled_adjacency.svg" alt="A grey first hop around a cycle; a red wrap reaches the output">
+
+`parse_adjacency` graphs are a shared state vector applied `T`
+times. A walk that needs three hops is dead at `T=2` and live
+at `T=3` on the same edgelist. Unbounded DAG reachability is
+the wrong ground truth. `T` is chosen in the test, not by
+`kpnn2`.
+
+Pinned-weight scores on a linear `PackedLinear` must match those
+T-bounded labels. Swapping the `T=2` and `T=3` labels must fail.
+After several extra steps, a feature that feeds only a decoy
+must still not change the prediction. Dropping the self-loop
+that would carry an early pulse must leave the net at chance.
+
+Packed attention is the same absent-pair claim: a key that is
+not a live edgelist source must not influence a query.
+
+Pinned in
+[`tests/controls/unroll.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/unroll.py),
+[`tests/controls/test_unroll.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_unroll.py),
+[`tests/controls/test_unrolled_importance.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_unrolled_importance.py),
+[`tests/controls/test_unrolled_absent_edge.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_unrolled_absent_edge.py),
+and
+[`tests/controls/test_no_memory_prior.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_no_memory_prior.py).
+Attention pairs are pinned in
+[`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py)
+and
+[`tests/module/test_packed_attention_kernel.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_kernel.py).
+
 ### Name mapping
 
 <img class="correctness-icon" src="../figures/correctness/name_mapping.svg" alt="Anonymous squares with a name tag clipped onto each column">
@@ -247,6 +278,8 @@ breakage that still passes tiny unit tests.
 - That trained importance on real data will recover “the true
   nodes.” The trained checks are matched-tower simulations
   with a learnability gate.
+- That the package picks `n_steps` or writes your time loop.
+  Unrolled-adjacency checks use tiny graphs and a fixed `T`.
 - GPU or TPU numerics in CI.
   [`tests/manual/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/manual)
   is Colab smoke, not pytest.
