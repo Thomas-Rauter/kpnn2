@@ -59,14 +59,17 @@ nav:
       - PackedLinear: packed_linear.md
   - Reference:
       - Index: reference/index.md
-  - Project:
+  - Validation:
       - Correctness: correctness.md
+      - Fortelny and Bock 2020: literature/fortelny-bock-2020.ipynb
+  - Project:
       - Changelog: changelog.md
       - Citing: citing.md
       - Feedback: feedback.md
 
 not_in_nav: |
   /reference/*.md
+  /literature/*.md
 
 hooks:
   - scripts/docs_notebooks.py
@@ -100,6 +103,7 @@ plugins:
   - mkdocs-jupyter:
       include:
         - "*.ipynb"
+        - "literature/*.ipynb"
       ignore:
         - "*.md"
       include_source: true

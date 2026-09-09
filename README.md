@@ -85,7 +85,9 @@ through a biological example.
 is no ready-made model object. Training loops, losses, optimizers,
 activations, and heads stay yours. The
 [**Correctness**](docs/correctness.md) page is an overview of the
-tests that pin those wiring and interpretation claims.
+tests that pin those wiring and interpretation claims. One frozen
+notebook repeats the simulated node-recovery result from
+[Fortelny and Bock, 2020](docs/literature/fortelny-bock-2020.ipynb).
 
 ## Why not PyG?
 

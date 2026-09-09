@@ -14,6 +14,11 @@ CI runs the full pytest suite, including the slow controls, on
 every change. That is a process check. The scientific argument
 is the claims below.
 
+A separate, frozen notebook repeats one published simulation
+with these primitives:
+[Fortelny and Bock, 2020](literature/fortelny-bock-2020.ipynb).
+That page is not part of the test suite.
+
 ## Two kinds of correctness
 
 **Technical.** The parsers, masks, packed layers, alignment,

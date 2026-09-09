@@ -1424,7 +1424,7 @@ tests/
   manual/                     # Colab GPU/TPU smoke; not pytest
 
 scripts/
-  docs_notebooks.py           # execute/repair docs notebooks
+  docs_notebooks.py           # tutorials in CI; literature opt-in
 
 CONTEXT.md                    # this file
 README.md
@@ -1434,6 +1434,8 @@ docs/
   supported.md                # architecture-family support table
   packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
   correctness.md              # test overview; scientific + technical
+  literature/                 # frozen paper notebooks; not CI-executed
+  literature/fortelny-bock-2020.ipynb
   feedforward-example.ipynb   # feedforward DAG; tutorials stay MaskedLinear
   cyclic-graph-example.ipynb  # cyclic graph; tutorials stay MaskedLinear
   time-series-example.ipynb   # sequence x_t; tutorials stay MaskedLinear
@@ -1621,10 +1623,16 @@ itself justify a changelog line.
   Do not add `MaskedRNN` / `MaskedGRU` / `MaskedLSTM`.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
-  mkdocs-jupyter then fails. Execute with
+  mkdocs-jupyter then fails. Execute tutorials with
   `python scripts/docs_notebooks.py` (venv kernel, not
   `ipykernel install --user --name python3`). `mkdocs serve`
-  repairs missing stream names on pre-build.
+  repairs missing stream names on pre-build. Notebooks under
+  `docs/literature/` are frozen paper reproductions: repair
+  them, do not execute them in CI. Re-run with
+  `python scripts/docs_notebooks.py --literature` after
+  downloading files into gitignored `.literature-data/`
+  (see `docs/literature/README.md`). Do not add bulk omics
+  matrices to git.
 - `tests/manual/` is Colab GPU/TPU smoke, not pytest and not
   docs. Do not execute it in CI or with
   `scripts/docs_notebooks.py`. Open from GitHub via

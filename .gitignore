@@ -19,3 +19,5 @@ RELEASE_NOTES.md
 .cursor/
 .cursorignore
 htmlcov/
+llm_dev/
+.literature-data/

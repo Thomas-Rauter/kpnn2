@@ -6,6 +6,12 @@ that on ``mkdocs`` pre-build, and is the supported execute path:
 
     python scripts/docs_notebooks.py
     python scripts/docs_notebooks.py --fix-only
+    python scripts/docs_notebooks.py --literature
+
+Tutorial notebooks under ``docs/*.ipynb`` are executed in CI.
+Notebooks under ``docs/literature/`` are frozen reproductions:
+repair them, but do not execute them unless ``--literature`` is
+set. Docs CI never passes that flag.
 """
 
 from __future__ import annotations
@@ -15,9 +21,36 @@ import json
 import sys
 from pathlib import Path
 
+_LITERATURE_DIR = "literature"
 
-def _iter_notebooks(docs_dir: Path) -> list[Path]:
-    return sorted(docs_dir.glob("*.ipynb"))
+
+def _is_literature(
+    path: Path,
+    docs_dir: Path,
+) -> bool:
+    try:
+        relative = path.relative_to(docs_dir)
+    except ValueError:
+        return False
+    return _LITERATURE_DIR in relative.parts
+
+
+def _iter_notebooks(
+    docs_dir: Path,
+    *,
+    include_literature: bool,
+) -> list[Path]:
+    notebooks = []
+    for path in sorted(docs_dir.rglob("*.ipynb")):
+        if ".ipynb_checkpoints" in path.parts:
+            continue
+        if not include_literature and _is_literature(
+            path,
+            docs_dir,
+        ):
+            continue
+        notebooks.append(path)
+    return notebooks
 
 
 def _detect_indent(text: str) -> int:
@@ -65,7 +98,11 @@ def repair_stream_names(path: Path) -> bool:
 def on_pre_build(config: dict) -> None:
     """MkDocs hook: repair notebooks before jupyter conversion."""
     docs_dir = Path(str(config["docs_dir"]))
-    for path in _iter_notebooks(docs_dir):
+    notebooks = _iter_notebooks(
+        docs_dir,
+        include_literature=True,
+    )
+    for path in notebooks:
         if repair_stream_names(path):
             print(f"Repaired stream output names in {path.name}")
 
@@ -117,9 +154,35 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Repair stream names; do not execute.",
     )
+    parser.add_argument(
+        "--literature",
+        action="store_true",
+        help=(
+            "Execute frozen notebooks under docs/literature/ "
+            "instead of the tutorial notebooks."
+        ),
+    )
     args = parser.parse_args(argv)
     docs_dir = Path(__file__).resolve().parents[1] / "docs"
-    notebooks = _iter_notebooks(docs_dir)
+    if args.fix_only:
+        notebooks = _iter_notebooks(
+            docs_dir,
+            include_literature=True,
+        )
+    elif args.literature:
+        notebooks = [
+            path
+            for path in _iter_notebooks(
+                docs_dir,
+                include_literature=True,
+            )
+            if _is_literature(path, docs_dir)
+        ]
+    else:
+        notebooks = _iter_notebooks(
+            docs_dir,
+            include_literature=False,
+        )
     if not notebooks:
         raise SystemExit(f"No notebooks in {docs_dir}")
     if args.fix_only:
