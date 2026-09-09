@@ -44,7 +44,7 @@ def _cycle_and_self_loop_edgelist():
 def _n_ones_layered(spec):
     total = 0
     for hop in spec.hops:
-        total += int((hop.mask == 1.0).sum().item())
+        total += len(hop.source_index)
     return total
 
 
@@ -163,15 +163,19 @@ def test_non_spec_argument_raises_kpnn2_error():
     assert "AdjacencySpec" in message
 
 
-def test_only_ones_count_as_edges():
+def test_mutating_to_mask_does_not_change_canonical_edges():
     spec = parse_layered(_chain_edgelist())
-    spec.hops[0].mask[0, 0] = 0.5
-    spec.hops[1].mask[0, 0] = 2.0
+    mask = spec.hops[0].to_mask()
+    mask[0, 0] = 0.5
+    spec.hops[1].to_mask()[0, 0] = 2.0
 
     edges = canonical_edges(spec)
 
-    assert edges == ()
-    assert _n_ones_layered(spec) == 0
+    assert edges == (
+        ("A", "B"),
+        ("B", "C"),
+    )
+    assert _n_ones_layered(spec) == 2
 
 
 def test_serialize_module_does_not_import_parsers_at_top_level():

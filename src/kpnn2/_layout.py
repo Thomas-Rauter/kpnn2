@@ -294,6 +294,35 @@ def fill_block(
     mask[target.units, source.units] = 1.0
 
 
+def dense_mask_from_indices(
+    source_index: Sequence[int],
+    target_index: Sequence[int],
+    out_features: int,
+    in_features: int,
+) -> torch.Tensor:
+    """
+    Allocate a dense float32 mask from packed unit indices.
+
+    Shape is ``(out_features, in_features)``. Each live edge
+    sets ``1.0`` at ``[target_index[i], source_index[i]]``.
+    Every call returns a fresh tensor.
+    """
+    mask = torch.zeros(
+        (
+            out_features,
+            in_features,
+        ),
+        dtype=torch.float32,
+    )
+    for source, target in zip(
+        source_index,
+        target_index,
+        strict=True,
+    ):
+        mask[target, source] = 1.0
+    return mask
+
+
 def expand_columns(
     values: np.ndarray,
     layout: Layout,

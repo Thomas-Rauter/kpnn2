@@ -64,8 +64,8 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     tuples, ready for ``PackedLinear`` or packed attention. Reach
     for it when the graph has cycles or self-loops, or when a
     shared-state loop is the update; ``parse_layered`` ranks a DAG
-    into one mask per layer instead. Nothing is ranked here, and no
-    ``(n, n)`` tensor is allocated.
+    into one packed hop per layer instead. Nothing is ranked here,
+    and no ``(n, n)`` tensor is allocated.
 
     Parameters
     ----------
@@ -118,10 +118,11 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     is valid input to both parsers, and neither inspects the graph
     to decide which spec to return. A dense square would carry
     ``1.0`` at ``[target_index[i], source_index[i]]``, the
-    ``nn.Linear.weight`` orientation the layered hop masks also
-    use; ``spec.to_mask()`` materializes it. Nothing here builds an
-    ``nn.Module``, unrolls time, or re-injects inputs between
-    steps: that update stays in user ``forward()`` code.
+    ``nn.Linear.weight`` orientation the layered hops also use
+    after ``to_mask()``; ``spec.to_mask()`` materializes it.
+    Nothing here builds an ``nn.Module``, unrolls time, or
+    re-injects inputs between steps: that update stays in user
+    ``forward()`` code.
 
     Examples
     --------

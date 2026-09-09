@@ -25,14 +25,14 @@ Names you call or construct.
 
 ## Specs {: .api-group }
 
-Returned by the parsers. Frozen dataclasses; treat masks as
-read-only.
+Returned by the parsers. Frozen dataclasses; densify with
+`to_mask()` when you need a rectangle.
 
 | Name | Description |
 | --- | --- |
-| [`LayeredSpec`][kpnn2.LayeredSpec] | A DAG as named layers and hop masks; not a ready-made model. |
-| [`Hop`][kpnn2.Hop] | Incoming wiring of one layer; pass its mask to `MaskedLinear`. |
-| [`Skip`][kpnn2.Skip] | Record of an edge that jumps layers; already in the hop mask. |
+| [`LayeredSpec`][kpnn2.LayeredSpec] | A DAG as named layers and packed hops; not a ready-made model. |
+| [`Hop`][kpnn2.Hop] | Incoming packed wiring of one layer; pass its indices to `PackedLinear`. |
+| [`Skip`][kpnn2.Skip] | Record of an edge that jumps layers; already a packed pair of its hop. |
 | [`AdjacencySpec`][kpnn2.AdjacencySpec] | Every node in one state vector, with packed edges; the general packed layout. |
 
 ## Errors and version {: .api-group }

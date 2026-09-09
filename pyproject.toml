@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kpnn2"
-version = "0.2.0"
+version = "0.3.0"
 description = "Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -141,6 +141,8 @@ exclude = [
     '\.LayeredSpec$',
     '\.AdjacencySpec$',
     '\.column_offsets$',
+    '\.Hop\.in_features$',
+    '\.Hop\.out_features$',
     '\.MaskedLinear\.mask$',
 ]
 exclude_files = [

@@ -20,8 +20,8 @@ def test_parse_layered_records_skip_with_indices():
             target="C",
             source_layer=0,
             target_layer=2,
-            source_index=0,
-            target_index=0,
+            source_in_layer=0,
+            target_in_layer=0,
         ),
     )
 

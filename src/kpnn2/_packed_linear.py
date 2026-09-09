@@ -139,11 +139,14 @@ class PackedLinear(nn.Module):
 
     An ``nn.Linear``-style layer (call ``layer(x)``; not a
     subclass, not a full model) for a graph laid out by
-    ``parse_adjacency``, where every node shares one state vector
-    and ``MaskedLinear(spec.to_mask())`` would store an
-    ``(n, n)`` square. Reach for it when that square strains RAM.
-    Input nodes have no incoming edges, so writing inputs into
-    the state each step is the caller's job.
+    ``parse_layered`` or ``parse_adjacency``. On a hop it stores
+    one weight per live edge of that hop instead of the dense
+    ``(out, in)`` rectangle ``MaskedLinear(hop.to_mask())``
+    would. On an ``AdjacencySpec`` it stores one weight per
+    graph edge instead of an ``(n, n)`` square. Reach for it
+    when that rectangle or square strains RAM. On an
+    ``AdjacencySpec``, input nodes have no incoming edges, so
+    writing inputs into the state each step is the caller's job.
 
     Parameters
     ----------
@@ -222,10 +225,12 @@ class PackedLinear(nn.Module):
     See Also
     --------
     MaskedLinear : Dense ``(out_features, in_features)`` weight;
-        the default layer, and the better one whenever that
-        square fits.
-    AdjacencySpec : Supplies ``source_index`` / ``target_index``;
-        this layer takes those tuples, not the spec object.
+        the GEMM hatch when that rectangle fits.
+    Hop : Supplies per-layer ``source_index`` / ``target_index``
+        on a ``LayeredSpec``.
+    AdjacencySpec : Supplies graph-wide ``source_index`` /
+        ``target_index``; this layer takes those tuples, not the
+        spec object.
     PackedMultiheadAttention : Attention over the same packed
         pairs, when the update is a contraction rather than one
         scalar per edge.
@@ -296,6 +301,27 @@ class PackedLinear(nn.Module):
     (2, 4)
     >>> tuple(state[:, spec.output_index].shape)
     (2, 1)
+
+    A layered hop uses the same constructor on that hop's
+    packed indices:
+
+    >>> layered = kpnn2.parse_layered(
+    ...     pd.DataFrame(
+    ...         {
+    ...             "source": ["A", "H", "A"],
+    ...             "target": ["H", "C", "C"],
+    ...         }
+    ...     )
+    ... )
+    >>> hop = layered.hops[1]
+    >>> layer = kpnn2.PackedLinear(
+    ...     hop.source_index,
+    ...     hop.target_index,
+    ...     hop.out_features,
+    ...     hop.in_features,
+    ... )
+    >>> layer.nnz
+    2
     """
 
     source_index: torch.Tensor

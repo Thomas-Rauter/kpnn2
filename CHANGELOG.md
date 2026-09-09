@@ -6,6 +6,18 @@ examples, and other small edits are not listed.
 This project follows semantic versioning.
 
 
+## [0.3.0] - 9. September 2026
+
+### Changed
+
+- `Hop` stores packed `source_index` / `target_index`. There is
+  no `mask` field; densify with `Hop.to_mask()`.
+- `Skip.source_index` / `target_index` renamed to
+  `source_in_layer` / `target_in_layer`.
+- `PackedLinear` is the large-n path on hops as well as on an
+  `AdjacencySpec`.
+
+
 ## [0.2.0] - 11. September 2026
 
 ### Added

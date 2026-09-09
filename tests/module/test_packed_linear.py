@@ -14,6 +14,7 @@ from kpnn2 import (
     MaskedLinear,
     PackedLinear,
     parse_adjacency,
+    parse_layered,
 )
 
 
@@ -795,3 +796,47 @@ def test_packed_linear_repr_reports_sizes():
     assert "out_features=2" in text
     assert "nnz=2" in text
     assert "bias=False" in text
+
+
+def test_packed_linear_matches_masked_linear_on_a_hop():
+    torch.manual_seed(42)
+    spec = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "H", "A"],
+                "target": ["H", "C", "C"],
+            }
+        )
+    )
+    hop = spec.hops[1]
+    dense = MaskedLinear(
+        hop.to_mask(),
+        bias=False,
+    )
+    packed = PackedLinear(
+        hop.source_index,
+        hop.target_index,
+        hop.out_features,
+        hop.in_features,
+        bias=False,
+    )
+    with torch.no_grad():
+        for index, (source, target) in enumerate(
+            zip(
+                hop.source_index,
+                hop.target_index,
+                strict=True,
+            )
+        ):
+            packed.weight[index] = dense.weight[
+                target,
+                source,
+            ]
+    x = torch.randn(
+        3,
+        hop.in_features,
+    )
+    torch.testing.assert_close(
+        packed(x),
+        dense(x),
+    )

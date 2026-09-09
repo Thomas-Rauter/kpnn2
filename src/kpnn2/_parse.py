@@ -5,7 +5,6 @@ Edgelist parsing for kpnn2.
 from collections import deque
 
 import pandas as pd
-import torch
 
 from ._errors import Kpnn2Error
 from ._layout import (
@@ -13,7 +12,6 @@ from ._layout import (
     NodeSlot,
     build_layout,
     concat_layouts,
-    fill_block,
 )
 from ._spec import Hop, LayeredSpec, Skip
 
@@ -354,18 +352,18 @@ def _build_hops(
     placement: dict[str, tuple[int, NodeSlot]],
 ) -> list[Hop]:
     """
-    Build one incoming mask per depth after the first.
+    Build one incoming packed hop per depth after the first.
 
-    ``hops[i]`` targets depth ``i + 1`` and its mask holds every
-    edge entering that depth, adjacent or skip, with shape
-    ``(target units, sum of source units)``. The column axis is
-    the source depths concatenated in ascending order, so an
-    edge fills the block its endpoints own on that axis: one
-    entry per edge while nodes are one unit wide.
+    ``hops[i]`` targets depth ``i + 1`` and its packed indices
+    hold every edge entering that depth, adjacent or skip. The
+    column axis is the source depths concatenated in ascending
+    order, so an edge uses the block start its endpoints own on
+    that axis: one pair per original edge while nodes are one
+    unit wide.
 
     Only depths that really feed the target become columns, so a
-    graph without skips gives exactly one source depth per hop
-    and the same masks a per-adjacent-hop layout would.
+    graph without skips gives exactly one source depth per hop.
+    Does not allocate an ``(out, in)`` tensor.
 
     Parameters
     ----------
@@ -390,7 +388,7 @@ def _build_hops(
 
     source_layers: dict[int, tuple[int, ...]] = {}
     source_layouts: dict[int, Layout] = {}
-    masks: dict[int, torch.Tensor] = {}
+    packed: dict[int, list[tuple[str, str, int, int]]] = {}
     for target_layer in range(1, n_layers):
         ordered = tuple(sorted(parents[target_layer]))
         source_layout = concat_layouts(
@@ -398,35 +396,37 @@ def _build_hops(
         )
         source_layers[target_layer] = ordered
         source_layouts[target_layer] = source_layout
-        masks[target_layer] = torch.zeros(
-            (
-                layouts[target_layer].n_units,
-                source_layout.n_units,
-            ),
-            dtype=torch.float32,
-        )
+        packed[target_layer] = []
 
     for source, target in zip(
         edgelist[_SOURCE].tolist(),
         edgelist[_TARGET].tolist(),
+        strict=True,
     ):
         target_layer, target_slot = placement[target]
-        fill_block(
-            masks[target_layer],
-            target_slot,
-            source_layouts[target_layer].slot(source),
+        source_slot = source_layouts[target_layer].slot(source)
+        packed[target_layer].append(
+            (
+                source,
+                target,
+                source_slot.start,
+                target_slot.start,
+            )
         )
 
     hops: list[Hop] = []
     for target_layer in range(1, n_layers):
         ordered = source_layers[target_layer]
+        rows = sorted(packed[target_layer])
         hops.append(
             Hop(
                 target_layer=target_layer,
                 source_layers=ordered,
                 source_dims=tuple(layouts[layer].n_units for layer in ordered),
                 source_nodes=source_layouts[target_layer].names,
-                mask=masks[target_layer],
+                target_dim=layouts[target_layer].n_units,
+                source_index=tuple(row[2] for row in rows),
+                target_index=tuple(row[3] for row in rows),
             )
         )
     return hops
@@ -440,7 +440,7 @@ def _build_skips(
     Collect original edges with depth gap greater than 1.
 
     These records are metadata: the edges themselves are already
-    ones in the target depth's hop mask. Adjacent edges (gap
+    packed pairs in the target depth's hop. Adjacent edges (gap
     exactly 1) are omitted, since nothing distinguishes them.
     Each recorded index is the first unit its node owns, which
     is the node's column index while nodes are one unit wide.
@@ -474,8 +474,8 @@ def _build_skips(
                     target=target,
                     source_layer=source_layer,
                     target_layer=target_layer,
-                    source_index=source_slot.start,
-                    target_index=target_slot.start,
+                    source_in_layer=source_slot.start,
+                    target_in_layer=target_slot.start,
                 )
             )
     return skips
@@ -486,12 +486,12 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     Parse a source/target edgelist into a ``LayeredSpec``.
 
     Prior-knowledge edges, such as genes into pathways, become
-    depth-ranked layers plus one connectivity mask per layer, ready
-    for a ``MaskedLinear`` stack. Reach for it when a DAG should
-    become one mask per layer; ``parse_adjacency`` is the packed
-    alternative, which also allows cycles. Depth is longest path
-    from inputs, names sort alphabetically within a layer, and
-    every mask is a dense float32 tensor.
+    depth-ranked layers plus one packed hop per layer, ready for
+    a ``PackedLinear`` stack. Reach for it when a DAG should
+    become one hop per layer; ``parse_adjacency`` is the
+    shared-state packed alternative, which also allows cycles.
+    Depth is longest path from inputs, names sort alphabetically
+    within a layer, and no hop mask is allocated.
 
     Parameters
     ----------
@@ -523,26 +523,27 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     --------
     parse_adjacency : Pack the same table into one state vector;
         allows cycles and self-loops.
+    PackedLinear : Apply one hop from its packed indices.
     gather_hop_inputs : Build one hop's input from the saved layer
         tensors.
 
     Notes
     -----
-    Every edge is a ``1.0`` in exactly one hop mask, the one of its
-    target layer, whether its depth gap is 1 or larger. A hop whose
-    target has parents further back reads several layers, and its
-    mask columns are those layers concatenated in ascending order,
-    so a skip edge is an ordinary weight rather than a dummy neuron
-    or a second mechanism; ``skips`` only reports it. Terminals
-    below maximum depth (early outputs) are allowed, and isolated
-    nodes cannot appear, since the node set is the union of
-    ``source`` and ``target``.
+    Every edge is a packed pair in exactly one hop, the one of
+    its target layer, whether its depth gap is 1 or larger. A
+    hop whose target has parents further back reads several
+    layers, and its source columns are those layers concatenated
+    in ascending order, so a skip edge is an ordinary weight
+    rather than a dummy neuron or a second mechanism; ``skips``
+    only reports it. Terminals below maximum depth (early
+    outputs) are allowed, and isolated nodes cannot appear, since
+    the node set is the union of ``source`` and ``target``.
 
     Examples
     --------
     A chain ``A -> H -> C`` plus the skip ``A -> C``. The hop into
-    ``C`` reads both earlier layers, so the skip is a column of its
-    mask:
+    ``C`` reads both earlier layers, so the skip is a packed pair
+    of that hop:
 
     >>> import pandas as pd
     >>> import kpnn2
@@ -554,7 +555,9 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     (('A',), ('H',), ('C',))
     >>> spec.hops[1].source_nodes
     ('A', 'H')
-    >>> spec.hops[1].mask.tolist()
+    >>> spec.hops[1].source_index, spec.hops[1].target_index
+    ((0, 1), (0, 0))
+    >>> spec.hops[1].to_mask().tolist()
     [[1.0, 1.0]]
     >>> spec.skips[0].source, spec.skips[0].target
     ('A', 'C')

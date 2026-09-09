@@ -1,29 +1,51 @@
 # PackedLinear
 
-`MaskedLinear` is the default. The RAM problem on this page is
-`parse_adjacency()` only. That layout puts every node in one
-state vector, so `MaskedLinear(spec.to_mask())` stores an
-`(n, n)` parameter. Use `kpnn2.PackedLinear` on that spec's
-packed indices when `n` is large enough that the square would
-hurt RAM. Small cyclic graphs stay on
-`MaskedLinear(spec.to_mask())`.
+`PackedLinear` stores one trainable scalar per live edge. Use it
+on a `Hop` or an `AdjacencySpec` when the dense rectangle
+`MaskedLinear(to_mask())` would strain RAM.
 
-`parse_layered()` does not build that square. Each hop mask is
-only that hop's `(out, in)`, and the layer is
-`MaskedLinear(hop.mask)`. `PackedLinear` does not take a hop
-mask or a `LayeredSpec`; there is no combined
-`parse_layered` + `PackedLinear` path.
+On a `LayeredSpec`, each hop is already packed:
 
-[Layered vs. Adjacency](layered_vs_adjacency.md) and the
-[Cyclic graph example](cyclic-graph-example.ipynb) stay on
-`MaskedLinear`. This page is the large-n adjacency path.
+```python
+layer = kpnn2.PackedLinear(
+    hop.source_index,
+    hop.target_index,
+    hop.out_features,
+    hop.in_features,
+)
+```
+
+`gather_hop_inputs` still concatenates whole source layers.
+`PackedLinear` then reads only the live columns. Small graphs
+may keep `MaskedLinear(hop.to_mask())` for GEMM.
+
+On an `AdjacencySpec`, every node shares one state vector, so
+`MaskedLinear(spec.to_mask())` stores an `(n, n)` parameter:
+
+```python
+core = kpnn2.PackedLinear(
+    spec.source_index,
+    spec.target_index,
+    len(spec.nodes),
+    len(spec.nodes),
+)
+```
+
+Small cyclic graphs may stay on `MaskedLinear(spec.to_mask())`.
+
+[Layered vs. Adjacency](layered_vs_adjacency.md) is the layout
+split. [Feedforward example](feedforward-example.ipynb) uses
+packed hops. [Cyclic graph example](cyclic-graph-example.ipynb)
+is the shared-state path.
 
 ## The RAM problem
 
-`AdjacencySpec` puts every node in one state, including a wide
-input layer. `MaskedLinear` then stores an `(n_nodes, n_nodes)`
-parameter. That square is RAM. Dataset size and minibatch size
-are not this problem.
+A hop that concatenates a 20k-gene input layer into a skip
+makes `MaskedLinear` store an `(out, ~20k)` parameter, a dense
+float32 mask, and Adam state of the same shape, even when only
+a handful of those columns are live edges. An `AdjacencySpec`
+with a wide input layer has the same problem as an `(n, n)`
+square. Dataset size and minibatch size are not this problem.
 
 Dead mask entries never affected learning. They were RAM (and
 extra GEMM work), not extra capacity.
@@ -34,11 +56,23 @@ extra GEMM work), not extra capacity.
 edge and updates with `index_add`. It is not `torch.sparse` and
 not sparse-tensor acceleration.
 
-Use `PackedLinear` when `n_nodes` is large enough that the
-square would hurt. Otherwise `MaskedLinear` is better (GEMM,
-`(out, in)` weight).
+Use `PackedLinear` when the dense rectangle would hurt.
+Otherwise `MaskedLinear` is better (GEMM, `(out, in)` weight).
 
 ## Construction
+
+From a hop:
+
+```python
+core = kpnn2.PackedLinear(
+    hop.source_index,
+    hop.target_index,
+    hop.out_features,
+    hop.in_features,
+)
+x = kpnn2.gather_hop_inputs(saved, hop)
+hidden = torch.relu(core(x))
+```
 
 From an `AdjacencySpec`:
 

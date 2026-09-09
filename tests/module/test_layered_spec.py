@@ -44,6 +44,8 @@ def test_layered_spec_sequences_are_tuples():
         assert isinstance(hop.source_layers, tuple)
         assert isinstance(hop.source_dims, tuple)
         assert isinstance(hop.source_nodes, tuple)
+        assert isinstance(hop.source_index, tuple)
+        assert isinstance(hop.target_index, tuple)
     with pytest.raises(AttributeError):
         spec.input_nodes.append("X")
 
@@ -54,17 +56,25 @@ def test_layered_spec_hop_count_matches_layers():
     assert len(spec.hops) == len(spec.layer_nodes) - 1
     for index, hop in enumerate(spec.hops):
         assert hop.target_layer == index + 1
-        assert hop.mask.shape[0] == spec.layer_dims[hop.target_layer]
-        assert hop.mask.shape[1] == sum(hop.source_dims)
+        assert isinstance(hop.source_index, tuple)
+        assert isinstance(hop.target_index, tuple)
+        assert hop.out_features == spec.layer_dims[hop.target_layer]
+        assert hop.in_features == sum(hop.source_dims)
+        assert hop.target_dim == spec.layer_dims[hop.target_layer]
+        assert len(hop.source_index) == len(hop.target_index)
         assert len(hop.source_dims) == len(hop.source_layers)
         assert len(hop.column_offsets) == len(hop.source_layers)
 
 
-def test_layered_spec_masks_are_plain_float32_tensors():
+def test_layered_spec_hops_have_no_stored_mask():
     spec = parse_layered(_chain_edgelist())
 
     for hop in spec.hops:
-        mask = hop.mask
+        assert not hasattr(
+            hop,
+            "mask",
+        )
+        mask = hop.to_mask()
         assert type(mask) is torch.Tensor
         assert mask.dtype == torch.float32
         assert not mask.requires_grad
@@ -72,22 +82,24 @@ def test_layered_spec_masks_are_plain_float32_tensors():
         assert mask.numpy().flags.writeable
 
 
-def test_layered_spec_masks_do_not_alias_the_parsed_tensors():
+def test_layered_spec_to_mask_does_not_alias_the_hop():
     edgelist = _chain_edgelist()
     spec = parse_layered(edgelist)
-    layer = MaskedLinear(spec.hops[0].mask)
+    mask = spec.hops[0].to_mask()
+    layer = MaskedLinear(mask)
     layer_before = layer.mask.tolist()
     other = parse_layered(edgelist)
 
-    spec.hops[0].mask.fill_(0.0)
+    mask.fill_(0.0)
 
     assert layer.mask.tolist() == layer_before
-    assert other.hops[0].mask.tolist() == layer_before
+    assert other.hops[0].to_mask().tolist() == layer_before
+    assert spec.hops[0].to_mask().tolist() == layer_before
 
 
-def test_layered_spec_deepcopy_independent_masks():
+def test_layered_spec_deepcopy_independent_hops():
     spec = parse_layered(_chain_edgelist())
-    before = [hop.mask.tolist() for hop in spec.hops]
+    before = [(hop.source_index, hop.target_index) for hop in spec.hops]
     copied = copy.deepcopy(spec)
 
     assert copied is not spec
@@ -102,13 +114,14 @@ def test_layered_spec_deepcopy_independent_masks():
         assert duplicate.target_layer == original.target_layer
         assert duplicate.source_layers == original.source_layers
         assert duplicate.source_nodes == original.source_nodes
-        assert type(original.mask) is torch.Tensor
-        assert type(duplicate.mask) is torch.Tensor
-        assert original.mask.dtype == torch.float32
-        assert duplicate.mask.dtype == torch.float32
-        assert original.mask.tolist() == duplicate.mask.tolist()
-        assert original.mask is not duplicate.mask
-        assert original.mask.data_ptr() != duplicate.mask.data_ptr()
-        duplicate.mask.fill_(0.0)
+        assert duplicate.source_index == original.source_index
+        assert duplicate.target_index == original.target_index
+        assert duplicate.target_dim == original.target_dim
+        first = original.to_mask()
+        second = duplicate.to_mask()
+        assert first.tolist() == second.tolist()
+        assert first is not second
+        second.fill_(0.0)
 
-    assert [hop.mask.tolist() for hop in spec.hops] == before
+    assert [(hop.source_index, hop.target_index) for hop in spec.hops] == before
+    assert spec.hops[0].to_mask().tolist() != [[0.0]]

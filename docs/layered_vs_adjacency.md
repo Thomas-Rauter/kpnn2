@@ -12,7 +12,7 @@ valid for both. Cycles and self-loops are allowed only by
 [Transformer example](transformer-example.ipynb) and
 [Time-series example](time-series-example.ipynb) use that same
 packed layout: they need named nodes and packed pairs, not hop
-masks. This page is the difference between the two specs.
+rectangles. This page is the difference between the two specs.
 
 ## How edges are stored
 
@@ -27,16 +27,16 @@ The toy is `A -> H -> C` plus the skip `A -> C`:
 <img class="figure-full" src="../figures/layered_vs_adjacency.svg" alt="Layered versus adjacency">
 
 **Figure 1.** The same DAG parsed two ways. Layered ranks nodes
-and puts every incoming edge in one hop mask (the skip is a
-column of `hops[1]`). Adjacency puts every node in one
+and puts every incoming edge in one packed hop (the skip is a
+pair of `hops[1]`). Adjacency puts every node in one
 alphabetical state vector and every edge in packed indices.
 
 `parse_layered()` assigns depth by longest path from the
 inputs: `A` is layer 0, `H` is layer 1, `C` is layer 2.
-`hops[0]` is the mask into `H`. `hops[1]` reads both earlier
-layers because `C` has the skip parent `A` as well as `H`.
-[Skip edges](skip-edges.ipynb) is the algorithm for that extra
-column.
+`hops[0]` is the packed hop into `H`. `hops[1]` reads both
+earlier layers because `C` has the skip parent `A` as well as
+`H`. [Skip edges](skip-edges.ipynb) is the algorithm for that
+extra source layer.
 
 `parse_adjacency()` does not rank. `spec.nodes` is `A`, `C`,
 `H` in alphabetical order. Edges are packed as
@@ -58,7 +58,7 @@ sweep: hold `A`, gather it with `H`, then `hops[1]`. Adjacency
 scatters `A` into the state and applies
 `MaskedLinear(spec.to_mask())` in a loop you own.
 
-On a `LayeredSpec` you apply one `MaskedLinear` per hop. Keep
+On a `LayeredSpec` you apply one `PackedLinear` per hop. Keep
 every produced layer in `saved`. `gather_hop_inputs()`
 concatenates the source layers a hop reads. `hops[0]` always
 reads layer 0 alone, so the gather that matters here is the
@@ -78,7 +78,8 @@ for index, hop in enumerate(spec.hops):
     saved[hop.target_layer] = hidden
 ```
 
-`self.hops[index]` is `MaskedLinear(hop.mask)`.
+`self.hops[index]` is `PackedLinear` on that hop's packed
+indices. `MaskedLinear(hop.to_mask())` is the dense hatch.
 [Feedforward example](feedforward-example.ipynb) writes that module.
 [Skip edges](skip-edges.ipynb) shows why gather raises if a
 source layer was never stored.

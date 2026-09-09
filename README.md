@@ -122,14 +122,15 @@ layers you assemble yourself. See
 1. Define a model architecture as an edgelist with named `source`
    and `target` nodes.
 2. Parse it with `parse_layered()` to a `LayeredSpec` when the
-   graph is a DAG that should become one mask per layer. Use
-   `parse_adjacency()` for the packed layout (`AdjacencySpec`):
+   graph is a DAG that should become one packed hop per layer.
+   Use `parse_adjacency()` for the packed layout (`AdjacencySpec`):
    one state vector, packed indices, cycles allowed. A DAG is
    valid for both; pick the layout, do not inspect the graph.
-3. Write an `nn.Module` with one `MaskedLinear` per
+3. Write an `nn.Module` with one `PackedLinear` per
    `spec.hops`, feeding each one
    `gather_hop_inputs(saved, hop)`. Skip edges are already
-   inside those masks, so there is nothing extra to call.
+   packed pairs of those hops, so there is nothing extra to
+   call. `MaskedLinear(hop.to_mask())` is the dense hatch.
 4. Align named input tables with `align_inputs()`.
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
@@ -163,12 +164,18 @@ spec = kpnn2.parse_layered(edgelist)
 class Net(nn.Module):
     def __init__(self, spec: kpnn2.LayeredSpec):
         super().__init__()
-        self.lin0 = kpnn2.MaskedLinear(
-            spec.hops[0].mask,
+        self.lin0 = kpnn2.PackedLinear(
+            spec.hops[0].source_index,
+            spec.hops[0].target_index,
+            spec.hops[0].out_features,
+            spec.hops[0].in_features,
             identity=spec.fingerprint,
         )
-        self.lin1 = kpnn2.MaskedLinear(
-            spec.hops[1].mask,
+        self.lin1 = kpnn2.PackedLinear(
+            spec.hops[1].source_index,
+            spec.hops[1].target_index,
+            spec.hops[1].out_features,
+            spec.hops[1].in_features,
             identity=spec.fingerprint,
         )
 
@@ -204,12 +211,14 @@ The documented public names are:
 - `map_node_attributions()`
 
 `LayeredSpec.hops` holds one `Hop` per layer after the first, and
-a hop's mask carries every edge entering that layer, skip edges
-included. `LayeredSpec.skips` lists which edges span layers, as
-metadata. An `AdjacencySpec` has no layers and no skips: it carries
-packed `source_index` / `target_index` over all `nodes`, plus
-`input_index` and `output_index` into that state vector.
-`to_mask()` densifies for `MaskedLinear` on small graphs.
+a hop's packed indices carry every edge entering that layer, skip
+edges included. Densify with `Hop.to_mask()` when you want
+`MaskedLinear`. `LayeredSpec.skips` lists which edges span
+layers, as metadata. An `AdjacencySpec` has no layers and no
+skips: it carries packed `source_index` / `target_index` over
+all `nodes`, plus `input_index` and `output_index` into that
+state vector. `to_mask()` densifies for `MaskedLinear` on small
+graphs.
 
 See the [**API reference**](docs/reference/index.md) for details, and
 [**Skip edges**](docs/skip-edges.ipynb) for a worked example.
@@ -218,9 +227,9 @@ See the [**API reference**](docs/reference/index.md) for details, and
 
 `kpnn2` is intentionally minimally opinionated.
 
-It owns edgelist parsing, mask tensors, hop input assembly, named
-input alignment, and attribution column names. It does not impose
-broader modeling choices such as:
+It owns edgelist parsing, packed hop and adjacency indices, hop
+input assembly, named input alignment, and attribution column
+names. It does not impose broader modeling choices such as:
 
 - activation functions
 - output heads

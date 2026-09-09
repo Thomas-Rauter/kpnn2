@@ -198,11 +198,11 @@ def test_hop_forward_equals_a_hand_written_residual_add():
     spec = parse_layered(_one_skip_edgelist())
     torch.manual_seed(42)
     layer0 = MaskedLinear(
-        spec.hops[0].mask,
+        spec.hops[0].to_mask(),
         bias=False,
     )
     layer1 = MaskedLinear(
-        spec.hops[1].mask,
+        spec.hops[1].to_mask(),
         bias=False,
     )
     weights = layer1.parametrizations.weight.original

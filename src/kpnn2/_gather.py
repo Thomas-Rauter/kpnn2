@@ -15,15 +15,15 @@ def gather_hop_inputs(
     hop: Hop,
 ) -> torch.Tensor:
     """
-    Concatenate the saved layer tensors one hop reads, in mask-column order.
+    Concatenate the saved layer tensors one hop reads, in source-column order.
 
-    A hop mask's columns are whole source layers laid side by
-    side, so the tensor feeding ``MaskedLinear(hop.mask)`` is
-    those layers concatenated. Call it between hops, keeping
-    every layer you produce in ``saved``; a forgotten layer
-    raises rather than dropping the edges that read it. Inputs
-    are never modified, and a single-source hop returns the
-    saved tensor itself.
+    A hop's source columns are whole source layers laid side by
+    side, so the tensor feeding ``PackedLinear`` or
+    ``MaskedLinear`` on that hop is those layers concatenated.
+    Call it between hops, keeping every layer you produce in
+    ``saved``; a forgotten layer raises rather than dropping the
+    edges that read it. Inputs are never modified, and a
+    single-source hop returns the saved tensor itself.
 
     Parameters
     ----------
@@ -40,13 +40,13 @@ def gather_hop_inputs(
         The hop about to be applied, one entry of ``spec.hops``.
         Its ``source_layers`` and ``source_dims`` decide which
         keys are read, in which order, and how wide each one
-        must be; the mask itself is not used here.
+        must be; the packed indices are not used here.
 
     Returns
     -------
     torch.Tensor
         The hop's source axis, shape
-        ``(..., hop.mask.shape[1])``, columns in
+        ``(..., hop.in_features)``, columns in
         ``hop.source_nodes`` order, dtype and device of the
         saved layers. When the hop reads a single layer, which
         is every hop with no skip parents and ``hops[0]``
@@ -69,9 +69,10 @@ def gather_hop_inputs(
 
     See Also
     --------
-    MaskedLinear : Applies the hop to the tensor returned here.
-    Hop : The record that fixes the source layers and the mask
-        column order this follows.
+    PackedLinear : Applies the hop to the tensor returned here.
+    MaskedLinear : Dense hatch via ``hop.to_mask()``.
+    Hop : The record that fixes the source layers and the
+        concatenated column order this follows.
     align_inputs : Builds the layer-0 tensor that seeds
         ``saved``.
 
@@ -79,11 +80,12 @@ def gather_hop_inputs(
     -----
     Nothing here is graph-aware: this holds no weights, does not
     inject values into the previous layer, and does not pick
-    skip sources by name. Columns that are not edges are zeroed
-    by the hop mask, not by the gather. With the skip
+    skip sources by name. Columns that are not edges stay in the
+    concatenated tensor; ``PackedLinear`` never reads them, and
+    ``MaskedLinear(hop.to_mask())`` zeros them. With the skip
     ``A -> C`` reaching past layer 1, layer 0 ``[A, B]`` and
     layer 1 ``[H]`` gather to ``[A, B, H]``, and the ``A -> C``
-    weight is the ``A`` column of ``hop.mask``.
+    weight is the packed pair whose source column is ``A``.
 
     An ``AdjacencySpec`` has no hops and is not accepted; in
     that layout every edge is already a packed index pair.

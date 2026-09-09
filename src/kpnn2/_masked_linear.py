@@ -109,15 +109,18 @@ class MaskedLinear(nn.Module):
     layer (call ``layer(x)``; not a subclass) in which only edges
     present in the prior-knowledge graph can carry weight, so
     absent edges need no hand-zeroing after every optimizer step.
-    Build one per ``spec.hops[i]``, fed by ``gather_hop_inputs``.
-    The masked ``weight`` is recomputed rather than stored, and
-    initialization scales by per-row mask degree.
+    Build one from ``spec.hops[i].to_mask()`` or
+    ``spec.to_mask()``, fed by ``gather_hop_inputs`` on a
+    layered hop. The large-n path on the same indices is
+    ``PackedLinear``. The masked ``weight`` is recomputed rather
+    than stored, and initialization scales by per-row mask
+    degree.
 
     Parameters
     ----------
     mask : torch.Tensor
         Connectivity of shape ``(out_features, in_features)``,
-        usually ``spec.hops[i].mask`` or ``spec.to_mask()``. A
+        usually ``spec.hops[i].to_mask()`` or ``spec.to_mask()``. A
         nonzero entry ``[j, k]`` lets input column ``k`` reach
         output row ``j``; a zero blocks it for the life of the
         layer. Stored as an independent float32 copy, so later
@@ -241,9 +244,9 @@ class MaskedLinear(nn.Module):
       ``weight``: that drops the mask and leaves a dense layer.
 
     ``reset_parameters`` uses per-row mask degree as ``fan_in``,
-    not full ``in_features``. Because a hop mask carries every
-    parent of its target, including skip parents, that per-row
-    degree is the unit's real fan-in.
+    not full ``in_features``. Because a hop carries every parent
+    of its target, including skip parents, that per-row degree
+    is the unit's real fan-in.
 
     Examples
     --------

@@ -9,6 +9,7 @@ from kpnn2._layout import (
     NodeSlot,
     build_layout,
     concat_layouts,
+    dense_mask_from_indices,
     expand_columns,
     fill_block,
 )
@@ -182,6 +183,28 @@ def test_fill_block_at_width_one_sets_a_single_entry():
     ]
 
 
+def test_dense_mask_from_indices_sets_live_cells():
+    mask = dense_mask_from_indices(
+        (0, 1),
+        (1, 0),
+        2,
+        2,
+    )
+    assert mask.dtype == torch.float32
+    assert mask.tolist() == [
+        [0.0, 1.0],
+        [1.0, 0.0],
+    ]
+    mask[0, 1] = 0.0
+    again = dense_mask_from_indices(
+        (0, 1),
+        (1, 0),
+        2,
+        2,
+    )
+    assert again[0, 1].item() == 1.0
+
+
 def test_fill_block_marks_every_unit_pair_of_one_edge():
     source_layout = build_layout(
         ["A", "B"],
@@ -296,11 +319,14 @@ def test_build_hops_block_expands_a_wider_layout():
     assert len(hops) == 1
     assert hops[0].source_layers == (0,)
     assert hops[0].source_dims == (5,)
-    assert tuple(hops[0].mask.shape) == (2, 5)
-    assert hops[0].mask.tolist() == [
-        [1.0, 1.0, 1.0, 1.0, 1.0],
-        [1.0, 1.0, 1.0, 1.0, 1.0],
-    ]
+    assert hops[0].target_dim == 2
+    assert hops[0].source_index == (0, 2)
+    assert hops[0].target_index == (0, 0)
+    assert tuple(hops[0].to_mask().shape) == (2, 5)
+    mask = hops[0].to_mask()
+    assert mask[0, 0].item() == 1.0
+    assert mask[0, 2].item() == 1.0
+    assert mask.sum().item() == 2.0
 
 
 def test_build_hops_leaves_unconnected_blocks_zero():
@@ -316,9 +342,11 @@ def test_build_hops_leaves_unconnected_blocks_zero():
         layouts,
         _node_placement(layouts),
     )
-    assert hops[0].mask.tolist() == [
-        [1.0, 1.0, 0.0, 0.0, 0.0],
-        [1.0, 1.0, 0.0, 0.0, 0.0],
+    assert hops[0].source_index == (0,)
+    assert hops[0].target_index == (0,)
+    assert hops[0].to_mask().tolist() == [
+        [1.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0],
     ]
 
 
@@ -354,9 +382,12 @@ def test_build_hops_block_expands_a_skip_edge_too():
     assert skip_hop.source_layers == (0, 1)
     assert skip_hop.source_dims == (5, 2)
     assert skip_hop.column_offsets == (0, 5)
-    assert tuple(skip_hop.mask.shape) == (4, 7)
-    expected_row = [0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    assert skip_hop.mask.tolist() == [expected_row] * 4
+    assert skip_hop.target_dim == 4
+    assert tuple(skip_hop.to_mask().shape) == (4, 7)
+    mask = skip_hop.to_mask()
+    assert mask[0, 2].item() == 1.0
+    assert mask[0, 5].item() == 1.0
+    assert mask.sum().item() == 2.0
 
 
 def test_build_skips_records_the_block_start():
@@ -385,8 +416,8 @@ def test_build_skips_records_the_block_start():
         _node_placement(layouts),
     )
     assert len(skips) == 1
-    assert skips[0].source_index == 2
-    assert skips[0].target_index == 0
+    assert skips[0].source_in_layer == 2
+    assert skips[0].target_in_layer == 0
     assert skips[0].source_layer == 0
     assert skips[0].target_layer == 2
 
@@ -431,8 +462,8 @@ def test_parsers_still_place_one_unit_per_node():
         layout = build_layout(names)
         assert layout.n_units == spec.layer_dims[depth]
     skip = spec.skips[0]
-    assert skip.source_index == spec.layer_nodes[0].index(skip.source)
-    assert skip.target_index == spec.layer_nodes[2].index(skip.target)
+    assert skip.source_in_layer == spec.layer_nodes[0].index(skip.source)
+    assert skip.target_in_layer == spec.layer_nodes[2].index(skip.target)
 
     state_spec = parse_adjacency(edgelist)
     n_nodes = len(state_spec.nodes)

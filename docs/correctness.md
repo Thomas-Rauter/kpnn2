@@ -158,10 +158,10 @@ Pinned in
 [`tests/module/test_absent_edge_influence.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_absent_edge_influence.py).
 
 Skip edges are the other direction: they **are** in the graph,
-as ordinary columns of the target hop mask, not a second
+as ordinary packed pairs of the target hop, not a second
 module. A skip still drives the target when the adjacent chain
-is ReLU-zeroed. Zeroing only that column removes only that
-term. Gradient reaches the skip source directly.
+is ReLU-zeroed. Zeroing only that packed weight removes only
+that term. Gradient reaches the skip source directly.
 
 Pinned in
 [`tests/module/test_hop_forward.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_hop_forward.py).
@@ -231,9 +231,9 @@ layouts, two fingerprints.
 [`tests/module/test_parse_adjacency.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_adjacency.py),
 [`tests/module/test_spec_serialize.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_spec_serialize.py).
 
-**Every edge is one mask one.** Summing the ones over all hop
-masks equals the edgelist length. Each original edge is a `1.0`
-in exactly one hop, the hop of its target, skips included.
+**Every edge is one packed pair.** Summing the pair counts over
+all hops equals the edgelist length. Each original edge is a
+pair in exactly one hop, the hop of its target, skips included.
 [`tests/module/test_parse_layered_hops.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py).
 
 **Forgotten layers error.** `gather_hop_inputs` concatenates

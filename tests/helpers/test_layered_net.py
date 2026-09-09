@@ -71,10 +71,10 @@ def test_layered_net_constructs_runs_and_pin_edge_zeros_skip():
         y_without_skip,
     )
     skip = spec.skips[0]
-    source = x[:, skip.source_index]
+    source = x[:, skip.source_in_layer]
     expected = y_with_skip.clone()
-    expected[:, skip.target_index] = (
-        y_with_skip[:, skip.target_index] - 1.0 * source
+    expected[:, skip.target_in_layer] = (
+        y_with_skip[:, skip.target_in_layer] - 1.0 * source
     )
     torch.testing.assert_close(
         y_without_skip,

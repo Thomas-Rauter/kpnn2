@@ -75,8 +75,8 @@ def _skip_identity(spec):
             skip.target,
             skip.source_layer,
             skip.target_layer,
-            skip.source_index,
-            skip.target_index,
+            skip.source_in_layer,
+            skip.target_in_layer,
         )
         for skip in spec.skips
     }
@@ -100,9 +100,12 @@ def _assert_layered_structure(
         assert roundtrip_hop.source_layers == original_hop.source_layers
         assert roundtrip_hop.source_dims == original_hop.source_dims
         assert roundtrip_hop.source_nodes == original_hop.source_nodes
+        assert roundtrip_hop.source_index == original_hop.source_index
+        assert roundtrip_hop.target_index == original_hop.target_index
+        assert roundtrip_hop.target_dim == original_hop.target_dim
         assert torch.equal(
-            roundtrip_hop.mask,
-            original_hop.mask,
+            roundtrip_hop.to_mask(),
+            original_hop.to_mask(),
         )
     assert _skip_identity(roundtrip) == _skip_identity(original)
 

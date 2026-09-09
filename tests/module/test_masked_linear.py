@@ -367,7 +367,7 @@ def test_masked_linear_mask_independent_of_layered_spec():
         }
     )
     spec = parse_layered(edgelist)
-    mask = spec.hops[0].mask
+    mask = spec.hops[0].to_mask()
     layer = MaskedLinear(mask)
     layer_before = layer.mask.tolist()
     assert layer.mask is not mask
@@ -801,17 +801,17 @@ def _rename_preserving_mask():
 def test_masked_linear_load_rejects_renamed_nodes():
     original, renamed = _rename_preserving_mask()
     assert torch.equal(
-        original.hops[0].mask,
-        renamed.hops[0].mask,
+        original.hops[0].to_mask(),
+        renamed.hops[0].to_mask(),
     )
     assert original.fingerprint != renamed.fingerprint
     src = MaskedLinear(
-        original.hops[0].mask,
+        original.hops[0].to_mask(),
         bias=False,
         identity=original.fingerprint,
     )
     dst = MaskedLinear(
-        renamed.hops[0].mask,
+        renamed.hops[0].to_mask(),
         bias=False,
         identity=renamed.fingerprint,
     )
@@ -833,11 +833,11 @@ def test_masked_linear_load_rejects_renamed_nodes():
 def test_masked_linear_rename_loads_without_identity():
     original, renamed = _rename_preserving_mask()
     src = MaskedLinear(
-        original.hops[0].mask,
+        original.hops[0].to_mask(),
         bias=False,
     )
     dst = MaskedLinear(
-        renamed.hops[0].mask,
+        renamed.hops[0].to_mask(),
         bias=False,
     )
     with torch.no_grad():
@@ -864,12 +864,12 @@ def test_masked_linear_identity_accepts_permuted_edgelist():
     shuffled = parse_layered(permuted)
     assert original.fingerprint == shuffled.fingerprint
     src = MaskedLinear(
-        original.hops[0].mask,
+        original.hops[0].to_mask(),
         bias=False,
         identity=original.fingerprint,
     )
     dst = MaskedLinear(
-        shuffled.hops[0].mask,
+        shuffled.hops[0].to_mask(),
         bias=False,
         identity=shuffled.fingerprint,
     )
@@ -1036,7 +1036,7 @@ def test_module_with_masked_linear_and_layered_spec_deepcopy():
     class Net(nn.Module):
         def __init__(self, spec):
             super().__init__()
-            self.lin = MaskedLinear(spec.hops[0].mask)
+            self.lin = MaskedLinear(spec.hops[0].to_mask())
             self.spec = spec
 
         def forward(self, x):
@@ -1061,15 +1061,15 @@ def test_module_with_masked_linear_and_layered_spec_deepcopy():
         net(x),
     )
     assert copied.lin.mask.dtype == torch.float32
-    assert copied.spec.hops[0].mask.dtype == torch.float32
+    assert copied.spec.hops[0].to_mask().dtype == torch.float32
     assert type(copied.lin.mask) is torch.Tensor
-    assert type(copied.spec.hops[0].mask) is torch.Tensor
+    assert type(copied.spec.hops[0].to_mask()) is torch.Tensor
 
     before = net.lin.mask.tolist()
     copied.lin.mask.fill_(0.0)
-    copied.spec.hops[0].mask.fill_(0.0)
+    copied.spec.hops[0].to_mask().fill_(0.0)
     assert net.lin.mask.tolist() == before
-    assert net.spec.hops[0].mask.tolist() == before
+    assert net.spec.hops[0].to_mask().tolist() == before
 
 
 def test_masked_linear_deepcopy_keeps_dtype_cast_and_state_dict():

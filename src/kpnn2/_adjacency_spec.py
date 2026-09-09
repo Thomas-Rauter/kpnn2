@@ -5,10 +5,9 @@ Structural blueprint for an edgelist-defined node network.
 from dataclasses import dataclass
 
 import pandas as pd
-import torch
 from torch import Tensor
 
-from ._layout import build_layout
+from ._layout import build_layout, dense_mask_from_indices
 
 
 @dataclass(frozen=True)
@@ -63,8 +62,8 @@ class AdjacencySpec:
     --------
     parse_adjacency : Builds this spec from a ``source`` /
         ``target`` edgelist; the only supported constructor.
-    LayeredSpec : Depth-ranked sibling layout, one incoming mask
-        per layer, rejecting cycles and self-loops.
+    LayeredSpec : Depth-ranked sibling layout, one incoming packed
+        hop per layer, rejecting cycles and self-loops.
     PackedLinear : Consumes ``source_index`` and ``target_index``
         as they are, with one weight per edge and no ``(n, n)``.
     PackedMultiheadAttention : Scores only those same packed
@@ -218,19 +217,12 @@ class AdjacencySpec:
         """
         layout = build_layout(self.nodes)
         n_units = layout.n_units
-        mask = torch.zeros(
-            (
-                n_units,
-                n_units,
-            ),
-            dtype=torch.float32,
-        )
-        for source, target in zip(
+        return dense_mask_from_indices(
             self.source_index,
             self.target_index,
-        ):
-            mask[target, source] = 1.0
-        return mask
+            n_units,
+            n_units,
+        )
 
     def to_edgelist(self) -> pd.DataFrame:
         """

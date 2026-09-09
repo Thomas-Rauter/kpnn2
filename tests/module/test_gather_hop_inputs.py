@@ -32,7 +32,7 @@ def test_gather_concatenates_source_layers_in_order():
         hop,
     )
     assert gathered.tolist() == [[1.0, 2.0, 5.0]]
-    assert gathered.shape[-1] == hop.mask.shape[1]
+    assert gathered.shape[-1] == hop.in_features
 
 
 def test_gather_returns_the_saved_tensor_for_a_single_source():

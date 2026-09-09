@@ -8,7 +8,6 @@ import json
 from collections.abc import Sequence
 
 import pandas as pd
-import torch
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
@@ -39,8 +38,8 @@ def canonical_edges(
     Return every original edge as a sorted ``(source, target)``
     tuple.
 
-    A ``LayeredSpec`` is read from hop-mask entries that equal
-    ``1.0``; skip metadata is not consulted. An
+    A ``LayeredSpec`` is read from packed hop index pairs;
+    skip metadata is not consulted. An
     ``AdjacencySpec`` is read from packed
     ``(nodes[source_index[i]], nodes[target_index[i]])``
     pairs, including cycles and self-loops, never from a dense
@@ -49,8 +48,8 @@ def canonical_edges(
     Parameters
     ----------
     spec : LayeredSpec or AdjacencySpec
-        Spec whose edges are stored as hop masks or packed
-        indices.
+        Spec whose edges are stored as packed hop indices or
+        packed state-vector indices.
 
     Returns
     -------
@@ -86,8 +85,7 @@ def spec_to_edgelist(
     Parameters
     ----------
     spec : LayeredSpec or AdjacencySpec
-        Spec whose edges are stored as hop masks or packed
-        indices.
+        Spec whose edges are stored as packed indices.
 
     Returns
     -------
@@ -120,8 +118,7 @@ def spec_to_dict(
     Parameters
     ----------
     spec : LayeredSpec or AdjacencySpec
-        Spec whose edges are stored as hop masks or packed
-        indices.
+        Spec whose edges are stored as packed indices.
 
     Returns
     -------
@@ -311,13 +308,18 @@ def _layered_edges(
 ) -> tuple[tuple[str, str], ...]:
     pairs: list[tuple[str, str]] = []
     for hop in spec.hops:
-        pairs.extend(
-            _pairs_from_mask(
-                hop.mask,
-                hop.source_nodes,
-                spec.layer_nodes[hop.target_layer],
+        target_names = spec.layer_nodes[hop.target_layer]
+        for source, target in zip(
+            hop.source_index,
+            hop.target_index,
+            strict=True,
+        ):
+            pairs.append(
+                (
+                    hop.source_nodes[source],
+                    target_names[target],
+                )
             )
-        )
     return tuple(sorted(pairs))
 
 
@@ -336,24 +338,3 @@ def _adjacency_edges(
             )
         )
     return tuple(sorted(pairs))
-
-
-def _pairs_from_mask(
-    mask: torch.Tensor,
-    source_names: tuple[str, ...],
-    target_names: tuple[str, ...],
-) -> list[tuple[str, str]]:
-    rows, cols = (mask == 1.0).nonzero(as_tuple=True)
-    pairs: list[tuple[str, str]] = []
-    for row, col in zip(
-        rows.tolist(),
-        cols.tolist(),
-        strict=True,
-    ):
-        pairs.append(
-            (
-                source_names[col],
-                target_names[row],
-            )
-        )
-    return pairs

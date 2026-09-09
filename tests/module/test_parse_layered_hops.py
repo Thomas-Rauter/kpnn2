@@ -49,7 +49,7 @@ def _mask_entry(
 ):
     row = spec.layer_nodes[hop.target_layer].index(target)
     column = hop.source_nodes.index(source)
-    return hop.mask[row, column].item()
+    return hop.to_mask()[row, column].item()
 
 
 def test_parse_layered_hops_chain_shapes_and_dtype():
@@ -62,12 +62,15 @@ def test_parse_layered_hops_chain_shapes_and_dtype():
     )
     for index, hop in enumerate(spec.hops):
         assert hop.target_layer == index + 1
-        assert hop.mask.shape == (1, 1)
-        assert hop.mask.dtype == torch.float32
+        assert hop.to_mask().shape == (1, 1)
+        assert hop.to_mask().dtype == torch.float32
         assert torch.equal(
-            hop.mask,
+            hop.to_mask(),
             ones,
         )
+        assert hop.source_index == (0,)
+        assert hop.target_index == (0,)
+        assert hop.target_dim == 1
 
 
 def test_parse_layered_hops_without_skips_read_one_layer():
@@ -90,15 +93,17 @@ def test_parse_layered_hops_include_the_skip_as_a_column():
     first, second = spec.hops
     assert first.source_layers == (0,)
     assert first.source_nodes == ("A",)
-    assert first.mask.tolist() == [[1.0]]
+    assert first.to_mask().tolist() == [[1.0]]
 
     assert second.target_layer == 2
     assert second.source_layers == (0, 1)
     assert second.source_dims == (1, 1)
     assert second.source_nodes == ("A", "H")
     assert second.column_offsets == (0, 1)
-    assert second.mask.shape == (1, 2)
-    assert second.mask.tolist() == [[1.0, 1.0]]
+    assert second.to_mask().shape == (1, 2)
+    assert second.to_mask().tolist() == [[1.0, 1.0]]
+    assert second.source_index == (0, 1)
+    assert second.target_index == (0, 0)
 
 
 def test_parse_layered_hops_first_hop_reads_only_the_input_layer():
@@ -111,7 +116,8 @@ def test_parse_layered_hops_first_hop_reads_only_the_input_layer():
         first = spec.hops[0]
         assert first.source_layers == (0,)
         assert first.source_nodes == spec.input_nodes
-        assert first.mask.shape[1] == len(spec.input_nodes)
+        assert first.to_mask().shape[1] == len(spec.input_nodes)
+        assert first.in_features == len(spec.input_nodes)
 
 
 def test_parse_layered_hops_always_read_the_layer_below():
@@ -127,7 +133,7 @@ def test_parse_layered_hops_cover_every_edge_exactly_once():
     edgelist = _three_hop_edgelist()
     spec = parse_layered(edgelist)
 
-    n_ones = sum(int(hop.mask.sum().item()) for hop in spec.hops)
+    n_ones = sum(len(hop.source_index) for hop in spec.hops)
     assert n_ones == len(edgelist)
 
     for source, target in _edge_pairs(edgelist):
@@ -171,8 +177,9 @@ def test_parse_layered_hops_row_degree_counts_skip_parents():
     assert last.target_layer == 3
     assert last.source_layers == (0, 1, 2)
     assert last.source_nodes == ("A", "B", "H1", "H2")
-    assert last.mask.tolist() == [[1.0, 0.0, 1.0, 1.0]]
-    assert last.mask.sum(dim=1).tolist() == [3.0]
+    assert last.to_mask().tolist() == [[1.0, 0.0, 1.0, 1.0]]
+    assert last.to_mask().sum(dim=1).tolist() == [3.0]
+    assert len(last.source_index) == 3
 
 
 def test_parse_layered_hops_early_output_indexing():
@@ -188,12 +195,12 @@ def test_parse_layered_hops_early_output_indexing():
     assert spec.layer_nodes == (("A",), ("E", "H"), ("C",))
     first, second = spec.hops
     assert first.source_layers == (0,)
-    assert first.mask.shape == (2, 1)
-    assert first.mask.tolist() == [[1.0], [1.0]]
+    assert first.to_mask().shape == (2, 1)
+    assert first.to_mask().tolist() == [[1.0], [1.0]]
     assert second.source_layers == (1,)
     assert second.source_nodes == ("E", "H")
-    assert second.mask.shape == (1, 2)
-    assert second.mask.tolist() == [[0.0, 1.0]]
+    assert second.to_mask().shape == (1, 2)
+    assert second.to_mask().tolist() == [[0.0, 1.0]]
 
 
 def test_parse_layered_hops_skip_out_of_a_wide_layer():
@@ -208,11 +215,11 @@ def test_parse_layered_hops_skip_out_of_a_wide_layer():
 
     assert spec.layer_nodes == (("A", "B"), ("H1",), ("H2",))
     assert spec.hops[0].source_layers == (0,)
-    assert spec.hops[0].mask.tolist() == [[1.0, 1.0]]
+    assert spec.hops[0].to_mask().tolist() == [[1.0, 1.0]]
 
     hop = spec.hops[1]
     assert hop.source_layers == (0, 1)
     assert hop.source_dims == (2, 1)
     assert hop.source_nodes == ("A", "B", "H1")
     assert hop.column_offsets == (0, 2)
-    assert hop.mask.tolist() == [[1.0, 0.0, 1.0]]
+    assert hop.to_mask().tolist() == [[1.0, 0.0, 1.0]]

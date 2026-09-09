@@ -8,17 +8,18 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from kpnn2 import LayeredSpec, MaskedLinear, gather_hop_inputs
+from kpnn2 import LayeredSpec, PackedLinear, gather_hop_inputs
 
 
 class LayeredNet(nn.Module):
     """
-    One ``MaskedLinear`` per ``spec.hops``, in depth order.
+    One ``PackedLinear`` per ``spec.hops``, in depth order.
 
     Each hop reads every layer that feeds its target, so skip
-    edges ride along inside the hop mask and there is nothing
-    extra to add. ReLU is applied after every hop except the
-    last, when ``relu`` is True. The last hop stays linear.
+    edges ride along inside the hop's packed indices and there
+    is nothing extra to add. ReLU is applied after every hop
+    except the last, when ``relu`` is True. The last hop stays
+    linear.
     """
 
     def __init__(
@@ -33,8 +34,11 @@ class LayeredNet(nn.Module):
         layers = []
         for hop in spec.hops:
             layers.append(
-                MaskedLinear(
-                    hop.mask,
+                PackedLinear(
+                    hop.source_index,
+                    hop.target_index,
+                    hop.out_features,
+                    hop.in_features,
                     bias=bias,
                     identity=spec.fingerprint,
                 )
@@ -68,16 +72,14 @@ def pin_all_weights(
     value: float = 1.0,
 ) -> None:
     """
-    Set every live edge weight and nothing else to ``value``.
+    Set every live edge weight to ``value``.
 
-    Masked-out trainable entries are set to 0. Skip edges are
-    live entries of a hop mask, so they are pinned by the same
-    line as adjacent edges.
+    Skip edges are live packed entries of a hop, so they are
+    pinned by the same line as adjacent edges.
     """
     with torch.no_grad():
         for layer in module.layers:
-            trainable = layer.parametrizations.weight.original
-            trainable.copy_(layer.mask * value)
+            layer.weight.fill_(value)
 
 
 def pin_edge(
@@ -96,8 +98,8 @@ def pin_edge(
     Raises
     ------
     ValueError
-        If ``source -> target`` is not a live entry of any hop
-        mask in ``module.spec``.
+        If ``source -> target`` is not a live packed pair of any
+        hop in ``module.spec``.
     """
     spec = module.spec
     with torch.no_grad():
@@ -108,9 +110,14 @@ def pin_edge(
             row = targets.index(target)
             column = hop.source_nodes.index(source)
             layer = module.layers[index]
-            if layer.mask[row, column].item() != 1.0:
-                continue
-            trainable = layer.parametrizations.weight.original
-            trainable[row, column] = value
-            return
+            for edge_i, (src, tgt) in enumerate(
+                zip(
+                    hop.source_index,
+                    hop.target_index,
+                    strict=True,
+                )
+            ):
+                if src == column and tgt == row:
+                    layer.weight[edge_i] = value
+                    return
     raise ValueError(f"No edge {source!r} -> {target!r} in spec.")

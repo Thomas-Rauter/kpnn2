@@ -111,10 +111,11 @@ def map_node_attributions(
     -----
     Captum is not imported anywhere in this package; mapping is
     name alignment only, and any attribution method will do. For
-    the output of ``MaskedLinear(spec.hops[i].mask)`` the layer to
-    pass is ``spec.hops[i].target_layer``, that is ``i + 1``: the
-    hop output, not its input. Only map units that are spec nodes;
-    BatchNorm and other unnamed modules have no node axis to name.
+    the output of ``PackedLinear`` (or ``MaskedLinear``) on
+    ``spec.hops[i]``, pass ``layer=spec.hops[i].target_layer``,
+    that is ``i + 1``: the hop output, not its input. Only map
+    units that are spec nodes; BatchNorm and other unnamed
+    modules have no node axis to name.
 
     A recurrent net on an ``AdjacencySpec`` has no layer to index,
     and the natural extra axis there is ``step``: pass one tensor

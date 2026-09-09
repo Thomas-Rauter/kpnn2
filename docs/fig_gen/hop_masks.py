@@ -169,21 +169,21 @@ def svg_text() -> str:
             _label(
                 (a_mid[0] + h1_mid[0]) / 2,
                 24,
-                "hops[0].mask",
+                "hops[0]",
             ),
             "",
             _line(_right_center(_H1), _left_center(_H2)),
             _label(
                 (h1_mid[0] + h2_mid[0]) / 2,
                 36,
-                "hops[1].mask",
+                "hops[1]",
             ),
             "",
             _line(_right_center(_H2), _left_center(_C)),
             _label(
                 (h2_mid[0] + c_mid[0]) / 2,
                 36,
-                "hops[2].mask",
+                "hops[2]",
             ),
             "",
             # A -> H2 and A -> C share A's bottom-center.
