@@ -16,19 +16,13 @@ class AdjacencySpec:
     """
     Frozen blueprint from ``parse_adjacency``.
 
-    Structure only: not an ``nn.Module`` and no parameters. Every
-    node lives in one state vector and connectivity is packed as
-    source/target index tuples, so the graph may contain cycles
-    and self-loops. There is no stored square mask. This is the
-    packed layout, not a cyclic-only spec: the same indices feed
-    ``PackedLinear``, ``MaskedLinear(spec.to_mask())``, or
-    ``PackedMultiheadAttention``.
-
-    There are no depths here: no ``layer_nodes``, no ``hops``
-    tuple, and no ``skips``. This is not a one-layer
-    ``LayeredSpec``. Write the update in ``forward()``: a shared
-    state loop, a time-series cell, attention, or any other
-    PyTorch module that consumes those packed indices.
+    Packed wiring for one knowledge-primed network: every node is
+    a unit of one alphabetical state vector, and every edge an
+    index pair, so cycles and self-loops are ordinary. Structure
+    only — no ``nn.Module``, no parameters, no stored square — and
+    the update is yours. Input nodes have no incoming edges, so
+    writing the inputs into the state each step is required.
+    ``LayeredSpec`` is the depth-ranked alternative.
 
     Parameters
     ----------
@@ -38,11 +32,13 @@ class AdjacencySpec:
         ``to_mask()``.
     input_nodes : tuple[str, ...]
         In-degree 0 names, alphabetical. This is the column order
-        of tensors returned by ``align_inputs``.
+        of tensors returned by ``align_inputs``, which is
+        narrower than ``nodes`` unless every node is an input.
     output_nodes : tuple[str, ...]
         Out-degree 0 names, alphabetical.
     hidden_nodes : tuple[str, ...]
         Names that are neither input nor output, alphabetical.
+        Empty when every node is an input or an output.
     source_index : tuple[int, ...]
         For each original edge, the column in ``nodes`` (the
         source). Same length as ``target_index`` and as the
@@ -55,9 +51,25 @@ class AdjacencySpec:
         target). A dense square would have ``1.0`` at
         ``[target_index[i], source_index[i]]``.
     input_index : tuple[int, ...]
-        Position of each ``input_nodes`` name in ``nodes``.
+        Position of each ``input_nodes`` name in ``nodes``, same
+        order. Scatter an ``align_inputs`` tensor into the state
+        vector along these columns.
     output_index : tuple[int, ...]
-        Position of each ``output_nodes`` name in ``nodes``.
+        Position of each ``output_nodes`` name in ``nodes``, same
+        order. Read the network's outputs from the state vector
+        along these columns.
+
+    See Also
+    --------
+    parse_adjacency : Builds this spec from a ``source`` /
+        ``target`` edgelist; the only supported constructor.
+    LayeredSpec : Depth-ranked sibling layout, one incoming mask
+        per layer, rejecting cycles and self-loops.
+    PackedLinear : Consumes ``source_index`` and ``target_index``
+        as they are, with one weight per edge and no ``(n, n)``.
+    PackedMultiheadAttention : Scores only those same packed
+        pairs, for an attention update instead of a linear one.
+    align_inputs : Orders a named DataFrame onto ``input_nodes``.
 
     Notes
     -----
@@ -73,21 +85,21 @@ class AdjacencySpec:
     is not the state width. Scatter that tensor into the
     ``n``-wide state vector with ``input_index``. Input rows of
     ``to_mask()`` are all zeros, so under the degree-aware init
-    of ``MaskedLinear`` they stay zero: writing the inputs in
-    is required, not cosmetic.
+    of ``MaskedLinear`` and ``PackedLinear`` those units stay
+    zero: writing the inputs in is required, not cosmetic.
 
-    ``to_edgelist()`` returns the original edges as a
-    two-column ``source`` / ``target`` DataFrame, rows sorted
-    lexicographically, including cycle edges and self-loops.
-    ``parse_adjacency`` on that table reconstructs this spec's
-    node lists, packed indices, and input/output indices.
+    Depth does not exist in this layout, so there is no
+    ``layer_nodes``, ``layer_dims``, ``hops``, or ``skips``, and
+    ``gather_hop_inputs`` does not accept this spec. An edge
+    that would span layers is already an ordinary index pair.
+    This is not a one-layer ``LayeredSpec``; the layout is your
+    choice, and a DAG is valid input to either parser.
 
-    ``to_dict()`` returns a JSON-safe tagged dict
-    (``kpnn2_spec``, ``layout``, ``edges``). ``from_dict``
-    rebuilds this spec by calling ``parse_adjacency``.
-    ``fingerprint`` is the SHA-256 of that canonical JSON.
-    Pickle / ``torch.save`` of the dataclass is not the
-    supported interchange.
+    ``to_edgelist()``, ``to_dict()`` with ``from_dict()``, and
+    ``fingerprint`` are the supported interchange; each
+    round-trips through ``parse_adjacency``, cycle edges and
+    self-loops included. Pickle and ``torch.save`` of the
+    dataclass are not.
 
     Examples
     --------

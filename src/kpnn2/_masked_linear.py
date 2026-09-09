@@ -102,30 +102,27 @@ class _MaskParametrization(nn.Module):
 
 class MaskedLinear(nn.Module):
     """
-    Affine hop with a fixed connectivity mask.
+    Affine hop whose connectivity is fixed by an edgelist mask.
 
-    Same job as ``torch.nn.Linear``: call ``layer(x)`` in an
-    ``nn.Module``. This is not a subclass of ``Linear``. For
-    shapes, ``bias``, calling the module, and training, see the
-    PyTorch docs for ``torch.nn.Linear``.
-
-    The mask is applied with
-    ``torch.nn.utils.parametrize.register_parametrization``, so
-    ``layer.weight`` is the **effective** masked weight
-    (recomputed, not an ``nn.Parameter``). The trainable
-    tensor lives at
-    ``layer.parametrizations.weight.original``.
-    ``model.parameters()`` includes that tensor. A
-    param-group filter that uses ``"weight" in name``
-    matches it; ``name.endswith(".weight")`` does not.
+    One hop of a knowledge-primed network: an ``nn.Linear``-style
+    layer (call ``layer(x)``; not a subclass) in which only edges
+    present in the prior-knowledge graph can carry weight, so
+    absent edges need no hand-zeroing after every optimizer step.
+    Build one per ``spec.hops[i]``, fed by ``gather_hop_inputs``.
+    The masked ``weight`` is recomputed rather than stored, and
+    initialization scales by per-row mask degree.
 
     Parameters
     ----------
     mask : torch.Tensor
-        Connectivity of shape ``(out_features, in_features)``.
-        Non-finite values are not special-cased: the tensor is
-        stored as float32 and multiplied with the trainable
-        weight.
+        Connectivity of shape ``(out_features, in_features)``,
+        usually ``spec.hops[i].mask`` or ``spec.to_mask()``. A
+        nonzero entry ``[j, k]`` lets input column ``k`` reach
+        output row ``j``; a zero blocks it for the life of the
+        layer. Stored as an independent float32 copy, so later
+        writes to the tensor passed in do not reach this layer.
+        Non-finite values are not special-cased: the stored
+        tensor is multiplied with the trainable weight as it is.
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
         If ``False``, there is no bias.
@@ -150,17 +147,17 @@ class MaskedLinear(nn.Module):
         ``nn.Parameter`` of shape
         ``(out_features, in_features)``, and the mask module.
         Masked-out entries can be nonzero in ``original``; they
-        never reach the output.
+        never reach the output. ``model.parameters()`` includes
+        that tensor. A param-group filter that uses
+        ``"weight" in name`` matches it;
+        ``name.endswith(".weight")`` does not.
     mask : torch.Tensor
         Float32 buffer, same shape as the constructor ``mask``.
-        Not trained and not saved in ``state_dict``. An
-        independent copy of the constructor tensor (including
-        ``spec.hops[i].mask``), so later edits to that tensor do
-        not reach this layer. Stays float32 after ``.half()`` /
-        bfloat16 / ``.double()``. **Treat it as read-only:**
-        like any PyTorch buffer it can be written to, and doing
-        so silently rewires the layer. Rebuild from the edgelist
-        instead.
+        Not trained and not saved in ``state_dict``. Stays
+        float32 after ``.half()`` / bfloat16 / ``.double()``.
+        **Treat it as read-only:** like any PyTorch buffer it can
+        be written to, and doing so silently rewires the layer.
+        Rebuild from the edgelist instead.
     bias : nn.Parameter | None
         Trainable bias, or ``None`` when constructed with
         ``bias=False``.
@@ -168,42 +165,50 @@ class MaskedLinear(nn.Module):
     Raises
     ------
     Kpnn2Error
-        If ``mask`` is not a ``torch.Tensor``, or is not 2-D.
+        If ``mask`` is not a ``torch.Tensor`` or is not 2-D, and
+        from ``load_state_dict`` when the checkpoint carries a
+        mask digest that does not match this layer's mask; the
+        weights are then not loaded.
+
+    See Also
+    --------
+    PackedLinear : One trainable scalar per live edge, for graphs
+        whose dense ``(out_features, in_features)`` weight would
+        not fit in RAM.
+    gather_hop_inputs : Assembles the input tensor of a hop that
+        reads more than one saved layer.
+    torch.nn.Linear : Dense equivalent, and the reference for
+        shapes, ``bias``, calling the module, and training.
 
     Notes
     -----
-    Construct with ``mask``; sizes come from ``mask.shape``.
-    ``mask`` is an ordinary float32 buffer: not trained, omitted
-    from ``state_dict``, and not a tensor subclass, so nothing
-    custom runs per operation and ``torch.compile`` sees plain
-    tensors. Nothing prevents writing to it; treat it as
-    read-only and rebuild from the edgelist to change wiring.
-    Module dtype casts do not change the stored mask dtype.
+    Sizes come from ``mask.shape``; there are no separate size
+    arguments. Forward is ``Y = F.linear(X, weight, bias)`` with
+    ``weight = original * mask.to(dtype=original.dtype,
+    device=original.device)``, equivalently
+    ``Y = X @ (W ⊙ M).T + b``, so ``.half()``, bfloat16, and
+    ``.double()`` work as on ``nn.Linear``. The multiply is dense
+    on purpose, and ``X`` is an ordinary dense activation tensor.
+    Nothing in the forward path is a tensor subclass, so
+    ``torch.compile(layer, fullgraph=True)`` traces it,
+    parametrization included. There are no edge-weight
+    constraints beyond the mask.
 
-    Forward is ``Y = F.linear(X, self.weight, self.bias)``, and
-    ``self.weight`` is ``original * mask.to(dtype=original.dtype,
-    device=original.device)``, so ``.half()``, bfloat16, and
-    ``.double()`` work like ``nn.Linear``. There are no extra
-    edge-weight constraints beyond the mask.
-
-    Registering a parametrization is what PyTorch does for
-    "the effective weight is a function of a stored parameter",
-    and it comes with that machinery's conventions:
+    The mask is applied with
+    ``torch.nn.utils.parametrize.register_parametrization``, the
+    PyTorch mechanism for "the effective weight is a function of
+    a stored parameter", and it comes with that machinery's
+    conventions:
 
     - ``state_dict`` keys are ``parametrizations.weight.original``,
       optional ``bias``, and ``mask_digest``; ``mask`` stays out
-      of it. ``"weight" in name`` matches that parameter key;
-      ``name.endswith(".weight")`` misses it. Default
-      ``Adam(model.parameters())`` needs no filter.
-      ``mask_digest`` is a 1-D CPU ``uint8`` tensor of
+      of it. ``mask_digest`` is a 1-D CPU ``uint8`` tensor of
       length 32: the SHA-256 of the live mask's float32
       C-contiguous bytes at save time, not a registered buffer.
-      ``load_state_dict`` raises ``Kpnn2Error`` when a present
-      digest does not match this layer's mask, and does not
-      load the weights. A missing digest is not an error, even
-      with ``strict=True``. The digest catches same-shape
-      rewiring, not a rename that leaves the 0/1 pattern
-      unchanged (that is ``spec.fingerprint``).
+      A missing digest is not an error, even with ``strict=True``.
+      The digest catches same-shape rewiring, not a rename that
+      leaves the 0/1 pattern unchanged (that is
+      ``spec.fingerprint``).
     - ``repr`` reports ``ParametrizedMaskedLinear``, because
       PyTorch swaps in a subclass to install the ``weight``
       property. ``isinstance(layer, MaskedLinear)`` is still
@@ -222,10 +227,9 @@ class MaskedLinear(nn.Module):
       ``weight``: that drops the mask and leaves a dense layer.
 
     ``reset_parameters`` uses per-row mask degree as ``fan_in``,
-    not full ``in_features``. Typical construction:
-    ``MaskedLinear(spec.hops[i].mask)``. Because a hop mask
-    carries every parent of its target, including skip parents,
-    that per-row degree is the unit's real fan-in.
+    not full ``in_features``. Because a hop mask carries every
+    parent of its target, including skip parents, that per-row
+    degree is the unit's real fan-in.
 
     Examples
     --------
@@ -246,10 +250,7 @@ class MaskedLinear(nn.Module):
     ... )
     >>> layer.in_features, layer.out_features
     (2, 2)
-    >>> tuple(layer.mask.shape)
-    (2, 2)
-    >>> x = torch.ones(3, 2)
-    >>> y = layer(x)
+    >>> y = layer(torch.ones(3, 2))
     >>> tuple(y.shape)
     (3, 2)
 
@@ -260,18 +261,6 @@ class MaskedLinear(nn.Module):
     True
     >>> tuple(layer.parametrizations.weight.original.shape)
     (2, 2)
-
-    A zero in the mask blocks that input column:
-
-    >>> mask = torch.tensor([[1.0, 0.0]])
-    >>> layer = kpnn2.MaskedLinear(
-    ...     mask,
-    ...     bias=False,
-    ... )
-    >>> a = layer(torch.tensor([[1.0, 0.0]]))
-    >>> b = layer(torch.tensor([[1.0, 99.0]]))
-    >>> torch.equal(a, b)
-    True
     """
 
     weight: torch.Tensor

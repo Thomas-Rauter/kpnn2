@@ -59,81 +59,74 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     """
     Parse a source/target edgelist into an ``AdjacencySpec``.
 
-    This is the packed layout. Every node goes into one state
-    vector, sorted alphabetically, and every edge goes into
-    packed source/target index tuples. Nothing is ranked, so
-    cycles and self-loops are allowed. It is not only for
-    cyclic graphs: the same spec feeds a shared-state loop, a
-    time-series cell, or ``PackedMultiheadAttention`` on live
-    pairs. Use ``parse_layered`` when a DAG should become one
-    mask per layer.
-
-    A DAG is valid input to both parsers. The layout is a choice,
-    not a property of the graph, so this function never inspects
-    the graph to decide which spec to return.
-
-    Isolated nodes cannot appear: the node set is the union of
-    ``source`` and ``target`` values only. Graphs with no
-    in-degree-0 node or no out-degree-0 node are rejected, which
-    also rejects a pure ring and a lone self-loop.
+    Prior-knowledge edges, such as genes into pathways, become one
+    alphabetical state vector plus packed source/target index
+    tuples, ready for ``PackedLinear`` or packed attention. Reach
+    for it when the graph has cycles or self-loops, or when a
+    shared-state loop is the update; ``parse_layered`` ranks a DAG
+    into one mask per layer instead. Nothing is ranked here, and no
+    ``(n, n)`` tensor is allocated.
 
     Parameters
     ----------
     edgelist : pd.DataFrame
-        Edge table with required columns ``source`` and ``target``.
-        Node names are stored as strings via ``str(...)``. Extra
-        columns are ignored.
+        Edge table with required columns ``source`` and ``target``,
+        one row per directed edge in the direction of computation.
+        Names are converted with ``str(...)``; extra columns are
+        ignored. The frame is read, never modified.
 
     Returns
     -------
     AdjacencySpec
-        Frozen structure: node names, packed edge indices, and
-        the input and output positions in the state vector.
+        Frozen structure: every node name alphabetically, one
+        ``source_index`` / ``target_index`` entry per edge, and the
+        positions of the input and output nodes in that state
+        vector. Packed order is canonical, lexicographic by
+        ``(source name, target name)``. ``hidden_nodes`` is empty
+        when every node is an input or an output; the other tuples
+        never are.
 
     Raises
     ------
     Kpnn2Error
-        If ``edgelist`` is not a DataFrame; required columns are
-        missing; the table is empty; names are missing or empty;
-        source-target pairs are duplicated (message names the
-        unique pairs, sorted); or there is no in-degree-0 node or
-        no out-degree-0 node.
+        If ``edgelist`` is not a DataFrame; ``source`` or ``target``
+        is absent, missing, or an empty name; the table has no rows;
+        a ``(source, target)`` pair is duplicated; or there is no
+        in-degree-0 node or no out-degree-0 node. Each message names
+        the offending pairs or nodes, sorted.
 
     See Also
     --------
-    parse_layered : Rank a DAG into one incoming mask per layer.
-    PackedLinear : One weight per packed edge; the large-n path.
-    PackedMultiheadAttention : Packed attention on the same indices.
+    parse_layered : Rank a DAG into one incoming mask per layer;
+        rejects cycles and self-loops.
+    PackedLinear : One trainable weight per packed edge, for large
+        node counts.
+    PackedMultiheadAttention : Score only the packed pairs.
 
     Notes
     -----
     Self-loops are allowed here and rejected by ``parse_layered``.
     That is the only edgelist rule the two parsers disagree on;
-    every other validation is shared, so the messages match.
+    every other validation is shared, so the messages match. A
+    self-loop takes its node out of both the input and the output
+    set, so an edgelist of only ``A -> A`` raises for having no
+    input node, as does a pure ring such as ``A -> B, B -> A``.
+    Isolated nodes cannot appear: the node set is the union of
+    ``source`` and ``target``.
 
-    A self-loop removes its node from both the input set and the
-    output set, so an edgelist of only ``A -> A`` raises for
-    having no input node. A pure ring such as ``A -> B, B -> A``
-    raises for the same reason.
-
-    This function does not allocate an ``(n, n)`` tensor. Packed
-    indices have the same length as the edge count. Order is
-    canonical: lexicographic by ``(source name, target name)``.
-    A dense square would have ``1.0`` at
-    ``[target_index[i], source_index[i]]``, matching the
-    ``nn.Linear.weight`` layout used by the layered hop masks.
-    Call ``spec.to_mask()`` to materialize that square.
-
-    This function does not build an ``nn.Module``, unroll time,
-    choose a step count, or re-inject inputs between steps. Any
-    loop, attention block, or other update stays in user
-    ``forward()`` code.
+    The layout is your choice, not a property of the graph. A DAG
+    is valid input to both parsers, and neither inspects the graph
+    to decide which spec to return. A dense square would carry
+    ``1.0`` at ``[target_index[i], source_index[i]]``, the
+    ``nn.Linear.weight`` orientation the layered hop masks also
+    use; ``spec.to_mask()`` materializes it. Nothing here builds an
+    ``nn.Module``, unrolls time, or re-injects inputs between
+    steps: that update stays in user ``forward()`` code.
 
     Examples
     --------
-    A DAG is valid here too; nodes still sit in one vector with
-    packed indices. The table below has a feedback edge, which
-    ``parse_layered`` would reject:
+    A feedback edge ``b -> a``, which ``parse_layered`` would
+    reject, packed alongside the forward edges:
 
     >>> import pandas as pd
     >>> import kpnn2
@@ -146,23 +139,12 @@ def parse_adjacency(edgelist: pd.DataFrame) -> AdjacencySpec:
     >>> spec = kpnn2.parse_adjacency(edgelist)
     >>> spec.nodes
     ('a', 'b', 'x', 'y')
-    >>> spec.input_nodes
-    ('x',)
-    >>> spec.input_index
-    (2,)
-    >>> spec.source_index
-    (0, 0, 1, 2)
-    >>> spec.target_index
-    (1, 3, 0, 0)
-    >>> tuple(spec.to_mask().shape)
-    (4, 4)
-
-    The feedback edge ``b -> a`` and the forward edge ``a -> b``
-    are both present:
-
-    >>> mask = spec.to_mask()
-    >>> mask[0, 1].item(), mask[1, 0].item()
-    (1.0, 1.0)
+    >>> spec.input_nodes, spec.input_index
+    (('x',), (2,))
+    >>> spec.source_index, spec.target_index
+    ((0, 0, 1, 2), (1, 3, 0, 0))
+    >>> spec.to_mask()[0, 1].item()
+    1.0
     """
     normalized = _validate_edgelist(edgelist)
     (

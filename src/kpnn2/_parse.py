@@ -485,117 +485,79 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     """
     Parse a source/target edgelist into a ``LayeredSpec``.
 
-    The graph must be a DAG. Nodes are ranked with Kahn's algorithm:
-    input nodes (in-degree 0) have depth 0, and every other node has
-    ``depth = 1 + max(parent depths)``. Names are sorted alphabetically
-    inside each layer. That ranking defines ``LayeredSpec.layer_nodes``
-    and one ``Hop`` per layer after the first.
-
-    **Every** edge lands in exactly one hop mask, the one of its
-    target layer, whether its depth gap is 1 or larger. A hop
-    whose target has parents further back reads several layers:
-    its mask columns are those layers concatenated. Edges with a
-    gap greater than 1 are additionally listed in ``skips`` as
-    metadata, so they can be reported, but they are not a
-    separate computation and are not expanded into dummy
-    neurons.
-
-    Terminals that are not at maximum depth (early outputs) are
-    allowed. Cycles, self-loops, and graphs with no input or no
-    output are not. Isolated nodes cannot appear: the node set is
-    the union of ``source`` and ``target`` values only.
+    Prior-knowledge edges, such as genes into pathways, become
+    depth-ranked layers plus one connectivity mask per layer, ready
+    for a ``MaskedLinear`` stack. Reach for it when a DAG should
+    become one mask per layer; ``parse_adjacency`` is the packed
+    alternative, which also allows cycles. Depth is longest path
+    from inputs, names sort alphabetically within a layer, and
+    every mask is a dense float32 tensor.
 
     Parameters
     ----------
     edgelist : pd.DataFrame
-        Edge table with required columns ``source`` and ``target``.
-        Node names are stored as strings via ``str(...)``. Extra
-        columns are ignored.
+        Edge table with required columns ``source`` and ``target``,
+        one row per directed edge in the direction of computation.
+        Names are converted with ``str(...)``; extra columns are
+        ignored. The frame is read, never modified.
 
     Returns
     -------
     LayeredSpec
-        Frozen structure: layers, hops, and skip metadata.
+        Frozen structure: layers, one ``Hop`` per layer after the
+        first, and ``skips`` metadata. ``skips`` is empty when no
+        edge spans more than one layer; ``hops`` never is, because
+        a valid edgelist always yields at least two layers.
 
     Raises
     ------
     Kpnn2Error
-        If ``edgelist`` is not a DataFrame; required columns are
-        missing; the table is empty; names are missing or empty;
-        source-target pairs are duplicated (message names the
-        unique pairs, sorted); any edge is a self-loop (message
-        names the unique nodes, sorted); the graph has a cycle
-        (message names unranked leftover nodes); or there is no
-        in-degree-0 node or no out-degree-0 node.
+        If ``edgelist`` is not a DataFrame; ``source`` or ``target``
+        is absent, missing, or an empty name; the table has no rows;
+        a ``(source, target)`` pair is duplicated; any edge is a
+        self-loop; the graph has a cycle; or there is no in-degree-0
+        node or no out-degree-0 node. Each message names the
+        offending pairs or nodes, sorted.
+
+    See Also
+    --------
+    parse_adjacency : Pack the same table into one state vector;
+        allows cycles and self-loops.
+    gather_hop_inputs : Build one hop's input from the saved layer
+        tensors.
 
     Notes
     -----
-    A cycle is detected when the Kahn sweep leaves some nodes
-    unranked. The error still says the edgelist has a cycle and
-    that only DAGs are supported, and lists every leftover name
-    (``nodes`` minus keys of ``depths``), sorted alphabetically.
-    That set may include nodes downstream of a cycle, not only
-    vertices on a directed cycle.
-
-    Duplicate ``(source, target)`` pairs name the unique pairs as
-    ``{source} -> {target}``, sorted lexicographically.
-    Self-loops name the unique nodes, sorted alphabetically.
-
-    ``len(hops)`` is ``len(layer_nodes) - 1`` and
-    ``hops[i].target_layer`` is ``i + 1``. ``hops[i].mask`` has
-    shape ``(layer_dims[i + 1], sum(hops[i].source_dims))``,
-    matching ``nn.Linear.weight``, and dtype float32. Its rows
-    are ``layer_nodes[i + 1]`` and its columns are
-    ``hops[i].source_nodes``, the source layers concatenated in
-    ascending order. An entry is ``1.0`` only for an original
-    edge between the node naming that row and the node naming
-    that column. ``hops[0]`` always reads layer 0 alone, so its
-    mask is what an ``align_inputs`` tensor feeds directly.
-
-    Every original edge with depth gap greater than 1 appears once
-    in ``skips``. Each record has ``source``, ``target``,
-    ``source_layer``, ``target_layer``, ``source_index``, and
-    ``target_index``. Adjacent edges never appear in ``skips``.
-    Membership in ``skips`` changes nothing about how the edge is
-    computed; it is already in its target's hop mask.
+    Every edge is a ``1.0`` in exactly one hop mask, the one of its
+    target layer, whether its depth gap is 1 or larger. A hop whose
+    target has parents further back reads several layers, and its
+    mask columns are those layers concatenated in ascending order,
+    so a skip edge is an ordinary weight rather than a dummy neuron
+    or a second mechanism; ``skips`` only reports it. Terminals
+    below maximum depth (early outputs) are allowed, and isolated
+    nodes cannot appear, since the node set is the union of
+    ``source`` and ``target``.
 
     Examples
     --------
-    A chain plus one skip ``A -> C``:
+    A chain ``A -> H -> C`` plus the skip ``A -> C``. The hop into
+    ``C`` reads both earlier layers, so the skip is a column of its
+    mask:
 
     >>> import pandas as pd
     >>> import kpnn2
     >>> edgelist = pd.DataFrame(
-    ...     {
-    ...         "source": ["A", "H", "A"],
-    ...         "target": ["H", "C", "C"],
-    ...     }
+    ...     {"source": ["A", "H", "A"], "target": ["H", "C", "C"]}
     ... )
     >>> spec = kpnn2.parse_layered(edgelist)
-    >>> spec.input_nodes
-    ('A',)
-    >>> spec.hidden_nodes
-    ('H',)
-    >>> spec.output_nodes
-    ('C',)
     >>> spec.layer_nodes
     (('A',), ('H',), ('C',))
-    >>> spec.layer_dims
-    (1, 1, 1)
-
-    The hop into ``C`` reads both earlier layers, so the skip
-    ``A -> C`` is a column of its mask:
-
-    >>> spec.hops[1].source_layers
-    (0, 1)
     >>> spec.hops[1].source_nodes
     ('A', 'H')
     >>> spec.hops[1].mask.tolist()
     [[1.0, 1.0]]
     >>> spec.skips[0].source, spec.skips[0].target
     ('A', 'C')
-    >>> spec.skips[0].source_layer, spec.skips[0].target_layer
-    (0, 2)
     """
     normalized = _validate_edgelist(edgelist)
     _reject_self_loops(normalized)

@@ -25,33 +25,40 @@ def align_inputs(
     """
     Return a float32 tensor whose columns follow ``spec.input_nodes``.
 
-    **DataFrame.** Required columns are ``spec.input_nodes``. Labels
-    are matched after ``str(...)``, the same conversion used for
-    edgelist node names, so an integer column ``1`` matches node
-    ``"1"``. Extra columns are ignored. Columns are reordered to
-    ``spec.input_nodes``. Missing, duplicate, or non-numeric required
-    columns raise an error.
-
-    **Tensor.** Not accepted. Raise ``Kpnn2Error``. Pre-ordered
-    tensors go straight to the model. Users who need alignment pass
-    a DataFrame.
-
-    AnnData is not supported.
+    Feature-table column labels rarely match the input-node order
+    the parsed edgelist fixes; the returned tensor puts them in
+    that order, so column ``i`` is ``spec.input_nodes[i]``. Call
+    it after parsing, before the model's first layer, instead of
+    hand-ordering columns. Every row is materialized as one dense
+    CPU tensor; it is not a minibatch or device helper, and
+    tensors are rejected.
 
     Parameters
     ----------
-    data : DataFrame
-        Feature table with named columns.
+    data : pandas.DataFrame of shape (n_samples, n_columns)
+        Feature table, one row per sample. It must carry a
+        numeric column for every name in ``spec.input_nodes``, in
+        any order; extra columns are ignored. Labels are matched
+        after ``str(...)``, the conversion edgelist node names go
+        through, so an integer column ``1`` matches node ``"1"``.
+        Values keep whatever units the table holds: nothing is
+        scaled or imputed, and ``NaN`` survives into the result.
+        Neither the frame nor its values are modified, and the
+        returned tensor shares no memory with it.
     spec : LayeredSpec or AdjacencySpec
-        Graph structure whose ``input_nodes`` define column order.
-        Both spec types work the same way here; only
-        ``input_nodes`` is read.
+        Parsed edgelist whose ``input_nodes`` — the in-degree-0
+        nodes, alphabetically sorted — fix both the required
+        column set and the output column order. Only that field
+        is read, so the two layouts behave identically here.
 
     Returns
     -------
-    Tensor
-        Float32 tensor of shape
-        ``(n_samples, len(spec.input_nodes))``.
+    torch.Tensor
+        Dense ``float32`` CPU tensor of shape
+        ``(n_samples, len(spec.input_nodes))``, column ``i``
+        holding the values of node ``spec.input_nodes[i]``. A
+        DataFrame with no rows gives a ``(0, len(input_nodes))``
+        tensor rather than an error.
 
     Raises
     ------
@@ -59,19 +66,30 @@ def align_inputs(
         If ``spec`` is neither a ``LayeredSpec`` nor an
         ``AdjacencySpec``; ``data`` is a tensor; ``data`` is not a
         DataFrame; required DataFrame columns are missing or
-        duplicated (including after ``str`` conversion; the message
-        names the unique duplicated labels, sorted,
+        duplicated (including after ``str`` conversion; the
+        message names the unique duplicated labels, sorted,
         comma-separated); or required columns are non-numeric.
+
+    See Also
+    --------
+    parse_layered : Builds the ``LayeredSpec`` whose
+        ``input_nodes`` set this column order.
+    parse_adjacency : Builds the ``AdjacencySpec`` for the packed
+        layout, where the result needs scattering first.
+    gather_hop_inputs : Assembles a later hop's input; layer 0
+        comes from here instead.
 
     Notes
     -----
-    PyTorch never sees feature names. Column ``i`` of the returned
-    tensor is ``spec.input_nodes[i]``. Use this function when the
-    table has named columns. A tensor whose columns already follow
-    ``spec.input_nodes`` goes straight to the model. Passing
+    PyTorch never sees feature names. Passing
     ``DataFrame.to_numpy()`` (or any hand-stacked array) into the
     model can silently wire the wrong features if the column order
-    differs.
+    differs, which is what this guards against. A tensor whose
+    columns already follow ``spec.input_nodes`` needs no
+    alignment and goes straight to the model. AnnData, numpy
+    arrays, and scipy sparse matrices are not accepted; a sparse
+    host matrix is column-aligned by the caller and densified one
+    row block at a time, never through here.
 
     The returned width is always ``len(spec.input_nodes)``. For a
     ``LayeredSpec`` that is the width of ``hops[0].mask``, whose

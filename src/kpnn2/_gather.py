@@ -15,53 +15,78 @@ def gather_hop_inputs(
     hop: Hop,
 ) -> torch.Tensor:
     """
-    Concatenate the layer tensors one hop reads, in mask-column
-    order.
+    Concatenate the saved layer tensors one hop reads, in mask-column order.
 
-    Call this in ``forward()`` just before
-    ``MaskedLinear(hop.mask)``. It sits between hops. It does
-    not inject values into the previous layer, does not pick
-    skip nodes by name, and holds no weights.
-
-    A hop mask's columns are **whole** source layers laid side
-    by side (``hop.source_layers``). This function builds that
-    tensor from ``saved``:
-
-    - Adjacent hop (no skips): one source, the layer below.
-      That saved tensor is returned as-is, with no copy.
-    - Hop with skips: the previous layer plus older layers,
-      concatenated on the last axis. The hop mask, not this
-      gather, zeros columns that are not edges. Example: skip
-      ``A → C`` with ``[A, B]`` then ``[H]`` yields
-      ``[A, B, H]``.
-
-    Store every layer you produce in ``saved``. A missing
-    source **layer** (not a missing node) raises
-    ``Kpnn2Error`` instead of silently dropping those edges.
-    Unused keys are ignored; saved tensors are not modified.
+    A hop mask's columns are whole source layers laid side by
+    side, so the tensor feeding ``MaskedLinear(hop.mask)`` is
+    those layers concatenated. Call it between hops, keeping
+    every layer you produce in ``saved``; a forgotten layer
+    raises rather than dropping the edges that read it. Inputs
+    are never modified, and a single-source hop returns the
+    saved tensor itself.
 
     Parameters
     ----------
     saved : mapping of int to torch.Tensor
-        Layer index to that layer's activation. Width of
-        ``saved[i]`` must be ``layer_dims[i]``. Only the layers
-        in ``hop.source_layers`` are read.
+        Layer depth to that layer's activation, as far as
+        ``forward()`` has produced them. ``saved[i]`` is shaped
+        ``(..., layer_dims[i])``; the leading dimensions are the
+        caller's, typically a batch. Only the layers in
+        ``hop.source_layers`` are read, so extra keys are
+        ignored, and those layers must share a dtype and a
+        device. Neither the mapping nor its tensors are copied
+        or modified.
     hop : Hop
-        The hop about to be applied, from ``spec.hops``.
+        The hop about to be applied, one entry of ``spec.hops``.
+        Its ``source_layers`` and ``source_dims`` decide which
+        keys are read, in which order, and how wide each one
+        must be; the mask itself is not used here.
 
     Returns
     -------
     torch.Tensor
-        Shape ``(..., hop.mask.shape[1])``, ready for
-        ``MaskedLinear(hop.mask)``.
+        The hop's source axis, shape
+        ``(..., hop.mask.shape[1])``, columns in
+        ``hop.source_nodes`` order, dtype and device of the
+        saved layers. When the hop reads a single layer, which
+        is every hop with no skip parents and ``hops[0]``
+        always, this is that saved tensor itself rather than a
+        copy, so writing into it writes into the saved
+        activation.
 
     Raises
     ------
     Kpnn2Error
         If ``saved`` is not a mapping or ``hop`` is not a
-        ``Hop``; a needed layer is missing from ``saved`` or is
-        not a tensor; a saved tensor has the wrong number of
-        units; or the parts disagree on dtype or device.
+        ``Hop``; a layer in ``hop.source_layers`` is absent from
+        ``saved`` or is not a tensor; a saved tensor is
+        0-dimensional or is the wrong number of units wide; or
+        the source layers disagree on dtype or device.
+    RuntimeError
+        Propagated from ``torch.cat`` when two source layers
+        disagree in a dimension other than the last, such as a
+        batch size.
+
+    See Also
+    --------
+    MaskedLinear : Applies the hop to the tensor returned here.
+    Hop : The record that fixes the source layers and the mask
+        column order this follows.
+    align_inputs : Builds the layer-0 tensor that seeds
+        ``saved``.
+
+    Notes
+    -----
+    Nothing here is graph-aware: this holds no weights, does not
+    inject values into the previous layer, and does not pick
+    skip sources by name. Columns that are not edges are zeroed
+    by the hop mask, not by the gather. With the skip
+    ``A -> C`` reaching past layer 1, layer 0 ``[A, B]`` and
+    layer 1 ``[H]`` gather to ``[A, B, H]``, and the ``A -> C``
+    weight is the ``A`` column of ``hop.mask``.
+
+    An ``AdjacencySpec`` has no hops and is not accepted; in
+    that layout every edge is already a packed index pair.
 
     Examples
     --------

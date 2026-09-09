@@ -136,24 +136,34 @@ class PackedLinear(nn.Module):
     """
     Affine map with one trainable scalar per live edge.
 
-    Packed 1-D weights, one per live edge; not ``torch.sparse``;
-    forward is ``index_add``. This is not a subclass of
-    ``Linear`` and not a full model. Dead edges are omitted: there
-    is no dense ``(out_features, in_features)`` parameter and
-    forward never allocates that square.
+    An ``nn.Linear``-style layer (call ``layer(x)``; not a
+    subclass, not a full model) for a graph laid out by
+    ``parse_adjacency``, where every node shares one state vector
+    and ``MaskedLinear(spec.to_mask())`` would store an
+    ``(n, n)`` square. Reach for it when that square strains RAM.
+    Input nodes have no incoming edges, so writing inputs into
+    the state each step is the caller's job.
 
     Parameters
     ----------
     source_index : torch.Tensor or sequence of int
         1-D integer indices of length ``nnz >= 1``. Entry ``i``
-        is the input column of live edge ``i``. Copied to an
-        int64 buffer.
+        is the input column of live edge ``i``, and must satisfy
+        ``0 <= source_index < in_features``. Copied to an int64
+        buffer, so later writes to the argument do not reach this
+        layer.
     target_index : torch.Tensor or sequence of int
         1-D integer indices of the same length. Entry ``i`` is
-        the output row of live edge ``i``. Copied to an int64
-        buffer.
+        the output row of live edge ``i``, and must satisfy
+        ``0 <= target_index < out_features``. The two arrays are
+        paired position by position, must not repeat a
+        ``(source, target)`` pair, and their shared order is also
+        the order of ``weight``.
     out_features : int
-        Width of the output axis. Must be a positive int.
+        Width of the output axis. Must be a positive int. Note
+        the order: ``out_features`` comes before ``in_features``,
+        as in the ``(out, in)`` shape of a dense weight, not in
+        the ``nn.Linear`` argument order.
     in_features : int
         Width of the input axis. Must be a positive int.
     bias : bool, default=True
@@ -175,8 +185,12 @@ class PackedLinear(nn.Module):
         ``parametrize`` and no dense ``(out, in)`` tensor.
     source_index : torch.Tensor
         Int64 buffer of input columns, length ``nnz``.
+        **Treat it as read-only:** like any PyTorch buffer it can
+        be written to, and doing so rewires the layer without
+        reinitializing it. Rebuild from the edgelist instead.
     target_index : torch.Tensor
-        Int64 buffer of output rows, length ``nnz``.
+        Int64 buffer of output rows, length ``nnz``, read-only in
+        the same sense.
     bias : nn.Parameter | None
         Trainable bias, or ``None`` when constructed with
         ``bias=False``.
@@ -184,77 +198,86 @@ class PackedLinear(nn.Module):
     Raises
     ------
     Kpnn2Error
-        If the indices are empty, not 1-D integers, mismatched
-        in length, out of range, duplicated as
-        ``(source, target)`` pairs, or if ``out_features`` /
-        ``in_features`` are not positive ints.
+        If the indices are empty, not 1-D integers, mismatched in
+        length, out of range, or duplicated as
+        ``(source, target)`` pairs; if ``out_features`` /
+        ``in_features`` are not positive ints; and from
+        ``load_state_dict`` when the checkpoint carries an index
+        digest that does not match this layer, in which case the
+        weights are not loaded.
+
+    See Also
+    --------
+    MaskedLinear : Dense ``(out_features, in_features)`` weight;
+        the default layer, and the better one whenever that
+        square fits.
+    AdjacencySpec : Supplies ``source_index`` / ``target_index``;
+        this layer takes those tuples, not the spec object.
+    PackedMultiheadAttention : Attention over the same packed
+        pairs, when the update is a contraction rather than one
+        scalar per edge.
+    torch.nn.Linear : Dense equivalent, and the reference for
+        shapes, ``bias``, calling the module, and training.
 
     Notes
     -----
-    Construct from packed indices, not from a dense mask and not
-    from an ``AdjacencySpec``::
-
-        PackedLinear(
-            spec.source_index,
-            spec.target_index,
-            len(spec.nodes),
-            len(spec.nodes),
-        )
-
-    ``0 <= source_index < in_features`` and
-    ``0 <= target_index < out_features``. Duplicate pairs are
-    rejected. Index buffers stay integer after ``.half()`` /
-    bfloat16 / ``.double()``; ``weight`` and ``bias`` follow
-    the module floating dtype like ``nn.Linear``.
-
     Forward gathers ``x[..., source_index]``, multiplies by
-    ``weight``, and ``index_add``s into a zeros tensor of shape
-    ``(..., out_features)``. It does not scatter into a dense
-    ``(out, in)`` matrix and does not import ``torch.sparse``.
+    ``weight``, and ``index_add``s into zeros of shape
+    ``(..., out_features)``, adding ``bias`` when present. ``x``
+    is an ordinary dense activation tensor. Nothing scatters into
+    a dense ``(out, in)`` matrix, nothing imports
+    ``torch.sparse``, and no tensor subclass is involved, so
+    ``torch.compile(layer, fullgraph=True)`` traces it. Index
+    buffers stay integer after ``.half()`` / bfloat16 /
+    ``.double()``; ``weight`` and ``bias`` follow the module
+    floating dtype like ``nn.Linear``.
 
     ``reset_parameters`` uses per-row packed degree as
-    ``fan_in``, counted with ``bincount`` over ``target_index``.
-    Each live edge into row ``j`` is drawn uniformly from
-    ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``. If
-    ``fan_in == 0``, that row has no packed weights and
-    ``bias[j]`` stays 0. Input nodes on an ``AdjacencySpec``
-    have in-degree 0, so they have no packed incoming edges;
-    this layer does not invent identity connections.
+    ``fan_in``, not full ``in_features``. A row with
+    ``fan_in == 0`` has no packed weights and its bias stays 0;
+    input nodes of an ``AdjacencySpec`` are exactly that case,
+    and this layer does not invent identity connections for them.
 
     ``state_dict`` keys are ``weight``, optional ``bias``,
     ``source_index``, ``target_index``, and ``index_digest``.
-    ``index_digest`` is a 1-D CPU ``uint8`` tensor of length
-    32: the SHA-256 of the live index buffers' int64
-    C-contiguous bytes plus ``out_features`` and
-    ``in_features`` as fixed-width integers, not a registered
-    persistent buffer. ``load_state_dict`` raises ``Kpnn2Error``
-    when a present digest does not match this layer, and does
-    not load the weights. A missing digest is not an error,
-    even with ``strict=True``. ``copy.deepcopy`` works.
-
-    Typical construction for a large ``AdjacencySpec`` is this
-    class; ``MaskedLinear(spec.to_mask())`` remains the dense
-    path for small graphs.
+    ``index_digest`` is a 1-D CPU ``uint8`` tensor of length 32:
+    the SHA-256 of the live index buffers' int64 C-contiguous
+    bytes plus ``out_features`` and ``in_features`` as
+    fixed-width integers, not a registered buffer. A missing
+    digest is not an error, even with ``strict=True``.
+    ``copy.deepcopy`` works.
 
     Examples
     --------
-    Two crossed edges on a 2-wide state, no bias:
+    An input feeding a two-node feedback core plus one output,
+    stepped once over the shared state vector:
 
+    >>> import pandas as pd
     >>> import torch
     >>> import kpnn2
-    >>> layer = kpnn2.PackedLinear(
-    ...     [0, 1],
-    ...     [1, 0],
-    ...     2,
-    ...     2,
-    ...     bias=False,
+    >>> edgelist = pd.DataFrame(
+    ...     {
+    ...         "source": ["x", "a", "b", "a"],
+    ...         "target": ["a", "b", "a", "y"],
+    ...     }
     ... )
-    >>> layer.in_features, layer.out_features, layer.nnz
-    (2, 2, 2)
-    >>> x = torch.ones(3, 2)
-    >>> y = layer(x)
-    >>> tuple(y.shape)
-    (3, 2)
+    >>> spec = kpnn2.parse_adjacency(edgelist)
+    >>> n = len(spec.nodes)
+    >>> core = kpnn2.PackedLinear(
+    ...     spec.source_index,
+    ...     spec.target_index,
+    ...     n,
+    ...     n,
+    ... )
+    >>> core.in_features, core.out_features, core.nnz
+    (4, 4, 4)
+    >>> state = torch.zeros(2, n)
+    >>> state[:, spec.input_index] = torch.ones(2, 1)
+    >>> state = torch.relu(core(state))
+    >>> tuple(state.shape)
+    (2, 4)
+    >>> tuple(state[:, spec.output_index].shape)
+    (2, 1)
     """
 
     source_index: torch.Tensor

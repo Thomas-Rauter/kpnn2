@@ -28,55 +28,60 @@ def map_node_attributions(
     coords: Mapping[str, Sequence] | None = None,
 ) -> xr.DataArray:
     """
-    Label an attribution tensor with node names from a spec.
+    Label an attribution tensor's node axis with names from a spec.
 
-    Values are copied with ``detach()`` onto CPU. This function does
-    not run an attribution method and does not import Captum. Pass
-    the tensor (or per-call tensors) you already computed. Nothing
-    is summed or averaged.
-
-    A 2-D ``(batch, n_units)`` tensor becomes dims
-    ``(observation, node)``. Extra Captum axes need ``dims`` so
-    one axis is named ``node``. A tuple of equal-shaped tensors is
-    stacked on a new ``step`` axis (one entry per module call).
-
-    Where the names come from depends on the spec:
-
-    - ``LayeredSpec``: ``layer`` is required and names come from
-      ``spec.layer_nodes[layer]``. The result carries a scalar
-      ``layer`` coordinate.
-    - ``AdjacencySpec``: ``layer`` must be omitted and names come
-      from ``spec.nodes``, the whole state vector. The result
-      carries no ``layer`` coordinate, because there is no depth.
+    Attribution methods return unlabeled tensors whose node axis is
+    bare positions; the spec knows the name at each one. Reach for
+    it after Captum or your own gradients rather than zipping names
+    to columns yourself. Which spec you pass decides the contract: a
+    ``LayeredSpec`` requires ``layer``, an ``AdjacencySpec`` forbids
+    it. Values are detached onto CPU and never aggregated.
 
     Parameters
     ----------
-    attributions : Tensor or sequence of Tensor
-        Scores whose ``node`` axis length equals the number of
-        named units: ``len(spec.layer_nodes[layer])`` for a
+    attributions : torch.Tensor or sequence of torch.Tensor
+        Scores exactly as the attribution method produced them, in
+        whatever units it works in; nothing is scaled, summed, or
+        made absolute. The node axis must be as long as the named
+        units — ``len(spec.layer_nodes[layer])`` for a
         ``LayeredSpec``, ``len(spec.nodes)`` for an
-        ``AdjacencySpec``. A sequence is stacked along ``step``.
+        ``AdjacencySpec`` — and the remaining axes are yours. A
+        non-empty tuple or list of equal-shaped tensors is stacked
+        on a new leading ``step`` axis, one entry per unrolled step
+        or module call. The tensors are read, never modified, and
+        the result holds a detached CPU copy that shares no memory
+        with them.
     spec : LayeredSpec or AdjacencySpec
-        Graph structure supplying the ``node`` coordinate.
+        Parsed edgelist supplying the ``node`` coordinate. A
+        ``LayeredSpec`` names one depth at a time, so it needs
+        ``layer``; an ``AdjacencySpec`` names the whole state
+        vector at once and has no depth to report.
     layer : int, optional
-        0-based index into ``spec.layer_nodes``. Layer 0 is the
-        input layer. Stored as a scalar coordinate ``layer``.
-        Required for a ``LayeredSpec``; must be omitted for an
-        ``AdjacencySpec``.
+        0-based depth into ``spec.layer_nodes``, index 0 being the
+        input layer, whose names label the node axis; the index
+        itself is attached as a scalar ``layer`` coordinate.
+        Required for a ``LayeredSpec``, rejected for an
+        ``AdjacencySpec``. Omitting it is not a default but the
+        other half of a spec-dependent contract.
     dims : sequence of str, optional
-        Name of each axis of the (stacked) tensor. Must contain
-        ``node`` exactly once. Required when the tensor has 3 or
-        more axes (except a default-stacked 2-D sequence).
-    coords : mapping, optional
-        Labels for axes other than ``node`` and ``layer``. Length
-        of each entry must match that axis. ``node`` is set from
-        ``spec``, and ``layer`` from the ``layer`` argument.
+        One name per axis of the tensor after any stacking,
+        containing ``node`` exactly once and never ``layer``.
+        Required at 3 or more axes, unless the tensor is a stacked
+        sequence of 1-D or 2-D pieces. The defaults are
+        ``("node",)`` for 1-D and ``("observation", "node")`` for
+        2-D, with ``step`` prepended when a sequence was stacked.
+    coords : mapping of str to sequence, optional
+        Labels for axes other than ``node`` and ``layer``, keyed by
+        dim name; each sequence must be as long as its axis. Axes
+        left out are labelled with their integer positions.
 
     Returns
     -------
-    DataArray
-        Raw scores with a ``node`` coordinate from the spec, plus a
-        scalar ``layer`` coordinate for a ``LayeredSpec``. Use
+    xarray.DataArray
+        The values and shape of the (stacked) tensor, carrying the
+        spec's node names as the ``node`` coordinate in spec order,
+        and a scalar ``layer`` coordinate when a ``LayeredSpec``
+        was passed. Use
         ``.to_dataframe(name="score").reset_index()`` for a long
         table, or ``.to_pandas()`` for a 2-D wide table.
 
@@ -85,28 +90,40 @@ def map_node_attributions(
     Kpnn2Error
         If ``spec`` is neither a ``LayeredSpec`` nor an
         ``AdjacencySpec``; ``layer`` is missing for a
-        ``LayeredSpec``, given for an ``AdjacencySpec``, or not a
-        valid int; ``attributions`` is not a tensor or a non-empty
-        sequence of equal-shaped tensors; ``dims`` is missing or
-        inconsistent; a ``node`` axis length does not match the
-        named units; or ``coords`` is invalid.
+        ``LayeredSpec``, given for an ``AdjacencySpec``, or is not
+        an int in range; ``attributions`` is neither a tensor nor a
+        non-empty sequence of equal-shaped tensors; ``dims`` is
+        missing, the wrong length, non-unique, or does not name
+        ``node`` exactly once; the node axis is not as long as the
+        named units; or ``coords`` names an unknown axis or a
+        wrong length.
+
+    See Also
+    --------
+    align_inputs : Applies the same node order on the way in,
+        mapping a named DataFrame onto ``spec.input_nodes``.
+    LayeredSpec : Holds ``layer_nodes``, the per-depth names used
+        when ``layer`` is given.
+    AdjacencySpec : Holds ``nodes``, the state-vector names used
+        when ``layer`` is omitted.
 
     Notes
     -----
-    For a ``MaskedLinear`` built from ``spec.hops[i].mask``, the
-    layer index to pass here is ``spec.hops[i].target_layer``,
-    that is ``i + 1``: the hop output, not its input.
-    Do not name-map tensors from BatchNorm or other unnamed
-    modules; only map units that are spec nodes.
+    Captum is not imported anywhere in this package; mapping is
+    name alignment only, and any attribution method will do. For
+    the output of ``MaskedLinear(spec.hops[i].mask)`` the layer to
+    pass is ``spec.hops[i].target_layer``, that is ``i + 1``: the
+    hop output, not its input. Only map units that are spec nodes;
+    BatchNorm and other unnamed modules have no node axis to name.
 
-    A recurrent net built on an ``AdjacencySpec`` has no layers to
-    index. The natural extra axis there is ``step``: pass one
-    tensor per time step as a sequence and they are stacked for
-    you.
+    A recurrent net on an ``AdjacencySpec`` has no layer to index,
+    and the natural extra axis there is ``step``: pass one tensor
+    per unrolled step as a sequence and they are stacked for you.
 
     Examples
     --------
-    Name a two-row tensor at the output layer:
+    Name a two-observation tensor at the output layer of a
+    ``LayeredSpec``:
 
     >>> import pandas as pd
     >>> import torch
@@ -133,18 +150,8 @@ def map_node_attributions(
     >>> int(da.coords["layer"])
     2
 
-    The ``layer`` argument is an index into ``spec.layer_nodes``:
-
-    >>> hidden = kpnn2.map_node_attributions(
-    ...     attributions=torch.zeros(2, 1),
-    ...     spec=spec,
-    ...     layer=1,
-    ... )
-    >>> hidden["node"].values.tolist()
-    ['H']
-
-    On an ``AdjacencySpec`` there are no layers: omit ``layer``
-    and the whole state vector is named. One tensor per time step
+    On an ``AdjacencySpec`` there are no layers: omit ``layer`` and
+    the whole state vector is named. One tensor per unrolled step
     stacks onto a ``step`` axis:
 
     >>> cyclic = pd.DataFrame(

@@ -16,28 +16,27 @@ class Hop:
     """
     Every edge entering one layer, as one mask.
 
-    A hop is what a single ``MaskedLinear`` computes. Its mask
-    covers **all** parents of ``target_layer``, whether they sit
-    in the layer directly below or several layers back, so a
-    skip edge is an ordinary one in this mask rather than a
-    separate term added later. That is what makes an edge
-    impossible to lose: apply the hop and every parent is
-    applied with it.
-
-    The mask columns are the source layers concatenated in
-    ascending order, which is the axis
-    ``kpnn2.gather_hop_inputs`` builds.
+    One entry of ``LayeredSpec.hops``, never built by hand: a hop
+    is exactly what a single ``MaskedLinear`` computes. Its mask
+    holds **all** parents of ``target_layer``, so a skip edge is
+    an ordinary one in it rather than a term added later, and no
+    edge can be dropped. Columns are the source layers
+    concatenated, the axis ``gather_hop_inputs`` assembles. The
+    mask is a plain, writable tensor.
 
     Parameters
     ----------
     target_layer : int
         Depth of the layer this hop produces. Always at least 1;
-        layer 0 has no parents.
+        layer 0 has no parents. ``LayeredSpec.hops[i]`` has
+        ``target_layer == i + 1``.
     source_layers : tuple[int, ...]
         Depths this hop reads, ascending, each one below
         ``target_layer``. Only layers that really feed the
         target appear, and ``target_layer - 1`` is always one of
-        them. A hop with a single entry is a plain adjacent hop.
+        them. A single entry is a plain adjacent hop; ``hops[0]``
+        is always ``(0,)``, so an ``align_inputs`` tensor feeds
+        it with no gathering.
     source_dims : tuple[int, ...]
         Units contributed by each entry of ``source_layers``,
         same order. Their sum is ``mask.shape[1]``.
@@ -49,14 +48,29 @@ class Hop:
     mask : torch.Tensor
         Connectivity of shape
         ``(layer_dims[target_layer], sum(source_dims))``, dtype
-        float32, matching ``nn.Linear.weight``. Entry
-        ``[target_index, column]`` is ``1.0`` for an original
-        edgelist edge and ``0.0`` otherwise. Treat it as
-        read-only: it is a plain tensor, so writing to it
+        float32, matching ``nn.Linear.weight``. Rows are named by
+        ``layer_nodes[target_layer]`` and columns by
+        ``source_nodes``; an entry is ``1.0`` when the original
+        edgelist has an edge from the node naming that column to
+        the node naming that row, and ``0.0`` otherwise. Treat it
+        as read-only: it is a plain tensor, so writing to it
         silently changes the wiring this record describes.
+
+    See Also
+    --------
+    LayeredSpec : Holds ``hops``, one per layer after the first.
+    gather_hop_inputs : Builds the tensor whose columns this mask
+        expects.
+    MaskedLinear : Applies one hop, on its own copy of the mask.
+    Skip : Metadata for the edges in this mask that span layers.
 
     Notes
     -----
+    Every edgelist edge is a one in exactly one hop mask, the one
+    of its target layer, so the ones summed over all hops give
+    the edge count and applying a hop applies every parent of its
+    layer at once.
+
     To locate one source layer's block inside the mask, add the
     widths in front of it:
 
@@ -135,30 +149,78 @@ class Skip:
     """
     One original edge whose endpoints are more than one layer apart.
 
-    This is **metadata**, not a separate computation. The edge
-    itself is a one in ``LayeredSpec.hops[target_layer - 1].mask``,
-    exactly like an adjacent edge, so nothing has to add it back
-    later and nothing can forget to. Read ``skips`` to report or
-    inspect which prior-knowledge edges span layers; do not
-    expand them into dummy neurons.
+    Metadata, not a second computation: the edge is already a one
+    in ``LayeredSpec.hops[target_layer - 1].mask``, exactly like an
+    adjacent edge, so nothing has to add it back later and nothing
+    can forget to. Read ``LayeredSpec.skips`` to inspect which
+    prior-knowledge edges span layers; a forward pass never reads
+    it. ``parse_layered`` builds these, never the caller.
 
     Parameters
     ----------
     source : str
-        Source node name.
+        Name of the node the edge leaves, as it appears in
+        ``LayeredSpec.layer_nodes[source_layer]``.
     target : str
-        Target node name.
+        Name of the node the edge enters, as it appears in
+        ``LayeredSpec.layer_nodes[target_layer]``.
     source_layer : int
-        Depth of ``source`` in ``LayeredSpec.layer_nodes``.
+        Depth of ``source``: its index into
+        ``LayeredSpec.layer_nodes``.
     target_layer : int
-        Depth of ``target``. Always satisfies
-        ``target_layer - source_layer > 1``.
+        Depth of ``target``. Always at least two above
+        ``source_layer``; that gap is what makes the edge a skip,
+        and it names the hop carrying it, ``hops[target_layer - 1]``.
     source_index : int
-        Column index of ``source`` in
-        ``layer_nodes[source_layer]``.
+        Index of ``source`` inside ``layer_nodes[source_layer]``.
+        This is a position in that layer alone, not a column of the
+        hop mask, whose columns are several layers concatenated;
+        see Examples for the shift.
     target_index : int
-        Column index of ``target`` in
-        ``layer_nodes[target_layer]``.
+        Index of ``target`` inside ``layer_nodes[target_layer]``,
+        which is also its row in ``hops[target_layer - 1].mask``,
+        since a hop mask has one row per unit of its own layer.
+
+    See Also
+    --------
+    Hop : The mask this edge is already a one in, alongside every
+        other parent of ``target_layer``.
+    LayeredSpec : Holds ``skips``, empty when no edge spans layers.
+    parse_layered : Builds the spec these records come from.
+
+    Notes
+    -----
+    Every original edge with a depth gap greater than 1 is recorded
+    once; adjacent edges never are. Membership changes nothing about
+    how the edge is computed: its weight, the unit bias, and the
+    fan-in the degree-aware initialization uses all stay on the
+    target layer's ``MaskedLinear``. Expanding a skip into dummy
+    neurons is not the intended use.
+
+    Examples
+    --------
+    Locate a skip inside the hop mask that carries it:
+
+    >>> import pandas as pd
+    >>> import kpnn2
+    >>> edgelist = pd.DataFrame(
+    ...     {
+    ...         "source": ["A", "B", "H", "A"],
+    ...         "target": ["H", "H", "C", "C"],
+    ...     }
+    ... )
+    >>> spec = kpnn2.parse_layered(edgelist)
+    >>> skip = spec.skips[0]
+    >>> skip.source, skip.target
+    ('A', 'C')
+    >>> skip.source_layer, skip.target_layer
+    (0, 2)
+    >>> hop = spec.hops[skip.target_layer - 1]
+    >>> offset = hop.column_offsets[
+    ...     hop.source_layers.index(skip.source_layer)
+    ... ]
+    >>> hop.mask[skip.target_index, offset + skip.source_index].item()
+    1.0
     """
 
     source: str
@@ -174,9 +236,13 @@ class LayeredSpec:
     """
     Frozen blueprint from ``parse_layered``.
 
-    Structure only: not an ``nn.Module`` and no parameters. One
-    ``Hop`` per layer after the first, and one ``MaskedLinear``
-    per hop is the whole model wiring.
+    Depth-ranked wiring for one knowledge-primed network: every
+    node sits at a layer, and one ``Hop`` per layer after the
+    first holds every edge entering it, skips included. Build one
+    ``MaskedLinear`` per hop, and use the name tuples to label
+    tensors. It is structure only — no ``nn.Module``, no
+    parameters — and the masks are plain, writable tensors.
+    ``AdjacencySpec`` is the packed alternative.
 
     Parameters
     ----------
@@ -184,14 +250,18 @@ class LayeredSpec:
         In-degree 0 names, alphabetical. This is the column order of
         tensors returned by ``align_inputs``.
     output_nodes : tuple[str, ...]
-        Out-degree 0 names, alphabetical.
+        Out-degree 0 names, alphabetical. A terminal node below
+        maximum depth belongs here too, so this is not the same
+        tuple as ``layer_nodes[-1]``.
     hidden_nodes : tuple[str, ...]
         Names that are neither input nor output, alphabetical.
     layer_nodes : tuple[tuple[str, ...], ...]
         ``layer_nodes[i]`` is the names at depth ``i``, alphabetical.
-        Index 0 is the input layer.
+        Index 0 is the input layer. Depth is longest path from the
+        inputs, and there are always at least two layers.
     layer_dims : tuple[int, ...]
-        ``layer_dims[i] == len(layer_nodes[i])``.
+        ``layer_dims[i] == len(layer_nodes[i])``: the unit width of
+        each layer, one unit per node.
     hops : tuple[Hop, ...]
         One hop per layer after the first:
         ``len(hops) == len(layer_nodes) - 1`` and
@@ -203,7 +273,17 @@ class LayeredSpec:
         Original edges with depth gap greater than 1, as metadata.
         Each one is already a one in
         ``hops[target_layer - 1].mask``; this list only says which
-        edges span layers.
+        edges span layers, and is empty when none do.
+
+    See Also
+    --------
+    parse_layered : Builds this spec from a ``source`` / ``target``
+        edgelist.
+    AdjacencySpec : Packed sibling layout, for cycles, self-loops,
+        or one shared state vector instead of depths.
+    gather_hop_inputs : Assembles one hop's input from the layer
+        tensors produced so far.
+    MaskedLinear : Consumes ``hops[i].mask`` as one layer.
 
     Notes
     -----
@@ -215,21 +295,14 @@ class LayeredSpec:
     buffer independent of ``spec.hops[i].mask``, so a layer built
     earlier keeps its own connectivity either way.
 
-    ``to_edgelist()`` returns the original edges as a two-column
-    ``source`` / ``target`` DataFrame, rows sorted
-    lexicographically. ``parse_layered`` on that table
-    reconstructs the same node lists, hops, and hop masks.
-
-    ``to_dict()`` returns a JSON-safe tagged dict
-    (``kpnn2_spec``, ``layout``, ``edges``). ``from_dict``
-    rebuilds this spec by calling ``parse_layered``.
-    ``fingerprint`` is the SHA-256 of that canonical JSON.
-    Pickle / ``torch.save`` of the dataclass is not the
-    supported interchange.
-
     Because a hop mask carries every parent of its target, the
     per-row degree ``MaskedLinear`` initializes from is the real
     fan-in of that unit, skips included.
+
+    ``to_edgelist()``, ``to_dict()`` with ``from_dict()``, and
+    ``fingerprint`` are the supported interchange; each
+    round-trips through ``parse_layered``. Pickle and
+    ``torch.save`` of the dataclass are not.
 
     Examples
     --------
@@ -246,8 +319,6 @@ class LayeredSpec:
     >>> spec = kpnn2.parse_layered(edgelist)
     >>> spec.layer_nodes
     (('A',), ('H',), ('C',))
-    >>> spec.layer_dims
-    (1, 1, 1)
     >>> spec.hops[0].source_layers, spec.hops[0].mask.tolist()
     ((0,), [[1.0]])
     >>> spec.hops[1].source_layers, spec.hops[1].mask.tolist()

@@ -393,63 +393,70 @@ def _packed_attention(
 
 class PackedMultiheadAttention(nn.Module):
     """
-    Multi-head attention whose allowed pairs are packed edges.
+    Multi-head attention restricted to the live edges of a named edgelist.
 
-    Same job as ``torch.nn.MultiheadAttention`` (call as
-    ``layer(query, key, value)``); not a subclass. Not a
-    Transformer block and not a full model. Scores exist only
-    for live ``(source, target)`` pairs: query = target, key /
-    value = source. Forward never allocates an ``(n, n)`` or
-    ``(L, S)`` score matrix and does not import
-    ``torch.sparse``. This module does not take an
-    ``AdjacencySpec``; pass packed indices (typically from
-    ``parse_adjacency``).
+    Prior knowledge decides which node may attend to which: the
+    query at an edge's target sees only the keys at its sources.
+    Reach for it instead of masking ``nn.MultiheadAttention``,
+    whose mask costs an ``(n, n)`` matrix. Build it from
+    ``parse_adjacency`` indices and wrap it in your own encoder.
+    Defaults differ from MHA: ``batch_first=True`` and
+    ``need_weights=False`` (``True`` raises).
 
     Parameters
     ----------
     source_index : torch.Tensor or sequence of int
         1-D integer indices of length ``nnz >= 1``. Entry ``i``
-        is the key / value position of live edge ``i``. Copied
-        to an int64 buffer.
+        is the key / value position of live edge ``i``, and must
+        satisfy ``0 <= source_index < key_features``. Copied to
+        an int64 buffer, so later writes to the argument do not
+        reach this layer.
     target_index : torch.Tensor or sequence of int
         1-D integer indices of the same length. Entry ``i`` is
-        the query position of live edge ``i``. Copied to an
-        int64 buffer.
+        the query position of live edge ``i``, and must satisfy
+        ``0 <= target_index < query_features``. The two arrays
+        are paired position by position and must not repeat a
+        ``(source, target)`` pair.
     query_features : int
-        Sequence length of ``query``. Must be a positive int.
+        Sequence length of ``query``, that is, how many query
+        positions the packed indices address. Positive int.
     key_features : int
-        Sequence length of ``key`` / ``value``. Must be a
-        positive int.
+        Sequence length of ``key`` / ``value``. Positive int.
+        Equal to ``query_features`` for a self-attention graph
+        over one node set; smaller or larger for a bipartite
+        query/key map.
     embed_dim : int
-        Model width; must be a positive int divisible by
-        ``num_heads``.
+        Model width of ``query`` / ``key`` / ``value`` and of the
+        output. Positive int, divisible by ``num_heads``.
     num_heads : int
-        Number of attention heads. Must be a positive int.
+        Number of attention heads. Each head attends over the
+        same live pairs with ``embed_dim // num_heads`` channels.
     dropout : float, default=0.0
-        Dropout on packed attention weights. Stored as
-        ``float >= 0``. Integer ``0`` is accepted. ``bool``
-        and negative values are rejected.
+        Dropout probability applied to the packed attention
+        weights in training mode only; ``0.0`` disables it.
+        Must be ``>= 0``; integer ``0`` is accepted, ``bool``
+        and negatives are rejected.
     bias : bool, default=True
-        Bias on the four ``nn.Linear`` projections.
+        Whether the four projections learn a bias. ``False``
+        makes them pure linear maps.
     kdim : int or None, default=None
         Key embed width. Must be ``None`` or equal to
-        ``embed_dim``. Other values raise ``Kpnn2Error``.
+        ``embed_dim``; kept for ``nn.MultiheadAttention``
+        call-site parity, not to support a differing width.
     vdim : int or None, default=None
-        Value embed width. Must be ``None`` or equal to
-        ``embed_dim``. Other values raise ``Kpnn2Error``.
+        Value embed width, under the same restriction as
+        ``kdim``.
     batch_first : bool, default=True
-        If ``True``, batched tensors are
-        ``(..., seq, embed_dim)``. If ``False``, batched
-        tensors use the ``nn.MultiheadAttention`` layout
-        ``(seq, batch, embed_dim)``. Unbatched 2-D
-        ``(seq, embed)`` ignores this flag.
+        Layout of batched tensors: ``(..., seq, embed_dim)`` when
+        ``True`` (kpnn2 sample-major), ``(seq, batch, embed_dim)``
+        when ``False`` (the ``nn.MultiheadAttention`` layout).
+        Unbatched 2-D ``(seq, embed)`` ignores this flag.
     add_self_loops : bool, default=False
-        If ``True``, OR missing ``(i, i)`` pairs into the
-        module buffers when ``query_features == key_features``.
-        Caller index objects are not mutated. Existing
-        self-loops are kept, not duplicated. If
-        ``query_features != key_features``, raise
-        ``Kpnn2Error``.
+        If ``True``, OR any missing ``(i, i)`` pair into the
+        module buffers, so every query keeps its own token as a
+        key. Existing self-loops are kept, not duplicated, and
+        the caller's index objects are not mutated. Requires
+        ``query_features == key_features``.
 
     Attributes
     ----------
@@ -464,81 +471,111 @@ class PackedMultiheadAttention(nn.Module):
     head_dim : int
         ``embed_dim // num_heads``.
     nnz : int
-        Number of live edges after ``add_self_loops``.
+        Number of live edges, counting any pair added by
+        ``add_self_loops``.
     dropout : float
         Dropout probability on packed attention weights.
     batch_first : bool
         Layout flag; default ``True``.
     add_self_loops : bool
-        Whether missing self-loops were OR-ed at init.
+        Whether missing self-loops were OR-ed at construction.
     source_index : torch.Tensor
         Int64 buffer of key / value positions, length ``nnz``.
+        **Treat it as read-only:** like any PyTorch buffer it can
+        be written to, and doing so rewires the layer without
+        reinitializing it. Rebuild from the edgelist instead.
     target_index : torch.Tensor
-        Int64 buffer of query positions, length ``nnz``.
+        Int64 buffer of query positions, length ``nnz``,
+        read-only in the same sense.
     q_proj, k_proj, v_proj, out_proj : nn.Linear
-        Separate ``embed_dim → embed_dim`` projections. Not a
-        fused ``in_proj_weight``.
+        Four separate ``embed_dim -> embed_dim`` projections, not
+        a fused ``in_proj_weight``.
 
     Raises
     ------
     Kpnn2Error
-        If the indices are empty, not 1-D integers, mismatched
-        in length, out of range, duplicated as
-        ``(source, target)`` pairs, if sizes are not positive
-        ints, if ``embed_dim`` is not divisible by
-        ``num_heads``, if ``dropout`` is a ``bool`` or
-        negative, if ``kdim`` / ``vdim`` are not ``None`` or
-        ``embed_dim``, or if ``add_self_loops`` is set when
-        ``query_features != key_features``.
+        At construction, if the indices are empty, not 1-D
+        integers, mismatched in length, out of range, or
+        duplicated as ``(source, target)`` pairs; if the sizes
+        are not positive ints; if ``embed_dim`` is not divisible
+        by ``num_heads``; if ``dropout`` is a ``bool`` or
+        negative; if ``kdim`` / ``vdim`` are neither ``None`` nor
+        ``embed_dim``; or if ``add_self_loops`` is set when
+        ``query_features != key_features``. From
+        ``load_state_dict``, when the checkpoint carries an index
+        digest that does not match this layer, in which case the
+        weights are not loaded. ``forward`` documents its own
+        rejected arguments.
+
+    See Also
+    --------
+    PackedLinear : Same packed pairs when the update is one
+        trainable scalar per edge rather than a contraction.
+    MaskedLinear : Dense ``(out, in)`` weight; the default layer
+        whenever that square fits.
+    AdjacencySpec : Supplies ``source_index`` / ``target_index``;
+        this layer takes those tuples, not the spec object.
+    torch.nn.MultiheadAttention : Dense equivalent, and the
+        reference for call shape, heads, and training.
 
     Notes
     -----
-    ``batch_first`` defaults to ``True`` (kpnn2 sample-major).
-    That differs from ``nn.MultiheadAttention``, whose default
-    is sequence-major.
+    The mix is a softmax over each query's live keys only, formed
+    edge by edge, so no ``(n, n)`` or ``(L, S)`` score matrix is
+    allocated and ``torch.sparse`` is not imported; cost scales
+    with ``nnz``, not with ``query_features * key_features``. A
+    query with no live keys (and none added by
+    ``add_self_loops``) mixes to zeros rather than NaN, then
+    still goes through ``out_proj``. Input nodes of an
+    ``AdjacencySpec`` are exactly that case.
 
-    ``need_weights`` defaults to ``False`` (MHA defaults
-    ``True``). If ``need_weights`` is ``True``, ``forward``
-    raises ``Kpnn2Error``: returning weights would allocate a
-    dense ``(L, S)`` matrix. ``average_attn_weights`` is kept
-    for call-site drop-in and has no effect while that raise
-    stands.
-
-    ``query``, ``key``, and ``value`` are required; ``key`` is
-    not defaulted to ``query``. ``attn_mask`` must be ``None``
-    (the edgelist is the structural mask). ``is_causal`` must
-    be ``False``.
-
-    Queries with no packed keys (and none added by
-    self-loops) stay zeros after the mix, then still go
-    through ``out_proj``. There is no NaN softmax. After
-    ``key_padding_mask``, a query with no remaining keys also
-    stays zeros. A boolean padding mask is copied onto the
-    scores' device; it stays boolean. Float padding masks
-    still raise ``Kpnn2Error``.
+    ``forward`` documents the accepted layouts, the
+    ``need_weights`` raise, ``attn_mask`` / ``is_causal``, and
+    ``key_padding_mask``.
 
     Index buffers stay integer after ``.half()`` / bfloat16 /
-    ``.double()``. ``state_dict`` includes ``index_digest``, a
-    1-D CPU ``uint8`` tensor of length 32: SHA-256 of the
-    packed indices plus ``query_features``, ``key_features``,
-    ``embed_dim``, and ``num_heads``. It is not a registered
-    persistent buffer. ``load_state_dict`` raises
-    ``Kpnn2Error`` when a present digest does not match this
-    layer, and does not load the weights. A missing digest is
-    not an error, even with ``strict=True``.
+    ``.double()``; projection weights follow the module floating
+    dtype like ``nn.Linear``. ``state_dict`` adds
+    ``index_digest``, a 1-D CPU ``uint8`` tensor of length 32:
+    the SHA-256 of the packed indices plus ``query_features``,
+    ``key_features``, ``embed_dim``, and ``num_heads``, so a
+    reshape or a different head split cannot collide. It is not
+    a registered buffer, and a missing digest is not an error,
+    even with ``strict=True``. ``copy.deepcopy`` works.
 
-    Typical construction::
+    Examples
+    --------
+    An input feeding a two-node feedback core plus one output,
+    attended as one four-token sequence:
 
-        spec = parse_adjacency(edgelist)
-        n = len(spec.nodes)
-        attn = PackedMultiheadAttention(
-            spec.source_index,
-            spec.target_index,
-            n,
-            n,
-            embed_dim,
-            num_heads,
-        )
+    >>> import pandas as pd
+    >>> import torch
+    >>> import kpnn2
+    >>> edgelist = pd.DataFrame(
+    ...     {
+    ...         "source": ["x", "a", "b", "a"],
+    ...         "target": ["a", "b", "a", "y"],
+    ...     }
+    ... )
+    >>> spec = kpnn2.parse_adjacency(edgelist)
+    >>> n = len(spec.nodes)
+    >>> attn = kpnn2.PackedMultiheadAttention(
+    ...     spec.source_index,
+    ...     spec.target_index,
+    ...     n,
+    ...     n,
+    ...     embed_dim=8,
+    ...     num_heads=2,
+    ...     add_self_loops=True,
+    ... )
+    >>> attn.nnz, attn.head_dim
+    (8, 4)
+    >>> tokens = torch.randn(2, n, 8)
+    >>> output, weights = attn(tokens, tokens, tokens)
+    >>> tuple(output.shape)
+    (2, 4, 8)
+    >>> weights is None
+    True
     """
 
     source_index: torch.Tensor
