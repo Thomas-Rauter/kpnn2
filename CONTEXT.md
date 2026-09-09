@@ -493,9 +493,10 @@ Every original edgelist edge with depth gap `> 1` appears once in
 `skips` (one metadata record per named edge, not per unit pair).
 Adjacent edges (gap `== 1`) never appear in `skips`.
 Membership in `skips` changes nothing about how the edge is
-computed. Locating the skip among packed indices means every
-unit pair in that block is live, not a single `(column, row)`
-pair.
+computed. `LayeredSpec.edge_location(source, target)` returns
+the packed slots of that named edge. Locating the skip among
+packed indices means every unit pair in that block is live,
+not a single `(column, row)` pair.
 
 ### `LayeredSpec.to_edgelist()`
 
@@ -523,6 +524,28 @@ Skip *tuple* order may
 follow the sorted edgelist rather than the original parse
 input; the skip *set* of `(source, target, source_layer,
 target_layer, source_in_layer, target_in_layer)` matches.
+
+### `LayeredSpec.edge_location()`
+
+```python
+layered_spec.edge_location(source, target) -> tuple[int, tuple[int, ...]]
+```
+
+Returns `(hop_index, packed_indices)`. `hop_index` is `i` such
+that the named edge is in `spec.hops[i]`. `packed_indices`
+indexes `hops[i].source_index` / `target_index` and the
+corresponding `PackedLinear.weight`.
+
+`source` and `target` are matched after `str(...)`, same as
+parse. At width 1 the index tuple has length 1. With
+`widths=`, a named edge `A→B` is the full `(k_B × k_A)`
+block of live unit pairs, target-unit outer, source-unit
+inner, in the order already stored. This is identity into
+those packed slots, not a constraint DSL.
+
+Missing pair, empty names, or a name that is not a node:
+`Kpnn2Error`. The message names the pair as
+`{source} -> {target}`.
 
 ---
 
@@ -633,6 +656,22 @@ columns from the pre-parse DataFrame are not reproduced.
 `nodes`, `input_nodes`, `output_nodes`, `hidden_nodes`,
 `source_index`, `target_index`, `input_index`, and
 `output_index`.
+
+### `AdjacencySpec.edge_location()`
+
+```python
+adjacency_spec.edge_location(source, target) -> tuple[int, ...]
+```
+
+Packed indices into `spec.source_index` / `spec.target_index`
+(and into `PackedLinear.weight` built from those arrays).
+Adjacency stays one pair per named edge; there are no
+widths. Order agrees with `to_edgelist()` rows.
+
+`source` and `target` are matched after `str(...)`, same as
+parse. Missing pair, empty names, or a name that is not a
+node: `Kpnn2Error`. The message names the pair as
+`{source} -> {target}`.
 
 ### `to_mask()` (allocating dense escape hatch)
 
@@ -1412,6 +1451,9 @@ edge / block start. Do not implement adjacency width.
   `fill_block`. Reconstruct named edges with
   `Layout.slot_containing(unit)`, never by indexing
   `source_nodes` with a unit index.
+  `LayeredSpec.edge_location` and `AdjacencySpec.edge_location`
+  are that lookup for callers: a named edge to packed weight
+  slots. They are identity, not constraints.
 - `AdjacencySpec.source_index` / `target_index` store
   `layout.start_of` (the block start) for each original edge.
   `to_mask()` writes `1.0` at each

@@ -12,7 +12,7 @@ construction, input alignment, hop concatenation, and attribution
 naming follow without changes at their call sites.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Container, Iterator, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -292,6 +292,152 @@ def concat_layouts(
             )
         start += layout.n_units
     return Layout(slots=tuple(slots))
+
+
+def hop_axis_layouts(
+    layer_nodes: Sequence[Sequence[str]],
+    layer_widths: Sequence[Sequence[int]],
+    source_layers: Sequence[int],
+    target_layer: int,
+) -> tuple[Layout, Layout]:
+    """
+    Build the source and target layouts of one hop.
+
+    The source axis is the source-layer layouts concatenated, the
+    same axis ``gather_hop_inputs`` assembles. The target axis
+    is that hop's target layer.
+
+    Parameters
+    ----------
+    layer_nodes
+        Node names at each depth, one name per node.
+    layer_widths
+        Width of each name in ``layer_nodes``, same nesting.
+    source_layers
+        Depths the hop reads, as on ``Hop.source_layers``.
+    target_layer
+        Depth the hop produces, as on ``Hop.target_layer``.
+
+    Returns
+    -------
+    tuple of (Layout, Layout)
+        Concatenated source layout, then target-layer layout.
+    """
+    source_layout = concat_layouts(
+        [
+            build_layout(
+                layer_nodes[layer],
+                layer_widths[layer],
+            )
+            for layer in source_layers
+        ]
+    )
+    target_layout = build_layout(
+        layer_nodes[target_layer],
+        layer_widths[target_layer],
+    )
+    return source_layout, target_layout
+
+
+def packed_indices_for_named_edge(
+    source_index: Sequence[int],
+    target_index: Sequence[int],
+    source_layout: Layout,
+    target_layout: Layout,
+    source: str,
+    target: str,
+) -> tuple[int, ...]:
+    """
+    Return packed slots whose owning names match one edge.
+
+    Walks the stored pairs in live order and does not re-sort.
+    A unit belongs to a named node via
+    ``Layout.slot_containing``, not a unit index into a
+    node-name list.
+
+    Parameters
+    ----------
+    source_index
+        Source-axis unit of each live pair.
+    target_index
+        Target-axis unit of each live pair. Same length as
+        ``source_index``.
+    source_layout
+        Layout of the source axis those columns address.
+    target_layout
+        Layout of the target axis those rows address.
+    source
+        Source node name, already a ``str``.
+    target
+        Target node name, already a ``str``.
+
+    Returns
+    -------
+    tuple of int
+        Indices into ``source_index`` / ``target_index`` whose
+        owning names are ``(source, target)``. Empty if that
+        named edge is not among these pairs.
+    """
+    indices: list[int] = []
+    for index, (source_unit, target_unit) in enumerate(
+        zip(
+            source_index,
+            target_index,
+            strict=True,
+        )
+    ):
+        source_name = source_layout.slot_containing(
+            source_unit,
+        ).name
+        target_name = target_layout.slot_containing(
+            target_unit,
+        ).name
+        if source_name == source and target_name == target:
+            indices.append(index)
+    return tuple(indices)
+
+
+def resolve_edge_names(
+    source: object,
+    target: object,
+    known_names: Container[str],
+) -> tuple[str, str]:
+    """
+    Match an edge pair the way parse matches node names.
+
+    Converts with ``str(...)``. Empty names and names that are
+    not in ``known_names`` raise ``Kpnn2Error`` naming the pair
+    as ``{source} -> {target}``.
+
+    Parameters
+    ----------
+    source
+        Source node name, or a value converted with ``str``.
+    target
+        Target node name, or a value converted with ``str``.
+    known_names
+        Node names that exist on the spec.
+
+    Returns
+    -------
+    tuple of str
+        ``(source_name, target_name)`` after ``str(...)``.
+
+    Raises
+    ------
+    Kpnn2Error
+        If a name is empty or is not in ``known_names``.
+    """
+    source_name = str(source)
+    target_name = str(target)
+    if (
+        source_name == ""
+        or target_name == ""
+        or source_name not in known_names
+        or target_name not in known_names
+    ):
+        raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+    return source_name, target_name
 
 
 def iter_block_pairs(

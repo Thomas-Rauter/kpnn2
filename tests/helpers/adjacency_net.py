@@ -111,23 +111,16 @@ def pin_edge(
     value: float,
 ) -> None:
     """
-    Set the packed weight of one live edge to ``value``.
+    Set the packed weight of one live named edge to ``value``.
 
     Raises
     ------
-    ValueError
+    Kpnn2Error
         If ``source -> target`` is not a packed edge.
     """
-    spec = module.spec
-    try:
-        source_pos = spec.nodes.index(source)
-        target_pos = spec.nodes.index(target)
-    except ValueError as exc:
-        raise ValueError(f"No edge {source!r} -> {target!r} in spec.") from exc
-    matches = (module.core.source_index == source_pos) & (
-        module.core.target_index == target_pos
+    packed_indices = module.spec.edge_location(
+        source,
+        target,
     )
-    if not bool(matches.any()):
-        raise ValueError(f"No edge {source!r} -> {target!r} in spec.")
     with torch.no_grad():
-        module.core.weight[matches] = value
+        module.core.weight[list(packed_indices)] = value

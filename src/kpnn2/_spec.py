@@ -8,6 +8,13 @@ from itertools import accumulate
 import pandas as pd
 from torch import Tensor
 
+from ._errors import Kpnn2Error
+from ._layout import (
+    hop_axis_layouts,
+    packed_indices_for_named_edge,
+    resolve_edge_names,
+)
+
 
 @dataclass(frozen=True)
 class Hop:
@@ -257,13 +264,15 @@ class Skip:
         First unit of ``source`` inside its layer (the block
         start). At width 1 this equals the node's index in
         ``layer_nodes[source_layer]``. It is not a column of
-        the hop's concatenated source axis; see Examples.
+        the hop's concatenated source axis.
+        ``LayeredSpec.edge_location`` returns the packed slots.
     target_in_layer : int
         First unit of ``target`` inside its layer (the block
         start). At width 1 this equals the node's index in
         ``layer_nodes[target_layer]``. Locating the skip among
         packed indices means every unit pair in that block is
-        live, not a single ``(column, row)`` pair.
+        live, not a single ``(column, row)`` pair. Use
+        ``LayeredSpec.edge_location``.
 
     See Also
     --------
@@ -285,10 +294,8 @@ class Skip:
 
     Examples
     --------
-    Locate a skip inside the hop that carries it. This graph is
-    width 1, so the skip is one packed pair and
-    ``source_in_layer`` equals the node's index in
-    ``layer_nodes``:
+    Locate a skip among packed indices. This graph is
+    width 1, so the skip is one packed pair:
 
     >>> import pandas as pd
     >>> import kpnn2
@@ -304,16 +311,14 @@ class Skip:
     ('A', 'C')
     >>> skip.source_layer, skip.target_layer
     (0, 2)
-    >>> hop = spec.hops[skip.target_layer - 1]
-    >>> offset = hop.column_offsets[
-    ...     hop.source_layers.index(skip.source_layer)
-    ... ]
-    >>> column = offset + skip.source_in_layer
-    >>> pair = (column, skip.target_in_layer)
-    >>> list(
-    ...     zip(hop.source_index, hop.target_index)
-    ... ).index(pair)
-    0
+    >>> hop_index, packed = spec.edge_location(
+    ...     skip.source,
+    ...     skip.target,
+    ... )
+    >>> hop_index
+    1
+    >>> packed
+    (0,)
     """
 
     source: str
@@ -374,7 +379,9 @@ class LayeredSpec:
         Original edges with depth gap greater than 1, as metadata.
         Each one is already a block of packed unit pairs in
         ``hops[target_layer - 1]``; this list only says which
-        edges span layers, and is empty when none do.
+        edges span layers, and is empty when none do. Use
+        ``edge_location`` to find the packed slots of a named
+        edge, skip or adjacent.
 
     See Also
     --------
@@ -408,6 +415,8 @@ class LayeredSpec:
     on ``to_dict()``, not on the edgelist: reparse of
     ``to_edgelist()`` without ``widths=`` is width 1.
     Pickle and ``torch.save`` of the dataclass are not.
+    ``edge_location`` finds packed slots of a named edge; it is
+    not a constraint.
 
     Examples
     --------
@@ -432,6 +441,8 @@ class LayeredSpec:
     ('A', 'C')
     >>> spec.skips[0].source_layer, spec.skips[0].target_layer
     (0, 2)
+    >>> spec.edge_location("A", "C")
+    (1, (0,))
     """
 
     input_nodes: tuple[str, ...]
@@ -532,6 +543,100 @@ class LayeredSpec:
         from ._serialize import spec_to_edgelist
 
         return spec_to_edgelist(self)
+
+    def edge_location(
+        self,
+        source: object,
+        target: object,
+    ) -> tuple[int, tuple[int, ...]]:
+        """
+        Return packed weight slots of one named edge.
+
+        ``source`` and ``target`` are matched after ``str(...)``,
+        same as parse. This is identity into the hop that
+        carries the edge, not a constraint.
+
+        Parameters
+        ----------
+        source : str
+            Source node name. Non-strings are converted with
+            ``str(...)``.
+        target : str
+            Target node name. Non-strings are converted with
+            ``str(...)``.
+
+        Returns
+        -------
+        hop_index : int
+            Index ``i`` such that the named edge is in
+            ``hops[i]``.
+        packed_indices : tuple of int
+            Indices into ``hops[i].source_index`` /
+            ``target_index`` and the corresponding
+            ``PackedLinear.weight``. Length is
+            ``k_source * k_target`` (1 at default width).
+            Order is the stored order: named edges canonical
+            lexicographic by ``(source name, target name)``;
+            within one named edge, target-unit outer,
+            source-unit inner.
+
+        Raises
+        ------
+        Kpnn2Error
+            If the pair is missing, a name is empty, or a name
+            is not a node. The message names the pair as
+            ``{source} -> {target}``.
+
+        Notes
+        -----
+        Width greater than 1 does not change the named edge. It
+        returns several packed indices, one per unit pair of
+        the block.
+
+        Examples
+        --------
+        A chain plus a skip. The skip is on the later hop:
+
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H", "A"],
+        ...         "target": ["H", "C", "C"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_layered(edgelist)
+        >>> spec.edge_location("A", "H")
+        (0, (0,))
+        >>> spec.edge_location("A", "C")
+        (1, (0,))
+        """
+        known_names: set[str] = set()
+        for layer in self.layer_nodes:
+            known_names.update(layer)
+        source_name, target_name = resolve_edge_names(
+            source,
+            target,
+            known_names,
+        )
+        for hop_index, hop in enumerate(self.hops):
+            source_layout, target_layout = hop_axis_layouts(
+                self.layer_nodes,
+                self.layer_widths,
+                hop.source_layers,
+                hop.target_layer,
+            )
+            packed = packed_indices_for_named_edge(
+                hop.source_index,
+                hop.target_index,
+                source_layout,
+                target_layout,
+                source_name,
+                target_name,
+            )
+            if packed:
+                return hop_index, packed
+        raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
 
     def to_dict(self) -> dict:
         """

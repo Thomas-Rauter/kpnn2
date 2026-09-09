@@ -89,35 +89,23 @@ def pin_edge(
     value: float,
 ) -> None:
     """
-    Set the weight of one live edge to ``value``.
+    Set the weight of one live named edge to ``value``.
 
-    Adjacent and skip edges are found the same way: the hop that
-    produces ``target`` names its rows, and its concatenated
-    source layers name its columns.
+    Adjacent and skip edges are found the same way:
+    ``spec.edge_location`` returns the hop and every packed
+    slot of that named-edge block. Width greater than 1 pins
+    the whole block, not unit 0 alone.
 
     Raises
     ------
-    ValueError
-        If ``source -> target`` is not a live packed pair of any
-        hop in ``module.spec``.
+    Kpnn2Error
+        If ``source -> target`` is not a live packed pair of
+        any hop in ``module.spec``.
     """
-    spec = module.spec
+    hop_index, packed_indices = module.spec.edge_location(
+        source,
+        target,
+    )
+    layer = module.layers[hop_index]
     with torch.no_grad():
-        for index, hop in enumerate(spec.hops):
-            targets = spec.layer_nodes[hop.target_layer]
-            if target not in targets or source not in hop.source_nodes:
-                continue
-            row = targets.index(target)
-            column = hop.source_nodes.index(source)
-            layer = module.layers[index]
-            for edge_i, (src, tgt) in enumerate(
-                zip(
-                    hop.source_index,
-                    hop.target_index,
-                    strict=True,
-                )
-            ):
-                if src == column and tgt == row:
-                    layer.weight[edge_i] = value
-                    return
-    raise ValueError(f"No edge {source!r} -> {target!r} in spec.")
+        layer.weight[list(packed_indices)] = value

@@ -3,7 +3,7 @@ import pytest
 import torch
 
 import kpnn2
-from kpnn2 import parse_layered
+from kpnn2 import Kpnn2Error, parse_layered
 from tests.helpers.layered_net import (
     LayeredNet,
     pin_all_weights,
@@ -89,8 +89,8 @@ def test_pin_edge_raises_for_missing_edge():
         bias=False,
     )
     with pytest.raises(
-        ValueError,
-        match="No edge",
+        Kpnn2Error,
+        match=r"H -> A",
     ):
         pin_edge(
             model,
@@ -98,3 +98,44 @@ def test_pin_edge_raises_for_missing_edge():
             "A",
             0.0,
         )
+
+
+def test_pin_edge_pins_every_unit_pair_when_wide():
+    spec = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "B"],
+                "target": ["H", "H"],
+            }
+        ),
+        widths={
+            "A": 2,
+            "H": 3,
+        },
+    )
+    model = LayeredNet(
+        spec,
+        bias=False,
+    )
+    pin_all_weights(
+        model,
+        value=1.0,
+    )
+    pin_edge(
+        model,
+        "A",
+        "H",
+        0.25,
+    )
+    hop_index, packed = spec.edge_location(
+        "A",
+        "H",
+    )
+    weights = model.layers[hop_index].weight.detach()
+    assert len(packed) == 6
+    assert weights[list(packed)].tolist() == [0.25] * 6
+    _, other = spec.edge_location(
+        "B",
+        "H",
+    )
+    assert weights[list(other)].tolist() == [1.0] * len(other)

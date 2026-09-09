@@ -7,7 +7,13 @@ from dataclasses import dataclass
 import pandas as pd
 from torch import Tensor
 
-from ._layout import build_layout, dense_mask_from_indices
+from ._errors import Kpnn2Error
+from ._layout import (
+    build_layout,
+    dense_mask_from_indices,
+    packed_indices_for_named_edge,
+    resolve_edge_names,
+)
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,8 @@ class AdjacencySpec:
         edge count. Order is canonical: lexicographic by
         ``(source name, target name)``, identical to
         ``to_edgelist()`` row order. Cycles and self-loops are
-        included.
+        included. ``edge_location`` returns the packed index of
+        one named pair.
     target_index : tuple[int, ...]
         For each original edge, the row in ``nodes`` (the
         target). A dense square would have ``1.0`` at
@@ -98,7 +105,8 @@ class AdjacencySpec:
     ``fingerprint`` are the supported interchange; each
     round-trips through ``parse_adjacency``, cycle edges and
     self-loops included. Pickle and ``torch.save`` of the
-    dataclass are not.
+    dataclass are not. ``edge_location`` finds packed slots of
+    a named edge; it is not a constraint.
 
     Examples
     --------
@@ -125,6 +133,8 @@ class AdjacencySpec:
     (0, 0, 1, 2)
     >>> spec.target_index
     (1, 3, 0, 0)
+    >>> spec.edge_location("a", "b")
+    (0,)
     >>> tuple(spec.to_mask().shape)
     (4, 4)
     >>> spec.to_mask()[0].tolist()
@@ -267,6 +277,84 @@ class AdjacencySpec:
         from ._serialize import spec_to_edgelist
 
         return spec_to_edgelist(self)
+
+    def edge_location(
+        self,
+        source: object,
+        target: object,
+    ) -> tuple[int, ...]:
+        """
+        Return packed weight slots of one named edge.
+
+        ``source`` and ``target`` are matched after ``str(...)``,
+        same as parse. Indices address ``source_index`` /
+        ``target_index`` and ``PackedLinear.weight`` built from
+        those arrays. This is identity into the packed arrays,
+        not a constraint. Adjacency stores one pair per named
+        edge.
+
+        Parameters
+        ----------
+        source : str
+            Source node name. Non-strings are converted with
+            ``str(...)``.
+        target : str
+            Target node name. Non-strings are converted with
+            ``str(...)``.
+
+        Returns
+        -------
+        tuple of int
+            Packed indices of the named edge, in stored order
+            (canonical lexicographic by
+            ``(source name, target name)``, same as
+            ``to_edgelist()`` rows). Length is 1.
+
+        Raises
+        ------
+        Kpnn2Error
+            If the pair is missing, a name is empty, or a name
+            is not a node. The message names the pair as
+            ``{source} -> {target}``.
+
+        Notes
+        -----
+        There is no hop index and no ``widths=``. A named edge
+        is one packed slot.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_adjacency(edgelist)
+        >>> spec.edge_location("a", "b")
+        (0,)
+        >>> spec.edge_location("x", "a")
+        (3,)
+        """
+        source_name, target_name = resolve_edge_names(
+            source,
+            target,
+            set(self.nodes),
+        )
+        layout = build_layout(self.nodes)
+        packed = packed_indices_for_named_edge(
+            self.source_index,
+            self.target_index,
+            layout,
+            layout,
+            source_name,
+            target_name,
+        )
+        if not packed:
+            raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+        return packed
 
     def to_dict(self) -> dict:
         """

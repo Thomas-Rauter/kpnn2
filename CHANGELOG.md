@@ -16,6 +16,8 @@ This project follows semantic versioning.
   `MaskedLinear.weight` stays masked if later maps are stacked.
 - `parse_layered(widths=)` / `LayeredSpec.layer_widths`: a named
   node can own several units.
+- `LayeredSpec.edge_location` / `AdjacencySpec.edge_location`:
+  locate a named edge's packed weight slots.
 
 
 ## [0.3.0] - 9. September 2026

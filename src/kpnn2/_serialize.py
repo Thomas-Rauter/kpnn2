@@ -11,7 +11,7 @@ import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
-from ._layout import build_layout, concat_layouts
+from ._layout import hop_axis_layouts
 from ._spec import LayeredSpec
 
 _SPEC_VERSION = 1
@@ -357,18 +357,11 @@ def _layered_edges(
 ) -> tuple[tuple[str, str], ...]:
     pairs: set[tuple[str, str]] = set()
     for hop in spec.hops:
-        source_layout = concat_layouts(
-            [
-                build_layout(
-                    spec.layer_nodes[layer],
-                    spec.layer_widths[layer],
-                )
-                for layer in hop.source_layers
-            ]
-        )
-        target_layout = build_layout(
-            spec.layer_nodes[hop.target_layer],
-            spec.layer_widths[hop.target_layer],
+        source_layout, target_layout = hop_axis_layouts(
+            spec.layer_nodes,
+            spec.layer_widths,
+            hop.source_layers,
+            hop.target_layer,
         )
         for source_unit, target_unit in zip(
             hop.source_index,

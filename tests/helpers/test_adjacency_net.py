@@ -3,7 +3,7 @@ import pytest
 import torch
 
 import kpnn2
-from kpnn2 import parse_adjacency
+from kpnn2 import Kpnn2Error, parse_adjacency
 from tests.helpers.adjacency_net import (
     AdjacencyNet,
     pin_all_weights,
@@ -75,8 +75,8 @@ def test_pin_edge_raises_for_missing_edge():
         bias=False,
     )
     with pytest.raises(
-        ValueError,
-        match="No edge",
+        Kpnn2Error,
+        match=r"C -> A",
     ):
         pin_edge(
             model,
