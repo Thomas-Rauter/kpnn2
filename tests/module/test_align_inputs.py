@@ -389,6 +389,30 @@ def test_align_inputs_adjacency_width_is_narrower_than_state():
     assert state[:, spec.input_index].tolist() == aligned.tolist()
 
 
+def test_align_inputs_repeats_a_wide_layered_input():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "H"],
+            "target": ["H", "C"],
+        }
+    )
+    spec = parse_layered(
+        edgelist,
+        widths={"A": 3},
+    )
+    assert spec.layer_dims[0] == 3
+    data = pd.DataFrame({"A": [1.0, 2.0]})
+    aligned = align_inputs(
+        data,
+        spec,
+    )
+    assert tuple(aligned.shape) == (2, spec.layer_dims[0])
+    assert aligned.tolist() == [
+        [1.0, 1.0, 1.0],
+        [2.0, 2.0, 2.0],
+    ]
+
+
 def _invalid_adjacency_align_cases():
     spec = _tiny_adjacency_spec()
     missing = pd.DataFrame(

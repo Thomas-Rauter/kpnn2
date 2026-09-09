@@ -42,20 +42,23 @@ class Hop:
         same order. Their sum is ``in_features``.
     source_nodes : tuple[str, ...]
         Node names of the concatenated source axis, source
-        layers in ``source_layers`` order. One name per node;
-        with one unit per node that is one name per column.
+        layers in ``source_layers`` order. One name per node,
+        not per unit. With width greater than 1,
+        ``len(source_nodes)`` is smaller than ``in_features``.
     target_dim : int
         Units in the target layer, equal to
         ``layer_dims[target_layer]`` and to ``out_features``.
     source_index : tuple[int, ...]
-        For each original edge entering this layer, the column
-        on the concatenated source axis. Same length as
-        ``target_index``. Order is canonical: lexicographic by
+        Concat-column of each live unit pair. A named edge
+        ``A -> B`` expands into every pair of the
+        ``(k_B, k_A)`` block, target-unit outer, source-unit
+        inner. Same length as ``target_index``. Named edges
+        are canonical: lexicographic by
         ``(source name, target name)``.
     target_index : tuple[int, ...]
-        For each original edge entering this layer, the row in
-        the target layer. A dense rectangle would have ``1.0``
-        at ``[target_index[i], source_index[i]]``.
+        Target-layer row of each live unit pair. A dense
+        rectangle would have ``1.0`` at
+        ``[target_index[i], source_index[i]]``.
 
     See Also
     --------
@@ -68,9 +71,10 @@ class Hop:
 
     Notes
     -----
-    Every edgelist edge is a packed pair in exactly one hop, the
-    one of its target layer, so the pairs summed over all hops
-    give the edge count and applying a hop applies every parent
+    Every named edge is a block of packed unit pairs in exactly
+    one hop, the one of its target layer. At width 1 that block
+    is a single pair and the pairs summed over all hops give
+    the named-edge count. Applying a hop applies every parent
     of its layer at once.
 
     To locate one source layer's block on the concatenated axis,
@@ -167,8 +171,9 @@ class Hop:
         First source column of each entry of ``source_layers``.
 
         Same length and order as ``source_layers``. Add a node's
-        index inside its own layer to get its concatenated
-        column.
+        block start inside its own layer to get its concatenated
+        first unit. At width 1 the block start equals the node's
+        ordinal in ``layer_nodes``.
         """
         return tuple(
             accumulate(
@@ -223,13 +228,14 @@ class Skip:
     """
     One original edge whose endpoints are more than one layer apart.
 
-    Metadata, not a second computation: the edge is already a
-    packed pair in ``LayeredSpec.hops[target_layer - 1]``, exactly
-    like an adjacent edge, so nothing has to add it back later
-    and nothing can forget to. Read ``LayeredSpec.skips`` to
-    inspect which prior-knowledge edges span layers; a forward
-    pass never reads it. ``parse_layered`` builds these, never
-    the caller.
+    Metadata, not a second computation: the named edge is already
+    a block of packed unit pairs in
+    ``LayeredSpec.hops[target_layer - 1]``, exactly like an
+    adjacent edge, so nothing has to add it back later and
+    nothing can forget to. Read ``LayeredSpec.skips`` to inspect
+    which prior-knowledge edges span layers; a forward pass
+    never reads it. ``parse_layered`` builds these, never the
+    caller.
 
     Parameters
     ----------
@@ -248,15 +254,16 @@ class Skip:
         and it names the hop carrying it,
         ``hops[target_layer - 1]``.
     source_in_layer : int
-        Index of ``source`` inside ``layer_nodes[source_layer]``.
-        This is a position in that layer alone, not a column of
-        the hop's concatenated source axis; see Examples for the
-        shift.
+        First unit of ``source`` inside its layer (the block
+        start). At width 1 this equals the node's index in
+        ``layer_nodes[source_layer]``. It is not a column of
+        the hop's concatenated source axis; see Examples.
     target_in_layer : int
-        Index of ``target`` inside ``layer_nodes[target_layer]``,
-        which is also its row in
-        ``hops[target_layer - 1].target_index``, since a hop has
-        one row per unit of its own layer.
+        First unit of ``target`` inside its layer (the block
+        start). At width 1 this equals the node's index in
+        ``layer_nodes[target_layer]``. Locating the skip among
+        packed indices means every unit pair in that block is
+        live, not a single ``(column, row)`` pair.
 
     See Also
     --------
@@ -272,11 +279,16 @@ class Skip:
     how the edge is computed: its weight, the unit bias, and the
     fan-in the degree-aware initialization uses all stay on the
     target layer's ``PackedLinear`` or ``MaskedLinear``. Expanding
-    a skip into dummy neurons is not the intended use.
+    a skip into dummy neurons is not the intended use. At width
+    greater than 1 the stored indices are block starts; every
+    unit pair of that block is a packed index of the hop.
 
     Examples
     --------
-    Locate a skip inside the hop that carries it:
+    Locate a skip inside the hop that carries it. This graph is
+    width 1, so the skip is one packed pair and
+    ``source_in_layer`` equals the node's index in
+    ``layer_nodes``:
 
     >>> import pandas as pd
     >>> import kpnn2
@@ -328,8 +340,9 @@ class LayeredSpec:
     Parameters
     ----------
     input_nodes : tuple[str, ...]
-        In-degree 0 names, alphabetical. This is the column order of
-        tensors returned by ``align_inputs``.
+        In-degree 0 names, alphabetical. This is the DataFrame
+        column order ``align_inputs`` reads. The returned tensor
+        width is ``layer_dims[0]``.
     output_nodes : tuple[str, ...]
         Out-degree 0 names, alphabetical. A terminal node below
         maximum depth belongs here too, so this is not the same
@@ -339,10 +352,17 @@ class LayeredSpec:
     layer_nodes : tuple[tuple[str, ...], ...]
         ``layer_nodes[i]`` is the names at depth ``i``, alphabetical.
         Index 0 is the input layer. Depth is longest path from the
-        inputs, and there are always at least two layers.
+        inputs, and there are always at least two layers. One
+        name per node, not per unit.
     layer_dims : tuple[int, ...]
-        ``layer_dims[i] == len(layer_nodes[i])``: the unit width of
-        each layer, one unit per node.
+        Unit count of each layer: ``layer_dims[i]`` is
+        ``sum(layer_widths[i])``. Equal to
+        ``len(layer_nodes[i])`` only when every node at that
+        depth has width 1.
+    layer_widths : tuple[tuple[int, ...], ...]
+        ``layer_widths[i][j]`` is the width of
+        ``layer_nodes[i][j]``. Default parse yields 1 for every
+        node.
     hops : tuple[Hop, ...]
         One hop per layer after the first:
         ``len(hops) == len(layer_nodes) - 1`` and
@@ -352,7 +372,7 @@ class LayeredSpec:
         source layers. ``hops[0]`` always reads layer 0 only.
     skips : tuple[Skip, ...]
         Original edges with depth gap greater than 1, as metadata.
-        Each one is already a packed pair in
+        Each one is already a block of packed unit pairs in
         ``hops[target_layer - 1]``; this list only says which
         edges span layers, and is empty when none do.
 
@@ -384,9 +404,10 @@ class LayeredSpec:
     included.
 
     ``to_edgelist()``, ``to_dict()`` with ``from_dict()``, and
-    ``fingerprint`` are the supported interchange; each
-    round-trips through ``parse_layered``. Pickle and
-    ``torch.save`` of the dataclass are not.
+    ``fingerprint`` are the supported interchange. Widths live
+    on ``to_dict()``, not on the edgelist: reparse of
+    ``to_edgelist()`` without ``widths=`` is width 1.
+    Pickle and ``torch.save`` of the dataclass are not.
 
     Examples
     --------
@@ -418,6 +439,7 @@ class LayeredSpec:
     hidden_nodes: tuple[str, ...]
     layer_nodes: tuple[tuple[str, ...], ...]
     layer_dims: tuple[int, ...]
+    layer_widths: tuple[tuple[int, ...], ...]
     hops: tuple[Hop, ...]
     skips: tuple[Skip, ...]
 
@@ -449,6 +471,11 @@ class LayeredSpec:
         )
         object.__setattr__(
             self,
+            "layer_widths",
+            tuple(tuple(layer) for layer in self.layer_widths),
+        )
+        object.__setattr__(
+            self,
             "hops",
             tuple(self.hops),
         )
@@ -469,8 +496,11 @@ class LayeredSpec:
         DataFrame that was parsed are not reproduced.
 
         ``parse_layered`` on this table reconstructs the same
-        node lists, hops, and packed hop indices. Skip tuple
-        order follows these sorted rows rather than the original
+        node lists and named edges. Packed hop indices and
+        ``layer_dims`` match when every node has width 1.
+        Otherwise pass ``widths=`` or use ``from_dict()``, which
+        reads widths from the tagged dict. Skip tuple order
+        follows these sorted rows rather than the original
         parse input order; the skip *set* matches.
 
         Returns
@@ -510,8 +540,10 @@ class LayeredSpec:
         Keys are ``kpnn2_spec`` (integer ``1``), ``layout``
         (``"layered"``), and ``edges`` (list of
         ``[source, target]`` lists in the same order as
-        ``to_edgelist()`` rows). The returned dict is new on
-        every call.
+        ``to_edgelist()`` rows). When any node has width other
+        than 1, a ``"widths"`` object of those names is included.
+        All-1 graphs omit ``"widths"``. The returned dict is new
+        on every call.
 
         Returns
         -------
@@ -547,14 +579,17 @@ class LayeredSpec:
         Rebuild a ``LayeredSpec`` from ``to_dict()`` output.
 
         Calls ``parse_layered`` on a DataFrame built from
-        ``payload["edges"]``. Hops and packed indices are not
-        assembled by hand. Extra unknown keys are ignored.
+        ``payload["edges"]``, passing ``payload["widths"]`` when
+        present. Hops and packed indices are not assembled by
+        hand. Extra unknown keys are ignored. An absent or empty
+        ``"widths"`` object is width 1.
 
         Parameters
         ----------
         payload : dict
             A dict with ``kpnn2_spec``, ``layout``, and
             ``edges``. ``layout`` must be ``"layered"``.
+            Optional ``"widths"`` is a node-name-to-int object.
 
         Returns
         -------
@@ -566,8 +601,10 @@ class LayeredSpec:
         Kpnn2Error
             If ``payload`` is not a dict; ``kpnn2_spec`` is
             missing or not ``1``; ``layout`` is missing, not a
-            known layout, or is ``"adjacency"``; or ``edges``
-            is missing or not a sequence of two nonempty names.
+            known layout, or is ``"adjacency"``; ``edges``
+            is missing or not a sequence of two nonempty names;
+            or ``"widths"`` is present and not a mapping of
+            positive ints.
 
         Examples
         --------

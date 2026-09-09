@@ -2,9 +2,9 @@
 Unit placement for graph nodes on a tensor axis.
 
 Every graph node owns a contiguous slice of units on the last
-axis of a tensor. In v1 every slice has width
-``DEFAULT_NODE_WIDTH == 1``, so a node's slice start is its
-column index and block expansion writes a single mask entry.
+axis of a tensor. Default width is ``DEFAULT_NODE_WIDTH == 1``.
+``parse_layered(..., widths=)`` may give a node several units;
+a named edge then occupies every unit pair of that block.
 
 Routing index arithmetic through this module is what keeps node
 width additive: give ``build_layout`` real widths and mask
@@ -12,7 +12,7 @@ construction, input alignment, hop concatenation, and attribution
 naming follow without changes at their call sites.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -35,8 +35,8 @@ class NodeSlot:
     start : int
         First unit index of the node.
     width : int
-        Number of units the node owns. Always
-        ``DEFAULT_NODE_WIDTH`` in v1.
+        Number of units the node owns. ``DEFAULT_NODE_WIDTH``
+        unless ``parse_layered`` was given ``widths``.
     """
 
     name: str
@@ -67,7 +67,7 @@ class Layout:
     tile the axis without gaps, so ``n_units`` is the axis
     length. With every width at ``DEFAULT_NODE_WIDTH`` this is a
     one-unit-per-node vector and ``slot(name).start`` is the
-    node's column index.
+    node's column index. Wider nodes occupy a contiguous block.
 
     Parameters
     ----------
@@ -163,6 +163,22 @@ class Layout:
             if slot.start == start:
                 return slot
         raise Kpnn2Error(f"No node begins at unit index {start}.")
+
+    def slot_containing(self, unit: int) -> NodeSlot:
+        """
+        Return the slot whose units slice contains ``unit``.
+
+        ``slot_at`` requires a block start; this accepts any
+        unit index inside the block.
+        """
+        if unit < 0 or unit >= self.n_units:
+            raise Kpnn2Error(
+                f"Unit index {unit} is out of range [0, {self.n_units})."
+            )
+        for slot in self.slots:
+            if slot.start <= unit < slot.stop:
+                return slot
+        raise Kpnn2Error(f"No node owns unit index {unit}.")
 
     def widths(self) -> tuple[int, ...]:
         """
@@ -276,6 +292,25 @@ def concat_layouts(
             )
         start += layout.n_units
     return Layout(slots=tuple(slots))
+
+
+def iter_block_pairs(
+    source: NodeSlot,
+    target: NodeSlot,
+) -> Iterator[tuple[int, int]]:
+    """
+    Yield unit-index pairs of one named edge.
+
+    Order is target-unit outer, source-unit inner, matching
+    ``fill_block`` writing ``mask[target.units, source.units]``.
+    Each yielded pair is ``(source_unit, target_unit)``.
+    """
+    for target_unit in range(target.start, target.stop):
+        for source_unit in range(source.start, source.stop):
+            yield (
+                source_unit,
+                target_unit,
+            )
 
 
 def fill_block(

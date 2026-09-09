@@ -3,6 +3,7 @@ Edgelist parsing for kpnn2.
 """
 
 from collections import deque
+from collections.abc import Mapping
 
 import pandas as pd
 
@@ -12,6 +13,7 @@ from ._layout import (
     NodeSlot,
     build_layout,
     concat_layouts,
+    iter_block_pairs,
 )
 from ._spec import Hop, LayeredSpec, Skip
 
@@ -297,17 +299,59 @@ def _rank_layers(
     return layer_nodes
 
 
+def _normalize_widths(
+    widths: Mapping[str, int] | None,
+    nodes: set[str],
+) -> dict[str, int]:
+    """
+    Map each graph node to a positive unit count.
+
+    ``None`` or omitted keys are width 1. Keys are matched after
+    ``str(...)``. Unknown names and non-positive or non-int
+    values raise ``Kpnn2Error``. ``bool`` is rejected.
+    """
+    if widths is None:
+        return {node: 1 for node in nodes}
+    if not isinstance(widths, Mapping):
+        raise Kpnn2Error("'widths' must be a mapping of node name to int.")
+    requested: dict[str, int] = {}
+    for key, value in widths.items():
+        name = str(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise Kpnn2Error(
+                f"Width for node {name!r} must be a positive int. "
+                f"Got {value!r}."
+            )
+        if value < 1:
+            raise Kpnn2Error(
+                f"Width for node {name!r} must be a positive int. "
+                f"Got {value!r}."
+            )
+        requested[name] = value
+    unknown = sorted(set(requested) - nodes)
+    if unknown:
+        names_str = ", ".join(unknown)
+        raise Kpnn2Error(f"Unknown node name(s) in 'widths': {names_str}.")
+    return {node: requested.get(node, 1) for node in nodes}
+
+
 def _layer_layouts(
     layer_nodes: list[list[str]],
+    width_of: dict[str, int],
 ) -> list[Layout]:
     """
     Place each layer's nodes on that layer's unit axis.
 
-    One layout per depth. Every node is ``DEFAULT_NODE_WIDTH``
-    units wide, so ``layout.n_units`` is the node count and a
-    node's slot start is its column index.
+    One layout per depth. ``layout.n_units`` is the sum of the
+    node widths at that depth.
     """
-    return [build_layout(names) for names in layer_nodes]
+    return [
+        build_layout(
+            names,
+            [width_of[name] for name in names],
+        )
+        for names in layer_nodes
+    ]
 
 
 def _node_placement(
@@ -357,9 +401,9 @@ def _build_hops(
     ``hops[i]`` targets depth ``i + 1`` and its packed indices
     hold every edge entering that depth, adjacent or skip. The
     column axis is the source depths concatenated in ascending
-    order, so an edge uses the block start its endpoints own on
-    that axis: one pair per original edge while nodes are one
-    unit wide.
+    order. Each named edge expands into every unit pair of the
+    ``(target.width, source.width)`` block. At width 1 that is
+    one pair per original edge.
 
     Only depths that really feed the target become columns, so a
     graph without skips gives exactly one source depth per hop.
@@ -388,7 +432,7 @@ def _build_hops(
 
     source_layers: dict[int, tuple[int, ...]] = {}
     source_layouts: dict[int, Layout] = {}
-    packed: dict[int, list[tuple[str, str, int, int]]] = {}
+    packed: dict[int, list[tuple[str, str, NodeSlot, NodeSlot]]] = {}
     for target_layer in range(1, n_layers):
         ordered = tuple(sorted(parents[target_layer]))
         source_layout = concat_layouts(
@@ -409,15 +453,27 @@ def _build_hops(
             (
                 source,
                 target,
-                source_slot.start,
-                target_slot.start,
+                source_slot,
+                target_slot,
             )
         )
 
     hops: list[Hop] = []
     for target_layer in range(1, n_layers):
         ordered = source_layers[target_layer]
-        rows = sorted(packed[target_layer])
+        rows = sorted(
+            packed[target_layer],
+            key=lambda row: (row[0], row[1]),
+        )
+        source_index: list[int] = []
+        target_index: list[int] = []
+        for _, _, source_slot, target_slot in rows:
+            for source_unit, target_unit in iter_block_pairs(
+                source_slot,
+                target_slot,
+            ):
+                source_index.append(source_unit)
+                target_index.append(target_unit)
         hops.append(
             Hop(
                 target_layer=target_layer,
@@ -425,8 +481,8 @@ def _build_hops(
                 source_dims=tuple(layouts[layer].n_units for layer in ordered),
                 source_nodes=source_layouts[target_layer].names,
                 target_dim=layouts[target_layer].n_units,
-                source_index=tuple(row[2] for row in rows),
-                target_index=tuple(row[3] for row in rows),
+                source_index=tuple(source_index),
+                target_index=tuple(target_index),
             )
         )
     return hops
@@ -439,11 +495,12 @@ def _build_skips(
     """
     Collect original edges with depth gap greater than 1.
 
-    These records are metadata: the edges themselves are already
-    packed pairs in the target depth's hop. Adjacent edges (gap
-    exactly 1) are omitted, since nothing distinguishes them.
-    Each recorded index is the first unit its node owns, which
-    is the node's column index while nodes are one unit wide.
+    These records are metadata: the named edges themselves are
+    already unit-pair blocks in the target depth's hop. Adjacent
+    edges (gap exactly 1) are omitted, since nothing
+    distinguishes them. Each recorded index is the first unit
+    its node owns, which equals the node's ordinal in
+    ``layer_nodes`` while every node is one unit wide.
 
     Parameters
     ----------
@@ -481,7 +538,11 @@ def _build_skips(
     return skips
 
 
-def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
+def parse_layered(
+    edgelist: pd.DataFrame,
+    *,
+    widths: Mapping[str, int] | None = None,
+) -> LayeredSpec:
     """
     Parse a source/target edgelist into a ``LayeredSpec``.
 
@@ -491,7 +552,8 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     become one hop per layer; ``parse_adjacency`` is the
     shared-state packed alternative, which also allows cycles.
     Depth is longest path from inputs, names sort alphabetically
-    within a layer, and no hop mask is allocated.
+    within a layer, and no hop mask is allocated. Optional
+    ``widths`` lets a named node own several units.
 
     Parameters
     ----------
@@ -500,6 +562,12 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
         one row per directed edge in the direction of computation.
         Names are converted with ``str(...)``; extra columns are
         ignored. The frame is read, never modified.
+    widths : mapping of str to int, optional
+        Units per named node. Omitted names, ``None``, and an
+        empty mapping are width 1. Keys are matched after
+        ``str(...)``. Unknown names raise ``Kpnn2Error``. Values
+        must be positive ints; ``bool``, ``0``, and negatives
+        are rejected.
 
     Returns
     -------
@@ -515,29 +583,33 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
         If ``edgelist`` is not a DataFrame; ``source`` or ``target``
         is absent, missing, or an empty name; the table has no rows;
         a ``(source, target)`` pair is duplicated; any edge is a
-        self-loop; the graph has a cycle; or there is no in-degree-0
-        node or no out-degree-0 node. Each message names the
-        offending pairs or nodes, sorted.
+        self-loop; the graph has a cycle; there is no in-degree-0
+        node or no out-degree-0 node; or ``widths`` names an
+        unknown node or is not a mapping of positive ints. Each
+        message names the offending pairs or nodes, sorted.
 
     See Also
     --------
     parse_adjacency : Pack the same table into one state vector;
-        allows cycles and self-loops.
+        allows cycles and self-loops. Has no ``widths`` argument.
     PackedLinear : Apply one hop from its packed indices.
     gather_hop_inputs : Build one hop's input from the saved layer
         tensors.
 
     Notes
     -----
-    Every edge is a packed pair in exactly one hop, the one of
-    its target layer, whether its depth gap is 1 or larger. A
-    hop whose target has parents further back reads several
-    layers, and its source columns are those layers concatenated
-    in ascending order, so a skip edge is an ordinary weight
-    rather than a dummy neuron or a second mechanism; ``skips``
-    only reports it. Terminals below maximum depth (early
-    outputs) are allowed, and isolated nodes cannot appear, since
-    the node set is the union of ``source`` and ``target``.
+    Every named edge belongs to exactly one hop, the one of its
+    target layer, whether its depth gap is 1 or larger. Packed
+    indices are in unit space: named edge ``A -> B`` expands
+    into a ``(k_B, k_A)`` block of live pairs. At default width
+    1 that is one pair per named edge. A hop whose target has
+    parents further back reads several layers, and its source
+    columns are those layers concatenated in ascending order, so
+    a skip edge is an ordinary weight rather than a dummy neuron
+    or a second mechanism; ``skips`` only reports it. Terminals
+    below maximum depth (early outputs) are allowed, and isolated
+    nodes cannot appear, since the node set is the union of
+    ``source`` and ``target``.
 
     Examples
     --------
@@ -561,6 +633,20 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
     [[1.0, 1.0]]
     >>> spec.skips[0].source, spec.skips[0].target
     ('A', 'C')
+
+    A hidden node of width 2 owns two units; the named edge
+    ``A -> H`` becomes a 2-by-1 block:
+
+    >>> spec = kpnn2.parse_layered(
+    ...     edgelist,
+    ...     widths={"H": 2},
+    ... )
+    >>> spec.layer_dims
+    (1, 2, 1)
+    >>> spec.layer_widths
+    ((1,), (2,), (1,))
+    >>> spec.hops[0].to_mask().tolist()
+    [[1.0], [1.0]]
     """
     normalized = _validate_edgelist(edgelist)
     _reject_self_loops(normalized)
@@ -582,7 +668,14 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
         parents,
         in_degree,
     )
-    layouts = _layer_layouts(layer_nodes)
+    width_of = _normalize_widths(
+        widths,
+        nodes,
+    )
+    layouts = _layer_layouts(
+        layer_nodes,
+        width_of,
+    )
     placement = _node_placement(layouts)
     layer_dims = [layout.n_units for layout in layouts]
     hops = _build_hops(
@@ -600,6 +693,7 @@ def parse_layered(edgelist: pd.DataFrame) -> LayeredSpec:
         hidden_nodes=tuple(hidden_nodes),
         layer_nodes=tuple(tuple(layer) for layer in layer_nodes),
         layer_dims=tuple(layer_dims),
+        layer_widths=tuple(layout.widths() for layout in layouts),
         hops=tuple(hops),
         skips=tuple(skips),
     )

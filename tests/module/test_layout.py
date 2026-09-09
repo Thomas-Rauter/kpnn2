@@ -75,6 +75,34 @@ def test_wider_layout_tiles_the_axis_without_gaps():
     assert layout.slot_at(3) is layout.slot("C")
 
 
+def test_slot_containing_returns_the_owning_slot():
+    layout = build_layout(
+        ["A", "B", "C"],
+        [2, 1, 3],
+    )
+    assert layout.slot_containing(0) is layout.slot("A")
+    assert layout.slot_containing(1) is layout.slot("A")
+    assert layout.slot_containing(2) is layout.slot("B")
+    assert layout.slot_containing(3) is layout.slot("C")
+    assert layout.slot_containing(5) is layout.slot("C")
+    with pytest.raises(
+        Kpnn2Error,
+        match="out of range",
+    ):
+        layout.slot_containing(-1)
+    with pytest.raises(
+        Kpnn2Error,
+        match="out of range",
+    ):
+        layout.slot_containing(6)
+
+
+def test_slot_containing_matches_slot_at_when_width_is_one():
+    layout = build_layout(["A", "B", "C"])
+    for index in range(layout.n_units):
+        assert layout.slot_containing(index) is layout.slot_at(index)
+
+
 def test_layout_rejects_unknown_name_and_unknown_start():
     layout = build_layout(["A", "B"])
     with pytest.raises(
@@ -317,16 +345,54 @@ def test_build_hops_block_expands_a_wider_layout():
         _node_placement(layouts),
     )
     assert len(hops) == 1
-    assert hops[0].source_layers == (0,)
-    assert hops[0].source_dims == (5,)
-    assert hops[0].target_dim == 2
-    assert hops[0].source_index == (0, 2)
-    assert hops[0].target_index == (0, 0)
-    assert tuple(hops[0].to_mask().shape) == (2, 5)
-    mask = hops[0].to_mask()
-    assert mask[0, 0].item() == 1.0
-    assert mask[0, 2].item() == 1.0
-    assert mask.sum().item() == 2.0
+    hop = hops[0]
+    assert hop.source_layers == (0,)
+    assert hop.source_dims == (5,)
+    assert hop.target_dim == 2
+    assert hop.source_nodes == ("A", "B")
+    assert hop.in_features == 5
+    assert hop.out_features == 2
+    assert len(hop.source_index) == 2 * 2 + 3 * 2
+    assert hop.source_index == (
+        0,
+        1,
+        0,
+        1,
+        2,
+        3,
+        4,
+        2,
+        3,
+        4,
+    )
+    assert hop.target_index == (
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+    )
+    expected = torch.zeros(
+        hop.out_features,
+        hop.in_features,
+    )
+    fill_block(
+        expected,
+        layouts[1].slot("H"),
+        layouts[0].slot("A"),
+    )
+    fill_block(
+        expected,
+        layouts[1].slot("H"),
+        layouts[0].slot("B"),
+    )
+    assert hop.to_mask().tolist() == expected.tolist()
+    assert hop.to_mask().sum().item() == 10.0
 
 
 def test_build_hops_leaves_unconnected_blocks_zero():
@@ -342,11 +408,21 @@ def test_build_hops_leaves_unconnected_blocks_zero():
         layouts,
         _node_placement(layouts),
     )
-    assert hops[0].source_index == (0,)
-    assert hops[0].target_index == (0,)
-    assert hops[0].to_mask().tolist() == [
-        [1.0, 0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0, 0.0],
+    hop = hops[0]
+    assert len(hop.source_index) == 2 * 2
+    expected = torch.zeros(
+        hop.out_features,
+        hop.in_features,
+    )
+    fill_block(
+        expected,
+        layouts[1].slot("H"),
+        layouts[0].slot("A"),
+    )
+    assert hop.to_mask().tolist() == expected.tolist()
+    assert hop.to_mask().tolist() == [
+        [1.0, 1.0, 0.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0, 0.0, 0.0],
     ]
 
 
@@ -383,11 +459,31 @@ def test_build_hops_block_expands_a_skip_edge_too():
     assert skip_hop.source_dims == (5, 2)
     assert skip_hop.column_offsets == (0, 5)
     assert skip_hop.target_dim == 4
+    assert skip_hop.source_nodes == ("A", "B", "H")
     assert tuple(skip_hop.to_mask().shape) == (4, 7)
-    mask = skip_hop.to_mask()
-    assert mask[0, 2].item() == 1.0
-    assert mask[0, 5].item() == 1.0
-    assert mask.sum().item() == 2.0
+    source_layout = concat_layouts(
+        [
+            layouts[0],
+            layouts[1],
+        ]
+    )
+    expected = torch.zeros(
+        skip_hop.out_features,
+        skip_hop.in_features,
+    )
+    fill_block(
+        expected,
+        layouts[2].slot("C"),
+        source_layout.slot("B"),
+    )
+    fill_block(
+        expected,
+        layouts[2].slot("C"),
+        source_layout.slot("H"),
+    )
+    assert skip_hop.to_mask().tolist() == expected.tolist()
+    assert len(skip_hop.source_index) == 3 * 4 + 2 * 4
+    assert skip_hop.to_mask().sum().item() == 20.0
 
 
 def test_build_skips_records_the_block_start():

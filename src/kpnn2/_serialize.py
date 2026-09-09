@@ -5,12 +5,13 @@ tagged dicts, and fingerprints.
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
+from ._layout import build_layout, concat_layouts
 from ._spec import LayeredSpec
 
 _SPEC_VERSION = 1
@@ -114,6 +115,8 @@ def spec_to_dict(
     Keys are ``kpnn2_spec`` (integer ``1``), ``layout``
     (``"layered"`` or ``"adjacency"``), and ``edges`` (list of
     ``[source, target]`` lists in ``canonical_edges`` order).
+    A ``LayeredSpec`` with any node wider than 1 also includes
+    ``"widths"``. Adjacency payloads never include ``"widths"``.
 
     Parameters
     ----------
@@ -134,11 +137,18 @@ def spec_to_dict(
     edges = [list(pair) for pair in canonical_edges(spec)]
     if isinstance(spec, LayeredSpec):
         layout = _LAYOUT_LAYERED
-    else:
-        layout = _LAYOUT_ADJACENCY
+        payload = {
+            "kpnn2_spec": _SPEC_VERSION,
+            "layout": layout,
+            "edges": edges,
+        }
+        widths = _layered_widths_payload(spec)
+        if widths:
+            payload["widths"] = widths
+        return payload
     return {
         "kpnn2_spec": _SPEC_VERSION,
-        "layout": layout,
+        "layout": _LAYOUT_ADJACENCY,
         "edges": edges,
     }
 
@@ -183,7 +193,8 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
     Rebuild a ``LayeredSpec`` by parsing ``payload["edges"]``.
 
     Calls ``parse_layered`` on a DataFrame built from the tagged
-    dict. Extra keys are ignored.
+    dict, passing ``payload["widths"]`` when present. Extra
+    unknown keys are ignored.
 
     Parameters
     ----------
@@ -208,7 +219,11 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
         payload,
         expected_layout=_LAYOUT_LAYERED,
     )
-    return parse_layered(table)
+    widths = _widths_from_payload(payload)
+    return parse_layered(
+        table,
+        widths=widths,
+    )
 
 
 def adjacency_spec_from_dict(payload: object) -> AdjacencySpec:
@@ -303,21 +318,73 @@ def _pairs_from_edges(edges: object) -> list[list[str]]:
     return pairs
 
 
+def _layered_widths_payload(spec: LayeredSpec) -> dict[str, int]:
+    """Node name -> width for every node whose width is not 1."""
+    widths: dict[str, int] = {}
+    for names, sizes in zip(
+        spec.layer_nodes,
+        spec.layer_widths,
+        strict=True,
+    ):
+        for name, width in zip(
+            names,
+            sizes,
+            strict=True,
+        ):
+            if width != 1:
+                widths[name] = width
+    return widths
+
+
+def _widths_from_payload(payload: object) -> Mapping[str, int] | None:
+    """Read optional ``payload["widths"]``. Absent or empty is all 1."""
+    if not isinstance(payload, dict):
+        return None
+    if "widths" not in payload:
+        return None
+    widths = payload["widths"]
+    if widths is None:
+        return None
+    if not isinstance(widths, Mapping):
+        raise Kpnn2Error("'widths' must be a mapping of node name to int.")
+    if len(widths) == 0:
+        return None
+    return widths
+
+
 def _layered_edges(
     spec: LayeredSpec,
 ) -> tuple[tuple[str, str], ...]:
-    pairs: list[tuple[str, str]] = []
+    pairs: set[tuple[str, str]] = set()
     for hop in spec.hops:
-        target_names = spec.layer_nodes[hop.target_layer]
-        for source, target in zip(
+        source_layout = concat_layouts(
+            [
+                build_layout(
+                    spec.layer_nodes[layer],
+                    spec.layer_widths[layer],
+                )
+                for layer in hop.source_layers
+            ]
+        )
+        target_layout = build_layout(
+            spec.layer_nodes[hop.target_layer],
+            spec.layer_widths[hop.target_layer],
+        )
+        for source_unit, target_unit in zip(
             hop.source_index,
             hop.target_index,
             strict=True,
         ):
-            pairs.append(
+            source_name = source_layout.slot_containing(
+                source_unit,
+            ).name
+            target_name = target_layout.slot_containing(
+                target_unit,
+            ).name
+            pairs.add(
                 (
-                    hop.source_nodes[source],
-                    target_names[target],
+                    source_name,
+                    target_name,
                 )
             )
     return tuple(sorted(pairs))

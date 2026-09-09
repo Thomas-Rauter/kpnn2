@@ -37,6 +37,8 @@ def test_layered_spec_sequences_are_tuples():
     assert isinstance(spec.input_nodes, tuple)
     assert isinstance(spec.layer_nodes, tuple)
     assert isinstance(spec.layer_nodes[0], tuple)
+    assert isinstance(spec.layer_widths, tuple)
+    assert isinstance(spec.layer_widths[0], tuple)
     assert isinstance(spec.hops, tuple)
     assert isinstance(spec.skips, tuple)
     for hop in spec.hops:
@@ -105,6 +107,8 @@ def test_layered_spec_deepcopy_independent_hops():
     assert copied is not spec
     assert copied.input_nodes == spec.input_nodes
     assert copied.layer_nodes == spec.layer_nodes
+    assert copied.layer_widths == spec.layer_widths
+    assert copied.layer_dims == spec.layer_dims
     assert len(copied.hops) == len(spec.hops)
     for original, duplicate in zip(
         spec.hops,

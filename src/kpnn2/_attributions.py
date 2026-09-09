@@ -43,9 +43,9 @@ def map_node_attributions(
         Scores exactly as the attribution method produced them, in
         whatever units it works in; nothing is scaled, summed, or
         made absolute. The node axis must be as long as the named
-        units — ``len(spec.layer_nodes[layer])`` for a
-        ``LayeredSpec``, ``len(spec.nodes)`` for an
-        ``AdjacencySpec`` — and the remaining axes are yours. A
+        units — ``spec.layer_dims[layer]`` for a ``LayeredSpec``,
+        ``len(spec.nodes)`` for an ``AdjacencySpec`` — and the
+        remaining axes are yours. A
         non-empty tuple or list of equal-shaped tensors is stacked
         on a new leading ``step`` axis, one entry per unrolled step
         or module call. The tensors are read, never modified, and
@@ -79,9 +79,10 @@ def map_node_attributions(
     -------
     xarray.DataArray
         The values and shape of the (stacked) tensor, carrying the
-        spec's node names as the ``node`` coordinate in spec order,
-        and a scalar ``layer`` coordinate when a ``LayeredSpec``
-        was passed. Use
+        spec's node names as the ``node`` coordinate in spec order
+        (a name repeats once per unit when that node is wider
+        than 1), and a scalar ``layer`` coordinate when a
+        ``LayeredSpec`` was passed. Use
         ``.to_dataframe(name="score").reset_index()`` for a long
         table, or ``.to_pandas()`` for a 2-D wide table.
 
@@ -236,7 +237,10 @@ def _resolve_node_layout(
             raise Kpnn2Error(
                 f"'layer' must be in range [0, {n_layers}). Got {layer}."
             )
-        return build_layout(spec.layer_nodes[layer]), layer
+        return build_layout(
+            spec.layer_nodes[layer],
+            spec.layer_widths[layer],
+        ), layer
     if isinstance(spec, AdjacencySpec):
         if layer is not None:
             raise Kpnn2Error(

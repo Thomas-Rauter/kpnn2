@@ -388,7 +388,114 @@ def test_from_dict_helpers_call_parsers():
     fingerprint_src = inspect.getsource(serialize_mod.spec_fingerprint)
 
     assert "from ._parse import parse_layered" in layered_src
-    assert "parse_layered(table)" in layered_src
+    assert "parse_layered(" in layered_src
+    assert "widths=widths" in layered_src
     assert "from ._parse_adjacency import parse_adjacency" in adjacency_src
     assert "parse_adjacency(table)" in adjacency_src
     assert "hashlib.sha256" in fingerprint_src
+
+
+def test_width_one_payload_omits_widths_and_matches_three_key_digest():
+    spec = parse_layered(_chain_edgelist())
+    payload = spec.to_dict()
+    expected = {
+        "kpnn2_spec": 1,
+        "layout": "layered",
+        "edges": [["A", "H"], ["H", "C"]],
+    }
+    assert payload == expected
+    assert "widths" not in payload
+    digest = hashlib.sha256(
+        json.dumps(
+            expected,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    assert spec.fingerprint == digest
+
+    skip_spec = parse_layered(_skip_edgelist())
+    skip_payload = skip_spec.to_dict()
+    assert "widths" not in skip_payload
+    assert skip_payload["kpnn2_spec"] == 1
+    assert skip_payload["layout"] == "layered"
+    assert skip_payload["edges"] == [
+        ["A", "C"],
+        ["A", "H"],
+        ["H", "C"],
+    ]
+
+
+def test_wide_payload_includes_non_one_widths_only():
+    spec = parse_layered(
+        _chain_edgelist(),
+        widths={"H": 3, "C": 2},
+    )
+    payload = spec.to_dict()
+    assert payload["kpnn2_spec"] == 1
+    assert payload["widths"] == {
+        "H": 3,
+        "C": 2,
+    }
+    assert "A" not in payload["widths"]
+    roundtrip = LayeredSpec.from_dict(payload)
+    _assert_layered_structure(
+        spec,
+        roundtrip,
+    )
+    changed = parse_layered(
+        _chain_edgelist(),
+        widths={"H": 4, "C": 2},
+    )
+    assert changed.fingerprint != spec.fingerprint
+    default = parse_layered(_chain_edgelist())
+    assert default.fingerprint != spec.fingerprint
+
+
+def test_from_dict_of_old_three_key_payload_is_width_one():
+    payload = {
+        "kpnn2_spec": 1,
+        "layout": "layered",
+        "edges": [["A", "H"], ["H", "C"]],
+    }
+    spec = LayeredSpec.from_dict(payload)
+    assert spec.layer_widths == ((1,), (1,), (1,))
+    assert spec.layer_dims == (1, 1, 1)
+    assert spec.fingerprint == parse_layered(_chain_edgelist()).fingerprint
+
+
+def test_from_dict_rejects_invalid_widths():
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    payload["widths"] = ["H"]
+    with pytest.raises(
+        Kpnn2Error,
+        match="mapping of node name",
+    ):
+        LayeredSpec.from_dict(payload)
+
+    payload["widths"] = {"H": 0}
+    with pytest.raises(
+        Kpnn2Error,
+        match="positive int",
+    ):
+        LayeredSpec.from_dict(payload)
+
+    payload["widths"] = {"missing": 2}
+    with pytest.raises(
+        Kpnn2Error,
+        match="Unknown node name",
+    ):
+        LayeredSpec.from_dict(payload)
+
+
+def test_adjacency_from_dict_ignores_stray_widths():
+    spec = parse_adjacency(_cycle_edgelist())
+    payload = spec.to_dict()
+    payload["widths"] = {"x": 3}
+    roundtrip = AdjacencySpec.from_dict(payload)
+    _assert_adjacency_structure(
+        spec,
+        roundtrip,
+    )
+    assert "widths" not in spec.to_dict()

@@ -79,18 +79,23 @@ this package unless a later prompt asks.
 
 1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
    `source` and `target` only, validates a layered DAG, and returns a
-   `LayeredSpec`. `parse_adjacency()` reads the same table and
+   `LayeredSpec`. Optional keyword-only `widths=` gives a named node
+   several units (DCell-style); omitted or `None` is width 1.
+   `parse_adjacency()` reads the same table and
    returns an `AdjacencySpec` instead: packed source/target indices
    over every node, cycles and self-loops allowed. It never
-   allocates an `(n, n)` tensor. The user picks the layout; a DAG
+   allocates an `(n, n)` tensor and has no `widths=` argument. The
+   user picks the layout; a DAG
    is valid input to both.
-2. **Specify:** `LayeredSpec` holds named nodes by layer and one
-   `Hop` per layer after the first. A hop's packed indices carry
-   **every** edge entering its layer, skips included. There is no
+2. **Specify:** `LayeredSpec` holds named nodes by layer, per-node
+   widths, and one `Hop` per layer after the first. A hop's packed
+   indices are in **unit** space: a named edge `A→B` expands into
+   a `(k_B × k_A)` block of live pairs, skips included. There is no
    stored mask; `Hop.to_mask()` allocates. `AdjacencySpec` holds
    all node names, packed edge indices, and the input/output
    positions in the state vector. Neither constructs an
-   `nn.Module`.
+   `nn.Module`. Packed adjacency indices remain one pair per
+   named edge.
 3. **Build:** The user writes a PyTorch `nn.Module` using one
    `PackedLinear(hop.source_index, hop.target_index,
    hop.out_features, hop.in_features)` per hop,
@@ -239,7 +244,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 
 | Symbol | Role |
 |--------|------|
-| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only) |
+| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only; optional `widths=`) |
 | `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed) |
 | `LayeredSpec` | Frozen structural dataclass (layers, packed hops, skip metadata) |
 | `Hop` | One layer's incoming packed edges; exported because `spec.hops` uses it |
@@ -371,6 +376,24 @@ node names, sorted alphabetically and comma-separated.
 Isolated nodes cannot appear: the node set is the union of `source`
 and `target` values only.
 
+### `parse_layered(..., widths=)`
+
+```python
+parse_layered(
+    edgelist: pd.DataFrame,
+    *,
+    widths: Mapping[str, int] | None = None,
+) -> LayeredSpec
+```
+
+`widths=None` or omitted: every node is 1. Missing names in the
+mapping default to 1. Unknown names (after `str(...)`) raise
+`Kpnn2Error`, unique names sorted, comma-separated. Values must
+be positive ints. Reject `bool` (`bool` is an `int`). Reject 0
+and negatives. `Kpnn2Error`.
+
+Do **not** add `widths=` to `parse_adjacency`.
+
 ---
 
 ## `LayeredSpec` fields
@@ -387,8 +410,9 @@ index tuples; two `Hop.to_mask()` results do not share storage.
 | `input_nodes` | `tuple[str, ...]` | In-degree 0 nodes, alphabetical. Tensor column order. |
 | `output_nodes` | `tuple[str, ...]` | Out-degree 0 nodes, alphabetical. |
 | `hidden_nodes` | `tuple[str, ...]` | Neither input nor output, alphabetical. |
-| `layer_nodes` | `tuple[tuple[str, ...], ...]` | `layer_nodes[i]` = names at depth `i`, alphabetical. Index 0 is the first layer. |
-| `layer_dims` | `tuple[int, ...]` | `layer_dims[i] == len(layer_nodes[i])`. |
+| `layer_nodes` | `tuple[tuple[str, ...], ...]` | `layer_nodes[i]` = names at depth `i`, alphabetical. Index 0 is the first layer. One name per node. |
+| `layer_dims` | `tuple[int, ...]` | Unit count of depth `i`: `layer_dims[i] == sum(layer_widths[i])`. Equals `len(layer_nodes[i])` only when every node at that depth has width 1. |
+| `layer_widths` | `tuple[tuple[int, ...], ...]` | `layer_widths[i][j]` is the width of `layer_nodes[i][j]`. Default parse is 1 for every node. |
 | `hops` | `tuple[Hop, ...]` | One incoming packed hop per layer after the first (see below). |
 | `skips` | `tuple[Skip, ...]` | Skip edges with depth gap `> 1`, as metadata (see below). |
 
@@ -404,10 +428,10 @@ layer. There is no second mechanism for edges that span layers.
 | `target_layer` | `int` | Depth this hop produces; `>= 1` |
 | `source_layers` | `tuple[int, ...]` | Depths it reads, ascending, all `< target_layer` |
 | `source_dims` | `tuple[int, ...]` | Units per entry of `source_layers`; sums to `in_features` |
-| `source_nodes` | `tuple[str, ...]` | Node names of the concatenated source axis |
+| `source_nodes` | `tuple[str, ...]` | Node names of the concatenated source axis, **one name per node**, not per unit. When any source node has `k>1`, `len(source_nodes) != hop.in_features`. |
 | `target_dim` | `int` | Units in the target layer; equal to `out_features` |
-| `source_index` | `tuple[int, ...]` | Concat-column of each live edge (see below) |
-| `target_index` | `tuple[int, ...]` | Target-layer row of each live edge |
+| `source_index` | `tuple[int, ...]` | Concat-column of each live **unit** pair (see below) |
+| `target_index` | `tuple[int, ...]` | Target-layer row of each live **unit** pair |
 
 `Hop.column_offsets` is a derived property: the first source
 column of each entry of `source_layers`. `in_features` is
@@ -424,16 +448,17 @@ column of each entry of `source_layers`. `in_features` is
 - A graph with no skip edges gives every hop a single source
   layer, and then `hops[i]` is the plain adjacent hop from
   layer `i` to layer `i+1`.
-- `source_index` and `target_index` have the same length as the
-  number of original edges entering that layer. Order is
-  canonical: lexicographic by `(source name, target name)`.
-  A dense rectangle would have `1.0` at
-  `[target_index[i], source_index[i]]`.
-- **Every edgelist edge is a packed pair in exactly one hop**,
-  the one of its target layer. Summing the pair counts over all
-  hops gives the edge count. This invariant is what makes an
-  edge impossible to drop silently: applying a hop applies all
-  of its target's parents at once.
+- `source_index` and `target_index` address **units**. Named
+  edges are canonical lexicographic by `(source name, target
+  name)`; within one named edge `A→B` every unit pair of the
+  `(k_B × k_A)` block is emitted, target-unit outer, source-unit
+  inner, matching `fill_block`. At width 1 that is one pair per
+  named edge, same order as before. A dense rectangle would have
+  `1.0` at `[target_index[i], source_index[i]]`.
+- **Every named edgelist edge belongs to exactly one hop**, the
+  one of its target layer. Packed `nnz` for a hop is the sum over
+  those named edges of `(k_source * k_target)`. Applying a hop
+  applies all of its target's parents at once.
 - Because a hop carries every parent, the per-row degree
   `PackedLinear` and `MaskedLinear` initialize from is the
   unit's real fan-in, skips included.
@@ -450,7 +475,7 @@ column of each entry of `source_layers`. `in_features` is
 ### `Skip` records
 
 Each skip is a frozen dataclass `Skip`. It is **metadata only**:
-the edge itself is already a packed pair in
+the edge itself is already a block of packed unit pairs in
 `hops[target_layer - 1]`, exactly like an adjacent edge.
 Read `skips` to report or inspect which prior-knowledge edges
 span layers; nothing in a forward pass needs it.
@@ -461,13 +486,16 @@ span layers; nothing in a forward pass needs it.
 | `target` | `str` | Target node name |
 | `source_layer` | `int` | Depth of `source` |
 | `target_layer` | `int` | Depth of `target`; `target_layer - source_layer > 1` |
-| `source_in_layer` | `int` | Index of `source` in `layer_nodes[source_layer]` |
-| `target_in_layer` | `int` | Index of `target` in `layer_nodes[target_layer]` |
+| `source_in_layer` | `int` | First unit of `source` in its layer (block start). At width 1 this equals the node's index in `layer_nodes[source_layer]`. |
+| `target_in_layer` | `int` | First unit of `target` in its layer (block start). At width 1 this equals the node's index in `layer_nodes[target_layer]`. |
 
 Every original edgelist edge with depth gap `> 1` appears once in
-`skips`. Adjacent edges (gap `== 1`) never appear in `skips`.
+`skips` (one metadata record per named edge, not per unit pair).
+Adjacent edges (gap `== 1`) never appear in `skips`.
 Membership in `skips` changes nothing about how the edge is
-computed.
+computed. Locating the skip among packed indices means every
+unit pair in that block is live, not a single `(column, row)`
+pair.
 
 ### `LayeredSpec.to_edgelist()`
 
@@ -483,10 +511,15 @@ strings. This is **not** the original parse input order, and
 extra columns from the pre-parse DataFrame are not
 reproduced.
 
-`parse_layered(spec.to_edgelist())` reconstructs the same
-`input_nodes`, `output_nodes`, `hidden_nodes`, `layer_nodes`,
-`layer_dims`, hop `source_layers` / `source_dims` /
-`source_nodes`, and packed hop indices. Skip *tuple* order may
+`parse_layered(spec.to_edgelist())` without `widths=` reconstructs
+the same `input_nodes`, `output_nodes`, `hidden_nodes`,
+`layer_nodes`, `layer_dims`, hop `source_layers` / `source_dims` /
+`source_nodes`, and packed hop indices **when every node has
+width 1**. Widths live on the spec dict, not the edgelist:
+`parse_layered(spec.to_edgelist())` is not the same spec if the
+original had `k>1`. Round-trip those graphs with
+`LayeredSpec.from_dict` or `parse_layered(..., widths=)`.
+Skip *tuple* order may
 follow the sorted edgelist rather than the original parse
 input; the skip *set* of `(source, target, source_layer,
 target_layer, source_in_layer, target_in_layer)` matches.
@@ -498,9 +531,9 @@ target_layer, source_in_layer, target_in_layer)` matches.
 A skip `A → H2` that jumps one or more layers is the source
 being an extra parent of the target. It is **not** a dummy
 channel, **not** a separate module, and **not** a learnable
-scalar added after the fact. It is a packed pair of
-`hops[target_layer - 1]`, and its weight is an ordinary
-entry of that layer's `PackedLinear` (or `MaskedLinear`).
+scalar added after the fact. It is a block of packed unit pairs
+of `hops[target_layer - 1]`, and its weights are ordinary
+entries of that layer's `PackedLinear` (or `MaskedLinear`).
 
 The consequences are the point of this design:
 
@@ -684,17 +717,35 @@ digest = spec.fingerprint
 }
 ```
 
+When every layered node has width 1, emit exactly those three
+keys. Do **not** emit `"widths"`. Then
+`parse_layered(edgelist).fingerprint` is unchanged from width-1
+graphs. When any node has width other than 1, also emit:
+
+```python
+"widths": {"H": 3, "C": 2}
+```
+
+JSON object, node name → int. Include only nodes whose width is
+not 1 (missing means 1). `json.dumps(..., sort_keys=True)` makes
+this fingerprint-stable. Never emit `"widths"` for an
+`AdjacencySpec`.
+
 | Key | Value |
 |-----|--------|
 | `kpnn2_spec` | Integer `1` (schema version). |
 | `layout` | `"layered"` for `LayeredSpec`, `"adjacency"` for `AdjacencySpec`. Must not be omitted. |
-| `edges` | List of `[source, target]` lists (JSON-safe, not tuples), same order as `to_edgelist()` rows / `canonical_edges`. |
+| `edges` | List of `[source, target]` lists (JSON-safe, not tuples), same order as `to_edgelist()` rows / `canonical_edges`. One row per **named** edge, not per unit pair. |
+| `widths` | Optional. Layered only. Node name → int for nodes whose width is not 1. |
 
 Unknown extra keys on an otherwise valid payload are ignored
-(forward compatible). `to_dict()` does not emit extra keys.
+(forward compatible). A stray `"widths"` key on an adjacency
+payload is ignored like any extra key.
 
 `LayeredSpec.from_dict(payload)` calls `parse_layered` on a
-DataFrame built from `payload["edges"]`.
+DataFrame built from `payload["edges"]`, passing
+`payload["widths"]` when present. Absent or empty `"widths"` is
+all 1. Invalid type or values raise `Kpnn2Error`.
 `AdjacencySpec.from_dict` calls `parse_adjacency`. Hops and
 masks are not hand-rebuilt. A layout mismatch (an adjacency
 dict into `LayeredSpec.from_dict`, or the reverse) raises
@@ -704,17 +755,19 @@ dict into `LayeredSpec.from_dict`, or the reverse) raises
 dict; `kpnn2_spec` is missing or not `1`; `layout` is missing
 or not `"layered"` / `"adjacency"`; `edges` is missing, is not
 a sequence of pairs, or a pair is not two nonempty
-string-convertible names.
+string-convertible names; or layered `"widths"` is present and
+not a mapping of positive ints.
 
 `fingerprint` is a property: the SHA-256 hex digest (64
 lowercase hex characters) of
 `json.dumps(spec.to_dict(), sort_keys=True, separators=(",", ":"),
 ensure_ascii=False).encode("utf-8")`. Do not use Python
 `hash()`. `parse_layered(edgelist).fingerprint` equals
-`parse_layered(spec.to_edgelist()).fingerprint`. The same DAG
-parsed layered vs adjacency yields different fingerprints
-because `layout` differs. Adding, removing, or renaming a
-node, or changing an edge, changes the fingerprint.
+`parse_layered(spec.to_edgelist()).fingerprint` when every
+width is 1. The same DAG parsed layered vs adjacency yields
+different fingerprints because `layout` differs. Adding,
+removing, or renaming a node, changing an edge, or changing a
+layered width changes the fingerprint.
 
 These three names are methods / a property on the spec
 classes. They are not package-level exports. There is no
@@ -1212,20 +1265,24 @@ would reintroduce a second place for edge weights to live.
 identical for both. Anything else raises `Kpnn2Error`.
 
 Returns `torch.float32` tensor of shape
-`(n_samples, len(spec.input_nodes))`. The tensor is dense and
+`(n_samples, width)`. The tensor is dense and
 lives on CPU. This function materializes **every row** of the
 DataFrame. It is not a minibatch API, not a device-copy
 helper, and not the sparse-host path. See **Locked
 contrasts**.
 
 **Width differs by layout.** For a `LayeredSpec` that width is
-`layer_dims[0]`, and `hops[0]` reads layer 0 alone, so the tensor
+`layer_dims[0]` (the unit width of layer 0), not
+`len(input_nodes)` when an input node is wider than 1.
+`hops[0]` reads layer 0 alone, so the tensor
 feeds `PackedLinear` on `hops[0]` (or
 `MaskedLinear(spec.hops[0].to_mask())`) directly with no
-gathering. For an `AdjacencySpec` it is **not** the state width:
-`to_mask()` is `(n, n)` over every node, while the aligned tensor
-is only `len(input_nodes)` wide. Scatter it into the `n`-wide
-state vector via `spec.input_index` before calling
+gathering. The DataFrame still has one column per input
+**node**; `expand_columns` repeats a column across that node's
+units. For an `AdjacencySpec` the width is **not** the state
+width: `to_mask()` is `(n, n)` over every node, while the
+aligned tensor is only `len(input_nodes)` wide. Scatter it into
+the `n`-wide state vector via `spec.input_index` before calling
 `MaskedLinear(spec.to_mask())`:
 
 ```python
@@ -1277,7 +1334,7 @@ optional. The four combinations are exhaustive:
 
 | Spec | `layer` | Result |
 |------|---------|--------|
-| `LayeredSpec` | `int` | Names from `layer_nodes[layer]`; scalar `layer` coordinate attached |
+| `LayeredSpec` | `int` | Names from `unit_names` of that layer (a wide node's name repeats); scalar `layer` coordinate attached |
 | `LayeredSpec` | omitted | `Kpnn2Error`: `layer` is required |
 | `AdjacencySpec` | omitted | Names from `spec.nodes`; **no** `layer` coordinate |
 | `AdjacencySpec` | `int` | `Kpnn2Error`: `layer` does not apply |
@@ -1290,9 +1347,11 @@ report and none is invented. Do not fabricate `layer=0` for it.
 - `layer`: `int` index into `spec.layer_nodes` (0-based), stored as
   scalar coordinate `layer`. `LayeredSpec` only.
 - The `node` axis length must equal the number of named units:
-  `len(spec.layer_nodes[layer])` for a `LayeredSpec`,
-  `len(spec.nodes)` for an `AdjacencySpec`. That axis gets those
-  names as its coordinate, in order.
+  `spec.layer_dims[layer]` for a `LayeredSpec` (names from
+  `layout.unit_names()`, so a wide node's name repeats `k`
+  times; do not aggregate), `len(spec.nodes)` for an
+  `AdjacencySpec`. That axis gets those names as its coordinate,
+  in order.
 - Default dims: 1-D → `(node,)`; 2-D → `(observation, node)`; a
   stacked sequence of 2-D tensors → `(step, observation, node)`.
   Rank 3+ (except that stacked default) requires `dims=` containing
@@ -1324,43 +1383,54 @@ unrolled step as a sequence and they stack onto
 position on a tensor axis. Nothing else in `src/` computes a
 column index by hand.
 
-- A node owns a **contiguous slice** of units (`NodeSlot`), not a
-  single column. `DEFAULT_NODE_WIDTH` is `1`, so every slice has
-  width 1, `slot.start` is the node's column index, and every
-  shape documented above is unchanged.
+**Layered width is public.** `parse_layered(..., widths=)` sets
+per-node unit counts on a `LayeredSpec`. `layer_widths` stores
+them next to `layer_nodes`. Default `k=1` leaves every existing
+edgelist, fingerprint, hop index tuple, and tutorial numerically
+identical.
+
+**Adjacency width is not.** `parse_adjacency` has no `widths=`
+argument. Packed adjacency indices remain one pair per named
+edge / block start. Do not implement adjacency width.
+
+- A node owns a **contiguous slice** of units (`NodeSlot`).
+  Default width is `DEFAULT_NODE_WIDTH == 1`. With `widths=`, a
+  node may own `k>1` units.
 - A `Layout` places the nodes of one axis in order without gaps.
   `layout.n_units` is that axis length. `layer_dims[i]` and the
-  `to_mask()` axis length come from `n_units`, not from
+  hop `to_mask()` axis length come from `n_units`, not from
   `len(names)`.
 - A hop's column axis is `concat_layouts` of its source layers'
   layouts, so a source node's block on that axis is its own
   block shifted by the widths in front of it. `source_dims` and
   `Hop.column_offsets` come from the same widths.
-- `Hop.source_index` / `target_index` store `slot.start` (the
-  block start) for each original edge entering that hop, in
-  concat-column space. `Hop.to_mask()` writes `1.0` at each
-  `[target_index[i], source_index[i]]`.
+  `Hop.source_nodes` stays one name per node.
+- `Hop.source_index` / `target_index` store **every unit pair**
+  of each named edge entering that hop (`iter_block_pairs`,
+  target-unit outer, source-unit inner). `Hop.to_mask()` writes
+  `1.0` at each `[target_index[i], source_index[i]]`, matching
+  `fill_block`. Reconstruct named edges with
+  `Layout.slot_containing(unit)`, never by indexing
+  `source_nodes` with a unit index.
 - `AdjacencySpec.source_index` / `target_index` store
   `layout.start_of` (the block start) for each original edge.
   `to_mask()` writes `1.0` at each
   `[target_index[i], source_index[i]]`.
 - `Skip.source_in_layer` and `Skip.target_in_layer` store a
-  **block start** inside their own layer.
-- `fill_block` remains the helper that would mark a full
-  `(target.width, source.width)` block in a dense mask. Packed
-  hop indices at width 1 are one pair per original edge.
-- `align_inputs` passes its ordered columns through
-  `expand_columns`, a no-op at width 1.
-- `map_node_attributions` takes the node-axis length from
-  `layout.n_units` and the coordinate from `layout.unit_names()`.
+  **block start** inside their own layer. One `Skip` per named
+  edge.
+- `align_inputs` builds a `LayeredSpec` layout from
+  `input_nodes` plus `layer_widths[0]` and passes columns
+  through `expand_columns`. An `AdjacencySpec` still uses
+  `build_layout(names)` at width 1.
+- `map_node_attributions` on a `LayeredSpec` uses
+  `build_layout(layer_nodes[layer], layer_widths[layer])`. The
+  node axis length is `n_units`; the coordinate is
+  `layout.unit_names()`. An `AdjacencySpec` still uses
+  `build_layout(names)` with no widths.
 
-This is a **hedge, not a feature.** There is no public node width
-and no way for a user to request one; do not add either unless a
-later prompt asks. The point is that adding node width later
-means handing `build_layout` real widths, instead of rewriting
-index arithmetic in five modules at once. Keep it that way: new
-code asks a `Layout` for a slot instead of using `list.index()`
-or `enumerate` positions.
+New code asks a `Layout` for a slot instead of using
+`list.index()` or `enumerate` positions.
 
 ---
 
@@ -1435,8 +1505,8 @@ da = kpnn2.map_node_attributions(
 ```
 
 Every edge, including `A → C` when that row is present, is
-already a packed pair of some hop. The loop applies each hop
-once, so nothing has to be remembered per skip edge.
+already a packed unit-pair block of some hop. The loop applies
+each hop once, so nothing has to be remembered per skip edge.
 
 That snippet is the dense-DataFrame path: `align_inputs`
 materializes the whole table on CPU. A caller who already has
@@ -1732,19 +1802,21 @@ itself justify a changelog line.
   user owns the `saved` dict, call order, and nonlinearities.
 - Do **not** reintroduce a skip module, a per-skip parameter, or
   any second place where an edge weight can live. A skip edge is
-  a packed pair of its target's hop; that is what makes the edge
-  count, the fan-in, and the "no silently dropped edge"
-  guarantee hold. `SkipAdd` existed until 0.1.0 and was removed
-  for exactly these reasons: it could be forgotten at a call
-  site without any error, its per-edge scalar left skip parents
-  out of the degree-aware init, it allocated one batch-sized
-  temporary per skip edge, and its single scalar could not
-  generalize to node width.
-- One graph node is one unit in v1 (no public node width). Keep
-  index arithmetic in `_layout.py`: build a `Layout`, ask it for
-  slots, and store packed `start_of` indices. `fill_block` and
-  `dense_mask_from_indices` densify when asked. See "Internal
-  unit layout".
+  a block of packed unit pairs of its target's hop; that is what
+  makes the edge count, the fan-in, and the "no silently dropped
+  edge" guarantee hold. `SkipAdd` existed until 0.1.0 and was
+  removed for exactly these reasons: it could be forgotten at a
+  call site without any error, its per-edge scalar left skip
+  parents out of the degree-aware init, it allocated one
+  batch-sized temporary per skip edge, and its single scalar
+  could not generalize to node width.
+- Layered node width is public on `parse_layered(..., widths=)`
+  only. Store `layer_widths` on `LayeredSpec`. Packed hop indices
+  are units; `source_nodes` stays one name per node. Keep index
+  arithmetic in `_layout.py`: build a `Layout`, ask it for slots,
+  expand named edges with `iter_block_pairs`, and map a unit
+  index back with `slot_containing`. Do **not** add `widths=` to
+  `parse_adjacency`. See "Internal unit layout".
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the
   `dev` extra. Do not use a global `ruff` on `PATH`.

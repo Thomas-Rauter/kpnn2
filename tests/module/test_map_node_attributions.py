@@ -517,3 +517,38 @@ def test_map_node_attributions_spec_error_names_both_spec_types():
     message = str(caught.value)
     assert "LayeredSpec" in message
     assert "AdjacencySpec" in message
+
+
+def test_map_node_attributions_repeats_wide_layered_names():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "H"],
+            "target": ["H", "C"],
+        }
+    )
+    spec = parse_layered(
+        edgelist,
+        widths={"H": 3},
+    )
+    scores = torch.tensor(
+        [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+        ]
+    )
+    da = map_node_attributions(
+        scores,
+        spec,
+        1,
+    )
+    assert da["node"].values.tolist() == ["H", "H", "H"]
+    assert da.shape[-1] == spec.layer_dims[1]
+    with pytest.raises(
+        Kpnn2Error,
+        match="wrong number of units",
+    ):
+        map_node_attributions(
+            torch.zeros(2, 1),
+            spec,
+            1,
+        )

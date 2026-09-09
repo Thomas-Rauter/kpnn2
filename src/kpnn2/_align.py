@@ -23,15 +23,18 @@ def align_inputs(
     spec: LayeredSpec | AdjacencySpec,
 ) -> torch.Tensor:
     """
-    Return a float32 tensor whose columns follow ``spec.input_nodes``.
+    Return a float32 tensor of spec input units.
 
     Feature-table column labels rarely match the input-node order
     the parsed edgelist fixes; the returned tensor puts them in
-    that order, so column ``i`` is ``spec.input_nodes[i]``. Call
-    it after parsing, before the model's first layer, instead of
-    hand-ordering columns. Every row is materialized as one dense
-    CPU tensor; it is not a minibatch or device helper, and
-    tensors are rejected.
+    that order. For a ``LayeredSpec``, a node with width greater
+    than 1 repeats its column across those units, so the tensor
+    width is ``spec.layer_dims[0]``. For an ``AdjacencySpec`` the
+    width is ``len(spec.input_nodes)``. Call it after parsing,
+    before the model's first layer, instead of hand-ordering
+    columns. Every row is materialized as one dense CPU tensor;
+    it is not a minibatch or device helper, and tensors are
+    rejected.
 
     Parameters
     ----------
@@ -48,17 +51,18 @@ def align_inputs(
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
-        column set and the output column order. Only that field
-        is read, so the two layouts behave identically here.
+        DataFrame columns and their order. A ``LayeredSpec``
+        also uses ``layer_widths[0]`` to expand columns.
 
     Returns
     -------
     torch.Tensor
-        Dense ``float32`` CPU tensor of shape
-        ``(n_samples, len(spec.input_nodes))``, column ``i``
-        holding the values of node ``spec.input_nodes[i]``. A
-        DataFrame with no rows gives a ``(0, len(input_nodes))``
-        tensor rather than an error.
+        Dense ``float32`` CPU tensor. Shape is
+        ``(n_samples, spec.layer_dims[0])`` for a
+        ``LayeredSpec`` and
+        ``(n_samples, len(spec.input_nodes))`` for an
+        ``AdjacencySpec``. A DataFrame with no rows gives a
+        ``(0, width)`` tensor rather than an error.
 
     Raises
     ------
@@ -91,13 +95,15 @@ def align_inputs(
     host matrix is column-aligned by the caller and densified one
     row block at a time, never through here.
 
-    The returned width is always ``len(spec.input_nodes)``. For a
-    ``LayeredSpec`` that is ``hops[0].in_features``, whose
-    only source layer is layer 0, so the tensor feeds the first
-    hop directly and needs no gathering. For an ``AdjacencySpec``
-    it is **not** the state width: scatter the tensor into the
-    ``len(spec.nodes)``-wide state vector with ``spec.input_index``
-    before calling ``MaskedLinear(spec.to_mask())``.
+    The returned width for a ``LayeredSpec`` is
+    ``spec.layer_dims[0]``, which equals
+    ``len(spec.input_nodes)`` only when every input node has
+    width 1. ``hops[0]`` reads layer 0 alone, so the tensor
+    feeds the first hop directly and needs no gathering. For an
+    ``AdjacencySpec`` it is **not** the state width: scatter the
+    tensor into the ``len(spec.nodes)``-wide state vector with
+    ``spec.input_index`` before calling
+    ``MaskedLinear(spec.to_mask())``.
 
     Examples
     --------
@@ -222,7 +228,13 @@ def _align_dataframe(
             f"{non_numeric_str}."
         )
 
-    layout = build_layout(spec.input_nodes)
+    if isinstance(spec, LayeredSpec):
+        layout = build_layout(
+            spec.input_nodes,
+            spec.layer_widths[0],
+        )
+    else:
+        layout = build_layout(spec.input_nodes)
     values = expand_columns(
         ordered.to_numpy(copy=True),
         layout,

@@ -91,6 +91,7 @@ def _assert_layered_structure(
     assert roundtrip.hidden_nodes == original.hidden_nodes
     assert roundtrip.layer_nodes == original.layer_nodes
     assert roundtrip.layer_dims == original.layer_dims
+    assert roundtrip.layer_widths == original.layer_widths
     assert len(roundtrip.hops) == len(original.hops)
     for original_hop, roundtrip_hop in zip(
         original.hops,
