@@ -242,10 +242,14 @@ whole source layers. A missing saved layer raises
 [`tests/module/test_gather_hop_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_gather_hop_inputs.py).
 
 **MaskedLinear.** A zero mask entry blocks that source in the
-forward pass and in the gradient. Optimizer steps leave
-blocked edges dead. Degree-aware init uses the row’s live
-count, not `in_features`. `torch.compile(..., fullgraph=True)`
-traces without a graph break.
+forward pass, in `layer.weight`, and in the gradient, even
+when another parametrization is stacked on `weight`.
+`constraint=` (an `nn.Module`, for example `nn.Softplus`)
+runs on the unconstrained tensor before that mask.
+Optimizer steps leave blocked edges dead. Degree-aware
+init uses the row’s live count, not `in_features`.
+`torch.compile(..., fullgraph=True)` traces without a
+graph break.
 [`tests/module/test_masked_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_masked_linear.py).
 
 **PackedLinear.** Same graph as `MaskedLinear(spec.to_mask())`

@@ -287,8 +287,9 @@ edgelist = pd.DataFrame(
 edge in the direction of computation (source feeds target).
 
 **No other columns are read.** Extra columns, if present, are ignored
-and must not change parsing. There is no `initial_weight` or
-`constraint` support.
+and must not change parsing. There is no `initial_weight` column
+and no edgelist `constraint` column. Per-edge maps belong on
+`MaskedLinear` / `PackedLinear` as `constraint=`.
 
 A spec returns this two-column form from `to_edgelist()`. Rows
 are sorted lexicographically by `(source, target)`, not the
@@ -728,7 +729,7 @@ Drop-in sparse linear layer. Same job as `torch.nn.Linear`
 (call as `layer(x)`); not a subclass. Not a full model.
 
 ```text
-MaskedLinear(mask, bias=True, *, identity=None)
+MaskedLinear(mask, bias=True, *, identity=None, constraint=None)
 ```
 
 - `mask`: `torch.Tensor`, shape `(out_features, in_features)`.
@@ -743,18 +744,35 @@ MaskedLinear(mask, bias=True, *, identity=None)
   match. A missing identity is not an error, even with
   `strict=True`. `None` means this layer does not claim
   an identity.
-- The mask is applied through
+- Optional `constraint`: `nn.Module` or `None`. A per-entry
+  map on the unconstrained weight, applied **before** the
+  mask. `nn.Softplus()` is the textbook non-negative edge
+  reparametrization. Must return a tensor of the same shape
+  as the unconstrained weight. `reset_parameters` writes
+  that unconstrained tensor; it does not invert this map.
+  `PackedLinear` takes the same argument. Do not add a
+  second class (`ConstrainedMaskedLinear`) and do not
+  read a `constraint` column from the edgelist.
+- The unconstrained tensor is stored through
   **`torch.nn.utils.parametrize.register_parametrization`** on
   the parameter named `weight`. That is the blessed PyTorch
   mechanism for "the effective weight is a function of a stored
   parameter". Do not replace it with a hand-rolled second
-  parameter name.
-- `layer.weight` is therefore the **effective masked weight**,
-  recomputed on access. It is not an `nn.Parameter`: in-place
-  writes to it are discarded. Assigning
-  (`layer.weight = w`, under `torch.no_grad()`) copies `w` into
-  the trainable tensor; the mask then hides the entries it
-  zeroes.
+  parameter name. Connectivity is **not** an inner
+  composable factor: `register_parametrization` appends, and
+  a later map that does not preserve zeros (for example
+  `softplus`) would resurrect blocked edges if the mask ran
+  first. The parametrization list therefore multiplies by
+  the mask **last**, so `layer.weight` and the forward pass
+  stay masked no matter what else is stacked. Do not shadow
+  `weight` with a plain property to achieve this.
+- `layer.weight` is therefore the **effective masked weight**
+  (constructor `constraint` if any, then any later maps,
+  then the mask), recomputed on access. It is not an
+  `nn.Parameter`: in-place writes to it are discarded.
+  Assigning (`layer.weight = w`, under `torch.no_grad()`)
+  copies `w` into the trainable tensor; the mask (and
+  `constraint`, if set) are applied on read.
 - The trainable tensor is
   `layer.parametrizations.weight.original`, same shape as
   `mask`. Masked-out entries may be nonzero there and never
@@ -763,6 +781,7 @@ MaskedLinear(mask, bias=True, *, identity=None)
   filter that uses `"weight" in name` matches it;
   `name.endswith(".weight")` does not. Do not describe this
   as "the usual `weight` name."
+- `layer.constraint` is the constructor module, or `None`.
 - `state_dict` keys are `parametrizations.weight.original`,
   optional `bias`, `mask_digest`, and `identity` when the
   constructor was given one. `mask` stays out: it remains a
@@ -806,14 +825,17 @@ MaskedLinear(mask, bias=True, *, identity=None)
   Parameters on the copy are distinct objects. Copied masks
   stay float32.
 - Forward multiplies in the parameter dtype:
-  `weight = original * mask.to(dtype=original.dtype,
-  device=original.device)`, then
+  `weight` is the effective tensor (constraint, then later
+  maps, then `mask.to(dtype=original.dtype,
+  device=original.device)`), then
   `Y = F.linear(X, weight, bias)`.
-  Equivalently `Y = X @ (W ⊙ M).T + b` with `M` cast to `W`'s
-  dtype/device. This is why `.half()` / bfloat16 / `.double()`
-  work like `nn.Linear`. In the common float32 case that `.to`
-  returns the buffer itself, so forward allocates nothing extra
-  for the mask. The multiply is **dense** on purpose.
+  Equivalently `Y = X @ (C(W) ⊙ M).T + b` with `C` the
+  constructor constraint (identity when omitted) and `M`
+  cast to `W`'s dtype/device. This is why `.half()` /
+  bfloat16 / `.double()` work like `nn.Linear`. In the
+  common float32 case that `.to` returns the buffer itself,
+  so forward allocates nothing extra for the mask. The
+  multiply is **dense** on purpose.
   `x` is an ordinary dense activation tensor, not a sparse
   host feature matrix. Sparse-tensor acceleration is not
   planned; see **Locked contrasts**.
@@ -832,9 +854,11 @@ MaskedLinear(mask, bias=True, *, identity=None)
   and which trained-tier seeds pass; those controls now test
   a pass rate over 30 seeds, not a 5-seed window.
 - Do **not** use full `in_features` as `fan_in`.
-- No edge constraints, no `initial_weight`, no softplus.
+- No edgelist `initial_weight` column. `constraint=` is the
+  supported per-entry map; do not stack `softplus` after the
+  mask yourself.
 - Masked-out weights still exist as parameters but are multiplied
-  by 0 in the forward pass.
+  by 0 in the effective weight and the forward pass.
 
 Typical construction:
 
@@ -863,6 +887,7 @@ PackedLinear(
     bias=True,
     *,
     identity=None,
+    constraint=None,
 )
 ```
 
@@ -882,9 +907,20 @@ PackedLinear(
   match. A missing identity is not an error, even with
   `strict=True`. `None` means this layer does not claim
   an identity.
+- Optional `constraint`: `nn.Module` or `None`. A per-entry
+  map on the packed `weight`, applied in `forward`.
+  `nn.Softplus()` is the textbook non-negative edge
+  reparametrization. Must return a tensor of shape `(nnz,)`.
+  There are no absent edges here, so this map cannot
+  resurrect a blocked cell. `reset_parameters` writes the
+  unconstrained packed tensor; it does not invert this map.
+  `MaskedLinear` takes the same argument. `layer.constraint`
+  is that module, or `None`. Still no `parametrize`.
 - `weight` is an `nn.Parameter` of shape `(nnz,)`. No
   `parametrize`. No dense `(out, in)` `layer.weight`.
-  The parameter name is `weight`.
+  The parameter name is `weight`. When `constraint` is set,
+  this tensor is unconstrained; `forward` uses
+  `constraint(weight)`.
 - Index buffers `source_index` and `target_index` are
   persistent so the module round-trips. They stay integer
   after `.half()` / bfloat16 / `.double()`; `weight` and
@@ -892,7 +928,8 @@ PackedLinear(
 - Forward, `x` shape `(..., in_features)`:
 
   ```text
-  contrib = x[..., source_index] * weight
+  live = constraint(weight) if constraint else weight
+  contrib = x[..., source_index] * live
   y = zeros(..., out_features)  # same batch dims, dtype, device
   y.index_add_(-1, target_index, contrib)
   if bias is not None:
@@ -1490,6 +1527,7 @@ src/kpnn2/
   _adjacency_spec.py          # AdjacencySpec
   _masked_linear.py           # MaskedLinear
   _packed_linear.py           # PackedLinear
+  _constraint.py              # constraint= validation for both linears
   _packed_multihead_attention.py  # PackedMultiheadAttention
   _gather.py                  # gather_hop_inputs
   _align.py                   # align_inputs
@@ -1607,7 +1645,10 @@ itself justify a changelog line.
   file wins after it exists.
 - Do not rename the package, import, or `src/kpnn2/` directory.
 - Do not reintroduce compilers, backends, pseudo nodes, Captum
-  adapters, edge constraints, or AnnData in v1.
+  adapters, or AnnData in v1. Do not add
+  `ConstrainedMaskedLinear`. Per-entry maps are
+  `constraint=` on `MaskedLinear` and `PackedLinear`. Do not
+  add an edgelist `constraint` column.
 - Two sparsity axes (see **Locked contrasts**). Graph
   connectivity is always dense compute in this package.
   Feature-matrix storage is the caller's. Do not collapse
@@ -1657,17 +1698,22 @@ itself justify a changelog line.
   PyTorch does not write-protect buffers either.
   `tests/module/test_masked_linear.py` keeps a `fullgraph`
   regression test.
-- `MaskedLinear` masks its weight with
+- `MaskedLinear` stores the unconstrained weight with
   `torch.nn.utils.parametrize`. The public attribute is
-  `weight` (effective, masked); the trainable tensor is
-  `parametrizations.weight.original`. `named_parameters` /
-  `state_dict` keys use that path, not `weight`. Do not
-  claim suffix-`.weight` filters or "the usual weight
-  name" see it. Do not reintroduce a second name such as
-  `raw_weight`, do not shadow `weight` with a plain
-  property, and do not make `MaskedLinear` a subclass of
-  `nn.Linear` (its `__init__` signature and its own
-  `reset_parameters` would fight ours).
+  `weight` (effective: constructor `constraint` if any,
+  then any later maps, then the mask). The trainable tensor
+  is `parametrizations.weight.original`. Connectivity is
+  applied last even if the caller stacks another
+  parametrization; do not let a later map resurrect blocked
+  edges. `named_parameters` / `state_dict` keys use that
+  path, not `weight`. Do not claim suffix-`.weight` filters
+  or "the usual weight name" see it. Do not reintroduce a
+  second name such as `raw_weight`, do not shadow `weight`
+  with a plain property, and do not make `MaskedLinear` a
+  subclass of `nn.Linear` (its `__init__` signature and its
+  own `reset_parameters` would fight ours). `constraint=`
+  is the supported inner map (`nn.Module`, per-entry). Do
+  not add `ConstrainedMaskedLinear`.
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks. Do not add an encoder
   class, Transformer block, or `parse_attention`.

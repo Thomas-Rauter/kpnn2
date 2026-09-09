@@ -11,6 +11,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from ._constraint import as_constraint, check_constraint_shape
 from ._errors import Kpnn2Error
 from ._identity import as_identity, check_identity, save_identity
 
@@ -182,6 +183,15 @@ class PackedLinear(nn.Module):
         does not load the weights. A missing identity is not an
         error, even with ``strict=True``. ``None`` means this
         layer does not claim an identity.
+    constraint : torch.nn.Module or None, default=None
+        Optional per-entry map on the packed ``weight``, applied
+        in ``forward``. ``nn.Softplus()`` is the textbook
+        non-negative edge reparametrization. The module must
+        return a tensor of shape ``(nnz,)``. There are no
+        absent edges here, so this map cannot resurrect a
+        blocked cell. ``reset_parameters`` writes the
+        unconstrained packed tensor; it does not invert this
+        map. ``MaskedLinear`` takes the same argument.
 
     Attributes
     ----------
@@ -196,6 +206,9 @@ class PackedLinear(nn.Module):
         per live edge, in the same order as the index buffers.
         This is an ordinary parameter; there is no
         ``parametrize`` and no dense ``(out, in)`` tensor.
+        When ``constraint`` is set, this tensor is
+        unconstrained; ``forward`` uses
+        ``constraint(weight)``.
     source_index : torch.Tensor
         Int64 buffer of input columns, length ``nnz``.
         **Treat it as read-only:** like any PyTorch buffer it can
@@ -204,6 +217,8 @@ class PackedLinear(nn.Module):
     target_index : torch.Tensor
         Int64 buffer of output rows, length ``nnz``, read-only in
         the same sense.
+    constraint : torch.nn.Module or None
+        The constructor ``constraint`` module, or ``None``.
     bias : nn.Parameter | None
         Trainable bias, or ``None`` when constructed with
         ``bias=False``.
@@ -217,7 +232,9 @@ class PackedLinear(nn.Module):
         length, out of range, or duplicated as
         ``(source, target)`` pairs; if ``out_features`` /
         ``in_features`` are not positive ints; if ``identity`` is
-        neither a ``str`` nor ``None``; and from
+        neither a ``str`` nor ``None``; if ``constraint`` is
+        neither an ``nn.Module`` nor ``None``, or does not
+        preserve the packed weight shape; and from
         ``load_state_dict`` when the checkpoint carries an index
         digest or identity that does not match this layer, in
         which case the weights are not loaded.
@@ -240,7 +257,8 @@ class PackedLinear(nn.Module):
     Notes
     -----
     Forward gathers ``x[..., source_index]``, multiplies by
-    ``weight``, and ``index_add``s into zeros of shape
+    ``constraint(weight)`` when ``constraint`` is set (else
+    ``weight``), and ``index_add``s into zeros of shape
     ``(..., out_features)``, adding ``bias`` when present. ``x``
     is an ordinary dense activation tensor. Nothing scatters into
     a dense ``(out, in)`` matrix, nothing imports
@@ -329,6 +347,7 @@ class PackedLinear(nn.Module):
     weight: nn.Parameter
     bias: nn.Parameter | None
     identity: str | None
+    constraint: nn.Module | None
 
     def __init__(
         self,
@@ -339,6 +358,7 @@ class PackedLinear(nn.Module):
         bias: bool = True,
         *,
         identity: str | None = None,
+        constraint: nn.Module | None = None,
     ) -> None:
         super().__init__()
         out_features = _positive_int(
@@ -409,6 +429,13 @@ class PackedLinear(nn.Module):
                 "bias",
                 None,
             )
+        constraint_module = as_constraint(constraint)
+        if constraint_module is not None:
+            check_constraint_shape(
+                constraint_module,
+                self.weight,
+            )
+        self.constraint = constraint_module
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -531,13 +558,18 @@ class PackedLinear(nn.Module):
         """
         Gather live inputs, scale by packed weights, ``index_add``.
 
-        ``contrib = x[..., source_index] * weight``, then
+        ``contrib = x[..., source_index] * live_weight``, then
         ``index_add`` into zeros of shape
-        ``(..., out_features)``. Adds ``bias`` when present.
+        ``(..., out_features)``. ``live_weight`` is
+        ``constraint(weight)`` when ``constraint`` is set,
+        otherwise ``weight``. Adds ``bias`` when present.
         Packed 1-D weights, one per live edge; not
         ``torch.sparse``; forward is ``index_add``.
         """
-        contrib = x[..., self.source_index] * self.weight
+        weight = self.weight
+        if self.constraint is not None:
+            weight = self.constraint(weight)
+        contrib = x[..., self.source_index] * weight
         y = torch.zeros(
             (*x.shape[:-1], self.out_features),
             dtype=x.dtype,

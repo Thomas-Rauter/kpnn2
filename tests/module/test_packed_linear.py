@@ -840,3 +840,171 @@ def test_packed_linear_matches_masked_linear_on_a_hop():
         packed(x),
         dense(x),
     )
+
+
+class _Widen(nn.Module):
+    def forward(
+        self,
+        weight,
+    ):
+        return weight.unsqueeze(0)
+
+
+def test_packed_constraint_softplus_matches_masked_on_live_edges():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_cyclic_edgelist())
+    dense = MaskedLinear(
+        spec.to_mask(),
+        bias=True,
+        constraint=nn.Softplus(),
+    )
+    packed = PackedLinear(
+        spec.source_index,
+        spec.target_index,
+        len(spec.nodes),
+        len(spec.nodes),
+        constraint=nn.Softplus(),
+    )
+    original = dense.parametrizations.weight.original
+    with torch.no_grad():
+        for index, (source, target) in enumerate(
+            zip(
+                spec.source_index,
+                spec.target_index,
+            )
+        ):
+            packed.weight[index] = original[target, source]
+        packed.bias.copy_(dense.bias)
+    x = torch.randn(
+        5,
+        len(spec.nodes),
+    )
+    torch.testing.assert_close(
+        packed(x),
+        dense(x),
+    )
+
+
+def test_packed_constraint_default_is_none():
+    layer = PackedLinear(
+        [0, 1],
+        [0, 1],
+        2,
+        2,
+        bias=False,
+    )
+    assert layer.constraint is None
+
+
+def test_packed_constraint_softplus_on_zero_is_positive():
+    layer = PackedLinear(
+        [0],
+        [0],
+        1,
+        1,
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    with torch.no_grad():
+        layer.weight.zero_()
+    y = layer(
+        torch.ones(
+            1,
+            1,
+        )
+    )
+    torch.testing.assert_close(
+        y,
+        torch.nn.functional.softplus(
+            torch.zeros(
+                1,
+                1,
+            )
+        ),
+    )
+
+
+def test_packed_constraint_rejects_a_plain_callable():
+    with pytest.raises(
+        Kpnn2Error,
+        match="nn.Module",
+    ):
+        PackedLinear(
+            [0],
+            [0],
+            1,
+            1,
+            bias=False,
+            constraint=torch.nn.functional.softplus,
+        )
+
+
+def test_packed_constraint_rejects_a_shape_changing_module():
+    with pytest.raises(
+        Kpnn2Error,
+        match="same shape",
+    ):
+        PackedLinear(
+            [0],
+            [0],
+            1,
+            1,
+            bias=False,
+            constraint=_Widen(),
+        )
+
+
+def test_packed_constraint_deepcopy_matches_and_is_independent():
+    layer = PackedLinear(
+        [0, 1],
+        [0, 1],
+        2,
+        2,
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    with torch.no_grad():
+        layer.weight.fill_(1.0)
+    copied = copy.deepcopy(layer)
+    x = torch.ones(
+        3,
+        2,
+    )
+    torch.testing.assert_close(
+        copied(x),
+        layer(x),
+    )
+    with torch.no_grad():
+        copied.weight.zero_()
+    assert not torch.equal(
+        copied.weight,
+        layer.weight,
+    )
+
+
+def test_packed_constraint_compiles_without_a_graph_break():
+    dynamo = pytest.importorskip("torch._dynamo")
+    if not dynamo.is_dynamo_supported():
+        pytest.skip("torch.compile is not supported here")
+    layer = PackedLinear(
+        [0, 2, 1, 3],
+        [1, 0, 3, 2],
+        4,
+        4,
+        constraint=nn.Softplus(),
+    )
+    x = torch.randn(
+        4,
+        4,
+    )
+    expected = layer(x)
+    dynamo.reset()
+    compiled = torch.compile(
+        layer,
+        fullgraph=True,
+        backend="eager",
+    )
+    torch.testing.assert_close(
+        compiled(x),
+        expected,
+    )

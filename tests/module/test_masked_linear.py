@@ -1420,3 +1420,173 @@ def test_masked_linear_ignores_mutation_of_constructor_tensor():
             2,
         ),
     )
+
+
+class _Widen(nn.Module):
+    def forward(
+        self,
+        weight,
+    ):
+        return weight.unsqueeze(0)
+
+
+def test_masked_linear_parametrization_list_remasks_last():
+    from kpnn2._masked_linear import _MaskedParametrizationList
+
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+    )
+    assert isinstance(
+        layer.parametrizations.weight,
+        _MaskedParametrizationList,
+    )
+
+
+def test_stacked_softplus_does_not_resurrect_masked_edges():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+    )
+    with torch.no_grad():
+        _original(layer).zero_()
+    parametrize.register_parametrization(
+        layer,
+        "weight",
+        nn.Softplus(),
+    )
+    blocked = layer.weight * (1.0 - _diag_mask())
+    assert torch.equal(
+        blocked,
+        torch.zeros(
+            2,
+            2,
+        ),
+    )
+    torch.testing.assert_close(
+        layer.weight,
+        F.softplus(torch.zeros(2, 2)) * _diag_mask(),
+    )
+    x_base = torch.tensor(
+        [[1.0, 2.0]],
+        dtype=torch.float32,
+    )
+    x_blocked = torch.tensor(
+        [[99.0, 2.0]],
+        dtype=torch.float32,
+    )
+    y_base = layer(x_base)
+    y_blocked = layer(x_blocked)
+    assert y_base[0, 1].item() == y_blocked[0, 1].item()
+
+
+def test_constraint_softplus_is_applied_before_the_mask():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    with torch.no_grad():
+        _original(layer).fill_(1.0)
+    expected = F.softplus(torch.ones(2, 2)) * _diag_mask()
+    torch.testing.assert_close(
+        layer.weight,
+        expected,
+    )
+    assert isinstance(
+        layer.constraint,
+        nn.Softplus,
+    )
+    x = torch.tensor(
+        [[1.0, 1.0]],
+        dtype=torch.float32,
+    )
+    torch.testing.assert_close(
+        layer(x),
+        x @ expected.T,
+    )
+
+
+def test_constraint_default_is_none():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+    )
+    assert layer.constraint is None
+
+
+def test_constraint_rejects_a_plain_callable():
+    with pytest.raises(
+        Kpnn2Error,
+        match="nn.Module",
+    ):
+        MaskedLinear(
+            _diag_mask(),
+            bias=False,
+            constraint=F.softplus,
+        )
+
+
+def test_constraint_rejects_a_shape_changing_module():
+    with pytest.raises(
+        Kpnn2Error,
+        match="same shape",
+    ):
+        MaskedLinear(
+            _diag_mask(),
+            bias=False,
+            constraint=_Widen(),
+        )
+
+
+def test_constraint_deepcopy_matches_and_is_independent():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    with torch.no_grad():
+        _original(layer).fill_(1.0)
+    copied = copy.deepcopy(layer)
+    x = torch.ones(
+        2,
+        2,
+    )
+    torch.testing.assert_close(
+        copied(x),
+        layer(x),
+    )
+    with torch.no_grad():
+        _original(copied).zero_()
+    assert not torch.equal(
+        copied.weight,
+        layer.weight,
+    )
+
+
+def test_constraint_compiles_without_a_graph_break():
+    dynamo = pytest.importorskip("torch._dynamo")
+    if not dynamo.is_dynamo_supported():
+        pytest.skip("torch.compile is not supported here")
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    with torch.no_grad():
+        _original(layer).fill_(1.0)
+    x = torch.ones(
+        2,
+        2,
+    )
+    expected = layer(x)
+    dynamo.reset()
+    compiled = torch.compile(
+        layer,
+        fullgraph=True,
+        backend="eager",
+    )
+    torch.testing.assert_close(
+        compiled(x),
+        expected,
+    )

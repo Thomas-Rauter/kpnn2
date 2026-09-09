@@ -6,6 +6,16 @@ examples, and other small edits are not listed.
 This project follows semantic versioning.
 
 
+## [Unreleased]
+
+### Added
+
+- `constraint=` on `MaskedLinear` and `PackedLinear`: optional
+  `nn.Module` applied to live weights before the mask
+  (`MaskedLinear`) or in packed space (`PackedLinear`).
+  `MaskedLinear.weight` stays masked if later maps are stacked.
+
+
 ## [0.3.0] - 9. September 2026
 
 ### Changed

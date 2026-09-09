@@ -105,6 +105,7 @@ convention = "numpy"
 "src/kpnn2/_adjacency_spec.py" = ["D200"]
 "src/kpnn2/_align.py" = ["D200"]
 "src/kpnn2/_attributions.py" = ["D200"]
+"src/kpnn2/_constraint.py" = ["D200"]
 "src/kpnn2/_errors.py" = ["D200"]
 "src/kpnn2/_gather.py" = ["D200", "D205"]
 "src/kpnn2/_layout.py" = ["D200", "D401"]
@@ -144,6 +145,7 @@ exclude = [
     '\.Hop\.in_features$',
     '\.Hop\.out_features$',
     '\.MaskedLinear\.mask$',
+    '\.MaskedLinear\.constraint$',
 ]
 exclude_files = [
     '^tests/',
