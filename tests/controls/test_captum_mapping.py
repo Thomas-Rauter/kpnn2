@@ -132,9 +132,11 @@ def test_synthetic_captum_tensor_maps_hidden_layer_names() -> None:
     Captum-shaped (observation, node) scores map at layer i+1.
 
     IntegratedGradients attributes inputs only. Hidden-layer
-    LayerConductance on MaskedLinear is not required here: the
-    mapper only needs a tensor whose node axis matches
-    spec.layer_nodes[layer]. Hop 0 output is layer 1.
+    LayerConductance on MaskedLinear is not required here: hop
+    output scores map with layer= (node axis matches that
+    depth's units). Hop input / gather_hop_inputs scores map
+    with hop= (concatenated source units). Hop 0 output is
+    layer 1.
     """
     scenario = _dead_edge_scenario()
     spec = parse_layered(scenario.edgelist)

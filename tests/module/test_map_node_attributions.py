@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pandas as pd
 import pytest
 import torch
@@ -482,7 +484,7 @@ def test_map_node_attributions_adjacency_rejects_a_layer():
 
     with pytest.raises(
         Kpnn2Error,
-        match="does not apply to an AdjacencySpec",
+        match="do not apply to an AdjacencySpec",
     ):
         map_node_attributions(
             torch.zeros(2, 4),
@@ -491,12 +493,12 @@ def test_map_node_attributions_adjacency_rejects_a_layer():
         )
 
 
-def test_map_node_attributions_layered_requires_a_layer():
+def test_map_node_attributions_layered_requires_layer_or_hop():
     spec = _tiny_spec()
 
     with pytest.raises(
         Kpnn2Error,
-        match="'layer' is required for a LayeredSpec",
+        match="needs 'layer' or 'hop'",
     ):
         map_node_attributions(
             torch.zeros(2, 2),
@@ -552,3 +554,153 @@ def test_map_node_attributions_repeats_wide_layered_names():
             spec,
             1,
         )
+
+
+def _skip_spec():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "H", "A"],
+            "target": ["H", "C", "C"],
+        }
+    )
+    return parse_layered(edgelist)
+
+
+def test_map_node_attributions_names_skip_hop_source_axis():
+    spec = _skip_spec()
+    hop = spec.hops[1]
+    scores = torch.tensor(
+        [0.1, 0.2],
+        dtype=torch.float32,
+    )
+
+    da = map_node_attributions(
+        scores,
+        spec,
+        hop=hop,
+    )
+
+    assert da["node"].values.tolist() == list(hop.source_nodes)
+    assert hop.in_features == len(hop.source_nodes)
+    assert da.shape[-1] == hop.in_features
+    assert "layer" not in da.coords
+    assert "layer" not in da.dims
+    assert da.sel(node="A").item() == pytest.approx(0.1)
+    assert da.sel(node="H").item() == pytest.approx(0.2)
+
+
+def test_map_node_attributions_repeats_wide_hop_source_names():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "H", "A"],
+            "target": ["H", "C", "C"],
+        }
+    )
+    spec = parse_layered(
+        edgelist,
+        widths={"A": 2, "H": 3},
+    )
+    hop = spec.hops[1]
+    scores = torch.arange(
+        hop.in_features,
+        dtype=torch.float32,
+    )
+
+    da = map_node_attributions(
+        scores,
+        spec,
+        hop=hop,
+    )
+
+    assert da["node"].values.tolist() == [
+        "A",
+        "A",
+        "H",
+        "H",
+        "H",
+    ]
+    assert da.shape[-1] == hop.in_features
+    assert hop.in_features != len(hop.source_nodes)
+    assert list(hop.source_nodes) == ["A", "H"]
+    assert "layer" not in da.coords
+
+
+def test_map_node_attributions_rejects_layer_and_hop():
+    spec = _skip_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="not both",
+    ):
+        map_node_attributions(
+            torch.zeros(1, 2),
+            spec,
+            1,
+            hop=spec.hops[1],
+        )
+
+
+def test_map_node_attributions_adjacency_rejects_a_hop():
+    spec = _tiny_adjacency_spec()
+    hop = _skip_spec().hops[0]
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="do not apply to an AdjacencySpec",
+    ):
+        map_node_attributions(
+            torch.zeros(2, 4),
+            spec,
+            hop=hop,
+        )
+
+
+def test_map_node_attributions_rejects_hop_not_in_spec():
+    spec = _skip_spec()
+    hop = spec.hops[1]
+    other = replace(
+        hop,
+        source_index=hop.source_index + (0,),
+        target_index=hop.target_index + (0,),
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="must match an entry of spec.hops",
+    ):
+        map_node_attributions(
+            torch.zeros(hop.in_features),
+            spec,
+            hop=other,
+        )
+
+
+def test_map_node_attributions_rejects_non_hop():
+    spec = _skip_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="must be a Hop",
+    ):
+        map_node_attributions(
+            torch.zeros(2),
+            spec,
+            hop=1,
+        )
+
+
+def test_map_node_attributions_hop_rejects_wrong_width():
+    spec = _skip_spec()
+    hop = spec.hops[1]
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="wrong number of units",
+    ) as caught:
+        map_node_attributions(
+            torch.zeros(3),
+            spec,
+            hop=hop,
+        )
+
+    assert f"Expected {hop.in_features}" in str(caught.value)
