@@ -48,6 +48,9 @@ dev = [
     "build",
     "scikit-learn",
     "captum",
+    "numpydoc==1.10.0",
+    "scipy-doctest==2.2.0",
+    "pre-commit",
 ]
 docs = [
     "mkdocs",
@@ -84,7 +87,71 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"docs/**" = ["D"]
+"scripts/**" = ["D"]
+"noxfile.py" = ["D"]
+"conftest.py" = ["D"]
+# Temporary: existing summaries wrap at 80 cols (D200/D205) or use
+# a descriptive rather than imperative mood (D401). Shrink this list
+# when those docstrings are reformatted; new modules are held to D.
+"src/kpnn2/__init__.py" = ["D205"]
+"src/kpnn2/_adjacency_spec.py" = ["D200"]
+"src/kpnn2/_align.py" = ["D200"]
+"src/kpnn2/_attributions.py" = ["D200"]
+"src/kpnn2/_errors.py" = ["D200"]
+"src/kpnn2/_gather.py" = ["D200", "D205"]
+"src/kpnn2/_layout.py" = ["D200", "D401"]
+"src/kpnn2/_mask_tensor.py" = ["D200"]
+"src/kpnn2/_masked_linear.py" = ["D200"]
+"src/kpnn2/_packed_linear.py" = ["D200"]
+"src/kpnn2/_packed_multihead_attention.py" = ["D200", "D205"]
+"src/kpnn2/_parse.py" = ["D200"]
+"src/kpnn2/_parse_adjacency.py" = ["D200"]
+"src/kpnn2/_serialize.py" = ["D205"]
+"src/kpnn2/_spec.py" = ["D200"]
+
+[tool.numpydoc_validation]
+checks = [
+    "all",
+    "EX01",  # example not required on every object
+    "SA01",  # See Also not required on every object
+    "ES01",  # extended summary not required on every object
+    "SS06",  # 80-col wrap makes one-line summaries wrap
+]
+exclude = [
+    '\.__init__$',
+    '\.__repr__$',
+    '\.__str__$',
+    '\.__eq__$',
+    '\.__post_init__$',
+    '\._',  # private helpers; public names stay checked
+    '\.(forward|extra_repr)$',  # nn.Module call/repr idiom
+    # Dataclass fields are documented on the class; the AST
+    # hook does not see the generated __init__, so PR02 is a
+    # false positive. Methods on these classes stay checked.
+    '\.Hop$',
+    '\.Skip$',
+    '\.LayeredSpec$',
+    '\.AdjacencySpec$',
+    '\.column_offsets$',
+    '\.MaskedLinear\.mask$',
+]
+exclude_files = [
+    '^tests/',
+    '^docs/',
+    '^scripts/',
+    '^conftest.py$',
+    # Temporary: internal modules, not the public façade.
+    '^src/kpnn2/_layout.py$',
+    '^src/kpnn2/_mask_tensor.py$',
+]
 
 [tool.mypy]
 python_version = "3.10"
@@ -103,6 +170,8 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = [
+    "-p",
+    "scipy_doctest",
     "--doctest-modules",
     "--ignore=tests/manual",
 ]

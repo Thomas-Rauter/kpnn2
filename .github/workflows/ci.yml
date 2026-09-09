@@ -43,6 +43,10 @@ jobs:
         run: |
           python -m ruff format --check .
 
+      - name: Validate NumPy docstrings
+        run: |
+          numpydoc lint src/kpnn2/*.py
+
       - name: Run mypy
         if: matrix.python-version == '3.11'
         run: |
