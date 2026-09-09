@@ -390,6 +390,7 @@ def test_from_dict_helpers_call_parsers():
     assert "from ._parse import parse_layered" in layered_src
     assert "parse_layered(" in layered_src
     assert "widths=widths" in layered_src
+    assert "ranks=ranks" in layered_src
     assert "from ._parse_adjacency import parse_adjacency" in adjacency_src
     assert "parse_adjacency(table)" in adjacency_src
     assert "hashlib.sha256" in fingerprint_src
@@ -405,6 +406,7 @@ def test_width_one_payload_omits_widths_and_matches_three_key_digest():
     }
     assert payload == expected
     assert "widths" not in payload
+    assert "ranks" not in payload
     digest = hashlib.sha256(
         json.dumps(
             expected,
@@ -418,6 +420,7 @@ def test_width_one_payload_omits_widths_and_matches_three_key_digest():
     skip_spec = parse_layered(_skip_edgelist())
     skip_payload = skip_spec.to_dict()
     assert "widths" not in skip_payload
+    assert "ranks" not in skip_payload
     assert skip_payload["kpnn2_spec"] == 1
     assert skip_payload["layout"] == "layered"
     assert skip_payload["edges"] == [
@@ -499,3 +502,86 @@ def test_adjacency_from_dict_ignores_stray_widths():
         roundtrip,
     )
     assert "widths" not in spec.to_dict()
+
+
+def _unequal_sibling_edgelist():
+    return pd.DataFrame(
+        {
+            "source": ["A", "A", "Mid"],
+            "target": ["Short", "Mid", "Long"],
+        }
+    )
+
+
+def _unequal_sibling_ranks():
+    return {
+        "A": 0,
+        "Mid": 1,
+        "Short": 2,
+        "Long": 2,
+    }
+
+
+def test_ranks_matching_longest_path_are_omitted_from_payload():
+    spec = parse_layered(
+        _chain_edgelist(),
+        ranks={
+            "A": 0,
+            "H": 10,
+            "C": 20,
+        },
+    )
+    payload = spec.to_dict()
+    assert "ranks" not in payload
+    assert spec.fingerprint == parse_layered(_chain_edgelist()).fingerprint
+
+
+def test_ranked_payload_includes_every_compacted_node():
+    spec = parse_layered(
+        _unequal_sibling_edgelist(),
+        ranks=_unequal_sibling_ranks(),
+    )
+    payload = spec.to_dict()
+    assert payload["ranks"] == {
+        "A": 0,
+        "Mid": 1,
+        "Long": 2,
+        "Short": 2,
+    }
+    roundtrip = LayeredSpec.from_dict(payload)
+    _assert_layered_structure(
+        spec,
+        roundtrip,
+    )
+    default = parse_layered(_unequal_sibling_edgelist())
+    assert spec.fingerprint != default.fingerprint
+    assert spec.layer_nodes != default.layer_nodes
+
+
+def test_from_dict_rejects_invalid_ranks():
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    payload["ranks"] = ["A"]
+    with pytest.raises(
+        Kpnn2Error,
+        match="mapping of node name",
+    ):
+        LayeredSpec.from_dict(payload)
+
+    payload["ranks"] = {"A": 0, "H": 1}
+    with pytest.raises(
+        Kpnn2Error,
+        match="Missing node name",
+    ):
+        LayeredSpec.from_dict(payload)
+
+
+def test_adjacency_from_dict_ignores_stray_ranks():
+    spec = parse_adjacency(_cycle_edgelist())
+    payload = spec.to_dict()
+    payload["ranks"] = {"x": 0}
+    roundtrip = AdjacencySpec.from_dict(payload)
+    _assert_adjacency_structure(
+        spec,
+        roundtrip,
+    )
+    assert "ranks" not in spec.to_dict()

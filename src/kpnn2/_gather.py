@@ -50,10 +50,10 @@ def gather_hop_inputs(
         source-unit order, dtype and device of the saved layers.
         ``source_nodes`` is one name per node, so it is shorter
         than this axis when a source node is wider than 1. When
-        the hop reads a single layer, which is every hop with no
-        skip parents and ``hops[0]`` always, this is that saved
-        tensor itself rather than a copy, so writing into it
-        writes into the saved activation.
+        the hop reads a single layer, including ``hops[0]`` and
+        any hop whose parents all sit at one depth, this is that
+        saved tensor itself rather than a copy, so writing into
+        it writes into the saved activation.
 
     Raises
     ------

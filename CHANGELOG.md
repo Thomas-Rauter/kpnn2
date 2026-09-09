@@ -20,6 +20,8 @@ This project follows semantic versioning.
   locate a named edge's packed weight slots.
 - `map_node_attributions(..., hop=)`: label a hop's
   concatenated source axis.
+- `parse_layered(ranks=)`: optional user depths so official
+  ontology levels need not be longest-path hops.
 
 
 ## [0.3.0] - 9. September 2026

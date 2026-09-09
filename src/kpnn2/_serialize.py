@@ -116,7 +116,10 @@ def spec_to_dict(
     (``"layered"`` or ``"adjacency"``), and ``edges`` (list of
     ``[source, target]`` lists in ``canonical_edges`` order).
     A ``LayeredSpec`` with any node wider than 1 also includes
-    ``"widths"``. Adjacency payloads never include ``"widths"``.
+    ``"widths"``. When compacted layers differ from longest-path
+    on the same edges, a ``LayeredSpec`` also includes
+    ``"ranks"`` (every node, compacted 0-based index). Adjacency
+    payloads never include ``"widths"`` or ``"ranks"``.
 
     Parameters
     ----------
@@ -145,6 +148,9 @@ def spec_to_dict(
         widths = _layered_widths_payload(spec)
         if widths:
             payload["widths"] = widths
+        ranks = _layered_ranks_payload(spec)
+        if ranks:
+            payload["ranks"] = ranks
         return payload
     return {
         "kpnn2_spec": _SPEC_VERSION,
@@ -193,8 +199,8 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
     Rebuild a ``LayeredSpec`` by parsing ``payload["edges"]``.
 
     Calls ``parse_layered`` on a DataFrame built from the tagged
-    dict, passing ``payload["widths"]`` when present. Extra
-    unknown keys are ignored.
+    dict, passing ``payload["widths"]`` and ``payload["ranks"]``
+    when present. Extra unknown keys are ignored.
 
     Parameters
     ----------
@@ -220,9 +226,11 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
         expected_layout=_LAYOUT_LAYERED,
     )
     widths = _widths_from_payload(payload)
+    ranks = _ranks_from_payload(payload)
     return parse_layered(
         table,
         widths=widths,
+        ranks=ranks,
     )
 
 
@@ -231,7 +239,8 @@ def adjacency_spec_from_dict(payload: object) -> AdjacencySpec:
     Rebuild an ``AdjacencySpec`` by parsing ``payload["edges"]``.
 
     Calls ``parse_adjacency`` on a DataFrame built from the
-    tagged dict. Extra keys are ignored.
+    tagged dict. Extra keys are ignored, including a stray
+    ``"ranks"`` or ``"widths"``.
 
     Parameters
     ----------
@@ -350,6 +359,54 @@ def _widths_from_payload(payload: object) -> Mapping[str, int] | None:
     if len(widths) == 0:
         return None
     return widths
+
+
+def _layered_ranks_payload(spec: LayeredSpec) -> dict[str, int] | None:
+    """
+    Compacted depth of every node, or ``None`` when that equals
+    longest-path on the same edges.
+    """
+    from ._parse import (
+        _build_adjacency,
+        _rank_layers,
+    )
+
+    table = spec_to_edgelist(spec)
+    (
+        nodes,
+        children,
+        parents,
+        in_degree,
+        _,
+    ) = _build_adjacency(table)
+    default_layers = _rank_layers(
+        nodes,
+        children,
+        parents,
+        in_degree,
+    )
+    default = tuple(tuple(layer) for layer in default_layers)
+    if default == spec.layer_nodes:
+        return None
+    ranks: dict[str, int] = {}
+    for depth, names in enumerate(spec.layer_nodes):
+        for name in names:
+            ranks[name] = depth
+    return ranks
+
+
+def _ranks_from_payload(payload: object) -> Mapping[str, int] | None:
+    """Read optional ``payload["ranks"]``. Absent is longest-path."""
+    if not isinstance(payload, dict):
+        return None
+    if "ranks" not in payload:
+        return None
+    ranks = payload["ranks"]
+    if ranks is None:
+        return None
+    if not isinstance(ranks, Mapping):
+        raise Kpnn2Error("'ranks' must be a mapping of node name to int.")
+    return ranks
 
 
 def _layered_edges(

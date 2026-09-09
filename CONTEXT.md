@@ -81,12 +81,14 @@ this package unless a later prompt asks.
    `source` and `target` only, validates a layered DAG, and returns a
    `LayeredSpec`. Optional keyword-only `widths=` gives a named node
    several units (DCell-style); omitted or `None` is width 1.
-   `parse_adjacency()` reads the same table and
+   Optional keyword-only `ranks=` assigns compact depths so official
+   ontology levels (P-NET / Reactome) need not be longest-path hops;
+   omitted or `None` is longest-path, bit-identical to today's
+   default. `parse_adjacency()` reads the same table and
    returns an `AdjacencySpec` instead: packed source/target indices
    over every node, cycles and self-loops allowed. It never
-   allocates an `(n, n)` tensor and has no `widths=` argument. The
-   user picks the layout; a DAG
-   is valid input to both.
+   allocates an `(n, n)` tensor and has no `widths=` or `ranks=`
+   argument. The user picks the layout; a DAG is valid input to both.
 2. **Specify:** `LayeredSpec` holds named nodes by layer, per-node
    widths, and one `Hop` per layer after the first. A hop's packed
    indices are in **unit** space: a named edge `A→B` expands into
@@ -244,7 +246,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 
 | Symbol | Role |
 |--------|------|
-| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only; optional `widths=`) |
+| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only; optional `widths=`, `ranks=`) |
 | `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed) |
 | `LayeredSpec` | Frozen structural dataclass (layers, packed hops, skip metadata) |
 | `Hop` | One layer's incoming packed edges; exported because `spec.hops` uses it |
@@ -343,10 +345,11 @@ are the only edgelist rule the two parsers disagree on.
 - **Hidden nodes:** every other named node (not input, not output).
   Sorted alphabetically. Stored in `spec.hidden_nodes`.
 
-**Layering (Kahn / longest-path from inputs):**
+**Layering (Kahn / longest-path from inputs, or `ranks=`):**
 
-- Process nodes in topological order. A node becomes ready when all
-  parents are assigned a depth.
+- Default (`ranks=None` or omitted): process nodes in topological
+  order. A node becomes ready when all parents are assigned a
+  depth.
 - `depth(input) = 0`.
 - `depth(node) = 1 + max(depth(parent) for parent in parents)`.
   Equivalently: the depth assigned when in-degree hits 0 in a Kahn
@@ -356,6 +359,27 @@ are the only edgelist rule the two parsers disagree on.
 - Layer 0 is the first layer (all depth-0 nodes, i.e. all inputs).
   If a graph somehow had a depth-0 non-input, that would violate
   in-degree 0 ⇔ input; do not invent extra depth-0 nodes.
+
+Optional `parse_layered(..., ranks=)` replaces longest-path with
+user depths. Keys are matched after `str(...)`, same as `widths`.
+Every graph node must be present; unknown names raise
+`Kpnn2Error`; unique names sorted, comma-separated. Values are
+non-negative ints; reject `bool`, negatives, and non-ints.
+Let `used` be the sorted unique rank values. Node layer index is
+`used.index(rank[node])`, so layers are `0 .. L-1` with **no
+empty layers**. User numbers need not be 0-based or consecutive
+(0/10/10/20 becomes layers 0, 1, 2). All in-degree-0 nodes share
+the minimum user rank, and no non-input sits at that minimum;
+after compacting they are exactly `layer_nodes[0]`. Every named
+edge is strictly forward: compacted(source) < compacted(target).
+Same-rank edges are illegal. A node at layer `d>0` may have only
+skip parents (no parent at `d-1`). Dummy depth-padding nodes are
+not an acceptable workaround; skips must not become
+pseudo-nodes.
+
+`ranks=None` is bit-identical to longest-path: same `layer_nodes`,
+hops, `to_dict` keys, fingerprint. `widths=` still applies after
+ranking. Do **not** add `ranks=` to `parse_adjacency`.
 
 A cycle is detected when `len(depths) != len(nodes)` after the
 sweep. The `Kpnn2Error` message still says the edgelist has a
@@ -376,13 +400,14 @@ node names, sorted alphabetically and comma-separated.
 Isolated nodes cannot appear: the node set is the union of `source`
 and `target` values only.
 
-### `parse_layered(..., widths=)`
+### `parse_layered(..., widths=, ranks=)`
 
 ```python
 parse_layered(
     edgelist: pd.DataFrame,
     *,
     widths: Mapping[str, int] | None = None,
+    ranks: Mapping[str, int] | None = None,
 ) -> LayeredSpec
 ```
 
@@ -392,7 +417,10 @@ mapping default to 1. Unknown names (after `str(...)`) raise
 be positive ints. Reject `bool` (`bool` is an `int`). Reject 0
 and negatives. `Kpnn2Error`.
 
-Do **not** add `widths=` to `parse_adjacency`.
+`ranks=None` or omitted: longest-path, unchanged. When provided,
+every graph node must have a non-negative int; see **Layering**.
+
+Do **not** add `widths=` or `ranks=` to `parse_adjacency`.
 
 ---
 
@@ -440,11 +468,14 @@ column of each entry of `source_layers`. `in_features` is
 - `len(hops) == len(layer_nodes) - 1` and
   `hops[i].target_layer == i + 1`.
 - `source_layers` lists only layers that really feed the target.
-  `target_layer - 1` is always one of them, because longest-path
-  ranking gives every node a parent one layer down.
-- `hops[0].source_layers == (0,)` always: layer 1 can only have
-  layer-0 parents. So an `align_inputs` tensor feeds `hops[0]`
-  directly, with no gathering.
+  Under longest-path ranking, `target_layer - 1` is always one of
+  them, because that ranking gives every node a parent one layer
+  down. With `ranks=`, a hop may omit the previous layer when a
+  node has only skip parents. `gather_hop_inputs` follows
+  `source_layers`; it does not assume adjacency.
+- `hops[0].source_layers == (0,)` always: after compact ranking,
+  layer 1 can only have layer-0 parents. So an `align_inputs`
+  tensor feeds `hops[0]` directly, with no gathering.
 - A graph with no skip edges gives every hop a single source
   layer, and then `hops[i]` is the plain adjacent hop from
   layer `i` to layer `i+1`.
@@ -512,14 +543,16 @@ strings. This is **not** the original parse input order, and
 extra columns from the pre-parse DataFrame are not
 reproduced.
 
-`parse_layered(spec.to_edgelist())` without `widths=` reconstructs
-the same `input_nodes`, `output_nodes`, `hidden_nodes`,
-`layer_nodes`, `layer_dims`, hop `source_layers` / `source_dims` /
-`source_nodes`, and packed hop indices **when every node has
-width 1**. Widths live on the spec dict, not the edgelist:
+`parse_layered(spec.to_edgelist())` without `widths=` or `ranks=`
+reconstructs the same `input_nodes`, `output_nodes`,
+`hidden_nodes`, `layer_nodes`, `layer_dims`, hop `source_layers`
+/ `source_dims` / `source_nodes`, and packed hop indices **when
+every node has width 1 and ranking is longest-path**. Widths and
+ranks live on the spec dict, not the edgelist:
 `parse_layered(spec.to_edgelist())` is not the same spec if the
-original had `k>1`. Round-trip those graphs with
-`LayeredSpec.from_dict` or `parse_layered(..., widths=)`.
+original had `k>1` or user ranks that differ from longest-path.
+Round-trip those graphs with `LayeredSpec.from_dict` or
+`parse_layered(..., widths=, ranks=)`.
 Skip *tuple* order may
 follow the sorted edgelist rather than the original parse
 input; the skip *set* of `(source, target, source_layer,
@@ -757,9 +790,11 @@ digest = spec.fingerprint
 ```
 
 When every layered node has width 1, emit exactly those three
-keys. Do **not** emit `"widths"`. Then
+keys unless compacted layers differ from longest-path. Do
+**not** emit `"widths"`. Then
 `parse_layered(edgelist).fingerprint` is unchanged from width-1
-graphs. When any node has width other than 1, also emit:
+longest-path graphs. When any node has width other than 1, also
+emit:
 
 ```python
 "widths": {"H": 3, "C": 2}
@@ -770,21 +805,37 @@ not 1 (missing means 1). `json.dumps(..., sort_keys=True)` makes
 this fingerprint-stable. Never emit `"widths"` for an
 `AdjacencySpec`.
 
+When compacted `layer_nodes` equal longest-path on the same
+edges, do **not** emit `"ranks"` (a `ranks=` that happens to
+match default does not change fingerprints). When they differ,
+emit:
+
+```python
+"ranks": {"GeneA": 0, "PathLeaf": 1, "PathRoot": 1}
+```
+
+JSON object, **every** node, value = compacted layer index
+(0-based, not the raw user numbers). `json.dumps(sort_keys=True)`
+keeps fingerprints stable. Never emit `"ranks"` for an
+`AdjacencySpec`.
+
 | Key | Value |
 |-----|--------|
 | `kpnn2_spec` | Integer `1` (schema version). |
 | `layout` | `"layered"` for `LayeredSpec`, `"adjacency"` for `AdjacencySpec`. Must not be omitted. |
 | `edges` | List of `[source, target]` lists (JSON-safe, not tuples), same order as `to_edgelist()` rows / `canonical_edges`. One row per **named** edge, not per unit pair. |
 | `widths` | Optional. Layered only. Node name → int for nodes whose width is not 1. |
+| `ranks` | Optional. Layered only. Node name → compacted 0-based layer index for **every** node. Present only when that layering differs from longest-path. |
 
 Unknown extra keys on an otherwise valid payload are ignored
-(forward compatible). A stray `"widths"` key on an adjacency
-payload is ignored like any extra key.
+(forward compatible). A stray `"widths"` or `"ranks"` key on an
+adjacency payload is ignored like any extra key.
 
 `LayeredSpec.from_dict(payload)` calls `parse_layered` on a
 DataFrame built from `payload["edges"]`, passing
-`payload["widths"]` when present. Absent or empty `"widths"` is
-all 1. Invalid type or values raise `Kpnn2Error`.
+`payload["widths"]` when present and `payload["ranks"]` when
+present. Absent or empty `"widths"` is all 1. Absent `"ranks"`
+is longest-path. Invalid type or values raise `Kpnn2Error`.
 `AdjacencySpec.from_dict` calls `parse_adjacency`. Hops and
 masks are not hand-rebuilt. A layout mismatch (an adjacency
 dict into `LayeredSpec.from_dict`, or the reverse) raises
@@ -794,8 +845,10 @@ dict into `LayeredSpec.from_dict`, or the reverse) raises
 dict; `kpnn2_spec` is missing or not `1`; `layout` is missing
 or not `"layered"` / `"adjacency"`; `edges` is missing, is not
 a sequence of pairs, or a pair is not two nonempty
-string-convertible names; or layered `"widths"` is present and
-not a mapping of positive ints.
+string-convertible names; layered `"widths"` is present and
+not a mapping of positive ints; or layered `"ranks"` is
+present and not a mapping of non-negative ints covering every
+node.
 
 `fingerprint` is a property: the SHA-256 hex digest (64
 lowercase hex characters) of
@@ -803,10 +856,11 @@ lowercase hex characters) of
 ensure_ascii=False).encode("utf-8")`. Do not use Python
 `hash()`. `parse_layered(edgelist).fingerprint` equals
 `parse_layered(spec.to_edgelist()).fingerprint` when every
-width is 1. The same DAG parsed layered vs adjacency yields
-different fingerprints because `layout` differs. Adding,
-removing, or renaming a node, changing an edge, or changing a
-layered width changes the fingerprint.
+width is 1 and ranking is longest-path. The same DAG parsed
+layered vs adjacency yields different fingerprints because
+`layout` differs. Adding, removing, or renaming a node, changing
+an edge, changing a layered width, or changing compacted ranks
+relative to longest-path changes the fingerprint.
 
 These three names are methods / a property on the spec
 classes. They are not package-level exports. There is no
@@ -1277,9 +1331,12 @@ gather_hop_inputs(saved, hop) -> torch.Tensor
 - Returns the source layers concatenated on the last axis in
   `hop.source_layers` order, shape `(..., hop.in_features)`,
   ready for `PackedLinear` or `MaskedLinear(hop.to_mask())`.
-- A hop with one source layer (adjacent, no skips) returns that
-  saved tensor itself, without a copy. A hop with skips
-  concatenates the previous layer plus older layers beside it.
+- A hop with one source layer returns that saved tensor itself,
+  without a copy (plain adjacent, or skip-only parents from one
+  depth). A hop with several source layers concatenates them in
+  `source_layers` order; that need not include
+  `target_layer - 1` when `ranks=` left a node with only skip
+  parents.
 - Store every produced layer in `saved`. A missing source
   **layer** (not a missing named node) raises `Kpnn2Error`
   instead of silently dropping those edges. The message names
@@ -1894,8 +1951,8 @@ itself justify a changelog line.
   are units; `source_nodes` stays one name per node. Keep index
   arithmetic in `_layout.py`: build a `Layout`, ask it for slots,
   expand named edges with `iter_block_pairs`, and map a unit
-  index back with `slot_containing`. Do **not** add `widths=` to
-  `parse_adjacency`. See "Internal unit layout".
+  index back with `slot_containing`. Do **not** add `widths=` or
+  `ranks=` to `parse_adjacency`. See "Internal unit layout".
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the
   `dev` extra. Do not use a global `ruff` on `PATH`.

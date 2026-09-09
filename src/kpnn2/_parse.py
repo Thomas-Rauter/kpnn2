@@ -290,6 +290,17 @@ def _rank_layers(
             f"Unranked nodes: {unranked_str}."
         )
 
+    return _layers_from_depths(depths)
+
+
+def _layers_from_depths(depths: dict[str, int]) -> list[list[str]]:
+    """
+    Group nodes into alphabetically sorted layers by depth.
+
+    ``layer_nodes[d]`` is every name with ``depth == d``. Depths
+    must be a compact ``0 .. L-1`` range; compaction of user
+    ranks happens before this helper is called.
+    """
     n_layers = max(depths.values()) + 1
     layer_nodes: list[list[str]] = [[] for _ in range(n_layers)]
     for node, depth in depths.items():
@@ -297,6 +308,105 @@ def _rank_layers(
     for layer in layer_nodes:
         layer.sort()
     return layer_nodes
+
+
+def _layers_from_user_ranks(
+    ranks: Mapping[str, int],
+    nodes: set[str],
+    input_nodes: list[str],
+    edgelist: pd.DataFrame,
+) -> list[list[str]]:
+    """
+    Compact user ranks into dense layers ``0 .. L-1``.
+
+    Every graph node must be present. Unknown names, ``bool``
+    values, negatives, and non-ints raise. Inputs must share
+    the minimum user rank, and no non-input may sit there.
+    Every named edge must be strictly forward after compacting.
+    """
+    if not isinstance(ranks, Mapping):
+        raise Kpnn2Error("'ranks' must be a mapping of node name to int.")
+    requested: dict[str, int] = {}
+    for key, value in ranks.items():
+        name = str(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise Kpnn2Error(
+                f"Rank for node {name!r} must be a non-negative int. "
+                f"Got {value!r}."
+            )
+        if value < 0:
+            raise Kpnn2Error(
+                f"Rank for node {name!r} must be a non-negative int. "
+                f"Got {value!r}."
+            )
+        requested[name] = value
+    unknown = sorted(set(requested) - nodes)
+    if unknown:
+        names_str = ", ".join(unknown)
+        raise Kpnn2Error(f"Unknown node name(s) in 'ranks': {names_str}.")
+    missing = sorted(nodes - set(requested))
+    if missing:
+        names_str = ", ".join(missing)
+        raise Kpnn2Error(f"Missing node name(s) in 'ranks': {names_str}.")
+
+    used = sorted(set(requested.values()))
+    rank_to_layer = {rank: index for index, rank in enumerate(used)}
+    depths = {node: rank_to_layer[requested[node]] for node in nodes}
+
+    min_rank = used[0]
+    input_set = set(input_nodes)
+    inputs_off_min = sorted(
+        node for node in input_nodes if requested[node] != min_rank
+    )
+    non_inputs_at_min = sorted(
+        node
+        for node in nodes
+        if node not in input_set and requested[node] == min_rank
+    )
+    if inputs_off_min or non_inputs_at_min:
+        offenders = []
+        if inputs_off_min:
+            names_str = ", ".join(inputs_off_min)
+            offenders.append(
+                f"input node(s) not at the minimum rank: {names_str}"
+            )
+        if non_inputs_at_min:
+            names_str = ", ".join(non_inputs_at_min)
+            offenders.append(
+                f"non-input node(s) at the minimum rank: {names_str}"
+            )
+        detail = "; ".join(offenders)
+        raise Kpnn2Error(
+            "All in-degree-0 nodes must share the minimum rank "
+            "in 'ranks', and no non-input may use that rank. "
+            f"{detail}."
+        )
+
+    bad_pairs: list[tuple[str, str]] = []
+    for source, target in zip(
+        edgelist[_SOURCE].tolist(),
+        edgelist[_TARGET].tolist(),
+        strict=True,
+    ):
+        if depths[source] >= depths[target]:
+            bad_pairs.append(
+                (
+                    source,
+                    target,
+                )
+            )
+    if bad_pairs:
+        unique_pairs = sorted(set(bad_pairs))
+        pair_labels = [
+            f"{source} -> {target}" for source, target in unique_pairs
+        ]
+        pairs_str = ", ".join(pair_labels)
+        raise Kpnn2Error(
+            "Every named edge must go strictly forward under "
+            f"'ranks'. Non-forward edge(s): {pairs_str}."
+        )
+
+    return _layers_from_depths(depths)
 
 
 def _normalize_widths(
@@ -376,8 +486,9 @@ def _parent_layers(
     Collect, per depth, the depths that feed it.
 
     Entry ``d`` is every depth with at least one edge into depth
-    ``d``. Longest-path ranking guarantees ``d - 1`` is in it for
-    every ``d > 0``, and that entry 0 is empty.
+    ``d``. Under longest-path ranking ``d - 1`` is in it for
+    every ``d > 0``. With user ranks a hop may omit ``d - 1``
+    when every parent is a skip. Entry 0 is empty.
     """
     parents: list[set[int]] = [set() for _ in range(n_layers)]
     for source, target in zip(
@@ -542,6 +653,7 @@ def parse_layered(
     edgelist: pd.DataFrame,
     *,
     widths: Mapping[str, int] | None = None,
+    ranks: Mapping[str, int] | None = None,
 ) -> LayeredSpec:
     """
     Parse a source/target edgelist into a ``LayeredSpec``.
@@ -551,9 +663,12 @@ def parse_layered(
     a ``PackedLinear`` stack. Reach for it when a DAG should
     become one hop per layer; ``parse_adjacency`` is the
     shared-state packed alternative, which also allows cycles.
-    Depth is longest path from inputs, names sort alphabetically
-    within a layer, and no hop mask is allocated. Optional
-    ``widths`` lets a named node own several units.
+    Depth is longest path from inputs unless ``ranks`` assigns
+    compact layers, names sort alphabetically within a layer,
+    and no hop mask is allocated. Optional ``widths`` lets a
+    named node own several units. Optional ``ranks`` places
+    nodes at official ontology levels instead of longest-path
+    hops.
 
     Parameters
     ----------
@@ -568,6 +683,20 @@ def parse_layered(
         ``str(...)``. Unknown names raise ``Kpnn2Error``. Values
         must be positive ints; ``bool``, ``0``, and negatives
         are rejected.
+    ranks : mapping of str to int, optional
+        User depth per named node. ``None`` or omitted is
+        longest-path ranking, identical to today's default.
+        Keys are matched after ``str(...)``. Every graph node
+        must be present; unknown names raise ``Kpnn2Error``.
+        Values are non-negative ints; ``bool`` and non-ints
+        are rejected. Unique values are compacted to layers
+        ``0 .. L-1`` with no empty layers, so numbers need not
+        be 0-based or consecutive. All in-degree-0 nodes must
+        share the minimum rank, and no non-input may use it.
+        Every named edge must be strictly forward after
+        compacting; same-rank edges are illegal. A node may
+        have only skip parents (no parent at the previous
+        compact layer).
 
     Returns
     -------
@@ -584,14 +713,19 @@ def parse_layered(
         is absent, missing, or an empty name; the table has no rows;
         a ``(source, target)`` pair is duplicated; any edge is a
         self-loop; the graph has a cycle; there is no in-degree-0
-        node or no out-degree-0 node; or ``widths`` names an
-        unknown node or is not a mapping of positive ints. Each
-        message names the offending pairs or nodes, sorted.
+        node or no out-degree-0 node; ``widths`` names an unknown
+        node or is not a mapping of positive ints; or ``ranks``
+        is incomplete, names an unknown node, is not a mapping
+        of non-negative ints, places inputs off the minimum
+        rank, places a non-input at that minimum, or contains a
+        non-forward edge. Each message names the offending
+        pairs or nodes, sorted.
 
     See Also
     --------
     parse_adjacency : Pack the same table into one state vector;
-        allows cycles and self-loops. Has no ``widths`` argument.
+        allows cycles and self-loops. Has no ``widths`` or
+        ``ranks`` argument.
     PackedLinear : Apply one hop from its packed indices.
     gather_hop_inputs : Build one hop's input from the saved layer
         tensors.
@@ -606,10 +740,14 @@ def parse_layered(
     parents further back reads several layers, and its source
     columns are those layers concatenated in ascending order, so
     a skip edge is an ordinary weight rather than a dummy neuron
-    or a second mechanism; ``skips`` only reports it. Terminals
-    below maximum depth (early outputs) are allowed, and isolated
-    nodes cannot appear, since the node set is the union of
-    ``source`` and ``target``.
+    or a second mechanism; ``skips`` only reports it. Under
+    longest-path ranking a hop always reads the previous layer;
+    with ``ranks`` it may omit that layer when every parent is
+    a skip. Terminals below maximum depth (early outputs) are
+    allowed, and isolated nodes cannot appear, since the node
+    set is the union of ``source`` and ``target``. ``to_dict()``
+    stores compacted ranks only when they differ from
+    longest-path on the same edges.
 
     Examples
     --------
@@ -647,6 +785,27 @@ def parse_layered(
     ((1,), (2,), (1,))
     >>> spec.hops[0].to_mask().tolist()
     [[1.0], [1.0]]
+
+    Two siblings at the same official level share a layer even
+    when longest-path depths differ:
+
+    >>> siblings = pd.DataFrame(
+    ...     {
+    ...         "source": ["A", "A", "Mid"],
+    ...         "target": ["Short", "Mid", "Long"],
+    ...     }
+    ... )
+    >>> spec = kpnn2.parse_layered(
+    ...     siblings,
+    ...     ranks={
+    ...         "A": 0,
+    ...         "Mid": 1,
+    ...         "Short": 2,
+    ...         "Long": 2,
+    ...     },
+    ... )
+    >>> spec.layer_nodes
+    (('A',), ('Mid',), ('Long', 'Short'))
     """
     normalized = _validate_edgelist(edgelist)
     _reject_self_loops(normalized)
@@ -668,6 +827,13 @@ def parse_layered(
         parents,
         in_degree,
     )
+    if ranks is not None:
+        layer_nodes = _layers_from_user_ranks(
+            ranks,
+            nodes,
+            input_nodes,
+            normalized,
+        )
     width_of = _normalize_widths(
         widths,
         nodes,

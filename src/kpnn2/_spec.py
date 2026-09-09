@@ -40,10 +40,14 @@ class Hop:
     source_layers : tuple[int, ...]
         Depths this hop reads, ascending, each one below
         ``target_layer``. Only layers that really feed the
-        target appear, and ``target_layer - 1`` is always one of
-        them. A single entry is a plain adjacent hop; ``hops[0]``
-        is always ``(0,)``, so an ``align_inputs`` tensor feeds
-        it with no gathering.
+        target appear. Under longest-path ranking,
+        ``target_layer - 1`` is always one of them; with
+        ``parse_layered(..., ranks=)`` a hop may omit the
+        previous layer when every parent is a skip. A single
+        entry is a plain adjacent hop when that entry is
+        ``target_layer - 1``; ``hops[0]`` is always ``(0,)``,
+        so an ``align_inputs`` tensor feeds it with no
+        gathering.
     source_dims : tuple[int, ...]
         Units contributed by each entry of ``source_layers``,
         same order. Their sum is ``in_features``.
@@ -357,8 +361,9 @@ class LayeredSpec:
     layer_nodes : tuple[tuple[str, ...], ...]
         ``layer_nodes[i]`` is the names at depth ``i``, alphabetical.
         Index 0 is the input layer. Depth is longest path from the
-        inputs, and there are always at least two layers. One
-        name per node, not per unit.
+        inputs unless ``parse_layered(..., ranks=)`` assigned
+        compact ranks, and there are always at least two layers.
+        One name per node, not per unit.
     layer_dims : tuple[int, ...]
         Unit count of each layer: ``layer_dims[i]`` is
         ``sum(layer_widths[i])``. Equal to
@@ -411,9 +416,11 @@ class LayeredSpec:
     included.
 
     ``to_edgelist()``, ``to_dict()`` with ``from_dict()``, and
-    ``fingerprint`` are the supported interchange. Widths live
-    on ``to_dict()``, not on the edgelist: reparse of
-    ``to_edgelist()`` without ``widths=`` is width 1.
+    ``fingerprint`` are the supported interchange. Widths and
+    ranks live on ``to_dict()``, not on the edgelist: reparse of
+    ``to_edgelist()`` without ``widths=`` / ``ranks=`` is
+    width 1 and longest-path. ``to_dict()`` omits ``"ranks"``
+    when compacted layers equal longest-path on the same edges.
     Pickle and ``torch.save`` of the dataclass are not.
     ``edge_location`` finds packed slots of a named edge; it is
     not a constraint.
@@ -507,11 +514,12 @@ class LayeredSpec:
         DataFrame that was parsed are not reproduced.
 
         ``parse_layered`` on this table reconstructs the same
-        node lists and named edges. Packed hop indices and
-        ``layer_dims`` match when every node has width 1.
-        Otherwise pass ``widths=`` or use ``from_dict()``, which
-        reads widths from the tagged dict. Skip tuple order
-        follows these sorted rows rather than the original
+        node lists and named edges when every node has width 1
+        and ranking is longest-path. Packed hop indices and
+        ``layer_dims`` match in that case. Otherwise pass
+        ``widths=`` and/or ``ranks=``, or use ``from_dict()``,
+        which reads those keys from the tagged dict. Skip tuple
+        order follows these sorted rows rather than the original
         parse input order; the skip *set* matches.
 
         Returns
@@ -647,8 +655,12 @@ class LayeredSpec:
         ``[source, target]`` lists in the same order as
         ``to_edgelist()`` rows). When any node has width other
         than 1, a ``"widths"`` object of those names is included.
-        All-1 graphs omit ``"widths"``. The returned dict is new
-        on every call.
+        All-1 graphs omit ``"widths"``. When compacted layers
+        differ from longest-path on the same edges, a ``"ranks"``
+        object maps every node to its compacted 0-based layer
+        index. A ``ranks=`` parse that matches longest-path
+        omits ``"ranks"``. The returned dict is new on every
+        call.
 
         Returns
         -------
@@ -684,10 +696,11 @@ class LayeredSpec:
         Rebuild a ``LayeredSpec`` from ``to_dict()`` output.
 
         Calls ``parse_layered`` on a DataFrame built from
-        ``payload["edges"]``, passing ``payload["widths"]`` when
-        present. Hops and packed indices are not assembled by
-        hand. Extra unknown keys are ignored. An absent or empty
-        ``"widths"`` object is width 1.
+        ``payload["edges"]``, passing ``payload["widths"]`` and
+        ``payload["ranks"]`` when present. Hops and packed
+        indices are not assembled by hand. Extra unknown keys
+        are ignored. An absent or empty ``"widths"`` object is
+        width 1. Absent ``"ranks"`` is longest-path.
 
         Parameters
         ----------
@@ -695,6 +708,8 @@ class LayeredSpec:
             A dict with ``kpnn2_spec``, ``layout``, and
             ``edges``. ``layout`` must be ``"layered"``.
             Optional ``"widths"`` is a node-name-to-int object.
+            Optional ``"ranks"`` is a node-name-to-int object of
+            compacted (or user) depths.
 
         Returns
         -------
@@ -708,8 +723,9 @@ class LayeredSpec:
             missing or not ``1``; ``layout`` is missing, not a
             known layout, or is ``"adjacency"``; ``edges``
             is missing or not a sequence of two nonempty names;
-            or ``"widths"`` is present and not a mapping of
-            positive ints.
+            ``"widths"`` is present and not a mapping of
+            positive ints; or ``"ranks"`` is present and not a
+            mapping of non-negative ints covering every node.
 
         Examples
         --------
