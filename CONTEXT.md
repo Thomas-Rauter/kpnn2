@@ -925,6 +925,9 @@ PackedLinear(
   persistent so the module round-trips. They stay integer
   after `.half()` / bfloat16 / `.double()`; `weight` and
   `bias` follow the module floating dtype like `nn.Linear`.
+  `torch.autocast` is unsupported: this forward path is
+  not on the AMP allowlist. Cast the module with
+  `.to(dtype=...)` (or `.half()` / `.double()`) instead.
 - Forward, `x` shape `(..., in_features)`:
 
   ```text
@@ -1075,6 +1078,8 @@ PackedMultiheadAttention(
 - Index buffers `source_index` and `target_index` are
   persistent so the module round-trips. They stay
   integer after `.half()` / bfloat16 / `.double()`.
+  `torch.autocast` is unsupported, as on `PackedLinear`.
+  Cast the module with `.to(dtype=...)` instead.
 
 ```text
 forward(

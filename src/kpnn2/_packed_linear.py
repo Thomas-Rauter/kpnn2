@@ -266,7 +266,10 @@ class PackedLinear(nn.Module):
     ``torch.compile(layer, fullgraph=True)`` traces it. Index
     buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``; ``weight`` and ``bias`` follow the module
-    floating dtype like ``nn.Linear``.
+    floating dtype like ``nn.Linear``. ``torch.autocast`` is
+    unsupported: this forward path is not on the AMP
+    allowlist. Cast the module with ``.to(dtype=...)``
+    (or ``.half()`` / ``.double()``) instead.
 
     ``reset_parameters`` uses per-row packed degree as
     ``fan_in``, not full ``in_features``. A row with

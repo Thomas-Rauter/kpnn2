@@ -548,7 +548,10 @@ class PackedMultiheadAttention(nn.Module):
 
     Index buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``; projection weights follow the module floating
-    dtype like ``nn.Linear``. ``state_dict`` adds
+    dtype like ``nn.Linear``. ``torch.autocast`` is unsupported:
+    the packed score path is not on the AMP allowlist. Cast the
+    module with ``.to(dtype=...)`` (or ``.half()`` /
+    ``.double()``) instead. ``state_dict`` adds
     ``index_digest``, a 1-D CPU ``uint8`` tensor of length 32:
     the SHA-256 of the packed indices plus ``query_features``,
     ``key_features``, ``embed_dim``, and ``num_heads``, so a
