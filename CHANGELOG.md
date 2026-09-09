@@ -10,7 +10,9 @@ This project follows semantic versioning.
 
 ### Added
 
-- `PackedMultiheadAttention` nn.Module for assembling transformer architectures.
+- `identity=` on `MaskedLinear`, `PackedLinear`, and
+  `PackedMultiheadAttention`: opaque spec fingerprint in
+  `state_dict`, checked on load.
 
 
 ## [0.1.0] - 1. September 2026

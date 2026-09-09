@@ -526,6 +526,153 @@ def test_packed_linear_index_digest_uses_live_indices():
     )
 
 
+def test_packed_linear_identity_in_state_dict():
+    layer = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+        identity="abc",
+    )
+    assert layer.identity == "abc"
+    saved = layer.state_dict()["identity"]
+    assert saved.dtype == torch.uint8
+    assert saved.device.type == "cpu"
+    assert saved.tolist() == list(b"abc")
+    buffers = dict(layer.named_buffers())
+    assert not any("identity" in name for name in buffers)
+
+
+def test_packed_linear_identity_omitted_from_state_dict():
+    layer = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+    )
+    assert layer.identity is None
+    assert "identity" not in layer.state_dict()
+
+
+def test_packed_linear_load_rejects_foreign_identity():
+    src = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+        identity="left",
+    )
+    dst = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+        identity="right",
+    )
+    with torch.no_grad():
+        src.weight.fill_(0.5)
+        dst.weight.fill_(0.25)
+    before = dst.weight.clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        dst.weight,
+        before,
+    )
+
+
+def test_packed_linear_load_without_identity_key():
+    src = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+    )
+    dst = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+        identity="abc",
+    )
+    with torch.no_grad():
+        src.weight.fill_(0.5)
+        dst.weight.fill_(0.25)
+    state = src.state_dict()
+    assert "identity" not in state
+    result = dst.load_state_dict(
+        state,
+        strict=True,
+    )
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
+    torch.testing.assert_close(
+        dst.weight,
+        src.weight,
+    )
+
+
+def test_packed_linear_load_rejects_renamed_nodes():
+    original = parse_adjacency(
+        pd.DataFrame(
+            {
+                "source": ["g1"],
+                "target": ["g2"],
+            }
+        )
+    )
+    renamed = parse_adjacency(
+        pd.DataFrame(
+            {
+                "source": ["g1b"],
+                "target": ["g2"],
+            }
+        )
+    )
+    assert original.source_index == renamed.source_index
+    assert original.target_index == renamed.target_index
+    assert original.fingerprint != renamed.fingerprint
+    n = len(original.nodes)
+    src = PackedLinear(
+        original.source_index,
+        original.target_index,
+        n,
+        n,
+        bias=False,
+        identity=original.fingerprint,
+    )
+    dst = PackedLinear(
+        renamed.source_index,
+        renamed.target_index,
+        n,
+        n,
+        bias=False,
+        identity=renamed.fingerprint,
+    )
+    with torch.no_grad():
+        src.weight.fill_(0.5)
+        dst.weight.fill_(0.25)
+    before = dst.weight.clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        dst.weight,
+        before,
+    )
+
+
 def test_packed_linear_deepcopy_independent_parameters():
     torch.manual_seed(42)
     layer = PackedLinear(

@@ -260,10 +260,12 @@ parameter.
 [`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py).
 
 **Checkpoints.** `state_dict` carries a digest of the live mask
-or packed indices. Loading into a rewired layer of the same
-shape raises. Spec interchange is `to_dict` / `from_dict`, not
-pickle of the dataclass. The public import surface is a frozen
-list.
+or packed indices, and an optional `identity` (typically
+`spec.fingerprint`). Loading into a rewired layer of the same
+shape raises. Loading into a same-shape rename raises when
+`identity` was set. Spec interchange is `to_dict` /
+`from_dict`, not pickle of the dataclass. The public import
+surface is a frozen list.
 [`tests/api/test_public_api.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/api/test_public_api.py).
 
 **A real table.** Breast Cancer Wisconsin Diagnostic, a sparse

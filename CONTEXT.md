@@ -722,12 +722,21 @@ Drop-in sparse linear layer. Same job as `torch.nn.Linear`
 (call as `layer(x)`); not a subclass. Not a full model.
 
 ```text
-MaskedLinear(mask, bias=True)
+MaskedLinear(mask, bias=True, *, identity=None)
 ```
 
 - `mask`: `torch.Tensor`, shape `(out_features, in_features)`.
   Inferred `in_features` / `out_features` from `mask.shape`.
   Do not take separate size arguments.
+- Optional `bias`: shape `(out_features,)`. If `bias=False`,
+  no bias parameter.
+- Optional `identity`: opaque `str`, typically
+  `spec.fingerprint`. Stored in `state_dict` next to
+  `mask_digest` as UTF-8 `uint8` bytes. `load_state_dict`
+  raises `Kpnn2Error` when a present identity does not
+  match. A missing identity is not an error, even with
+  `strict=True`. `None` means this layer does not claim
+  an identity.
 - The mask is applied through
   **`torch.nn.utils.parametrize.register_parametrization`** on
   the parameter named `weight`. That is the blessed PyTorch
@@ -749,23 +758,28 @@ MaskedLinear(mask, bias=True)
   `name.endswith(".weight")` does not. Do not describe this
   as "the usual `weight` name."
 - `state_dict` keys are `parametrizations.weight.original`,
-  optional `bias`, and `mask_digest`. `mask` stays out: it
-  remains a non-persistent float32 buffer. `mask_digest` is a
-  1-D CPU `torch.uint8` tensor of length 32, the SHA-256 of
-  the live mask's float32 C-contiguous bytes at save time, not
-  a registered persistent buffer. `load_state_dict` raises
-  `Kpnn2Error` when a present digest does not match the live
-  mask, and does not load the weights. A missing digest is not
-  an error, even with `strict=True`. This catches same-shape
-  rewiring, not a rename that leaves the 0/1 pattern unchanged
-  (that is `spec.fingerprint`). `repr` reports
-  `ParametrizedMaskedLinear` (PyTorch swaps in a subclass to
-  install the `weight` property); `isinstance(layer,
-  MaskedLinear)` stays `True`, and `extra_repr` reports
-  `in_features`, `out_features`, `bias` as `nn.Linear` does.
-  Pickling the module object raises, as for any parametrized
-  module; `copy.deepcopy` and `state_dict` work. Do not call
-  `remove_parametrizations` on `weight`: that drops the mask.
+  optional `bias`, `mask_digest`, and `identity` when the
+  constructor was given one. `mask` stays out: it remains a
+  non-persistent float32 buffer. `mask_digest` is a 1-D CPU
+  `torch.uint8` tensor of length 32, the SHA-256 of the live
+  mask's float32 C-contiguous bytes at save time, not a
+  registered persistent buffer. `identity` is a 1-D CPU
+  `torch.uint8` tensor of the UTF-8 bytes of the constructor
+  string, also not a registered buffer. `load_state_dict`
+  raises `Kpnn2Error` when a present digest or identity does
+  not match the live layer, and does not load the weights. A
+  missing digest or identity is not an error, even with
+  `strict=True`. The digest catches same-shape rewiring. A
+  rename that leaves the 0/1 pattern unchanged is caught by
+  `identity` when callers pass `spec.fingerprint`. `repr`
+  reports `ParametrizedMaskedLinear` (PyTorch swaps in a
+  subclass to install the `weight` property);
+  `isinstance(layer, MaskedLinear)` stays `True`, and
+  `extra_repr` reports `in_features`, `out_features`, `bias`
+  as `nn.Linear` does. Pickling the module object raises, as
+  for any parametrized module; `copy.deepcopy` and
+  `state_dict` work. Do not call `remove_parametrizations` on
+  `weight`: that drops the mask.
 - Register `mask` as a **non-persistent buffer** (not a
   parameter, not in `state_dict`), `float32`, and a **plain
   `torch.Tensor`**. It lives on the parametrization module, so
@@ -784,8 +798,6 @@ MaskedLinear(mask, bias=True)
   `MaskedLinear` layers and a `LayeredSpec`) succeeds.
   Parameters on the copy are distinct objects. Copied masks
   stay float32.
-- Optional `bias`: shape `(out_features,)`. If `bias=False`, no bias
-  parameter.
 - Forward multiplies in the parameter dtype:
   `weight = original * mask.to(dtype=original.dtype,
   device=original.device)`, then
@@ -817,7 +829,14 @@ MaskedLinear(mask, bias=True)
 - Masked-out weights still exist as parameters but are multiplied
   by 0 in the forward pass.
 
-Typical construction: `MaskedLinear(spec.hops[i].mask)`.
+Typical construction:
+
+```python
+MaskedLinear(
+    spec.hops[i].mask,
+    identity=spec.fingerprint,
+)
+```
 
 ---
 
@@ -835,6 +854,8 @@ PackedLinear(
     out_features,
     in_features,
     bias=True,
+    *,
+    identity=None,
 )
 ```
 
@@ -847,6 +868,13 @@ PackedLinear(
 - `out_features`, `in_features`: positive ints.
 - Optional `bias`: shape `(out_features,)`. If
   `bias=False`, no bias parameter.
+- Optional `identity`: opaque `str`, typically
+  `spec.fingerprint`. Stored in `state_dict` next to
+  `index_digest` as UTF-8 `uint8` bytes. `load_state_dict`
+  raises `Kpnn2Error` when a present identity does not
+  match. A missing identity is not an error, even with
+  `strict=True`. `None` means this layer does not claim
+  an identity.
 - `weight` is an `nn.Parameter` of shape `(nnz,)`. No
   `parametrize`. No dense `(out, in)` `layer.weight`.
   The parameter name is `weight`.
@@ -882,16 +910,23 @@ PackedLinear(
 - `extra_repr` reports `in_features`, `out_features`,
   `nnz`, and `bias`.
 - `state_dict` keys are `weight`, optional `bias`,
-  `source_index`, `target_index`, and `index_digest`.
+  `source_index`, `target_index`, `index_digest`, and
+  `identity` when the constructor was given one.
   `index_digest` is a 1-D CPU `torch.uint8` tensor of
   length 32, the SHA-256 of the int64 C-contiguous bytes
   of `source_index`, then `target_index`, plus
   `out_features` and `in_features` as fixed-width
   integers so a reshape cannot collide. It is not a
-  registered persistent buffer. `load_state_dict` raises
-  `Kpnn2Error` when a present digest does not match, and
-  does not load the weights. A missing digest is not an
-  error, even with `strict=True`. `copy.deepcopy` works.
+  registered persistent buffer. `identity` is a 1-D CPU
+  `torch.uint8` tensor of the UTF-8 bytes of the
+  constructor string, also not a registered buffer.
+  `load_state_dict` raises `Kpnn2Error` when a present
+  digest or identity does not match, and does not load
+  the weights. A missing digest or identity is not an
+  error, even with `strict=True`. The digest catches
+  same-shape rewiring. A rename that leaves the packed
+  index pattern unchanged is caught by `identity` when
+  callers pass `spec.fingerprint`. `copy.deepcopy` works.
 - The forward path holds no tensor subclass and no sparse
   layout, so `torch.compile(layer, fullgraph=True)` traces
   it without a graph break. Keep it that way.
@@ -905,6 +940,7 @@ core = kpnn2.PackedLinear(
     spec.target_index,
     len(spec.nodes),
     len(spec.nodes),
+    identity=spec.fingerprint,
 )
 ```
 
@@ -946,6 +982,8 @@ PackedMultiheadAttention(
     vdim=None,
     batch_first=True,
     add_self_loops=False,
+    *,
+    identity=None,
 )
 ```
 
@@ -978,6 +1016,13 @@ PackedMultiheadAttention(
   kept, not duplicated. If
   `query_features != key_features`, raise
   `Kpnn2Error`.
+- Optional `identity`: opaque `str`, typically
+  `spec.fingerprint`. Stored in `state_dict` next to
+  `index_digest` as UTF-8 `uint8` bytes. `load_state_dict`
+  raises `Kpnn2Error` when a present identity does not
+  match. A missing identity is not an error, even with
+  `strict=True`. `None` means this layer does not claim
+  an identity.
 - Projections are four separate
   `embed_dim → embed_dim` `nn.Linear`s (`q_proj`,
   `k_proj`, `v_proj`, `out_proj`), not a fused
@@ -1036,11 +1081,14 @@ forward(
   `key_features`, `embed_dim`, and `num_heads` as
   fixed-width integers so a reshape or a different
   head split cannot collide. It is not a registered
-  persistent buffer. `load_state_dict` raises
-  `Kpnn2Error` when a present digest does not match,
-  and does not load the weights. A missing digest is
-  not an error, even with `strict=True`. Same
-  pattern as `PackedLinear`. `copy.deepcopy` works.
+  persistent buffer. When the constructor was given
+  `identity`, `state_dict` also includes that string
+  as UTF-8 `uint8` bytes. `load_state_dict` raises
+  `Kpnn2Error` when a present digest or identity does
+  not match, and does not load the weights. A missing
+  digest or identity is not an error, even with
+  `strict=True`. Same pattern as `PackedLinear`.
+  `copy.deepcopy` works.
 
 Typical construction:
 
@@ -1054,6 +1102,7 @@ attn = kpnn2.PackedMultiheadAttention(
     n,
     embed_dim,
     num_heads,
+    identity=spec.fingerprint,
 )
 ```
 
@@ -1293,7 +1342,13 @@ class Net(nn.Module):
         super().__init__()
         self.spec = spec
         self.hops = nn.ModuleList(
-            [kpnn2.MaskedLinear(hop.mask) for hop in spec.hops]
+            [
+                kpnn2.MaskedLinear(
+                    hop.mask,
+                    identity=spec.fingerprint,
+                )
+                for hop in spec.hops
+            ]
         )
 
     def forward(self, x):
@@ -1343,9 +1398,17 @@ module raises, because the mask is a parametrization; save
 dataclass and will break when spec fields move. `to_dict()` is
 the interchange. Alphabetical unit identity is unchanged after
 `from_dict`. The connectivity mask stays out of `state_dict`.
-`mask_digest` only checks that the rebuilt layer's mask matches
-training; it does not restore names. There is no `layout=`
-parser flag: choose `LayeredSpec.from_dict` or
+`mask_digest` / `index_digest` only check that the rebuilt
+layer's 0/1 pattern or packed indices match training; they do
+not restore names. Pass `identity=spec.fingerprint` when
+constructing layers so `state_dict` carries that digest next
+to the connectivity digest. `load_state_dict` raises
+`Kpnn2Error` when a present identity does not match: a rename
+that preserves alphabetical position (for example
+`('g1','g2')` → `('g1b','g2')`) is then a loud failure
+instead of silent mis-attribution. A missing identity is not
+an error (old checkpoints). There is no `layout=` parser
+flag: choose `LayeredSpec.from_dict` or
 `AdjacencySpec.from_dict` from `blob["spec"]["layout"]`.
 
 ```python
@@ -1371,7 +1434,8 @@ There is no graph compiler and no ready-made model. Write ordinary
 PyTorch:
 
 1. `spec = kpnn2.parse_layered(edgelist)`
-2. `kpnn2.MaskedLinear(hop.mask)` for each `hop` in `spec.hops`
+2. `kpnn2.MaskedLinear(hop.mask, identity=spec.fingerprint)`
+   for each `hop` in `spec.hops`
 3. In `forward()`, keep a `saved` dict of layer index → tensor,
    and feed each hop `kpnn2.gather_hop_inputs(saved, hop)`
 4. Put ReLU / BatchNorm / Dropout in `forward()` yourself, after
@@ -1385,7 +1449,9 @@ PyTorch:
    `map_node_attributions(...)`
 7. Save `spec.to_dict()` next to `state_dict`. Rebuild from
    `from_dict`, then `load_state_dict`. Weights alone cannot
-   reconstruct names or layout.
+   reconstruct names or layout. Pass
+   `identity=spec.fingerprint` on each connectivity module
+   so a rename cannot load silently.
 
 Do not add a compiled core or mutate connectivity after parse.
 `copy.deepcopy` of this module shape succeeds. Copied masks
@@ -1414,6 +1480,7 @@ src/kpnn2/
   _errors.py                  # Kpnn2Error
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis
+  _identity.py                # opaque checkpoint identity
   _serialize.py               # private spec edges, dicts, fingerprints
 
 tests/

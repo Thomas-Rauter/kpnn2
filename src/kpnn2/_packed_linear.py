@@ -12,6 +12,7 @@ import torch
 from torch import nn
 
 from ._errors import Kpnn2Error
+from ._identity import as_identity, check_identity, save_identity
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -169,6 +170,15 @@ class PackedLinear(nn.Module):
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
         If ``False``, there is no bias.
+    identity : str or None, default=None
+        Opaque checkpoint identity, typically
+        ``spec.fingerprint``. Stored in ``state_dict`` next to
+        ``index_digest`` as a 1-D CPU ``uint8`` tensor of the
+        UTF-8 bytes. ``load_state_dict`` raises ``Kpnn2Error``
+        when a present identity does not match this layer, and
+        does not load the weights. A missing identity is not an
+        error, even with ``strict=True``. ``None`` means this
+        layer does not claim an identity.
 
     Attributes
     ----------
@@ -194,6 +204,8 @@ class PackedLinear(nn.Module):
     bias : nn.Parameter | None
         Trainable bias, or ``None`` when constructed with
         ``bias=False``.
+    identity : str | None
+        The constructor ``identity``, or ``None``.
 
     Raises
     ------
@@ -201,10 +213,11 @@ class PackedLinear(nn.Module):
         If the indices are empty, not 1-D integers, mismatched in
         length, out of range, or duplicated as
         ``(source, target)`` pairs; if ``out_features`` /
-        ``in_features`` are not positive ints; and from
+        ``in_features`` are not positive ints; if ``identity`` is
+        neither a ``str`` nor ``None``; and from
         ``load_state_dict`` when the checkpoint carries an index
-        digest that does not match this layer, in which case the
-        weights are not loaded.
+        digest or identity that does not match this layer, in
+        which case the weights are not loaded.
 
     See Also
     --------
@@ -239,12 +252,16 @@ class PackedLinear(nn.Module):
     and this layer does not invent identity connections for them.
 
     ``state_dict`` keys are ``weight``, optional ``bias``,
-    ``source_index``, ``target_index``, and ``index_digest``.
+    ``source_index``, ``target_index``, ``index_digest``, and
+    ``identity`` when the constructor was given one.
     ``index_digest`` is a 1-D CPU ``uint8`` tensor of length 32:
     the SHA-256 of the live index buffers' int64 C-contiguous
     bytes plus ``out_features`` and ``in_features`` as
     fixed-width integers, not a registered buffer. A missing
-    digest is not an error, even with ``strict=True``.
+    digest is not an error, even with ``strict=True``. The
+    digest catches same-shape rewiring. A rename that leaves
+    the packed index pattern unchanged is caught by
+    ``identity`` when callers pass ``spec.fingerprint``.
     ``copy.deepcopy`` works.
 
     Examples
@@ -268,6 +285,7 @@ class PackedLinear(nn.Module):
     ...     spec.target_index,
     ...     n,
     ...     n,
+    ...     identity=spec.fingerprint,
     ... )
     >>> core.in_features, core.out_features, core.nnz
     (4, 4, 4)
@@ -284,6 +302,7 @@ class PackedLinear(nn.Module):
     target_index: torch.Tensor
     weight: nn.Parameter
     bias: nn.Parameter | None
+    identity: str | None
 
     def __init__(
         self,
@@ -292,6 +311,8 @@ class PackedLinear(nn.Module):
         out_features: int,
         in_features: int,
         bias: bool = True,
+        *,
+        identity: str | None = None,
     ) -> None:
         super().__init__()
         out_features = _positive_int(
@@ -345,6 +366,7 @@ class PackedLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.nnz = nnz
+        self.identity = as_identity(identity)
         self.register_buffer(
             "source_index",
             source,
@@ -432,6 +454,11 @@ class PackedLinear(nn.Module):
             self.out_features,
             self.in_features,
         )
+        save_identity(
+            destination,
+            prefix,
+            self.identity,
+        )
 
     def _load_from_state_dict(
         self,
@@ -443,6 +470,11 @@ class PackedLinear(nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
+        check_identity(
+            state_dict,
+            prefix,
+            self.identity,
+        )
         key = prefix + _INDEX_DIGEST_KEY
         saved = state_dict.pop(key, None)
         if saved is not None:

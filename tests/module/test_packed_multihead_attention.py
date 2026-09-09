@@ -852,6 +852,132 @@ def test_load_without_index_digest():
     )
 
 
+def test_identity_in_state_dict():
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        bias=False,
+        identity="abc",
+    )
+    assert layer.identity == "abc"
+    saved = layer.state_dict()["identity"]
+    assert saved.dtype == torch.uint8
+    assert saved.device.type == "cpu"
+    assert saved.tolist() == list(b"abc")
+    buffers = dict(layer.named_buffers())
+    assert not any("identity" in name for name in buffers)
+
+
+def test_identity_omitted_from_state_dict():
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        bias=False,
+    )
+    assert layer.identity is None
+    assert "identity" not in layer.state_dict()
+
+
+def test_load_rejects_foreign_identity():
+    src = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        bias=False,
+        identity="left",
+    )
+    dst = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        bias=False,
+        identity="right",
+    )
+    with torch.no_grad():
+        src.q_proj.weight.fill_(0.5)
+        dst.q_proj.weight.fill_(0.25)
+    before = dst.q_proj.weight.detach().clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        dst.q_proj.weight,
+        before,
+    )
+
+
+def test_load_rejects_renamed_nodes():
+    original = parse_adjacency(
+        pd.DataFrame(
+            {
+                "source": ["g1"],
+                "target": ["g2"],
+            }
+        )
+    )
+    renamed = parse_adjacency(
+        pd.DataFrame(
+            {
+                "source": ["g1b"],
+                "target": ["g2"],
+            }
+        )
+    )
+    assert original.source_index == renamed.source_index
+    assert original.target_index == renamed.target_index
+    assert original.fingerprint != renamed.fingerprint
+    n = len(original.nodes)
+    src = PackedMultiheadAttention(
+        original.source_index,
+        original.target_index,
+        n,
+        n,
+        8,
+        2,
+        bias=False,
+        identity=original.fingerprint,
+    )
+    dst = PackedMultiheadAttention(
+        renamed.source_index,
+        renamed.target_index,
+        n,
+        n,
+        8,
+        2,
+        bias=False,
+        identity=renamed.fingerprint,
+    )
+    with torch.no_grad():
+        src.q_proj.weight.fill_(0.5)
+        dst.q_proj.weight.fill_(0.25)
+    before = dst.q_proj.weight.detach().clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        dst.q_proj.weight,
+        before,
+    )
+
+
 def test_deepcopy_independent_parameters():
     torch.manual_seed(42)
     layer = PackedMultiheadAttention(

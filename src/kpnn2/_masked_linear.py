@@ -12,6 +12,7 @@ from torch import nn
 from torch.nn.utils import parametrize
 
 from ._errors import Kpnn2Error
+from ._identity import as_identity, check_identity, save_identity
 from ._mask_tensor import as_mask_tensor
 
 _MASK_DIGEST_KEY = "mask_digest"
@@ -126,6 +127,15 @@ class MaskedLinear(nn.Module):
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
         If ``False``, there is no bias.
+    identity : str or None, default=None
+        Opaque checkpoint identity, typically
+        ``spec.fingerprint``. Stored in ``state_dict`` next to
+        ``mask_digest`` as a 1-D CPU ``uint8`` tensor of the
+        UTF-8 bytes. ``load_state_dict`` raises ``Kpnn2Error``
+        when a present identity does not match this layer, and
+        does not load the weights. A missing identity is not an
+        error, even with ``strict=True``. ``None`` means this
+        layer does not claim an identity.
 
     Attributes
     ----------
@@ -161,13 +171,16 @@ class MaskedLinear(nn.Module):
     bias : nn.Parameter | None
         Trainable bias, or ``None`` when constructed with
         ``bias=False``.
+    identity : str | None
+        The constructor ``identity``, or ``None``.
 
     Raises
     ------
     Kpnn2Error
-        If ``mask`` is not a ``torch.Tensor`` or is not 2-D, and
-        from ``load_state_dict`` when the checkpoint carries a
-        mask digest that does not match this layer's mask; the
+        If ``mask`` is not a ``torch.Tensor`` or is not 2-D; if
+        ``identity`` is neither a ``str`` nor ``None``; and from
+        ``load_state_dict`` when the checkpoint carries a mask
+        digest or identity that does not match this layer; the
         weights are then not loaded.
 
     See Also
@@ -201,14 +214,15 @@ class MaskedLinear(nn.Module):
     conventions:
 
     - ``state_dict`` keys are ``parametrizations.weight.original``,
-      optional ``bias``, and ``mask_digest``; ``mask`` stays out
-      of it. ``mask_digest`` is a 1-D CPU ``uint8`` tensor of
-      length 32: the SHA-256 of the live mask's float32
-      C-contiguous bytes at save time, not a registered buffer.
-      A missing digest is not an error, even with ``strict=True``.
-      The digest catches same-shape rewiring, not a rename that
-      leaves the 0/1 pattern unchanged (that is
-      ``spec.fingerprint``).
+      optional ``bias``, ``mask_digest``, and ``identity`` when
+      the constructor was given one; ``mask`` stays out of it.
+      ``mask_digest`` is a 1-D CPU ``uint8`` tensor of length 32:
+      the SHA-256 of the live mask's float32 C-contiguous bytes
+      at save time, not a registered buffer. A missing digest is
+      not an error, even with ``strict=True``. The digest
+      catches same-shape rewiring. A rename that leaves the 0/1
+      pattern unchanged is caught by ``identity`` when callers
+      pass ``spec.fingerprint``.
     - ``repr`` reports ``ParametrizedMaskedLinear``, because
       PyTorch swaps in a subclass to install the ``weight``
       property. ``isinstance(layer, MaskedLinear)`` is still
@@ -265,11 +279,14 @@ class MaskedLinear(nn.Module):
 
     weight: torch.Tensor
     bias: nn.Parameter | None
+    identity: str | None
 
     def __init__(
         self,
         mask: torch.Tensor,
         bias: bool = True,
+        *,
+        identity: str | None = None,
     ) -> None:
         super().__init__()
         if not isinstance(mask, torch.Tensor):
@@ -283,6 +300,7 @@ class MaskedLinear(nn.Module):
         out_features, in_features = mask.shape
         self.in_features = in_features
         self.out_features = out_features
+        self.identity = as_identity(identity)
 
         self.weight = nn.Parameter(
             torch.empty(
@@ -397,6 +415,11 @@ class MaskedLinear(nn.Module):
             keep_vars,
         )
         destination[prefix + _MASK_DIGEST_KEY] = _mask_digest(self.mask)
+        save_identity(
+            destination,
+            prefix,
+            self.identity,
+        )
 
     def _load_from_state_dict(
         self,
@@ -408,6 +431,11 @@ class MaskedLinear(nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
+        check_identity(
+            state_dict,
+            prefix,
+            self.identity,
+        )
         key = prefix + _MASK_DIGEST_KEY
         saved = state_dict.pop(key, None)
         if saved is not None:

@@ -595,6 +595,309 @@ def test_masked_linear_mask_digest_uses_live_mask():
     )
 
 
+def test_masked_linear_identity_is_keyword_only():
+    mask = torch.ones(
+        2,
+        3,
+    )
+    with pytest.raises(TypeError):
+        MaskedLinear(
+            mask,
+            True,
+            "abc",
+        )
+
+
+def test_masked_linear_identity_rejects_non_str():
+    mask = torch.ones(
+        2,
+        3,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match="identity",
+    ):
+        MaskedLinear(
+            mask,
+            identity=b"abc",
+        )
+
+
+def test_masked_linear_identity_omitted_from_state_dict():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        )
+    )
+    assert layer.identity is None
+    assert "identity" not in layer.state_dict()
+
+
+def test_masked_linear_identity_in_state_dict():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        identity="abc",
+    )
+    assert layer.identity == "abc"
+    keys = set(layer.state_dict().keys())
+    assert "identity" in keys
+    saved = layer.state_dict()["identity"]
+    assert saved.dtype == torch.uint8
+    assert saved.device.type == "cpu"
+    assert saved.tolist() == list(b"abc")
+    buffers = dict(layer.named_buffers())
+    assert not any("identity" in name for name in buffers)
+
+
+def test_masked_linear_identity_roundtrip():
+    src = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+        identity="abc",
+    )
+    dst = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+        identity="abc",
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    result = dst.load_state_dict(src.state_dict())
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
+    torch.testing.assert_close(
+        _original(dst),
+        _original(src),
+    )
+
+
+def test_masked_linear_load_rejects_foreign_identity():
+    src = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+        identity="left",
+    )
+    dst = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+        identity="right",
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    before = _original(dst).clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        _original(dst),
+        before,
+    )
+
+
+def test_masked_linear_load_without_identity_key():
+    src = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+    )
+    dst = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+        identity="abc",
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    state = src.state_dict()
+    assert "identity" not in state
+    result = dst.load_state_dict(
+        state,
+        strict=True,
+    )
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
+    torch.testing.assert_close(
+        _original(dst),
+        _original(src),
+    )
+
+
+def test_masked_linear_load_rejects_identity_when_live_has_none():
+    src = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+        identity="abc",
+    )
+    dst = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        bias=False,
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    before = _original(dst).clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        _original(dst),
+        before,
+    )
+
+
+def _rename_preserving_mask():
+    original = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["g1"],
+                "target": ["g2"],
+            }
+        )
+    )
+    renamed = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["g1b"],
+                "target": ["g2"],
+            }
+        )
+    )
+    return original, renamed
+
+
+def test_masked_linear_load_rejects_renamed_nodes():
+    original, renamed = _rename_preserving_mask()
+    assert torch.equal(
+        original.hops[0].mask,
+        renamed.hops[0].mask,
+    )
+    assert original.fingerprint != renamed.fingerprint
+    src = MaskedLinear(
+        original.hops[0].mask,
+        bias=False,
+        identity=original.fingerprint,
+    )
+    dst = MaskedLinear(
+        renamed.hops[0].mask,
+        bias=False,
+        identity=renamed.fingerprint,
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    before = _original(dst).clone()
+    with pytest.raises(
+        Kpnn2Error,
+        match="checkpoint identity does not match",
+    ):
+        dst.load_state_dict(src.state_dict())
+    torch.testing.assert_close(
+        _original(dst),
+        before,
+    )
+
+
+def test_masked_linear_rename_loads_without_identity():
+    original, renamed = _rename_preserving_mask()
+    src = MaskedLinear(
+        original.hops[0].mask,
+        bias=False,
+    )
+    dst = MaskedLinear(
+        renamed.hops[0].mask,
+        bias=False,
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    result = dst.load_state_dict(src.state_dict())
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
+    torch.testing.assert_close(
+        _original(dst),
+        _original(src),
+    )
+
+
+def test_masked_linear_identity_accepts_permuted_edgelist():
+    rows = pd.DataFrame(
+        {
+            "source": ["b", "a"],
+            "target": ["c", "b"],
+        }
+    )
+    permuted = rows.iloc[::-1].reset_index(drop=True)
+    original = parse_layered(rows)
+    shuffled = parse_layered(permuted)
+    assert original.fingerprint == shuffled.fingerprint
+    src = MaskedLinear(
+        original.hops[0].mask,
+        bias=False,
+        identity=original.fingerprint,
+    )
+    dst = MaskedLinear(
+        shuffled.hops[0].mask,
+        bias=False,
+        identity=shuffled.fingerprint,
+    )
+    with torch.no_grad():
+        _original(src).fill_(0.5)
+        _original(dst).fill_(0.25)
+    result = dst.load_state_dict(src.state_dict())
+    assert result.missing_keys == []
+    assert result.unexpected_keys == []
+    torch.testing.assert_close(
+        _original(dst),
+        _original(src),
+    )
+
+
+def test_masked_linear_deepcopy_keeps_identity():
+    layer = MaskedLinear(
+        torch.ones(
+            2,
+            3,
+        ),
+        identity="abc",
+    )
+    copied = copy.deepcopy(layer)
+    assert copied.identity == "abc"
+    assert copied.identity == layer.identity
+
+
 def test_masked_linear_zero_degree_row_stays_zero():
     torch.manual_seed(42)
     mask = torch.tensor(

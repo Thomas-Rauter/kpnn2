@@ -20,7 +20,14 @@ def _chain_plus_skip():
     )
 
 
-def test_layered_net_is_not_public_api():
+def test_layered_net_layers_carry_spec_fingerprint():
+    spec = parse_layered(_chain_plus_skip())
+    model = LayeredNet(
+        spec,
+        bias=False,
+    )
+    for layer in model.layers:
+        assert layer.identity == spec.fingerprint
     assert "LayeredNet" not in kpnn2.__all__
     assert not hasattr(
         kpnn2,

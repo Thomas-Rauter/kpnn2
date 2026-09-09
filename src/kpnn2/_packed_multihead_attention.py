@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ._errors import Kpnn2Error
+from ._identity import as_identity, check_identity, save_identity
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -457,6 +458,15 @@ class PackedMultiheadAttention(nn.Module):
         key. Existing self-loops are kept, not duplicated, and
         the caller's index objects are not mutated. Requires
         ``query_features == key_features``.
+    identity : str or None, default=None
+        Opaque checkpoint identity, typically
+        ``spec.fingerprint``. Stored in ``state_dict`` next to
+        ``index_digest`` as a 1-D CPU ``uint8`` tensor of the
+        UTF-8 bytes. ``load_state_dict`` raises ``Kpnn2Error``
+        when a present identity does not match this layer, and
+        does not load the weights. A missing identity is not an
+        error, even with ``strict=True``. ``None`` means this
+        layer does not claim an identity.
 
     Attributes
     ----------
@@ -490,6 +500,8 @@ class PackedMultiheadAttention(nn.Module):
     q_proj, k_proj, v_proj, out_proj : nn.Linear
         Four separate ``embed_dim -> embed_dim`` projections, not
         a fused ``in_proj_weight``.
+    identity : str | None
+        The constructor ``identity``, or ``None``.
 
     Raises
     ------
@@ -500,12 +512,13 @@ class PackedMultiheadAttention(nn.Module):
         are not positive ints; if ``embed_dim`` is not divisible
         by ``num_heads``; if ``dropout`` is a ``bool`` or
         negative; if ``kdim`` / ``vdim`` are neither ``None`` nor
-        ``embed_dim``; or if ``add_self_loops`` is set when
-        ``query_features != key_features``. From
+        ``embed_dim``; if ``add_self_loops`` is set when
+        ``query_features != key_features``; or if ``identity`` is
+        neither a ``str`` nor ``None``. From
         ``load_state_dict``, when the checkpoint carries an index
-        digest that does not match this layer, in which case the
-        weights are not loaded. ``forward`` documents its own
-        rejected arguments.
+        digest or identity that does not match this layer, in
+        which case the weights are not loaded. ``forward``
+        documents its own rejected arguments.
 
     See Also
     --------
@@ -541,7 +554,10 @@ class PackedMultiheadAttention(nn.Module):
     ``key_features``, ``embed_dim``, and ``num_heads``, so a
     reshape or a different head split cannot collide. It is not
     a registered buffer, and a missing digest is not an error,
-    even with ``strict=True``. ``copy.deepcopy`` works.
+    even with ``strict=True``. ``identity`` is stored the same
+    way when the constructor was given one: a rename that
+    leaves the packed index pattern unchanged is caught when
+    callers pass ``spec.fingerprint``. ``copy.deepcopy`` works.
 
     Examples
     --------
@@ -567,6 +583,7 @@ class PackedMultiheadAttention(nn.Module):
     ...     embed_dim=8,
     ...     num_heads=2,
     ...     add_self_loops=True,
+    ...     identity=spec.fingerprint,
     ... )
     >>> attn.nnz, attn.head_dim
     (8, 4)
@@ -580,6 +597,7 @@ class PackedMultiheadAttention(nn.Module):
 
     source_index: torch.Tensor
     target_index: torch.Tensor
+    identity: str | None
 
     def __init__(
         self,
@@ -595,6 +613,8 @@ class PackedMultiheadAttention(nn.Module):
         vdim: int | None = None,
         batch_first: bool = True,
         add_self_loops: bool = False,
+        *,
+        identity: str | None = None,
     ) -> None:
         super().__init__()
         query_features = _positive_int(
@@ -677,6 +697,7 @@ class PackedMultiheadAttention(nn.Module):
         self.dropout = dropout
         self.batch_first = batch_first
         self.add_self_loops = add_self_loops
+        self.identity = as_identity(identity)
         self.register_buffer(
             "source_index",
             source,
@@ -755,6 +776,11 @@ class PackedMultiheadAttention(nn.Module):
             self.embed_dim,
             self.num_heads,
         )
+        save_identity(
+            destination,
+            prefix,
+            self.identity,
+        )
 
     def _load_from_state_dict(
         self,
@@ -766,6 +792,11 @@ class PackedMultiheadAttention(nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
+        check_identity(
+            state_dict,
+            prefix,
+            self.identity,
+        )
         key = prefix + _INDEX_DIGEST_KEY
         saved = state_dict.pop(key, None)
         if saved is not None:

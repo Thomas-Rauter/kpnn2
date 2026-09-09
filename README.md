@@ -163,8 +163,14 @@ spec = kpnn2.parse_layered(edgelist)
 class Net(nn.Module):
     def __init__(self, spec: kpnn2.LayeredSpec):
         super().__init__()
-        self.lin0 = kpnn2.MaskedLinear(spec.hops[0].mask)
-        self.lin1 = kpnn2.MaskedLinear(spec.hops[1].mask)
+        self.lin0 = kpnn2.MaskedLinear(
+            spec.hops[0].mask,
+            identity=spec.fingerprint,
+        )
+        self.lin1 = kpnn2.MaskedLinear(
+            spec.hops[1].mask,
+            identity=spec.fingerprint,
+        )
 
     def forward(self, x):
         h = F.relu(self.lin0(x))

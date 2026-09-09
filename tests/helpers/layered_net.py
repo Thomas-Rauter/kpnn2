@@ -36,6 +36,7 @@ class LayeredNet(nn.Module):
                 MaskedLinear(
                     hop.mask,
                     bias=bias,
+                    identity=spec.fingerprint,
                 )
             )
         self.layers = nn.ModuleList(layers)
