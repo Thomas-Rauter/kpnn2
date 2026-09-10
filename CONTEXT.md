@@ -143,6 +143,24 @@ this package unless a later prompt asks.
   to add `parse_attention`. Do not reuse a hop rectangle as a
   square attention matrix.
 - **Not a trainer.** No losses, optimizers, or training loops.
+- **Not a per-edge policy DSL.** Mixed sign constraints
+  (activation vs inhibition) and frozen live-edge values
+  occur in real KPNNs (for example LEMBAS / OmniPath MOA).
+  kpnn2 does not own them and does not block them. They are
+  user convenience on top of the spec, not a missing
+  primitive: keep extra columns on the caller's DataFrame,
+  parse `source`/`target` only, locate slots with
+  `edge_location`, then apply ordinary PyTorch (a custom
+  `constraint=` module, a loss barrier, a gradient hook, or
+  `torch.where`). `constraint=` stays one `nn.Module` over
+  the whole weight tensor. `PackedLinear.weight` is one
+  `nn.Parameter`; per-slot `requires_grad=False` is not a
+  PyTorch operation. First-class `sign` / `freeze` /
+  `initial_weight` columns would change parse,
+  `to_edgelist()`, fingerprints, and spec fields for a
+  workflow the caller can already run. Do not add those
+  columns, a sign tensor on the spec, or a second
+  constrained layer class. See **Package philosophy**.
 - **Not a mutable graph.** Topology is frozen after parse.
   `LayeredSpec` and `AdjacencySpec` are frozen dataclasses
   with no edge add/remove methods. `PackedLinear` index
@@ -210,6 +228,17 @@ this package unless a later prompt asks.
 parsing, packed hop and adjacency indices, hop input assembly,
 named I/O alignment, and attribution column names. The user owns
 `nn.Module.forward()`, call order, nonlinearities, and training.
+
+**Per-edge signs and frozen values stay with the caller.**
+kpnn2 owns which edges exist and where their packed slots
+are. It does not own mixed per-edge signs, freeze flags, or
+initial numerical values. Those appear in published KPNNs
+and are not blocked: the user keeps them on their own table
+and implements them with standard PyTorch together with
+`constraint=` and `edge_location`. Shipping that as parse
+columns or spec fields would be convenience, not a
+necessity, and would make the public contract heavier. Do
+not add it. See **What kpnn2 is NOT**.
 
 **Topology is frozen after parse.** Specs are parse snapshots,
 not a live graph. Training-time prune and grow (ParsVNN,
@@ -323,9 +352,15 @@ edgelist = pd.DataFrame(
 edge in the direction of computation (source feeds target).
 
 **No other columns are read.** Extra columns, if present, are ignored
-and must not change parsing. There is no `initial_weight` column
-and no edgelist `constraint` column. Per-edge maps belong on
-`MaskedLinear` / `PackedLinear` as `constraint=`.
+and must not change parsing. There is no `initial_weight` column,
+no `sign` / `freeze` column, and no edgelist `constraint`
+column. A uniform per-entry map belongs on `MaskedLinear` /
+`PackedLinear` as `constraint=` (one `nn.Module` over the
+whole tensor). Mixed signs and frozen live-edge values are
+the caller's: keep those columns on the DataFrame, parse
+connectivity only, and apply them in user PyTorch after
+`edge_location`. First-class support is convenience, not a
+necessity; do not add those columns.
 
 A spec returns this two-column form from `to_edgelist()`. Rows
 are sorted lexicographically by `(source, target)`, not the
@@ -607,7 +642,9 @@ parse. At width 1 the index tuple has length 1. With
 `widths=`, a named edge `A→B` is the full `(k_B × k_A)`
 block of live unit pairs, target-unit outer, source-unit
 inner, in the order already stored. This is identity into
-those packed slots, not a constraint DSL.
+those packed slots, not a constraint DSL. Mixed signs and
+frozen values belong in user PyTorch that indexes these
+slots, not on the spec.
 
 Missing pair, empty names, or a name that is not a node:
 `Kpnn2Error`. The message names the pair as
@@ -767,7 +804,9 @@ widths. Order agrees with `to_edgelist()` rows.
 `source` and `target` are matched after `str(...)`, same as
 parse. Missing pair, empty names, or a name that is not a
 node: `Kpnn2Error`. The message names the pair as
-`{source} -> {target}`.
+`{source} -> {target}`. This is identity into packed slots,
+not a constraint DSL. Mixed signs and frozen values belong
+in user PyTorch that indexes these slots, not on the spec.
 
 ### `to_mask()` (allocating dense escape hatch)
 
@@ -961,7 +1000,11 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None)
   that unconstrained tensor; it does not invert this map.
   `PackedLinear` takes the same argument. Do not add a
   second class (`ConstrainedMaskedLinear`) and do not
-  read a `constraint` column from the edgelist.
+  read a `constraint` column from the edgelist. Mixed
+  per-edge signs and frozen slots are not this argument:
+  put a sign buffer or `torch.where` inside the caller's
+  module, or a barrier in the loss. That is user PyTorch,
+  not a missing primitive.
 - The unconstrained tensor is stored through
   **`torch.nn.utils.parametrize.register_parametrization`** on
   the parameter named `weight`. That is the blessed PyTorch
@@ -1065,7 +1108,8 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None)
 - Do **not** use full `in_features` as `fan_in`.
 - No edgelist `initial_weight` column. `constraint=` is the
   supported per-entry map; do not stack `softplus` after the
-  mask yourself.
+  mask yourself. Mixed signs and frozen live-edge values
+  stay in the caller's PyTorch; see **Package philosophy**.
 - Masked-out weights still exist as parameters but are multiplied
   by 0 in the effective weight and the forward pass.
 
@@ -1124,7 +1168,10 @@ PackedLinear(
   resurrect a blocked cell. `reset_parameters` writes the
   unconstrained packed tensor; it does not invert this map.
   `MaskedLinear` takes the same argument. `layer.constraint`
-  is that module, or `None`. Still no `parametrize`.
+  is that module, or `None`. Still no `parametrize`. Mixed
+  per-edge signs and frozen slots are user PyTorch on this
+  tensor (custom module, loss barrier, or hook), not parse
+  columns and not per-slot `requires_grad=False`.
 - `weight` is an `nn.Parameter` of shape `(nnz,)`. No
   `parametrize`. No dense `(out, in)` `layer.weight`.
   The parameter name is `weight`. When `constraint` is set,
@@ -1613,7 +1660,9 @@ edge / block start. Do not implement adjacency width.
   `source_nodes` with a unit index.
   `LayeredSpec.edge_location` and `AdjacencySpec.edge_location`
   are that lookup for callers: a named edge to packed weight
-  slots. They are identity, not constraints.
+  slots. They are identity, not constraints. Callers who
+  need mixed signs or frozen values index these slots in
+  their own PyTorch; do not store that policy on the spec.
   `LayeredSpec.node_units` and `LayeredSpec.hop_units` are
   the matching lookup for a named node: a contiguous unit
   slice on a layer tensor or a hop source axis. Do not
@@ -1933,7 +1982,14 @@ itself justify a changelog line.
   adapters, or AnnData in v1. Do not add
   `ConstrainedMaskedLinear`. Per-entry maps are
   `constraint=` on `MaskedLinear` and `PackedLinear`. Do not
-  add an edgelist `constraint` column.
+  add an edgelist `constraint` column. Mixed per-edge signs
+  and frozen live-edge values are caller PyTorch
+  (`constraint=`, loss barriers, hooks, `edge_location`),
+  not parse columns or spec fields. They occur in real
+  KPNNs and are not blocked. First-class `sign` / `freeze`
+  / `initial_weight` columns, a sign tensor on the spec,
+  or per-slot `requires_grad` would be convenience, not a
+  necessity; do not add them.
 - Do **not** add topology mutation after parse: `add_edge` /
   `remove_edge` on specs, PackedLinear index-buffer setters,
   or an in-place prune / grow API. `LayeredSpec` and
