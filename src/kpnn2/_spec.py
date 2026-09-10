@@ -93,7 +93,10 @@ class Hop:
     LayeredSpec : Holds ``hops``, one per layer after the first.
     gather_hop_inputs : Builds the tensor whose columns these
         indices address.
+    scatter_hop_outputs : Splits that concatenated axis back
+        onto source layers.
     PackedLinear : Applies one hop from the packed indices.
+    PackedLinear.transpose : Tied decode of this hop.
     MaskedLinear : Applies one hop after ``to_mask()``.
     Skip : Metadata for the edges in this hop that span layers.
     LayeredSpec.hop_units : Slice of one named node on this
@@ -419,8 +422,11 @@ class LayeredSpec:
         or one shared state vector instead of depths.
     gather_hop_inputs : Assembles one hop's input from the layer
         tensors produced so far.
+    scatter_hop_outputs : Splits a transposed hop's output back
+        onto those source layers.
     PackedLinear : Consumes ``hops[i].source_index`` /
         ``target_index`` as one layer.
+    PackedLinear.transpose : Tied decode of that hop.
     MaskedLinear : Consumes ``hops[i].to_mask()`` as one layer.
 
     Notes

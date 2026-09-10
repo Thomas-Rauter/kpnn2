@@ -17,6 +17,11 @@ This project follows semantic versioning.
 
 ### Added
 
+- `PackedLinear.transpose()`: swapped packed indices, tied or
+  copied `weight`, untied bias. The tied autoencoder path.
+- `scatter_hop_outputs`: split a hop's concatenated source
+  axis back onto source layers (inverse of
+  `gather_hop_inputs`).
 - `constraint=` on `MaskedLinear` and `PackedLinear`: optional
   `nn.Module` applied to live weights before the mask
   (`MaskedLinear`) or in packed space (`PackedLinear`).

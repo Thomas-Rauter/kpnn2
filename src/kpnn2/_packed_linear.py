@@ -2,6 +2,7 @@
 Packed linear layer: one trainable scalar per live edge.
 """
 
+import copy
 import hashlib
 import math
 import struct
@@ -251,6 +252,8 @@ class PackedLinear(nn.Module):
     PackedMultiheadAttention : Attention over the same packed
         pairs, when the update is a contraction rather than one
         scalar per edge.
+    scatter_hop_outputs : Split a transposed hop's concatenated
+        output back onto source layers.
     torch.nn.Linear : Dense equivalent, and the reference for
         shapes, ``bias``, calling the module, and training.
 
@@ -289,6 +292,15 @@ class PackedLinear(nn.Module):
     the packed index pattern unchanged is caught by
     ``identity`` when callers pass ``spec.fingerprint``.
     ``copy.deepcopy`` works.
+
+    ``transpose()`` is the tied-autoencoder helper: it swaps
+    the index buffers and the feature sizes so packed slot
+    ``i`` is still the same live edge, then shares or copies
+    ``weight``. Bias is never tied. Do not reparse a reversed
+    edgelist and assign ``dec.weight = enc.weight``: that
+    permutes slots. On a hop whose source axis is several
+    layers, split the transposed output with
+    ``scatter_hop_outputs``.
 
     Examples
     --------
@@ -481,6 +493,126 @@ class PackedLinear(nn.Module):
                         -bound,
                         bound,
                     )
+
+    def transpose(
+        self,
+        bias: bool = True,
+        *,
+        tie: bool = True,
+        identity: str | None = None,
+    ) -> "PackedLinear":
+        """
+        Return a packed layer that applies the same edges backwards.
+
+        Packed slot ``i`` stays the same live edge: the 1-D
+        ``weight`` is not permuted. The new layer reads the
+        former output axis and writes the former input axis.
+        That is the packed analogue of ``enc.weight.T`` for a
+        tied autoencoder. Bias is never shared.
+
+        Parameters
+        ----------
+        bias : bool, default=True
+            If ``True``, the new layer gets its own bias of
+            shape ``(in_features,)``, the original input
+            width, initialized from the transposed packed
+            degree. If ``False``, there is no bias. This
+            layer's bias is not copied.
+        tie : bool, default=True
+            If ``True``, the returned layer's ``weight`` is
+            this layer's ``weight`` ``nn.Parameter``. Gradients
+            from both forwards accumulate there. If
+            ``False``, copy the current values into a new
+            Parameter.
+        identity : str or None, default=None
+            Checkpoint identity for the new layer, typically
+            ``spec.fingerprint``. This layer's identity is
+            not copied. ``None`` means the new layer does
+            not claim an identity.
+
+        Returns
+        -------
+        PackedLinear
+            New module: ``source_index`` and ``target_index``
+            swapped, ``in_features`` and ``out_features``
+            swapped, same ``nnz``. ``constraint`` is a
+            deepcopy of this layer's constraint, or ``None``.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``tie`` is not a ``bool``, or if constructing
+            the new layer fails (see the constructor).
+
+        Notes
+        -----
+        Do not parse a reversed edgelist and assign
+        ``dec.weight = enc.weight``. Packed order is
+        lexicographic by ``(source name, target name)`` of
+        each spec, so those slots do not line up. This
+        method keeps slot ``i`` as the same edge.
+
+        On a layered hop, the transposed output is
+        ``hop.in_features`` wide. Split it with
+        ``scatter_hop_outputs`` when the hop reads several
+        source layers; add those pieces into the caller's
+        ``saved`` dict, because two reversed hops may write
+        the same earlier layer. An ``AdjacencySpec`` map is
+        already ``n``-wide; no gather or scatter.
+
+        ``MaskedLinear`` has no packed slots: use
+        ``F.linear(h, layer.weight.T, dec_bias)``.
+
+        Examples
+        --------
+        Slot ``i`` is the same edge after a transpose, so
+        sharing ``weight`` is the tied map:
+
+        >>> import torch
+        >>> import kpnn2
+        >>> layer = kpnn2.PackedLinear(
+        ...     [0, 1],
+        ...     [0, 0],
+        ...     1,
+        ...     2,
+        ...     bias=False,
+        ... )
+        >>> with torch.no_grad():
+        ...     layer.weight[:] = torch.tensor([2.0, 3.0])
+        >>> mirrored = layer.transpose(bias=False)
+        >>> mirrored.weight is layer.weight
+        True
+        >>> mirrored.in_features, mirrored.out_features
+        (1, 2)
+        >>> layer(torch.tensor([[1.0, 4.0]])).tolist()
+        [[14.0]]
+        >>> mirrored(torch.tensor([[1.0]])).tolist()
+        [[2.0, 3.0]]
+        """
+        if not isinstance(tie, bool):
+            raise Kpnn2Error("'tie' must be True or False.")
+        constraint = None
+        if self.constraint is not None:
+            constraint = copy.deepcopy(self.constraint)
+        mirrored = PackedLinear(
+            self.target_index,
+            self.source_index,
+            self.in_features,
+            self.out_features,
+            bias,
+            identity=identity,
+            constraint=constraint,
+        )
+        mirrored.to(
+            device=self.weight.device,
+            dtype=self.weight.dtype,
+        )
+        if tie:
+            mirrored.weight = self.weight
+        else:
+            with torch.no_grad():
+                mirrored.weight.copy_(self.weight)
+        return mirrored
 
     def extra_repr(self) -> str:
         """

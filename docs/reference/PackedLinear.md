@@ -2,4 +2,5 @@
     options:
       members:
         - reset_parameters
+        - transpose
         - forward

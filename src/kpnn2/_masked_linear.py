@@ -256,7 +256,9 @@ class MaskedLinear(nn.Module):
     --------
     PackedLinear : One trainable scalar per live edge, for graphs
         whose dense ``(out_features, in_features)`` weight would
-        not fit in RAM.
+        not fit in RAM. Tied decode is
+        ``PackedLinear.transpose``; on this layer use
+        ``F.linear(h, weight.T, dec_bias)``.
     gather_hop_inputs : Assembles the input tensor of a hop that
         reads more than one saved layer.
     torch.nn.Linear : Dense equivalent, and the reference for

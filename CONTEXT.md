@@ -52,11 +52,11 @@ GPU/TPU, sparse minibatches, sparse kernels, or a silent
 full densify of the host matrix.
 
 **Module boundary.** `MaskedLinear`, `PackedLinear`,
-`PackedMultiheadAttention`, `gather_hop_inputs`, and
-`map_node_attributions` take and return ordinary dense
-`torch.Tensor`s. Captum is not in this package; when the
-caller runs it, that call stays dense (no sparse IG here,
-and none to add).
+`PackedMultiheadAttention`, `gather_hop_inputs`,
+`scatter_hop_outputs`, and `map_node_attributions` take
+and return ordinary dense `torch.Tensor`s. Captum is not
+in this package; when the caller runs it, that call stays
+dense (no sparse IG here, and none to add).
 
 **`align_inputs` is the dense-table path.** It maps a named
 pandas DataFrame onto `spec.input_nodes` as a dense
@@ -103,6 +103,10 @@ this package unless a later prompt asks.
    hop.out_features, hop.in_features)` per hop,
    `gather_hop_inputs(saved, hop)` to assemble that hop's input,
    and their own activations, norms, loops, and heads.
+   `PackedLinear.transpose()` is the tied decoder map (same
+   packed slots, shared or copied `weight`, untied bias).
+   `scatter_hop_outputs` splits a transposed hop's concatenated
+   output back onto source layers.
    `MaskedLinear(hop.to_mask())` densifies and remains valid for
    small graphs. On an `AdjacencySpec` the large-n path is
    `PackedLinear(spec.source_index, spec.target_index, n, n)`
@@ -142,6 +146,10 @@ this package unless a later prompt asks.
   not an encoder, not a Transformer stack, and not a reason
   to add `parse_attention`. Do not reuse a hop rectangle as a
   square attention matrix.
+- **Not a ready-made autoencoder.** `PackedLinear.transpose`
+  and `scatter_hop_outputs` are primitives. The user owns
+  `forward()`, activations, and whether weights are tied.
+  Do not add a `TiedAutoencoder` class or a reverse parser.
 - **Not a trainer.** No losses, optimizers, or training loops.
 - **Not a per-edge policy DSL.** Mixed sign constraints
   (activation vs inhibition) and frozen live-edge values
@@ -226,8 +234,10 @@ this package unless a later prompt asks.
 
 **Primitives, not a compiled container.** `kpnn2` owns edgelist
 parsing, packed hop and adjacency indices, hop input assembly,
-named I/O alignment, and attribution column names. The user owns
-`nn.Module.forward()`, call order, nonlinearities, and training.
+hop-output split, packed transpose, named I/O alignment, and
+attribution column names. The user owns `nn.Module.forward()`,
+call order, nonlinearities, and training. There is no
+ready-made autoencoder class.
 
 **Per-edge signs and frozen values stay with the caller.**
 kpnn2 owns which edges exist and where their packed slots
@@ -284,6 +294,8 @@ Division of labor:
 | `PackedLinear` (1-D weight per live edge, `index_add`) | kpnn2 |
 | `PackedMultiheadAttention` (packed MHA on live pairs) | kpnn2 |
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
+| `scatter_hop_outputs` (split that axis onto source layers) | kpnn2 |
+| `PackedLinear.transpose` (tied packed `W.T`) | kpnn2 |
 | Named node → unit slice (`node_units` / `hop_units`) | kpnn2 |
 | Named DataFrame → dense CPU tensor (`align_inputs`) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
@@ -314,6 +326,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `PackedLinear` | `nn.Module`: one trainable scalar per live edge |
 | `PackedMultiheadAttention` | `nn.Module`: packed multi-head attention on live edgelist pairs |
 | `gather_hop_inputs` | Saved layer tensors + `Hop` → that hop's input tensor |
+| `scatter_hop_outputs` | Concatenated hop axis → per-source-layer tensors |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
 | `Kpnn2Error` | User-facing error type |
@@ -1258,6 +1271,57 @@ the better kernel when the dense rectangle fits (GEMM).
 Do not name this `SparseMaskedLinear`, `SparseLinear`, or
 `PackedMaskedLinear`.
 
+### `PackedLinear.transpose()`
+
+```text
+layer.transpose(bias=True, *, tie=True, identity=None)
+```
+
+The tied-autoencoder helper. Returns a new `PackedLinear`
+that applies the same live edges backwards: `source_index`
+and `target_index` swapped, `in_features` and
+`out_features` swapped, same `nnz`. Packed slot `i` is
+still the same edge; the 1-D `weight` is not permuted.
+
+- `tie=True` (default): the returned layer's `weight` is
+  this layer's `weight` `nn.Parameter`. Gradients from both
+  forwards accumulate there.
+- `tie=False`: copy the current values into a new
+  Parameter.
+- Bias is never tied. Default `bias=True` allocates a new
+  bias of shape `(in_features,)` (the original input
+  width), degree-aware init on the transposed fan-in.
+  `bias=False` means no bias. This layer's bias is unused.
+- `constraint` on the result is a deepcopy of this layer's
+  constraint, or `None`. Do not pass the same `nn.Module`
+  into two `PackedLinear` constructors: PyTorch would
+  steal the submodule from the first parent.
+- `identity` defaults to `None`; this layer's identity is
+  not copied. The index digest differs because buffers and
+  sizes are swapped, so an encoder `state_dict` will not
+  load into the transpose.
+- Device and floating dtype follow this layer's `weight`.
+  Index buffers stay integer.
+
+Do **not** parse a reversed edgelist and assign
+`dec.weight = enc.weight`. Packed order is lexicographic
+by `(source name, target name)` of each spec, so those
+slots do not line up. Do **not** add a packed-slot
+permutation helper or a reverse parser; this method is the
+tying path.
+
+On a layered hop, the transposed output is
+`hop.in_features` wide. Split it with `scatter_hop_outputs`
+when the hop reads several source layers; add those pieces
+into the caller's `saved` dict, because two reversed hops
+may write the same earlier layer. An `AdjacencySpec` map
+is already `n`-wide; no gather or scatter.
+
+`MaskedLinear` has no packed slots: use
+`F.linear(h, layer.weight.T, dec_bias)`. Do not add
+`MaskedLinear.transpose`. Do not add a `TiedAutoencoder`
+class; the user owns `forward()`.
+
 ---
 
 ## `PackedMultiheadAttention`
@@ -1429,12 +1493,12 @@ attention matrix. Do not fold this layer into
 
 The source axis of one hop. Call it in `forward()` just before
 `PackedLinear` (or `MaskedLinear(hop.to_mask())`); it sits
-between hops. This is the only thing the layered layout needs
-beyond the linear primitive, and it holds no parameters. It
-does not inject values into the previous layer and does not
-pick skip nodes by name: it concatenates **whole** source
-layers. Unused skip columns stay in that tensor;
-`PackedLinear` never reads them.
+between hops. Together with `scatter_hop_outputs` (the inverse
+split) this is what the layered layout needs beyond the linear
+primitive, and it holds no parameters. It does not inject
+values into the previous layer and does not pick skip nodes
+by name: it concatenates **whole** source layers. Unused skip
+columns stay in that tensor; `PackedLinear` never reads them.
 
 ```text
 gather_hop_inputs(saved, hop) -> torch.Tensor
@@ -1467,6 +1531,44 @@ gather_hop_inputs(saved, hop) -> torch.Tensor
 
 There is **no** module here on purpose. Anything with parameters
 would reintroduce a second place for edge weights to live.
+
+---
+
+## `scatter_hop_outputs(tensor, hop)`
+
+The inverse of `gather_hop_inputs` for that concatenated
+axis. A tied decoder (`PackedLinear.transpose` on the hop)
+emits `hop.in_features` columns; this splits them back
+onto `hop.source_layers`. It holds no parameters. It does
+not take `saved` and does not add into it.
+
+```text
+scatter_hop_outputs(tensor, hop) -> dict[int, Tensor]
+```
+
+- `tensor` is the concatenated source axis, last dimension
+  `hop.in_features`. Typically the output of
+  `PackedLinear.transpose()` on this hop.
+- `hop` is a `Hop` from `spec.hops`.
+- Returns `{layer: piece}` for each entry of
+  `hop.source_layers`, in that order. `piece` has last
+  dimension `hop.source_dims[i]`.
+- A hop with one source layer returns `{source_layers[0]:
+  tensor}` itself, without a copy. Several source layers
+  are `torch.split` views on the last axis.
+- The caller adds those pieces into their decoder `saved`
+  dict. Two reversed hops may write the same earlier layer
+  (a skip and an adjacent reverse), so add, do not
+  overwrite.
+- Last dimension must be `hop.in_features`. A missing
+  match, a non-tensor, a 0-dimensional tensor, or a non-
+  `Hop` raises `Kpnn2Error`.
+- Differentiable into `tensor`.
+- An `AdjacencySpec` has no hops and is not accepted.
+
+There is **no** module here on purpose, same as gather.
+Do not add a packed-slot permutation API; `transpose`
+keeps slot `i` as the same edge.
 
 ---
 
@@ -1825,7 +1927,10 @@ PyTorch:
    identity=spec.fingerprint)` for each `hop` in `spec.hops`.
    `MaskedLinear(hop.to_mask())` is the dense hatch.
 3. In `forward()`, keep a `saved` dict of layer index → tensor,
-   and feed each hop `kpnn2.gather_hop_inputs(saved, hop)`
+   and feed each hop `kpnn2.gather_hop_inputs(saved, hop)`.
+   A tied decoder is `layer.transpose()` plus
+   `scatter_hop_outputs` on skip hops; add the pieces into
+   the decoder `saved` dict. There is no autoencoder class.
 4. Put ReLU / BatchNorm / Dropout in `forward()` yourself, after
    the hop that produced the tensor. Store the value you want
    later hops to read.
@@ -1863,7 +1968,7 @@ src/kpnn2/
   _packed_linear.py           # PackedLinear
   _constraint.py              # constraint= validation for both linears
   _packed_multihead_attention.py  # PackedMultiheadAttention
-  _gather.py                  # gather_hop_inputs
+  _gather.py                  # gather_hop_inputs, scatter_hop_outputs
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions
   _errors.py                  # Kpnn2Error
@@ -2065,8 +2170,13 @@ itself justify a changelog line.
   not add `ConstrainedMaskedLinear`.
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks. Do not add an encoder
-  class, Transformer block, or `parse_attention`.
+  class, a `TiedAutoencoder`, a reverse parser, a packed-slot
+  permutation helper, Transformer block, or `parse_attention`.
   `PackedMultiheadAttention` is a contraction primitive.
+  `PackedLinear.transpose` is the tied packed `W.T` path;
+  `scatter_hop_outputs` is the gather inverse. Do not add
+  `MaskedLinear.transpose`; dense tied decode is
+  `F.linear(h, layer.weight.T, dec_bias)`.
 - `parse_layered` and `parse_adjacency` must not instantiate
   `nn.Module`.
 - Keep the two parsers separate: no `layout=` flag, no dispatch

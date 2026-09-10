@@ -23,7 +23,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._align import align_inputs
 from ._attributions import map_node_attributions
 from ._errors import Kpnn2Error
-from ._gather import gather_hop_inputs
+from ._gather import gather_hop_inputs, scatter_hop_outputs
 from ._masked_linear import MaskedLinear
 from ._packed_linear import PackedLinear
 from ._packed_multihead_attention import PackedMultiheadAttention
@@ -44,6 +44,7 @@ __all__ = [
     "PackedLinear",
     "PackedMultiheadAttention",
     "gather_hop_inputs",
+    "scatter_hop_outputs",
     "align_inputs",
     "map_node_attributions",
     "Kpnn2Error",

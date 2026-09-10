@@ -236,10 +236,20 @@ all hops equals the edgelist length. Each original edge is a
 pair in exactly one hop, the hop of its target, skips included.
 [`tests/module/test_parse_layered_hops.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py).
 
-**Forgotten layers error.** `gather_hop_inputs` concatenates
-whole source layers. A missing saved layer raises
-`Kpnn2Error` instead of silently dropping those edges.
-[`tests/module/test_gather_hop_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_gather_hop_inputs.py).
+**PackedLinear.** Same graph as `MaskedLinear(spec.to_mask())`
+gives the same forward values. Absent edges are not
+parameters. Construction does not call `to_mask()`.
+`transpose()` matches dense `W.T` on the live edges and
+ties `weight` when `tie=True`.
+[`tests/module/test_packed_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear.py),
+[`tests/module/test_packed_linear_transpose.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear_transpose.py).
+
+**Hop source axis.** `gather_hop_inputs` concatenates whole
+source layers; `scatter_hop_outputs` splits that axis back.
+A missing saved layer raises `Kpnn2Error` instead of
+silently dropping those edges.
+[`tests/module/test_gather_hop_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_gather_hop_inputs.py),
+[`tests/module/test_scatter_hop_outputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_scatter_hop_outputs.py).
 
 **MaskedLinear.** A zero mask entry blocks that source in the
 forward pass, in `layer.weight`, and in the gradient, even
@@ -251,11 +261,6 @@ init uses the row’s live count, not `in_features`.
 `torch.compile(..., fullgraph=True)` traces without a
 graph break.
 [`tests/module/test_masked_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_masked_linear.py).
-
-**PackedLinear.** Same graph as `MaskedLinear(spec.to_mask())`
-gives the same forward values. Absent edges are not
-parameters. Construction does not call `to_mask()`.
-[`tests/module/test_packed_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear.py).
 
 **Packed attention.** Scores exist only for live
 `(source, target)` pairs. An absent key does not influence a

@@ -20,6 +20,7 @@ Names you call or construct.
 | [`PackedLinear`][kpnn2.PackedLinear] | Linear layer with one weight per live edge, not a dense matrix. |
 | [`PackedMultiheadAttention`][kpnn2.PackedMultiheadAttention] | Attention that scores only live edgelist pairs, not a full matrix. |
 | [`gather_hop_inputs`][kpnn2.gather_hop_inputs] | Build the input for one hop from the layer activations you saved. |
+| [`scatter_hop_outputs`][kpnn2.scatter_hop_outputs] | Split a hop's concatenated source axis back onto source layers. |
 | [`align_inputs`][kpnn2.align_inputs] | Align named features to the spec's input nodes so the wiring matches. |
 | [`map_node_attributions`][kpnn2.map_node_attributions] | Attach spec node names to an attribution tensor you already computed. |
 

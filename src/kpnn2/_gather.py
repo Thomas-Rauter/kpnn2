@@ -1,5 +1,5 @@
 """
-Source axis assembly for one hop.
+Source axis assembly and split for one hop.
 """
 
 from collections.abc import Mapping
@@ -70,7 +70,12 @@ def gather_hop_inputs(
 
     See Also
     --------
+    scatter_hop_outputs : Split the concatenated axis this
+        returns back onto source layers.
     PackedLinear : Applies the hop to the tensor returned here.
+    PackedLinear.transpose : Tied decode of that hop; feed its
+        output to ``scatter_hop_outputs`` when the hop reads
+        several layers.
     MaskedLinear : Dense hatch via ``hop.to_mask()``.
     Hop : The record that fixes the source layers and the
         concatenated column order this follows.
@@ -183,4 +188,123 @@ def gather_hop_inputs(
     return torch.cat(
         parts,
         dim=-1,
+    )
+
+
+def scatter_hop_outputs(
+    tensor: object,
+    hop: Hop,
+) -> dict[int, torch.Tensor]:
+    """
+    Split a hop's concatenated source axis back onto source layers.
+
+    Inverse of ``gather_hop_inputs`` for that axis. The encoder
+    concatenates whole source layers; a tied decoder
+    (``PackedLinear.transpose``) emits the same concatenated
+    width. This splits it. It does not take a ``saved`` dict
+    and does not add into one: return the pieces and add them
+    yourself, because two reversed hops may write the same
+    earlier layer.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Concatenated source axis, last dimension
+        ``hop.in_features``. Typically the output of
+        ``PackedLinear.transpose()`` on this hop. Leading
+        dimensions are the caller's, typically a batch.
+    hop : Hop
+        The hop whose source axis ``tensor`` follows, one
+        entry of ``spec.hops``.
+
+    Returns
+    -------
+    dict of int to torch.Tensor
+        One entry per ``hop.source_layers``, in that order.
+        ``result[layer]`` has last dimension
+        ``hop.source_dims[i]`` for that layer. A hop with one
+        source layer returns ``tensor`` itself rather than a
+        copy, so writing into the piece writes into
+        ``tensor``. Several source layers are ``torch.split``
+        views on the last axis.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``hop`` is not a ``Hop``; ``tensor`` is not a
+        tensor; ``tensor`` is 0-dimensional; or the last
+        dimension is not ``hop.in_features``.
+
+    See Also
+    --------
+    gather_hop_inputs : Concatenates the layers this splits.
+    PackedLinear.transpose : Packed ``W.T``; its output on a
+        skip hop is what this splits.
+    Hop : ``source_layers``, ``source_dims``, and
+        ``column_offsets`` are the split layout.
+    PackedLinear : Encoder map whose transpose emits this axis.
+
+    Notes
+    -----
+    Nothing here is graph-aware and nothing holds weights.
+    Unused skip columns stay in the pieces, same as they
+    stay in a gather. An ``AdjacencySpec`` has no hops and
+    is not accepted.
+
+    Examples
+    --------
+    The hop into ``C`` reads layers 0 and 1, so a
+    concatenated decoder activation splits back onto those
+    depths:
+
+    >>> import pandas as pd
+    >>> import torch
+    >>> import kpnn2
+    >>> edgelist = pd.DataFrame(
+    ...     {
+    ...         "source": ["A", "H", "A"],
+    ...         "target": ["H", "C", "C"],
+    ...     }
+    ... )
+    >>> spec = kpnn2.parse_layered(edgelist)
+    >>> concat = torch.tensor([[2.0, 5.0]])
+    >>> parts = kpnn2.scatter_hop_outputs(
+    ...     concat,
+    ...     spec.hops[1],
+    ... )
+    >>> list(parts)
+    [0, 1]
+    >>> parts[0].tolist(), parts[1].tolist()
+    ([[2.0]], [[5.0]])
+    """
+    if not isinstance(hop, Hop):
+        raise Kpnn2Error("'hop' must be a Hop from spec.hops.")
+    if not isinstance(tensor, torch.Tensor):
+        raise Kpnn2Error("'tensor' must be a torch.Tensor.")
+    n_units = hop.in_features
+    if tensor.ndim < 1:
+        raise Kpnn2Error(
+            "tensor has the wrong number of units. "
+            f"Expected {n_units}, got a 0-dimensional tensor."
+        )
+    if tensor.shape[-1] != n_units:
+        raise Kpnn2Error(
+            "tensor has the wrong number of units. "
+            f"Expected {n_units}, got {tensor.shape[-1]}."
+        )
+
+    if len(hop.source_layers) == 1:
+        return {hop.source_layers[0]: tensor}
+
+    pieces = torch.split(
+        tensor,
+        list(hop.source_dims),
+        dim=-1,
+    )
+    return dict(
+        zip(
+            hop.source_layers,
+            pieces,
+            strict=True,
+        )
     )

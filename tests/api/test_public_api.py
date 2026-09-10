@@ -16,6 +16,7 @@ _PUBLIC_NAMES = [
     "PackedLinear",
     "PackedMultiheadAttention",
     "gather_hop_inputs",
+    "scatter_hop_outputs",
     "align_inputs",
     "map_node_attributions",
     "Kpnn2Error",

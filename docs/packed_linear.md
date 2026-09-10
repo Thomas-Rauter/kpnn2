@@ -104,3 +104,43 @@ That is a different primitive (attention on live pairs, not one
 scalar per edge). The
 [Transformer example](transformer-example.ipynb) is that
 walkthrough.
+
+## Tied transpose
+
+`PackedLinear.weight` is 1-D, so there is no `enc.weight.T`.
+`layer.transpose()` is that helper: same packed slots, indices
+swapped, `weight` shared by default, bias never shared.
+
+```python
+enc = kpnn2.PackedLinear(
+    hop.source_index,
+    hop.target_index,
+    hop.out_features,
+    hop.in_features,
+    bias=False,
+)
+dec = enc.transpose()
+```
+
+Do not reparse a reversed edgelist and assign
+`dec.weight = enc.weight`: packed slot order will not match.
+
+On a hop that concatenates several source layers, split the
+transposed output and add the pieces into your decoder
+`saved` dict:
+
+```python
+concat = dec(restored[hop.target_layer])
+for layer, piece in kpnn2.scatter_hop_outputs(
+    concat,
+    hop,
+).items():
+    if layer in restored:
+        restored[layer] = restored[layer] + piece
+    else:
+        restored[layer] = piece
+```
+
+`MaskedLinear` can keep using `F.linear(h, enc.weight.T,
+dec_bias)`. There is no autoencoder class; `forward()` is
+yours.

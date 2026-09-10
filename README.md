@@ -207,6 +207,7 @@ The documented public names are:
 - `PackedLinear`
 - `PackedMultiheadAttention`
 - `gather_hop_inputs()`
+- `scatter_hop_outputs()`
 - `align_inputs()`
 - `map_node_attributions()`
 
@@ -228,8 +229,9 @@ See the [**API reference**](docs/reference/index.md) for details, and
 `kpnn2` is intentionally minimally opinionated.
 
 It owns edgelist parsing, packed hop and adjacency indices, hop
-input assembly, named input alignment, and attribution column
-names. It does not impose broader modeling choices such as:
+input assembly, hop-output split, packed transpose, named input
+alignment, and attribution column names. It does not impose
+broader modeling choices such as:
 
 - activation functions
 - output heads
