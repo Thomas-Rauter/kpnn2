@@ -990,7 +990,7 @@ Drop-in sparse linear layer. Same job as `torch.nn.Linear`
 (call as `layer(x)`); not a subclass. Not a full model.
 
 ```text
-MaskedLinear(mask, bias=True, *, identity=None, constraint=None)
+MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
 ```
 
 - `mask`: `torch.Tensor`, shape `(out_features, in_features)`.
@@ -1018,6 +1018,11 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None)
   put a sign buffer or `torch.where` inside the caller's
   module, or a barrier in the loss. That is user PyTorch,
   not a missing primitive.
+- Optional `generator`: `torch.Generator` or `None`. Init
+  draws from that generator. `None` (the default) uses the
+  process default generator, bit-identical to omitting the
+  argument. Not stored on the module. `reset_parameters`
+  takes the same argument. Do not add `seed=`.
 - The unconstrained tensor is stored through
   **`torch.nn.utils.parametrize.register_parametrization`** on
   the parameter named `weight`. That is the blessed PyTorch
@@ -1115,7 +1120,9 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None)
   weights). If `fan_in == 0`, leave that row at 0 and use bias
   bound 0. `reset_parameters` writes into
   `parametrizations.weight.original`, row by row, in that
-  order. A different draw count shifts the torch RNG stream
+  order. Optional `generator` isolates those draws from
+  other torch RNG consumers; `None` keeps the default
+  stream. A different draw count shifts the torch RNG stream
   and which trained-tier seeds pass; those controls now test
   a pass rate over 30 seeds, not a 5-seed window.
 - Do **not** use full `in_features` as `fan_in`.
@@ -1154,6 +1161,7 @@ PackedLinear(
     *,
     identity=None,
     constraint=None,
+    generator=None,
 )
 ```
 
@@ -1185,6 +1193,12 @@ PackedLinear(
   per-edge signs and frozen slots are user PyTorch on this
   tensor (custom module, loss barrier, or hook), not parse
   columns and not per-slot `requires_grad=False`.
+- Optional `generator`: `torch.Generator` or `None`. Init
+  draws from that generator. `None` (the default) uses the
+  process default generator, bit-identical to omitting the
+  argument. Not stored on the module. `reset_parameters`
+  takes the same argument. `transpose` forwards it to the
+  inner constructor. Do not add `seed=`.
 - `weight` is an `nn.Parameter` of shape `(nnz,)`. No
   `parametrize`. No dense `(out, in)` `layer.weight`.
   The parameter name is `weight`. When `constraint` is set,
@@ -1222,7 +1236,9 @@ PackedLinear(
   an `AdjacencySpec` have in-degree 0, so they have no
   packed incoming edges; do not invent identity
   connections. The user still writes inputs into the
-  state vector each step.
+  state vector each step. Optional `generator` isolates
+  those draws from other torch RNG consumers; `None`
+  keeps the default stream.
 - `extra_repr` reports `in_features`, `out_features`,
   `nnz`, and `bias`.
 - `state_dict` keys are `weight`, optional `bias`,
@@ -1274,7 +1290,7 @@ Do not name this `SparseMaskedLinear`, `SparseLinear`, or
 ### `PackedLinear.transpose()`
 
 ```text
-layer.transpose(bias=True, *, tie=True, identity=None)
+layer.transpose(bias=True, *, tie=True, identity=None, generator=None)
 ```
 
 The tied-autoencoder helper. Returns a new `PackedLinear`
@@ -1300,6 +1316,10 @@ still the same edge; the 1-D `weight` is not permuted.
   not copied. The index digest differs because buffers and
   sizes are swapped, so an encoder `state_dict` will not
   load into the transpose.
+- Optional `generator`: forwarded to the inner
+  `PackedLinear` constructor. `None` keeps today's global
+  init. A full init still runs, then `weight` is replaced;
+  discarded weight draws still advance that generator.
 - Device and floating dtype follow this layer's `weight`.
   Index buffers stay integer.
 
@@ -1352,6 +1372,7 @@ PackedMultiheadAttention(
     add_self_loops=False,
     *,
     identity=None,
+    generator=None,
 )
 ```
 
@@ -1391,6 +1412,14 @@ PackedMultiheadAttention(
   match. A missing identity is not an error, even with
   `strict=True`. `None` means this layer does not claim
   an identity.
+- Optional `generator`: Xavier-uniform on the four
+  projections uses that `torch.Generator`. `None` keeps
+  today's path: `nn.Linear` kaiming-init then Xavier on
+  the global stream, bit-identical to omitting the
+  argument. When set, those `nn.Linear` constructors must
+  not advance the global stream. Not stored on the
+  module. `reset_parameters` takes the same argument.
+  Do not add `seed=`.
 - Projections are four separate
   `embed_dim → embed_dim` `nn.Linear`s (`q_proj`,
   `k_proj`, `v_proj`, `out_proj`), not a fused
@@ -1967,6 +1996,7 @@ src/kpnn2/
   _masked_linear.py           # MaskedLinear
   _packed_linear.py           # PackedLinear
   _constraint.py              # constraint= validation for both linears
+  _generator.py               # generator= validation; isolate Linear init
   _packed_multihead_attention.py  # PackedMultiheadAttention
   _gather.py                  # gather_hop_inputs, scatter_hop_outputs
   _align.py                   # align_inputs
@@ -2095,6 +2125,13 @@ itself justify a changelog line.
   / `initial_weight` columns, a sign tensor on the spec,
   or per-slot `requires_grad` would be convenience, not a
   necessity; do not add them.
+- Optional `generator=` on `MaskedLinear`, `PackedLinear`,
+  `PackedMultiheadAttention`, and `PackedLinear.transpose`
+  is a `torch.Generator` or `None`. `None` keeps the
+  default global stream, bit-identical to omitting it. Do
+  not store it on the module. Do not add `seed=`. When it
+  is set, `PackedMultiheadAttention` must not let
+  `nn.Linear` constructors consume the global stream.
 - Do **not** add topology mutation after parse: `add_edge` /
   `remove_edge` on specs, PackedLinear index-buffer setters,
   or an in-place prune / grow API. `LayeredSpec` and

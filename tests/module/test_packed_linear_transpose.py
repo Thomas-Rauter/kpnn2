@@ -463,3 +463,95 @@ def test_transpose_on_adjacency_spec_matches_dense():
             dense.T,
         ),
     )
+
+
+def test_transpose_generator_is_keyword_only():
+    layer = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        bias=False,
+    )
+    with pytest.raises(TypeError):
+        layer.transpose(
+            True,
+            True,
+            None,
+            torch.Generator(),
+        )
+
+
+def test_transpose_generator_rejects_non_generator():
+    layer = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        bias=False,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match="generator",
+    ):
+        layer.transpose(generator=42)
+
+
+def test_transpose_generator_none_matches_omitted():
+    torch.manual_seed(42)
+    enc = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        bias=False,
+    )
+    torch.manual_seed(42)
+    omitted = enc.transpose()
+    torch.manual_seed(42)
+    explicit = enc.transpose(generator=None)
+    torch.testing.assert_close(
+        omitted.bias,
+        explicit.bias,
+    )
+
+
+def test_transpose_generator_isolates_bias_init():
+    enc = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        bias=False,
+    )
+    with torch.no_grad():
+        enc.weight.fill_(1.0)
+    torch.manual_seed(0)
+    torch.randn(8)
+    g = torch.Generator().manual_seed(42)
+    polluted = enc.transpose(generator=g)
+    g2 = torch.Generator().manual_seed(42)
+    clean = enc.transpose(generator=g2)
+    torch.testing.assert_close(
+        polluted.bias,
+        clean.bias,
+    )
+
+
+def test_transpose_omitted_generator_follows_global_stream():
+    enc = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        bias=False,
+    )
+    torch.manual_seed(42)
+    first = enc.transpose()
+    torch.manual_seed(42)
+    torch.randn(8)
+    second = enc.transpose()
+    assert not torch.equal(
+        first.bias,
+        second.bias,
+    )

@@ -1122,6 +1122,133 @@ def test_identity_omitted_from_state_dict():
     assert "identity" not in layer.state_dict()
 
 
+def _tiny_attn(**kwargs):
+    return PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        4,
+        2,
+        bias=False,
+        **kwargs,
+    )
+
+
+def _assert_same_projections(
+    left,
+    right,
+):
+    torch.testing.assert_close(
+        left.q_proj.weight,
+        right.q_proj.weight,
+    )
+    torch.testing.assert_close(
+        left.k_proj.weight,
+        right.k_proj.weight,
+    )
+    torch.testing.assert_close(
+        left.v_proj.weight,
+        right.v_proj.weight,
+    )
+    torch.testing.assert_close(
+        left.out_proj.weight,
+        right.out_proj.weight,
+    )
+
+
+def test_packed_mha_generator_is_keyword_only():
+    with pytest.raises(TypeError):
+        PackedMultiheadAttention(
+            [0, 1],
+            [1, 0],
+            2,
+            2,
+            4,
+            2,
+            0.0,
+            False,
+            None,
+            None,
+            True,
+            False,
+            torch.Generator(),
+        )
+
+
+def test_packed_mha_generator_rejects_non_generator():
+    with pytest.raises(
+        Kpnn2Error,
+        match="generator",
+    ):
+        _tiny_attn(generator=42)
+
+
+def test_packed_mha_generator_none_matches_omitted():
+    torch.manual_seed(42)
+    omitted = _tiny_attn()
+    torch.manual_seed(42)
+    explicit = _tiny_attn(generator=None)
+    _assert_same_projections(
+        omitted,
+        explicit,
+    )
+
+
+def test_packed_mha_generator_ignores_global_draws():
+    torch.manual_seed(0)
+    torch.randn(8)
+    g = torch.Generator().manual_seed(42)
+    polluted = _tiny_attn(generator=g)
+    g2 = torch.Generator().manual_seed(42)
+    clean = _tiny_attn(generator=g2)
+    _assert_same_projections(
+        polluted,
+        clean,
+    )
+    assert not hasattr(
+        polluted,
+        "generator",
+    )
+
+
+def test_packed_mha_generator_does_not_shift_global_stream():
+    torch.manual_seed(0)
+    expected = torch.randn(3)
+    torch.manual_seed(0)
+    g = torch.Generator().manual_seed(42)
+    _tiny_attn(generator=g)
+    got = torch.randn(3)
+    torch.testing.assert_close(
+        got,
+        expected,
+    )
+
+
+def test_packed_mha_omitted_generator_shifts_global_stream():
+    torch.manual_seed(0)
+    expected = torch.randn(3)
+    torch.manual_seed(0)
+    _tiny_attn()
+    got = torch.randn(3)
+    assert not torch.equal(
+        got,
+        expected,
+    )
+
+
+def test_packed_mha_generator_skips_linear_kaiming_stream():
+    torch.manual_seed(42)
+    global_layer = _tiny_attn()
+    isolated = _tiny_attn(
+        generator=torch.Generator().manual_seed(42),
+    )
+    assert not torch.equal(
+        global_layer.q_proj.weight,
+        isolated.q_proj.weight,
+    )
+
+
 def test_load_rejects_foreign_identity():
     src = PackedMultiheadAttention(
         [0, 1],

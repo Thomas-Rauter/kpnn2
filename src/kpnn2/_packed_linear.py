@@ -14,6 +14,7 @@ from torch import nn
 
 from ._constraint import as_constraint, check_constraint_shape
 from ._errors import Kpnn2Error
+from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 
 _INDEX_DIGEST_KEY = "index_digest"
@@ -193,6 +194,12 @@ class PackedLinear(nn.Module):
         blocked cell. ``reset_parameters`` writes the
         unconstrained packed tensor; it does not invert this
         map. ``MaskedLinear`` takes the same argument.
+    generator : torch.Generator or None, default=None
+        Isolated RNG for ``reset_parameters``. ``None`` uses
+        the default torch generator, bit-identical to omitting
+        the argument. Not stored on the module; pass it again
+        to ``reset_parameters`` to replay. Do not pass a seed
+        integer.
 
     Attributes
     ----------
@@ -235,7 +242,8 @@ class PackedLinear(nn.Module):
         ``in_features`` are not positive ints; if ``identity`` is
         neither a ``str`` nor ``None``; if ``constraint`` is
         neither an ``nn.Module`` nor ``None``, or does not
-        preserve the packed weight shape; and from
+        preserve the packed weight shape; if ``generator`` is
+        neither a ``torch.Generator`` nor ``None``; and from
         ``load_state_dict`` when the checkpoint carries an index
         digest or identity that does not match this layer, in
         which case the weights are not loaded.
@@ -279,6 +287,8 @@ class PackedLinear(nn.Module):
     ``fan_in == 0`` has no packed weights and its bias stays 0;
     input nodes of an ``AdjacencySpec`` are exactly that case,
     and this layer does not invent identity connections for them.
+    Optional ``generator`` isolates those draws from other torch
+    RNG consumers.
 
     ``state_dict`` keys are ``weight``, optional ``bias``,
     ``source_index``, ``target_index``, ``index_digest``, and
@@ -374,6 +384,7 @@ class PackedLinear(nn.Module):
         *,
         identity: str | None = None,
         constraint: nn.Module | None = None,
+        generator: torch.Generator | None = None,
     ) -> None:
         super().__init__()
         out_features = _positive_int(
@@ -451,9 +462,12 @@ class PackedLinear(nn.Module):
                 self.weight,
             )
         self.constraint = constraint_module
-        self.reset_parameters()
+        self.reset_parameters(generator)
 
-    def reset_parameters(self) -> None:
+    def reset_parameters(
+        self,
+        generator: torch.Generator | None = None,
+    ) -> None:
         """
         Initialize from per-row packed degree, not full width.
 
@@ -464,7 +478,14 @@ class PackedLinear(nn.Module):
         ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``. If
         ``fan_in == 0``, that row has no packed weights and
         ``bias[j]`` stays 0.
+
+        Parameters
+        ----------
+        generator : torch.Generator or None, default=None
+            Isolated RNG for these draws. ``None`` uses the
+            default torch generator. Not stored on the module.
         """
+        generator = as_generator(generator)
         with torch.no_grad():
             self.weight.zero_()
             if self.bias is not None:
@@ -486,12 +507,14 @@ class PackedLinear(nn.Module):
                         self.weight[index : index + 1],
                         -bound,
                         bound,
+                        generator=generator,
                     )
                 if self.bias is not None:
                     nn.init.uniform_(
                         self.bias[row : row + 1],
                         -bound,
                         bound,
+                        generator=generator,
                     )
 
     def transpose(
@@ -500,6 +523,7 @@ class PackedLinear(nn.Module):
         *,
         tie: bool = True,
         identity: str | None = None,
+        generator: torch.Generator | None = None,
     ) -> "PackedLinear":
         """
         Return a packed layer that applies the same edges backwards.
@@ -529,6 +553,12 @@ class PackedLinear(nn.Module):
             ``spec.fingerprint``. This layer's identity is
             not copied. ``None`` means the new layer does
             not claim an identity.
+        generator : torch.Generator or None, default=None
+            Forwarded to the inner ``PackedLinear``
+            constructor. ``None`` uses the default torch
+            generator. A full init still runs, then
+            ``weight`` is replaced; discarded weight draws
+            still advance this generator.
 
         Returns
         -------
@@ -602,6 +632,7 @@ class PackedLinear(nn.Module):
             bias,
             identity=identity,
             constraint=constraint,
+            generator=generator,
         )
         mirrored.to(
             device=self.weight.device,

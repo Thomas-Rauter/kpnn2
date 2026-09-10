@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ._errors import Kpnn2Error
+from ._generator import as_generator, run_preserving_default_rng
 from ._identity import as_identity, check_identity, save_identity
 
 _INDEX_DIGEST_KEY = "index_digest"
@@ -469,6 +470,15 @@ class PackedMultiheadAttention(nn.Module):
         does not load the weights. A missing identity is not an
         error, even with ``strict=True``. ``None`` means this
         layer does not claim an identity.
+    generator : torch.Generator or None, default=None
+        Isolated RNG for Xavier-uniform on the four
+        projections. ``None`` uses the default torch
+        generator and keeps today's path: ``nn.Linear``
+        kaiming-init then Xavier on that global stream.
+        When set, those ``nn.Linear`` constructors do not
+        advance the global stream. Not stored on the module;
+        pass it again to ``reset_parameters`` to replay. Do
+        not pass a seed integer.
 
     Attributes
     ----------
@@ -515,8 +525,9 @@ class PackedMultiheadAttention(nn.Module):
         by ``num_heads``; if ``dropout`` is a ``bool`` or
         negative; if ``kdim`` / ``vdim`` are neither ``None`` nor
         ``embed_dim``; if ``add_self_loops`` is set when
-        ``query_features != key_features``; or if ``identity`` is
-        neither a ``str`` nor ``None``. From
+        ``query_features != key_features``; if ``identity`` is
+        neither a ``str`` nor ``None``; or if ``generator`` is
+        neither a ``torch.Generator`` nor ``None``. From
         ``load_state_dict``, when the checkpoint carries an index
         digest or identity that does not match this layer, in
         which case the weights are not loaded. ``forward``
@@ -628,6 +639,7 @@ class PackedMultiheadAttention(nn.Module):
         add_self_loops: bool = False,
         *,
         identity: str | None = None,
+        generator: torch.Generator | None = None,
     ) -> None:
         super().__init__()
         query_features = _positive_int(
@@ -711,6 +723,7 @@ class PackedMultiheadAttention(nn.Module):
         self.batch_first = batch_first
         self.add_self_loops = add_self_loops
         self.identity = as_identity(identity)
+        generator = as_generator(generator)
         self.register_buffer(
             "source_index",
             source,
@@ -719,36 +732,67 @@ class PackedMultiheadAttention(nn.Module):
             "target_index",
             target,
         )
-        self.q_proj = nn.Linear(
-            embed_dim,
-            embed_dim,
-            bias=bias,
-        )
-        self.k_proj = nn.Linear(
-            embed_dim,
-            embed_dim,
-            bias=bias,
-        )
-        self.v_proj = nn.Linear(
-            embed_dim,
-            embed_dim,
-            bias=bias,
-        )
-        self.out_proj = nn.Linear(
-            embed_dim,
-            embed_dim,
-            bias=bias,
-        )
-        self.reset_parameters()
 
-    def reset_parameters(self) -> None:
+        def _init_projections() -> None:
+            self.q_proj = nn.Linear(
+                embed_dim,
+                embed_dim,
+                bias=bias,
+            )
+            self.k_proj = nn.Linear(
+                embed_dim,
+                embed_dim,
+                bias=bias,
+            )
+            self.v_proj = nn.Linear(
+                embed_dim,
+                embed_dim,
+                bias=bias,
+            )
+            self.out_proj = nn.Linear(
+                embed_dim,
+                embed_dim,
+                bias=bias,
+            )
+
+        if generator is None:
+            _init_projections()
+        else:
+            run_preserving_default_rng(_init_projections)
+        self.reset_parameters(generator)
+
+    def reset_parameters(
+        self,
+        generator: torch.Generator | None = None,
+    ) -> None:
         """
         Xavier-uniform projections, like ``nn.MultiheadAttention``.
+
+        Parameters
+        ----------
+        generator : torch.Generator or None, default=None
+            Isolated RNG for the four Xavier draws. ``None``
+            uses the default torch generator. Not stored on
+            the module. Biases, when present, are zeroed and
+            do not consume the generator.
         """
-        nn.init.xavier_uniform_(self.q_proj.weight)
-        nn.init.xavier_uniform_(self.k_proj.weight)
-        nn.init.xavier_uniform_(self.v_proj.weight)
-        nn.init.xavier_uniform_(self.out_proj.weight)
+        generator = as_generator(generator)
+        nn.init.xavier_uniform_(
+            self.q_proj.weight,
+            generator=generator,
+        )
+        nn.init.xavier_uniform_(
+            self.k_proj.weight,
+            generator=generator,
+        )
+        nn.init.xavier_uniform_(
+            self.v_proj.weight,
+            generator=generator,
+        )
+        nn.init.xavier_uniform_(
+            self.out_proj.weight,
+            generator=generator,
+        )
         if self.q_proj.bias is not None:
             nn.init.zeros_(self.q_proj.bias)
             nn.init.zeros_(self.k_proj.bias)

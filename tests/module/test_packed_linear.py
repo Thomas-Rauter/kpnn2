@@ -557,6 +557,181 @@ def test_packed_linear_identity_omitted_from_state_dict():
     assert "identity" not in layer.state_dict()
 
 
+def test_packed_linear_generator_is_keyword_only():
+    with pytest.raises(TypeError):
+        PackedLinear(
+            [0],
+            [0],
+            1,
+            1,
+            True,
+            torch.Generator(),
+        )
+
+
+def test_packed_linear_generator_rejects_non_generator():
+    with pytest.raises(
+        Kpnn2Error,
+        match="generator",
+    ):
+        PackedLinear(
+            [0],
+            [0],
+            1,
+            1,
+            generator=42,
+        )
+
+
+def test_packed_linear_generator_none_matches_omitted():
+    torch.manual_seed(42)
+    omitted = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+    )
+    torch.manual_seed(42)
+    explicit = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        generator=None,
+    )
+    torch.testing.assert_close(
+        omitted.weight,
+        explicit.weight,
+    )
+    torch.testing.assert_close(
+        omitted.bias,
+        explicit.bias,
+    )
+
+
+def test_packed_linear_generator_ignores_global_draws():
+    torch.manual_seed(0)
+    torch.randn(8)
+    g = torch.Generator().manual_seed(42)
+    polluted = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        generator=g,
+    )
+    g2 = torch.Generator().manual_seed(42)
+    clean = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        generator=g2,
+    )
+    torch.testing.assert_close(
+        polluted.weight,
+        clean.weight,
+    )
+    torch.testing.assert_close(
+        polluted.bias,
+        clean.bias,
+    )
+    assert not hasattr(
+        polluted,
+        "generator",
+    )
+
+
+def test_packed_linear_omitted_generator_follows_global_stream():
+    torch.manual_seed(42)
+    first = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+    )
+    torch.manual_seed(42)
+    torch.randn(8)
+    second = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+    )
+    assert not torch.equal(
+        first.weight,
+        second.weight,
+    )
+
+
+def test_packed_linear_shared_generator_replays_hop_order():
+    spec = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "H", "A"],
+                "target": ["H", "C", "C"],
+            }
+        )
+    )
+
+    def build(generator):
+        return [
+            PackedLinear(
+                hop.source_index,
+                hop.target_index,
+                hop.out_features,
+                hop.in_features,
+                generator=generator,
+            )
+            for hop in spec.hops
+        ]
+
+    first = build(torch.Generator().manual_seed(42))
+    second = build(torch.Generator().manual_seed(42))
+    assert len(first) == 2
+    for left, right in zip(
+        first,
+        second,
+        strict=True,
+    ):
+        torch.testing.assert_close(
+            left.weight,
+            right.weight,
+        )
+        torch.testing.assert_close(
+            left.bias,
+            right.bias,
+        )
+
+
+def test_packed_linear_reset_parameters_accepts_generator():
+    torch.manual_seed(0)
+    layer = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+    )
+    g = torch.Generator().manual_seed(42)
+    layer.reset_parameters(generator=g)
+    g2 = torch.Generator().manual_seed(42)
+    other = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        generator=g2,
+    )
+    torch.testing.assert_close(
+        layer.weight,
+        other.weight,
+    )
+    torch.testing.assert_close(
+        layer.bias,
+        other.bias,
+    )
+
+
 def test_packed_linear_load_rejects_foreign_identity():
     src = PackedLinear(
         [0, 1],

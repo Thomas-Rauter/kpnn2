@@ -13,6 +13,7 @@ from torch.nn.utils import parametrize
 
 from ._constraint import as_constraint, check_constraint_shape
 from ._errors import Kpnn2Error
+from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 from ._mask_tensor import as_mask_tensor
 
@@ -200,6 +201,12 @@ class MaskedLinear(nn.Module):
         unconstrained weight. ``reset_parameters`` writes that
         unconstrained tensor; it does not invert this map.
         ``PackedLinear`` takes the same argument.
+    generator : torch.Generator or None, default=None
+        Isolated RNG for ``reset_parameters``. ``None`` uses
+        the default torch generator, bit-identical to omitting
+        the argument. Not stored on the module; pass it again
+        to ``reset_parameters`` to replay. Do not pass a seed
+        integer.
 
     Attributes
     ----------
@@ -247,10 +254,12 @@ class MaskedLinear(nn.Module):
         If ``mask`` is not a ``torch.Tensor`` or is not 2-D; if
         ``identity`` is neither a ``str`` nor ``None``; if
         ``constraint`` is neither an ``nn.Module`` nor
-        ``None``, or does not preserve the weight shape; and
-        from ``load_state_dict`` when the checkpoint carries a
-        mask digest or identity that does not match this
-        layer; the weights are then not loaded.
+        ``None``, or does not preserve the weight shape; if
+        ``generator`` is neither a ``torch.Generator`` nor
+        ``None``; and from ``load_state_dict`` when the
+        checkpoint carries a mask digest or identity that
+        does not match this layer; the weights are then not
+        loaded.
 
     See Also
     --------
@@ -320,7 +329,8 @@ class MaskedLinear(nn.Module):
     ``reset_parameters`` uses per-row mask degree as ``fan_in``,
     not full ``in_features``. Because a hop carries every parent
     of its target, including skip parents, that per-row degree
-    is the unit's real fan-in.
+    is the unit's real fan-in. Optional ``generator`` isolates
+    those draws from other torch RNG consumers.
 
     Examples
     --------
@@ -376,6 +386,7 @@ class MaskedLinear(nn.Module):
         *,
         identity: str | None = None,
         constraint: nn.Module | None = None,
+        generator: torch.Generator | None = None,
     ) -> None:
         super().__init__()
         if not isinstance(mask, torch.Tensor):
@@ -422,7 +433,7 @@ class MaskedLinear(nn.Module):
                 "weight",
                 _ConstraintParametrization(constraint),
             )
-        self.reset_parameters()
+        self.reset_parameters(generator)
 
     def _weight_parametrizations(self) -> parametrize.ParametrizationList:
         holders = cast(
@@ -468,7 +479,10 @@ class MaskedLinear(nn.Module):
     def _original_weight(self) -> torch.Tensor:
         return self._weight_parametrizations().original
 
-    def reset_parameters(self) -> None:
+    def reset_parameters(
+        self,
+        generator: torch.Generator | None = None,
+    ) -> None:
         """
         Initialize from per-row mask degree, not full width.
 
@@ -484,7 +498,14 @@ class MaskedLinear(nn.Module):
         per-row device synchronization happens here. Rows are
         then drawn one at a time, which writes straight into
         the trainable tensor without a full-size temporary.
+
+        Parameters
+        ----------
+        generator : torch.Generator or None, default=None
+            Isolated RNG for these draws. ``None`` uses the
+            default torch generator. Not stored on the module.
         """
+        generator = as_generator(generator)
         original = self._original_weight
         with torch.no_grad():
             original.zero_()
@@ -499,12 +520,14 @@ class MaskedLinear(nn.Module):
                     original[row],
                     -bound,
                     bound,
+                    generator=generator,
                 )
                 if self.bias is not None:
                     nn.init.uniform_(
                         self.bias[row : row + 1],
                         -bound,
                         bound,
+                        generator=generator,
                     )
 
     def extra_repr(self) -> str:

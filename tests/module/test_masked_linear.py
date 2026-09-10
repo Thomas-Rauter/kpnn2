@@ -623,6 +623,131 @@ def test_masked_linear_identity_rejects_non_str():
         )
 
 
+def test_masked_linear_generator_is_keyword_only():
+    mask = torch.ones(
+        2,
+        3,
+    )
+    with pytest.raises(TypeError):
+        MaskedLinear(
+            mask,
+            True,
+            None,
+            None,
+            torch.Generator(),
+        )
+
+
+def test_masked_linear_generator_rejects_non_generator():
+    mask = torch.ones(
+        2,
+        3,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match="generator",
+    ):
+        MaskedLinear(
+            mask,
+            generator=42,
+        )
+
+
+def test_masked_linear_generator_none_matches_omitted():
+    mask = torch.tensor(
+        [
+            [1.0, 1.0],
+            [0.0, 1.0],
+        ]
+    )
+    torch.manual_seed(42)
+    omitted = MaskedLinear(mask)
+    torch.manual_seed(42)
+    explicit = MaskedLinear(
+        mask,
+        generator=None,
+    )
+    torch.testing.assert_close(
+        _original(omitted),
+        _original(explicit),
+    )
+    torch.testing.assert_close(
+        omitted.bias,
+        explicit.bias,
+    )
+
+
+def test_masked_linear_generator_ignores_global_draws():
+    mask = torch.tensor(
+        [
+            [1.0, 1.0],
+            [0.0, 1.0],
+        ]
+    )
+    torch.manual_seed(0)
+    torch.randn(8)
+    g = torch.Generator().manual_seed(42)
+    polluted = MaskedLinear(
+        mask,
+        generator=g,
+    )
+    g2 = torch.Generator().manual_seed(42)
+    clean = MaskedLinear(
+        mask,
+        generator=g2,
+    )
+    torch.testing.assert_close(
+        _original(polluted),
+        _original(clean),
+    )
+    torch.testing.assert_close(
+        polluted.bias,
+        clean.bias,
+    )
+
+
+def test_masked_linear_omitted_generator_follows_global_stream():
+    mask = torch.tensor(
+        [
+            [1.0, 1.0],
+            [0.0, 1.0],
+        ]
+    )
+    torch.manual_seed(42)
+    first = MaskedLinear(mask)
+    torch.manual_seed(42)
+    torch.randn(8)
+    second = MaskedLinear(mask)
+    assert not torch.equal(
+        _original(first),
+        _original(second),
+    )
+
+
+def test_masked_linear_reset_parameters_accepts_generator():
+    mask = torch.ones(
+        2,
+        2,
+    )
+    torch.manual_seed(0)
+    layer = MaskedLinear(mask)
+    g = torch.Generator().manual_seed(42)
+    layer.reset_parameters(generator=g)
+    g2 = torch.Generator().manual_seed(42)
+    other = MaskedLinear(
+        mask,
+        generator=g2,
+    )
+    torch.testing.assert_close(
+        _original(layer),
+        _original(other),
+    )
+    assert not hasattr(
+        layer,
+        "generator",
+    )
+
+
 def test_masked_linear_identity_omitted_from_state_dict():
     layer = MaskedLinear(
         torch.ones(

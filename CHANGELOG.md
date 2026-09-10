@@ -36,6 +36,10 @@ This project follows semantic versioning.
   concatenated source axis.
 - `parse_layered(ranks=)`: optional user depths so official
   ontology levels need not be longest-path hops.
+- `generator=` on `MaskedLinear`, `PackedLinear`,
+  `PackedMultiheadAttention`, and `PackedLinear.transpose`:
+  optional `torch.Generator` for isolated parameter init.
+  Default `None` keeps the global stream.
 
 
 ## [0.3.0] - 9. September 2026
