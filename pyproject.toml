@@ -97,7 +97,6 @@ convention = "numpy"
 "docs/**" = ["D"]
 "scripts/**" = ["D"]
 "noxfile.py" = ["D"]
-"conftest.py" = ["D"]
 # Temporary: existing summaries wrap at 80 cols (D200/D205) or use
 # a descriptive rather than imperative mood (D401). Shrink this list
 # when those docstrings are reformatted; new modules are held to D.
@@ -151,7 +150,6 @@ exclude_files = [
     '^tests/',
     '^docs/',
     '^scripts/',
-    '^conftest.py$',
     # Temporary: internal modules, not the public façade.
     '^src/kpnn2/_layout.py$',
     '^src/kpnn2/_mask_tensor.py$',
