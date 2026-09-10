@@ -8,6 +8,13 @@ This project follows semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- `PackedMultiheadAttention`: `need_weights=True` returns
+  packed per-edge weights aligned with `source_index` /
+  `target_index`, not a dense `(L, S)` matrix and not an
+  error. Default `False` still returns `None`.
+
 ### Added
 
 - `constraint=` on `MaskedLinear` and `PackedLinear`: optional

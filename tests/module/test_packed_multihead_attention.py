@@ -12,6 +12,11 @@ from kpnn2 import (
     PackedMultiheadAttention,
     parse_adjacency,
 )
+from tests.helpers.packed_attention import (
+    dense_packed_weights,
+    pin_projections_identity,
+    shape_heads,
+)
 
 
 def _tiny_edgelist():
@@ -347,30 +352,261 @@ def test_rejects_length_mismatch_and_out_of_range_index():
         )
 
 
-def test_need_weights_true_raises():
+def test_need_weights_true_returns_packed():
     torch.manual_seed(42)
-    layer = PackedMultiheadAttention(
-        [0, 1],
-        [1, 0],
-        2,
-        2,
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(spec)
+    layer.eval()
+    n = len(spec.nodes)
+    x = torch.randn(
+        3,
+        n,
         8,
-        2,
     )
+    out_off, none_w = layer(
+        x,
+        x,
+        x,
+        need_weights=False,
+    )
+    out_on, weights = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+    )
+    assert none_w is None
+    assert weights is not None
+    assert weights.shape == (3, layer.nnz)
+    assert weights.shape != (3, n, n)
+    torch.testing.assert_close(
+        out_off,
+        out_on,
+    )
+
+
+def test_average_attn_weights_false_keeps_heads():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(spec)
+    n = len(spec.nodes)
+    x = torch.randn(
+        3,
+        n,
+        8,
+    )
+    _, weights = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    assert weights.shape == (
+        3,
+        layer.nnz,
+        layer.num_heads,
+    )
+    _, averaged = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+    )
+    torch.testing.assert_close(
+        averaged,
+        weights.mean(dim=-1),
+    )
+
+
+def test_need_weights_false_ignores_average_flag():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(spec)
+    n = len(spec.nodes)
     x = torch.randn(
         2,
-        2,
+        n,
         8,
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="need_weights",
-    ):
-        layer(
-            x,
-            x,
-            x,
-            need_weights=True,
+    _, weights = layer(
+        x,
+        x,
+        x,
+        need_weights=False,
+        average_attn_weights=False,
+    )
+    assert weights is None
+
+
+def test_packed_weights_match_dense_live_pairs():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(spec)
+    pin_projections_identity(layer)
+    layer.eval()
+    n = len(spec.nodes)
+    x = torch.randn(
+        4,
+        n,
+        8,
+    )
+    _, packed = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    headed = shape_heads(
+        x,
+        layer.num_heads,
+    )
+    expected = dense_packed_weights(
+        headed,
+        headed,
+        layer.source_index,
+        layer.target_index,
+    )
+    torch.testing.assert_close(
+        packed,
+        expected,
+    )
+
+
+def test_packed_weights_unbatched_and_seq_major():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(spec)
+    n = len(spec.nodes)
+    x = torch.randn(
+        n,
+        8,
+    )
+    _, averaged = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+    )
+    assert averaged.shape == (layer.nnz,)
+    _, per_head = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    assert per_head.shape == (
+        layer.nnz,
+        layer.num_heads,
+    )
+    seq_layer = _attn_from_spec(
+        spec,
+        batch_first=False,
+    )
+    x_seq = torch.randn(
+        n,
+        3,
+        8,
+    )
+    _, seq_avg = seq_layer(
+        x_seq,
+        x_seq,
+        x_seq,
+        need_weights=True,
+    )
+    assert seq_avg.shape == (seq_layer.nnz, 3)
+    _, seq_heads = seq_layer(
+        x_seq,
+        x_seq,
+        x_seq,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    assert seq_heads.shape == (
+        seq_layer.nnz,
+        3,
+        seq_layer.num_heads,
+    )
+
+
+def test_packed_weights_length_matches_nnz_with_self_loops():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(
+        spec,
+        add_self_loops=True,
+    )
+    assert layer.nnz > len(spec.source_index)
+    n = len(spec.nodes)
+    x = torch.randn(
+        2,
+        n,
+        8,
+    )
+    _, weights = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+    )
+    assert weights.shape == (2, layer.nnz)
+    edges = spec.to_edgelist()
+    assert weights.shape[-1] != len(edges)
+
+
+def test_packed_weights_align_with_to_edgelist():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(
+        spec,
+        add_self_loops=False,
+    )
+    edges = spec.to_edgelist()
+    n = len(spec.nodes)
+    x = torch.randn(
+        2,
+        n,
+        8,
+    )
+    _, weights = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+    )
+    assert weights.shape[-1] == len(edges)
+
+
+def test_packed_weights_sum_to_one_per_live_query():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    layer = _attn_from_spec(spec)
+    pin_projections_identity(layer)
+    layer.eval()
+    n = len(spec.nodes)
+    x = torch.randn(
+        3,
+        n,
+        8,
+    )
+    _, weights = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    target = layer.target_index
+    for query_pos in range(n):
+        live = target == query_pos
+        if not bool(live.any()):
+            continue
+        summed = weights[:, live, :].sum(dim=1)
+        torch.testing.assert_close(
+            summed,
+            torch.ones_like(summed),
         )
 
 

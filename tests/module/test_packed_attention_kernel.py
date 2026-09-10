@@ -8,6 +8,7 @@ from tests.helpers.packed_attention import (
     allow_matrix,
     cyclic_edgelist,
     dense_masked_attention,
+    dense_packed_weights,
     rectangular_indices,
     shape_heads,
     three_cycle_indices,
@@ -71,7 +72,7 @@ def test_packed_mix_matches_dense_on_cyclic_adjacency():
         torch.randn(batch, n, embed_dim),
         num_heads,
     )
-    packed = _packed_attention(
+    packed, _ = _packed_attention(
         query,
         key,
         value,
@@ -111,7 +112,7 @@ def test_packed_mix_matches_dense_on_three_cycle():
     query = torch.randn(batch, n, num_heads, head_dim)
     key = torch.randn(batch, n, num_heads, head_dim)
     value = torch.randn(batch, n, num_heads, head_dim)
-    packed = _packed_attention(
+    packed, _ = _packed_attention(
         query,
         key,
         value,
@@ -149,7 +150,7 @@ def test_live_packed_weights_sum_to_one_through_the_mix():
     query = torch.randn(2, n, num_heads, head_dim)
     key = torch.randn(2, n, num_heads, head_dim)
     value = torch.randn(2, n, num_heads, head_dim)
-    packed = _packed_attention(
+    packed, _ = _packed_attention(
         query,
         key,
         value,
@@ -189,7 +190,7 @@ def test_live_packed_weights_sum_to_one_through_the_mix():
     value_oh = torch.zeros(1, n, num_heads, head_dim)
     for i, key_pos in enumerate(live_keys.tolist()):
         value_oh[0, key_pos, :, i] = 1.0
-    packed_oh = _packed_attention(
+    packed_oh, _ = _packed_attention(
         query_oh,
         key_oh,
         value_oh,
@@ -243,7 +244,7 @@ def test_scale_is_one_over_sqrt_head_dim():
             v_flat,
             num_heads,
         )
-        packed = _packed_attention(
+        packed, _ = _packed_attention(
             query,
             key,
             value,
@@ -298,7 +299,7 @@ def test_heads_do_not_mix_inside_the_kernel():
         ],
         dim=-2,
     )
-    packed = _packed_attention(
+    packed, _ = _packed_attention(
         query,
         key,
         value,
@@ -320,7 +321,7 @@ def test_heads_do_not_mix_inside_the_kernel():
     )
     value_perturbed = value.clone()
     value_perturbed[..., 1, :] = value_perturbed[..., 1, :] + 10.0
-    packed_p = _packed_attention(
+    packed_p, _ = _packed_attention(
         query,
         key,
         value_perturbed,
@@ -372,7 +373,7 @@ def test_dead_pair_has_zero_influence_in_the_kernel():
     query = torch.randn(2, n, num_heads, head_dim)
     key = torch.randn(2, n, num_heads, head_dim)
     value = torch.randn(2, n, num_heads, head_dim)
-    packed = _packed_attention(
+    packed, _ = _packed_attention(
         query,
         key,
         value,
@@ -400,7 +401,7 @@ def test_dead_pair_has_zero_influence_in_the_kernel():
     k_dead = int(dead_pairs[0, 1])
     key_dead = key.clone()
     key_dead[:, k_dead] = key_dead[:, k_dead] + 50.0
-    packed_dead = _packed_attention(
+    packed_dead, _ = _packed_attention(
         query,
         key_dead,
         value,
@@ -421,7 +422,7 @@ def test_dead_pair_has_zero_influence_in_the_kernel():
     k_live = int(live_pairs[0, 1])
     key_live = key.clone()
     key_live[:, k_live] = key_live[:, k_live] + 50.0
-    packed_live = _packed_attention(
+    packed_live, _ = _packed_attention(
         query,
         key_live,
         value,
@@ -445,7 +446,7 @@ def test_eval_dropout_does_not_change_the_mix():
     query = torch.randn(batch, n, num_heads, head_dim)
     key = torch.randn(batch, n, num_heads, head_dim)
     value = torch.randn(batch, n, num_heads, head_dim)
-    packed_off = _packed_attention(
+    packed_off, _ = _packed_attention(
         query,
         key,
         value,
@@ -454,7 +455,7 @@ def test_eval_dropout_does_not_change_the_mix():
         dropout_p=0.0,
         training=False,
     )
-    packed_eval = _packed_attention(
+    packed_eval, _ = _packed_attention(
         query,
         key,
         value,
@@ -501,7 +502,7 @@ def test_rectangular_indices_match_dense_oracle():
         num_heads,
         head_dim,
     )
-    packed = _packed_attention(
+    packed, _ = _packed_attention(
         query,
         key,
         value,
@@ -520,4 +521,49 @@ def test_rectangular_indices_match_dense_oracle():
     _assert_close(
         packed,
         dense,
+    )
+
+
+def test_packed_weights_match_dense_gather():
+    torch.manual_seed(42)
+    source_index, target_index, n = _cyclic_indices()
+    batch = 4
+    num_heads = 2
+    head_dim = 4
+    embed_dim = num_heads * head_dim
+    query = shape_heads(
+        torch.randn(batch, n, embed_dim),
+        num_heads,
+    )
+    key = shape_heads(
+        torch.randn(batch, n, embed_dim),
+        num_heads,
+    )
+    value = shape_heads(
+        torch.randn(batch, n, embed_dim),
+        num_heads,
+    )
+    _, packed_w = _packed_attention(
+        query,
+        key,
+        value,
+        source_index,
+        target_index,
+        dropout_p=0.0,
+        training=False,
+    )
+    expected = dense_packed_weights(
+        query,
+        key,
+        source_index,
+        target_index,
+    )
+    assert packed_w.shape == (
+        batch,
+        int(source_index.shape[0]),
+        num_heads,
+    )
+    _assert_close(
+        packed_w,
+        expected,
     )

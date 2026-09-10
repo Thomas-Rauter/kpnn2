@@ -19,6 +19,7 @@ _HELPER_NAMES = (
     "allow_matrix",
     "shape_heads",
     "dense_masked_attention",
+    "dense_packed_weights",
     "cyclic_edgelist",
     "self_loop_edgelist",
     "three_cycle_indices",

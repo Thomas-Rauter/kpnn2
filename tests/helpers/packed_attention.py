@@ -60,22 +60,18 @@ def shape_heads(
     )
 
 
-def dense_masked_attention(
+def _dense_attn_probs(
     query: torch.Tensor,
     key: torch.Tensor,
-    value: torch.Tensor,
     source_index: torch.Tensor,
     target_index: torch.Tensor,
     key_padding_mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
-    Dense scaled-dot attention on live packed pairs.
+    Dense ``(..., query, heads, key)`` softmax on live pairs.
 
-    ``query`` / ``key`` / ``value`` are
-    ``(..., seq, heads, head_dim)``. Dead pairs (no packed
-    edge, or a padded key) get additive
-    ``torch.finfo(dtype).min``. Softmax is over the key axis.
-    A query with no remaining live keys is zeros, not NaN.
+    Dead pairs (no packed edge, or a padded key) are 0.
+    A query with no remaining live keys is all zeros, not NaN.
     """
     n_query = query.shape[-3]
     n_key = key.shape[-3]
@@ -142,12 +138,94 @@ def dense_masked_attention(
     attn = attn * has_live.unsqueeze(-1).unsqueeze(-1).to(
         dtype=attn.dtype,
     )
+    return attn
+
+
+def dense_masked_attention(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    source_index: torch.Tensor,
+    target_index: torch.Tensor,
+    key_padding_mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """
+    Dense scaled-dot attention on live packed pairs.
+
+    ``query`` / ``key`` / ``value`` are
+    ``(..., seq, heads, head_dim)``. Dead pairs (no packed
+    edge, or a padded key) get additive
+    ``torch.finfo(dtype).min``. Softmax is over the key axis.
+    A query with no remaining live keys is zeros, not NaN.
+    """
+    attn = _dense_attn_probs(
+        query,
+        key,
+        source_index,
+        target_index,
+        key_padding_mask=key_padding_mask,
+    )
     mixed = torch.einsum(
         "...qhk,...khd->...qhd",
         attn,
         value,
     )
     return mixed
+
+
+def dense_packed_weights(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    source_index: torch.Tensor,
+    target_index: torch.Tensor,
+    key_padding_mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """
+    Dense softmax gathered onto live packed pairs.
+
+    ``query`` / ``key`` are ``(..., seq, heads, head_dim)``.
+    Returns ``(..., nnz, heads)``. Dead or padded pairs are
+    0. May allocate an ``(n_query, n_key)`` score matrix.
+    """
+    attn = _dense_attn_probs(
+        query,
+        key,
+        source_index,
+        target_index,
+        key_padding_mask=key_padding_mask,
+    )
+    source_index = torch.as_tensor(
+        source_index,
+        dtype=torch.int64,
+        device=attn.device,
+    )
+    target_index = torch.as_tensor(
+        target_index,
+        dtype=torch.int64,
+        device=attn.device,
+    )
+    selected = attn.index_select(
+        -3,
+        target_index,
+    )
+    nnz = int(source_index.shape[0])
+    heads = selected.shape[-2]
+    leading = selected.shape[:-3]
+    index = source_index.view(
+        *([1] * len(leading)),
+        nnz,
+        1,
+        1,
+    ).expand(
+        *leading,
+        nnz,
+        heads,
+        1,
+    )
+    return selected.gather(
+        -1,
+        index,
+    ).squeeze(-1)
 
 
 def cyclic_edgelist() -> pd.DataFrame:

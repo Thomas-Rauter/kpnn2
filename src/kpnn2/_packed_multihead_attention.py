@@ -300,11 +300,12 @@ def _packed_attention(
     dropout_p: float,
     training: bool,
     participate: torch.Tensor | None = None,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Softmax over live keys of each query; never an ``(n, n)`` score
     matrix. ``query`` / ``key`` / ``value`` are
-    ``(..., seq, heads, head_dim)``.
+    ``(..., seq, heads, head_dim)``. Returns the mixed values
+    and packed weights ``(..., nnz, heads)``.
     """
     head_dim = query.shape[-1]
     scale = head_dim**-0.5
@@ -389,7 +390,7 @@ def _packed_attention(
         value_index,
         weighted,
     )
-    return out
+    return out, attn
 
 
 class PackedMultiheadAttention(nn.Module):
@@ -402,7 +403,8 @@ class PackedMultiheadAttention(nn.Module):
     whose mask costs an ``(n, n)`` matrix. Build it from
     ``parse_adjacency`` indices and wrap it in your own encoder.
     Defaults differ from MHA: ``batch_first=True`` and
-    ``need_weights=False`` (``True`` raises).
+    ``need_weights=False``. ``True`` returns packed per-edge
+    weights, not a dense ``(L, S)`` matrix.
 
     Parameters
     ----------
@@ -542,8 +544,8 @@ class PackedMultiheadAttention(nn.Module):
     still goes through ``out_proj``. Input nodes of an
     ``AdjacencySpec`` are exactly that case.
 
-    ``forward`` documents the accepted layouts, the
-    ``need_weights`` raise, ``attn_mask`` / ``is_causal``, and
+    ``forward`` documents the accepted layouts, packed
+    ``need_weights``, ``attn_mask`` / ``is_causal``, and
     ``key_padding_mask``.
 
     Index buffers stay integer after ``.half()`` / bfloat16 /
@@ -596,6 +598,14 @@ class PackedMultiheadAttention(nn.Module):
     (2, 4, 8)
     >>> weights is None
     True
+    >>> _, packed = attn(
+    ...     tokens,
+    ...     tokens,
+    ...     tokens,
+    ...     need_weights=True,
+    ... )
+    >>> tuple(packed.shape)
+    (2, 8)
     """
 
     source_index: torch.Tensor
@@ -869,11 +879,16 @@ class PackedMultiheadAttention(nn.Module):
         the packed kernel and transposed back.
 
         Always returns a 2-tuple. ``need_weights`` defaults to
-        ``False``. If ``need_weights`` is ``True``, raise
-        ``Kpnn2Error`` (a packed layer must not allocate a
-        dense ``(L, S)`` weight matrix).
-        ``average_attn_weights`` has no effect while that raise
-        stands.
+        ``False``, and then the second entry is ``None``. If
+        ``need_weights`` is ``True``, the second entry is the
+        packed per-edge softmax, aligned with
+        ``source_index`` / ``target_index``, not MHA's dense
+        ``(L, S)`` map. With ``average_attn_weights=True``
+        (the default) the head axis is averaged, shape
+        ``(..., nnz)``. With ``False``, shape
+        ``(..., nnz, num_heads)``. Batch layout follows the
+        output (including ``batch_first``). This path does
+        not allocate ``(L, S)``.
 
         ``attn_mask`` must be ``None``. ``is_causal`` must be
         ``False``. ``key_padding_mask`` is ``None`` or a
@@ -884,12 +899,6 @@ class PackedMultiheadAttention(nn.Module):
         padding masks raise ``Kpnn2Error``. After padding, a
         query with no remaining keys stays zeros, not NaN.
         """
-        if need_weights:
-            raise Kpnn2Error(
-                "PackedMultiheadAttention cannot return "
-                "attention weights: that would allocate a dense "
-                "(L, S) matrix. 'need_weights' must be False."
-            )
         if attn_mask is not None:
             raise Kpnn2Error(
                 "'attn_mask' must be None; the edgelist is the structural mask."
@@ -937,7 +946,7 @@ class PackedMultiheadAttention(nn.Module):
             self.key_features,
             query_bf.device,
         )
-        mixed = _packed_attention(
+        mixed, attn = _packed_attention(
             q,
             k,
             v,
@@ -955,4 +964,11 @@ class PackedMultiheadAttention(nn.Module):
         )
         if transposed:
             output = output.transpose(0, 1)
-        return (output, None)
+        if not need_weights:
+            return (output, None)
+        weights = attn
+        if average_attn_weights:
+            weights = weights.mean(dim=-1)
+        if transposed:
+            weights = weights.transpose(0, 1)
+        return (output, weights)

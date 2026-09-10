@@ -1300,16 +1300,22 @@ forward(
     attn_mask=None,
     average_attn_weights=True,
     is_causal=False,
-) -> (output, None)
+) -> (output, None) or (output, packed_weights)
 ```
 
-- Always returns a 2-tuple. The second entry is always
-  `None`. `need_weights` defaults to `False` (MHA
-  defaults `True`). If `need_weights` is `True`, raise
-  `Kpnn2Error`: returning weights would allocate a
-  dense `(L, S)` matrix. `average_attn_weights` is
-  kept for call-site drop-in and has no effect while
-  that raise stands.
+- Always returns a 2-tuple. `need_weights` defaults to
+  `False` (MHA defaults `True`); then the second entry is
+  `None`. If `need_weights` is `True`, the second entry is
+  packed per-edge softmax aligned with `source_index` /
+  `target_index`, **not** MHA's dense `(L, S)` map.
+  `average_attn_weights=True` (default) averages heads:
+  shape `(..., nnz)`. `False` keeps heads:
+  `(..., nnz, num_heads)`. Batch layout follows the
+  output, including `batch_first`. Does not allocate
+  `(L, S)`. Packed length is the module `nnz`, including
+  pairs OR-ed by `add_self_loops`; zip with
+  `source_index` / `target_index`, not `to_edgelist()`,
+  when that flag added pairs.
 - `query`, `key`, and `value` are required; `key` is
   not defaulted to `query`.
 - `attn_mask` must be `None` (the edgelist is the

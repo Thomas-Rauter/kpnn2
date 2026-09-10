@@ -83,7 +83,7 @@ def _packed_backward(
         key,
         value,
     )
-    mix = _packed_attention(
+    mix, _ = _packed_attention(
         q,
         k,
         v,
