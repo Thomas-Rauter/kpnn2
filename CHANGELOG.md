@@ -18,6 +18,8 @@ This project follows semantic versioning.
   node can own several units.
 - `LayeredSpec.edge_location` / `AdjacencySpec.edge_location`:
   locate a named edge's packed weight slots.
+- `LayeredSpec.node_units` / `hop_units`: named node to its
+  unit slice on a layer tensor or a hop source axis.
 - `map_node_attributions(..., hop=)`: label a hop's
   concatenated source axis.
 - `parse_layered(ranks=)`: optional user depths so official

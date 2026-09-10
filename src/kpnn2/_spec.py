@@ -10,10 +10,27 @@ from torch import Tensor
 
 from ._errors import Kpnn2Error
 from ._layout import (
+    build_layout,
     hop_axis_layouts,
     packed_indices_for_named_edge,
     resolve_edge_names,
 )
+
+
+def _layered_node_layer(
+    layer_nodes: tuple[tuple[str, ...], ...],
+    name: object,
+) -> tuple[int, str]:
+    """
+    Return the depth and string name of one layered node.
+    """
+    node_name = str(name)
+    if node_name == "":
+        raise Kpnn2Error("Node name is empty.")
+    for layer, names in enumerate(layer_nodes):
+        if node_name in names:
+            return layer, node_name
+    raise Kpnn2Error(f"Unknown node name: {node_name}.")
 
 
 @dataclass(frozen=True)
@@ -79,6 +96,10 @@ class Hop:
     PackedLinear : Applies one hop from the packed indices.
     MaskedLinear : Applies one hop after ``to_mask()``.
     Skip : Metadata for the edges in this hop that span layers.
+    LayeredSpec.hop_units : Slice of one named node on this
+        hop's concatenated source axis.
+    LayeredSpec.node_units : Slice of one named node on its
+        layer tensor.
 
     Notes
     -----
@@ -94,6 +115,8 @@ class Hop:
     ``offset = sum(source_dims[:source_layers.index(layer)])``
 
     ``column_offsets`` does that for you.
+    ``LayeredSpec.hop_units`` locates one named node on that
+    axis, widths included.
 
     Examples
     --------
@@ -423,7 +446,9 @@ class LayeredSpec:
     when compacted layers equal longest-path on the same edges.
     Pickle and ``torch.save`` of the dataclass are not.
     ``edge_location`` finds packed slots of a named edge; it is
-    not a constraint.
+    not a constraint. ``node_units`` and ``hop_units`` map a
+    named node to its contiguous unit slice on a layer tensor
+    or a hop source axis.
 
     Examples
     --------
@@ -645,6 +670,152 @@ class LayeredSpec:
             if packed:
                 return hop_index, packed
         raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+
+    def node_units(
+        self,
+        name: object,
+    ) -> tuple[int, slice]:
+        """
+        Return the layer and unit slice of one named node.
+
+        ``name`` is matched after ``str(...)``, same as parse.
+        The slice indexes the last axis of that layer's tensor
+        (``saved[layer]``). It is always a slice, including at
+        width 1.
+
+        Parameters
+        ----------
+        name : str
+            Node name. Non-strings are converted with
+            ``str(...)``.
+
+        Returns
+        -------
+        layer : int
+            Depth of the node: index into ``layer_nodes`` and
+            the key of a saved-layer dict.
+        units : slice
+            Contiguous columns on that layer's last axis.
+            Length is the node's width.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``name`` is empty or is not a node.
+
+        Notes
+        -----
+        This is identity into the unit axis, not a dropout
+        module and not a head helper. Index as
+        ``saved[layer][..., units]``.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H"],
+        ...         "target": ["H", "C"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_layered(
+        ...     edgelist,
+        ...     widths={"H": 3},
+        ... )
+        >>> layer, units = spec.node_units("H")
+        >>> layer, units.start, units.stop
+        (1, 0, 3)
+        """
+        layer, node_name = _layered_node_layer(
+            self.layer_nodes,
+            name,
+        )
+        layout = build_layout(
+            self.layer_nodes[layer],
+            self.layer_widths[layer],
+        )
+        return layer, layout.slot(node_name).units
+
+    def hop_units(
+        self,
+        hop: Hop,
+        name: object,
+    ) -> slice:
+        """
+        Return the unit slice of one named node on a hop axis.
+
+        The axis is the concatenated source of ``hop``, the
+        same tensor ``gather_hop_inputs`` returns.
+        ``name`` is matched after ``str(...)``, same as parse.
+        ``hop`` must compare equal to one entry of ``hops``.
+
+        Parameters
+        ----------
+        hop : Hop
+            A hop from ``spec.hops``.
+        name : str
+            Node name. Non-strings are converted with
+            ``str(...)``.
+
+        Returns
+        -------
+        slice
+            Contiguous columns on ``hop.in_features``. Length
+            is the node's width. Index as
+            ``sources[..., units]``.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``hop`` is not a ``Hop``, does not match an
+            entry of ``hops``, ``name`` is empty, ``name`` is
+            not a node, or the node is not a source of this
+            hop.
+
+        Notes
+        -----
+        ``column_offsets`` locates a whole source layer on this
+        axis. This method locates one named node, widths
+        included. A target-layer name is not on the source
+        axis.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H", "A"],
+        ...         "target": ["H", "C", "C"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_layered(edgelist)
+        >>> hop = spec.hops[1]
+        >>> spec.hop_units(hop, "A").start
+        0
+        >>> spec.hop_units(hop, "H").start
+        1
+        """
+        if not isinstance(hop, Hop):
+            raise Kpnn2Error("'hop' must be a Hop from spec.hops.")
+        if hop not in self.hops:
+            raise Kpnn2Error("'hop' must match an entry of spec.hops.")
+        _, node_name = _layered_node_layer(
+            self.layer_nodes,
+            name,
+        )
+        source_layout, _ = hop_axis_layouts(
+            self.layer_nodes,
+            self.layer_widths,
+            hop.source_layers,
+            hop.target_layer,
+        )
+        if node_name not in source_layout.names:
+            raise Kpnn2Error(
+                f"Node {node_name} is not on this hop's source axis."
+            )
+        return source_layout.slot(node_name).units
 
     def to_dict(self) -> dict:
         """

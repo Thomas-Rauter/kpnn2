@@ -143,6 +143,24 @@ this package unless a later prompt asks.
   to add `parse_attention`. Do not reuse a hop rectangle as a
   square attention matrix.
 - **Not a trainer.** No losses, optimizers, or training loops.
+- **Not a mutable graph.** Topology is frozen after parse.
+  `LayeredSpec` and `AdjacencySpec` are frozen dataclasses
+  with no edge add/remove methods. `PackedLinear` index
+  buffers have no setter. Assigning `MaskedLinear.mask`
+  can prune in place, but then `mask_digest` will not
+  match a model rebuilt from the original spec. In-place
+  ParsVNN / self-pruning BINN pruning and PathExpSurv edge
+  growth are not a supported public contract. Those
+  workflows are rare special cases. First-class support
+  would re-pack hops on both layouts, resize packed
+  `weight`, remap optimizer slots, and rewrite
+  fingerprints and digests on every edge change. That
+  would make the code much more complex and harder to
+  maintain. Callers who need a different prior drop or
+  add DataFrame rows, parse again, and copy surviving
+  weights with `edge_location`. Do not add `add_edge` /
+  `remove_edge`, PackedLinear index setters, or an
+  in-place prune / grow API.
 - **Not a data-residency layer.** No minibatcher, no device
   policy, no "keep X sparse" helper, and no rule that moves
   the full feature matrix to GPU. Host-sparse storage (for
@@ -193,6 +211,15 @@ parsing, packed hop and adjacency indices, hop input assembly,
 named I/O alignment, and attribution column names. The user owns
 `nn.Module.forward()`, call order, nonlinearities, and training.
 
+**Topology is frozen after parse.** Specs are parse snapshots,
+not a live graph. Training-time prune and grow (ParsVNN,
+self-pruning BINN, PathExpSurv) stay in the caller's loop:
+edit the edgelist, parse again, copy weights with
+`edge_location`. Do not add mutation APIs to make those
+papers first-class. They are rare relative to a fixed prior,
+and supporting them in kpnn2 would make the code much more
+complex and harder to maintain. See **What kpnn2 is NOT**.
+
 **Two sparsity axes.** Graph connectivity is kpnn2's: always
 dense compute, sparse only as "which edges exist." Feature
 matrix X is the user's: sparse host storage is allowed in
@@ -228,10 +255,12 @@ Division of labor:
 | `PackedLinear` (1-D weight per live edge, `index_add`) | kpnn2 |
 | `PackedMultiheadAttention` (packed MHA on live pairs) | kpnn2 |
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
+| Named node → unit slice (`node_units` / `hop_units`) | kpnn2 |
 | Named DataFrame → dense CPU tensor (`align_inputs`) | kpnn2 |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Encoder stack, FFN, residuals | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
+| Training-time prune / grow of the prior | User (reparse) |
 | Host feature layout (dense table vs sparse AnnData `.X`) | User |
 | Minibatch slice → densify that block → device copy | User |
 | Captum / other attribution algorithms | User |
@@ -428,7 +457,9 @@ Do **not** add `widths=` or `ranks=` to `parse_adjacency`.
 
 `LayeredSpec` is a frozen dataclass. It holds structure only: no
 `nn.Module`, no parameters, no execution plan object. Sequences
-are tuples. Do not reassign fields. There is no stored mask
+are tuples. Do not reassign fields. There are no edge
+add/remove methods; a different prior is a new parse
+(see **What kpnn2 is NOT**). There is no stored mask
 tensor and no densifying `mask` property on a hop.
 `copy.deepcopy` of a `LayeredSpec` succeeds and copies the
 index tuples; two `Hop.to_mask()` results do not share storage.
@@ -464,6 +495,8 @@ layer. There is no second mechanism for edges that span layers.
 `Hop.column_offsets` is a derived property: the first source
 column of each entry of `source_layers`. `in_features` is
 `sum(source_dims)`. `out_features` is `target_dim`.
+`LayeredSpec.hop_units` locates one named node on that
+concatenated axis; `column_offsets` only walks source layers.
 
 - `len(hops) == len(layer_nodes) - 1` and
   `hops[i].target_layer == i + 1`.
@@ -580,6 +613,35 @@ Missing pair, empty names, or a name that is not a node:
 `Kpnn2Error`. The message names the pair as
 `{source} -> {target}`.
 
+### `LayeredSpec.node_units()` / `hop_units()`
+
+```python
+layered_spec.node_units(name) -> tuple[int, slice]
+layered_spec.hop_units(hop, name) -> slice
+```
+
+`node_units` returns `(layer, units)` for one named node.
+`layer` is the depth in `layer_nodes`. `units` is a
+contiguous slice of that layer's last axis (`saved[layer]`),
+length `k` of that node. Always a slice, including at
+width 1. Index as `saved[layer][..., units]`.
+
+`hop_units` returns the same node's slice on the concatenated
+source axis of `hop` (`gather_hop_inputs` output /
+hop-module input). `hop` must compare equal to one entry of
+`spec.hops`. A graph node that is not a source of that hop
+raises `Kpnn2Error`. Index as `sources[..., units]`.
+`Hop.column_offsets` still locates a whole source **layer**
+on that axis; this locates one named node.
+
+`name` is matched after `str(...)`, same as parse. Empty
+name or a name that is not a node: `Kpnn2Error`. Do **not**
+export `Layout`. Do **not** add this lookup on
+`AdjacencySpec` (every node is one unit of `spec.nodes`).
+
+These are identity into the unit axis, not a dropout module
+and not a head helper.
+
 ---
 
 ## Skip connections (no pseudo nodes, no second mechanism)
@@ -646,9 +708,10 @@ It must not allocate an `(n, n)` tensor.
 ### `AdjacencySpec` fields
 
 Frozen dataclass, same rules as `LayeredSpec`: no reassignment,
-sequences are tuples. There is no stored mask tensor and no
-densifying `mask` property. `copy.deepcopy` succeeds and copies
-the index tuples; two `to_mask()` results do not share storage.
+sequences are tuples, no edge add/remove methods. There is no
+stored mask tensor and no densifying `mask` property.
+`copy.deepcopy` succeeds and copies the index tuples; two
+`to_mask()` results do not share storage.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -1545,6 +1608,10 @@ edge / block start. Do not implement adjacency width.
   `LayeredSpec.edge_location` and `AdjacencySpec.edge_location`
   are that lookup for callers: a named edge to packed weight
   slots. They are identity, not constraints.
+  `LayeredSpec.node_units` and `LayeredSpec.hop_units` are
+  the matching lookup for a named node: a contiguous unit
+  slice on a layer tensor or a hop source axis. Do not
+  export `Layout`.
 - `AdjacencySpec.source_index` / `target_index` store
   `layout.start_of` (the block start) for each original edge.
   `to_mask()` writes `1.0` at each
@@ -1720,7 +1787,8 @@ PyTorch:
    so a rename cannot load silently.
 
 Do not add a compiled core or mutate connectivity after parse.
-`copy.deepcopy` of this module shape succeeds.
+See **What kpnn2 is NOT** (mutable graph). `copy.deepcopy` of
+this module shape succeeds.
 
 The Python distribution and import name are **`kpnn2`**.
 Do not rename them.
@@ -1860,6 +1928,14 @@ itself justify a changelog line.
   `ConstrainedMaskedLinear`. Per-entry maps are
   `constraint=` on `MaskedLinear` and `PackedLinear`. Do not
   add an edgelist `constraint` column.
+- Do **not** add topology mutation after parse: `add_edge` /
+  `remove_edge` on specs, PackedLinear index-buffer setters,
+  or an in-place prune / grow API. `LayeredSpec` and
+  `AdjacencySpec` stay frozen dataclasses. ParsVNN /
+  self-pruning BINN / PathExpSurv are caller reparse, not a
+  public contract. Those cases are rare; first-class support
+  would make the code much more complex and harder to
+  maintain. See **What kpnn2 is NOT**.
 - Two sparsity axes (see **Locked contrasts**). Graph
   connectivity is always dense compute in this package.
   Feature-matrix storage is the caller's. Do not collapse
@@ -1951,8 +2027,10 @@ itself justify a changelog line.
   are units; `source_nodes` stays one name per node. Keep index
   arithmetic in `_layout.py`: build a `Layout`, ask it for slots,
   expand named edges with `iter_block_pairs`, and map a unit
-  index back with `slot_containing`. Do **not** add `widths=` or
-  `ranks=` to `parse_adjacency`. See "Internal unit layout".
+  index back with `slot_containing`. Callers use `node_units`,
+  `hop_units`, and `edge_location`; do **not** export `Layout`.
+  Do **not** add `widths=` or `ranks=` to `parse_adjacency`.
+  See "Internal unit layout".
 - Public failures: `Kpnn2Error` only.
 - After Python edits, run `python -m ruff format .` from the
   `dev` extra. Do not use a global `ruff` on `PATH`.
