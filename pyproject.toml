@@ -84,6 +84,7 @@ target-version = "py310"
 extend-exclude = [
     "*.md",
     "tests/manual",
+    "out",
 ]
 
 [tool.ruff.lint]
@@ -169,6 +170,12 @@ follow_imports_for_stubs = true
 module = ["xarray", "xarray.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
+
+[tool.coverage.html]
+directory = "out/htmlcov"
+
+[tool.coverage.xml]
+output = "out/coverage.xml"
 
 [tool.pytest.ini_options]
 addopts = [

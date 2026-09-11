@@ -58,8 +58,8 @@ jobs:
             -m "not slow" \
             --cov=kpnn2 \
             --cov-report=term-missing \
-            --cov-report=xml \
-            --cov-report=html
+            --cov-report=xml:out/coverage.xml \
+            --cov-report=html:out/htmlcov
 
       - name: Run slow tests
         if: matrix.python-version == '3.11'
@@ -71,33 +71,33 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: htmlcov
-          path: htmlcov/
+          path: out/htmlcov/
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v5
         with:
-          files: ./coverage.xml
+          files: ./out/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Thomas-Rauter/kpnn2
 
       - name: Build package
         if: matrix.python-version == '3.11'
         run: |
-          python -m build
+          python -m build -o out/dist
 
       - name: Check package metadata
         if: matrix.python-version == '3.11'
         run: |
           python -m pip install twine
-          python -m twine check dist/*
+          python -m twine check out/dist/*
 
       - name: Smoke test installed wheel
         if: matrix.python-version == '3.11'
         run: |
           python -m venv /tmp/kpnn2-wheel-test
           /tmp/kpnn2-wheel-test/bin/python -m pip install --upgrade pip
-          /tmp/kpnn2-wheel-test/bin/python -m pip install dist/*.whl
+          /tmp/kpnn2-wheel-test/bin/python -m pip install out/dist/*.whl
           cp tests/api/test_core_smoke.py /tmp/wheel_smoke.py
           cd /tmp
           /tmp/kpnn2-wheel-test/bin/python /tmp/wheel_smoke.py

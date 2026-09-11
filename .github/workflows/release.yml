@@ -53,17 +53,17 @@ jobs:
 
       - name: Build package
         run: |
-          python -m build
+          python -m build -o out/dist
 
       - name: Check distribution metadata
         run: |
-          python -m twine check --strict dist/*
+          python -m twine check --strict out/dist/*
 
       - name: Upload distribution artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: out/dist/
           if-no-files-found: error
 
   publish:
@@ -84,7 +84,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: out/dist/
 
       - name: Publish distribution files to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: out/dist

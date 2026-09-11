@@ -3,6 +3,7 @@ site_description: >
   Turn a named edgelist into sparsely connected PyTorch layers
   you assemble yourself.
 site_url: https://thomas-rauter.github.io/kpnn2/
+site_dir: out/site
 repo_url: https://github.com/Thomas-Rauter/kpnn2
 repo_name: Thomas-Rauter/kpnn2
 

@@ -2037,6 +2037,13 @@ docs/
   figures/correctness/
 ```
 
+Generated local/CI outputs go under gitignored `out/`:
+MkDocs `out/site`, coverage `out/htmlcov` and
+`out/coverage.xml`, wheels `out/dist`. Do not write `site/`,
+`htmlcov/`, or `dist/` at the repo root. `python -m build`
+needs `-o out/dist`; there is no pyproject key for that
+outdir. `__pycache__/` stays next to `.py` files.
+
 `src/kpnn2/__init__.py` is the **only** public import path. Users
 write `import kpnn2` or `from kpnn2 import MaskedLinear`, never
 `from kpnn2._masked_linear import MaskedLinear`. Examples and
