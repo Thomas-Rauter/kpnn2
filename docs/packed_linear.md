@@ -209,3 +209,124 @@ The same module works on `MaskedLinear`: freeze at
 `[target_index, source_index]` of the dense rectangle,
 not at packed slots. `constraint=` still runs before the
 mask.
+
+## Changing the prior (reparse)
+
+Specs are frozen after parse. To prune or grow the prior,
+edit the edgelist, parse again, build **new** layers from
+the new spec, and copy surviving tensors **by name**.
+
+Look up each surviving named edge on **both** specs with
+`edge_location` and copy those packed slots. A surviving
+edge can sit on a different hop with a different packed
+index. Do not `Tensor.copy_` a whole `weight`, and do not
+`load_state_dict` across different priors.
+`PackedLinear.weight` is 1-D of length `nnz`. If you drop
+one named edge and add another, `nnz` is unchanged and
+slot `i` is a different named edge. `index_digest` /
+`mask_digest` hash numeric indices (or the mask) and
+shapes, not names. Always pass `identity=spec.fingerprint`
+on the new `PackedLinear` or `MaskedLinear`.
+
+Reparse is not "the same graph minus a row." Both parsers
+recompute `input_nodes` / `output_nodes`. `parse_layered`
+also recomputes longest-path depths (unless you pass the
+same `ranks=`), hop membership, concat source axes, and
+`skips`. Pass the same `widths=` / `ranks=` as the original
+parse.
+
+Bias is `(out_features,)`, one value per output unit, not
+per edge. Copy it by named node → unit slice, not by packed
+slot. On a `LayeredSpec`, `node_units` indexes the hop's
+output axis; copy only when the node still exists and its
+width and layer still match. On an `AdjacencySpec`, index
+`spec.nodes` by name.
+
+Construct a new optimizer on the new parameters, or accept
+that Adam moments on the old `Parameter` objects are lost.
+
+```python
+old_spec = kpnn2.parse_adjacency(old_edgelist)
+new_spec = kpnn2.parse_adjacency(new_edgelist)
+n_old = len(old_spec.nodes)
+n_new = len(new_spec.nodes)
+old_core = kpnn2.PackedLinear(
+    old_spec.source_index,
+    old_spec.target_index,
+    n_old,
+    n_old,
+    identity=old_spec.fingerprint,
+)
+new_core = kpnn2.PackedLinear(
+    new_spec.source_index,
+    new_spec.target_index,
+    n_new,
+    n_new,
+    identity=new_spec.fingerprint,
+)
+old_edges = set(
+    zip(
+        old_spec.to_edgelist()["source"],
+        old_spec.to_edgelist()["target"],
+    )
+)
+new_table = new_spec.to_edgelist()
+with torch.no_grad():
+    for source, target in zip(
+        new_table["source"],
+        new_table["target"],
+    ):
+        pair = (source, target)
+        if pair not in old_edges:
+            continue
+        old_pack = old_spec.edge_location(
+            source,
+            target,
+        )
+        new_pack = new_spec.edge_location(
+            source,
+            target,
+        )
+        new_core.weight[list(new_pack)] = (
+            old_core.weight[list(old_pack)]
+        )
+    if (
+        old_core.bias is not None
+        and new_core.bias is not None
+    ):
+        old_index = {
+            name: i
+            for i, name in enumerate(old_spec.nodes)
+        }
+        for i, name in enumerate(new_spec.nodes):
+            if name not in old_index:
+                continue
+            new_core.bias[i] = old_core.bias[
+                old_index[name]
+            ]
+optimizer = torch.optim.Adam(new_core.parameters())
+```
+
+On a `LayeredSpec`, `edge_location` returns
+`(hop_index, packed_indices)`. Copy into
+`layers[hop_index]` on each spec. Copy bias with
+`node_units` only when layer and width still match:
+
+```python
+old_layer, old_units = old_spec.node_units(name)
+new_layer, new_units = new_spec.node_units(name)
+if old_layer != new_layer:
+    continue
+old_width = old_units.stop - old_units.start
+new_width = new_units.stop - new_units.start
+if old_width != new_width or old_layer == 0:
+    continue
+new_layers[new_layer - 1].bias[new_units] = (
+    old_layers[old_layer - 1].bias[old_units]
+)
+```
+
+On `MaskedLinear`, copy the named live cells of
+`parametrizations.weight.original`. Do not `copy_` the
+`(out, in)` rectangle. `load_state_dict` is still
+name-blind when the mask pattern and `nnz` are unchanged.

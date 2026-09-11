@@ -191,9 +191,9 @@ this package unless a later prompt asks.
   would make the code much more complex and harder to
   maintain. Callers who need a different prior drop or
   add DataFrame rows, parse again, and copy surviving
-  weights with `edge_location`. Do not add `add_edge` /
-  `remove_edge`, PackedLinear index setters, or an
-  in-place prune / grow API.
+  tensors **by name** (see **Reparse hatch**). Do not add
+  `add_edge` / `remove_edge`, PackedLinear index setters,
+  a transfer helper, or an in-place prune / grow API.
 - **Not a data-residency layer.** No minibatcher, no device
   policy, no "keep X sparse" helper, and no rule that moves
   the full feature matrix to GPU. Host-sparse storage (for
@@ -262,8 +262,8 @@ contract heavier. Do not add it. See **What kpnn2 is NOT**.
 **Topology is frozen after parse.** Specs are parse snapshots,
 not a live graph. Training-time prune and grow (ParsVNN,
 self-pruning BINN, PathExpSurv) stay in the caller's loop:
-edit the edgelist, parse again, copy weights with
-`edge_location`. Do not add mutation APIs to make those
+edit the edgelist, parse again, copy by name (see
+**Reparse hatch**). Do not add mutation APIs to make those
 papers first-class. They are rare relative to a fixed prior,
 and supporting them in kpnn2 would make the code much more
 complex and harder to maintain. See **What kpnn2 is NOT**.
@@ -310,7 +310,7 @@ Division of labor:
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Encoder stack, FFN, residuals | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
-| Training-time prune / grow of the prior | User (reparse) |
+| Training-time prune / grow of the prior | User (reparse hatch) |
 | Host feature layout (dense table vs sparse AnnData `.X`) | User |
 | Minibatch slice → densify that block → device copy | User |
 | Captum / other attribution algorithms | User |
@@ -675,6 +675,9 @@ Missing pair, empty names, or a name that is not a node:
 `Kpnn2Error`. The message names the pair as
 `{source} -> {target}`.
 
+To copy weights onto a new prior, look up the same named
+edge on **both** specs. See **Reparse hatch**.
+
 ### `LayeredSpec.node_units()` / `hop_units()`
 
 ```python
@@ -702,7 +705,9 @@ export `Layout`. Do **not** add this lookup on
 `AdjacencySpec` (every node is one unit of `spec.nodes`).
 
 These are identity into the unit axis, not a dropout module
-and not a head helper.
+and not a head helper. After a reparse, copy bias with
+`node_units` only when width and layer still match; see
+**Reparse hatch**.
 
 ---
 
@@ -834,6 +839,9 @@ not a constraint DSL. Mixed signs and frozen values belong
 in user PyTorch that indexes these slots (`torch.where`
 inside `constraint=` to hold a value), not on the spec.
 
+To copy weights onto a new prior, look up the same named
+edge on **both** specs. See **Reparse hatch**.
+
 ### `to_mask()` (allocating dense escape hatch)
 
 ```python
@@ -891,6 +899,63 @@ state[:, spec.input_index] = x        # required, see above
 state = torch.relu(core(state))       # one step; loop as needed
 logits = state[:, spec.output_index]
 ```
+
+---
+
+## Reparse hatch
+
+Topology stays frozen after parse. To prune or grow the
+prior, edit the edgelist DataFrame, call `parse_layered` or
+`parse_adjacency` again, build **new** `PackedLinear` or
+`MaskedLinear` modules from the new spec, and copy surviving
+tensors **by name**. Do not add `add_edge` / `remove_edge`,
+a transfer helper, or an in-place prune / grow API.
+
+**Name-to-name copy.** For each named edge that exists on
+both specs, look up packed slots on the **old** spec and on
+the **new** spec (`LayeredSpec.edge_location` /
+`AdjacencySpec.edge_location`) and copy those scalars onto
+the new layer. A surviving edge can sit on a different hop
+with a different packed index. Do **not** `Tensor.copy_` a
+whole `weight`, and do **not** `load_state_dict` across
+different priors. `PackedLinear.weight` is 1-D of length
+`nnz`. Dropping one named edge and adding another leaves
+`nnz` unchanged, so slot `i` is a different named edge.
+`index_digest` / `mask_digest` hash numeric indices (or the
+mask) and shapes, not names. A rename that leaves the packed
+index pattern unchanged loads silently unless the new layers
+were built with `identity=spec.fingerprint`. Always pass
+that on the new `PackedLinear` / `MaskedLinear`. On
+`MaskedLinear`, copy the named live cells of
+`parametrizations.weight.original`, not the effective
+`weight` property and not the whole rectangle.
+
+**Reparse rebuilds the blueprint.** Parse is not "the same
+graph minus a row." Both parsers recompute `input_nodes` /
+`output_nodes` (in-degree / out-degree 0). `parse_layered`
+also recomputes longest-path depths (unless `ranks=`), hop
+membership, concat source axes, and `skips`. Adding an
+incoming edge to a former input removes it from
+`input_nodes`, so `align_inputs` columns change. Pass the
+same `widths=` / `ranks=` as the original parse, or the new
+spec will not match.
+
+**Bias is not a packed slot.** Bias is shape
+`(out_features,)`, one value per output unit, not per edge.
+Copy it by named node → unit slice:
+`LayeredSpec.node_units` indexes the hop's output axis (the
+target layer of `hops[layer - 1]`). Copy only when the node
+still exists, its width is unchanged, and it still lives on
+the same layer. On an `AdjacencySpec` there is no
+`node_units`; index `spec.nodes` (the state-vector / bias
+axis) by name. Do not copy bias by packed edge index. New
+nodes keep the degree-aware init.
+
+**Optimizer state is not copied.** Adam moments (`exp_avg`,
+`exp_avg_sq`) are keyed by `Parameter` identity on the old
+module. Construct a new optimizer on the new parameters, or
+accept that those moments are lost. Do not add an
+optimizer-remap helper.
 
 ---
 
@@ -1082,8 +1147,10 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   missing digest or identity is not an error, even with
   `strict=True`. The digest catches same-shape rewiring. A
   rename that leaves the 0/1 pattern unchanged is caught by
-  `identity` when callers pass `spec.fingerprint`. `repr`
-  reports `ParametrizedMaskedLinear` (PyTorch swaps in a
+  `identity` when callers pass `spec.fingerprint`. Do not
+  `load_state_dict` or `Tensor.copy_` a weight across a
+  reparse; see **Reparse hatch**. `repr` reports
+  `ParametrizedMaskedLinear` (PyTorch swaps in a
   subclass to install the `weight` property);
   `isinstance(layer, MaskedLinear)` stays `True`, and
   `extra_repr` reports `in_features`, `out_features`, `bias`
@@ -1289,7 +1356,9 @@ PackedLinear(
   error, even with `strict=True`. The digest catches
   same-shape rewiring. A rename that leaves the packed
   index pattern unchanged is caught by `identity` when
-  callers pass `spec.fingerprint`. `copy.deepcopy` works.
+  callers pass `spec.fingerprint`. Do not `load_state_dict`
+  or `Tensor.copy_` a `weight` across a reparse; see
+  **Reparse hatch**. `copy.deepcopy` works.
 - The forward path holds no tensor subclass and no sparse
   layout, so `torch.compile(layer, fullgraph=True)` traces
   it without a graph break. Keep it that way.
@@ -2181,9 +2250,12 @@ itself justify a changelog line.
   or an in-place prune / grow API. `LayeredSpec` and
   `AdjacencySpec` stay frozen dataclasses. ParsVNN /
   self-pruning BINN / PathExpSurv are caller reparse, not a
-  public contract. Those cases are rare; first-class support
-  would make the code much more complex and harder to
-  maintain. See **What kpnn2 is NOT**.
+  public contract. Document the hatch (name-to-name copy;
+  see **Reparse hatch**). Do not add a weight-transfer
+  helper, a bias remapper, or an optimizer-state migrator.
+  Those cases are rare; first-class support would make the
+  code much more complex and harder to maintain. See
+  **What kpnn2 is NOT**.
 - Two sparsity axes (see **Locked contrasts**). Graph
   connectivity is always dense compute in this package.
   Feature-matrix storage is the caller's. Do not collapse
@@ -2302,7 +2374,8 @@ itself justify a changelog line.
   `MaskedLinear(hop.to_mask())` remains valid in those
   pages as the dense hatch. Cyclic graph and time-series
   examples stay on `AdjacencySpec`. `PackedLinear` also
-  has its own page (`docs/packed_linear.md`).
+  has its own page (`docs/packed_linear.md`), including
+  the reparse hatch.
   The transformer example
   (`docs/transformer-example.ipynb`) is the
   `PackedMultiheadAttention` walkthrough. Do not sprinkle

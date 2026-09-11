@@ -127,3 +127,13 @@ is the [Transformer example](transformer-example.ipynb).
 - Both still need at least one in-degree-0 node and one
   out-degree-0 node. A pure ring, or a lone self-loop, is
   rejected on both sides.
+
+## Changing the prior
+
+Specs are frozen after parse. Edit the edgelist, parse
+again, and copy surviving tensors **by name** with
+`edge_location`. Do not `copy_` / `load_state_dict` a
+whole `weight` onto a different prior. Reparse recomputes
+`input_nodes` / `output_nodes`; `parse_layered` also
+recomputes depths, hops, and skips. The recipe is on
+[PackedLinear](packed_linear.md#changing-the-prior-reparse).
