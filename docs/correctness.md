@@ -243,7 +243,8 @@ parameters. Construction does not call `to_mask()`.
 ties `weight` when `tie=True`. A `constraint=` module that
 `torch.where`-replaces packed slots holds those live-edge
 values under AdamW and SGD with momentum; a gradient hook
-that zeroes `grad[i]` does not.
+that zeroes `grad[i]` does not. `forward` disables
+`torch.autocast` and casts `x` to the parameter dtype.
 [`tests/module/test_packed_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear.py),
 [`tests/module/test_packed_linear_transpose.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear_transpose.py),
 [`tests/module/test_constraint_freeze.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py).
@@ -264,15 +265,17 @@ runs on the unconstrained tensor before that mask.
 AdamW; a gradient hook that zeroes the slot does not.
 Optimizer steps leave blocked edges dead. Degree-aware
 init uses the row’s live count, not `in_features`.
-`torch.compile(..., fullgraph=True)` traces without a
-graph break.
+`forward` disables `torch.autocast` and casts `x` to the
+parameter dtype. `torch.compile(..., fullgraph=True)`
+traces without a graph break.
 [`tests/module/test_masked_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_masked_linear.py),
 [`tests/module/test_constraint_freeze.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py).
 
 **Packed attention.** Scores exist only for live
 `(source, target)` pairs. An absent key does not influence a
 query. Isolated queries stay zeros, not NaN. No `(n, n)` score
-parameter.
+parameter. `forward` disables `torch.autocast` and casts
+query, key, and value to the parameter dtype.
 [`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py).
 
 **Checkpoints.** `state_dict` carries a digest of the live mask

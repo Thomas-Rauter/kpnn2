@@ -423,6 +423,36 @@ def test_masked_linear_module_dtype_cast_forward(apply_cast):
     )
 
 
+def test_masked_linear_autocast_keeps_parameter_dtype():
+    layer = _layer_with_pinned_diag_weights(bias=True)
+    with torch.no_grad():
+        layer.bias.copy_(_pinned_bias())
+    x = torch.ones(
+        2,
+        2,
+        dtype=torch.float32,
+    )
+    expected = layer(x)
+    with torch.autocast(
+        device_type="cpu",
+        dtype=torch.bfloat16,
+    ):
+        y = layer(x)
+        y_from_half = layer(
+            x.to(dtype=torch.float16),
+        )
+    assert y.dtype == torch.float32
+    assert y_from_half.dtype == torch.float32
+    torch.testing.assert_close(
+        y,
+        expected,
+    )
+    torch.testing.assert_close(
+        y_from_half,
+        expected,
+    )
+
+
 def test_masked_linear_half_keeps_float32_plain_mask():
     layer = MaskedLinear(
         torch.ones(

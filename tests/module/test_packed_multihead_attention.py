@@ -881,6 +881,57 @@ def test_module_dtype_cast_keeps_integer_indices(apply_cast):
     assert weights is None
 
 
+def test_module_autocast_keeps_parameter_dtype():
+    torch.manual_seed(42)
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+    )
+    x = torch.ones(
+        2,
+        2,
+        8,
+        dtype=torch.float32,
+    )
+    expected, _ = layer(
+        x,
+        x,
+        x,
+        need_weights=False,
+    )
+    with torch.autocast(
+        device_type="cpu",
+        dtype=torch.bfloat16,
+    ):
+        attn_out, weights = layer(
+            x,
+            x,
+            x,
+            need_weights=False,
+        )
+        attn_from_half, _ = layer(
+            x.to(dtype=torch.float16),
+            x.to(dtype=torch.float16),
+            x.to(dtype=torch.float16),
+            need_weights=False,
+        )
+    assert attn_out.dtype == torch.float32
+    assert attn_from_half.dtype == torch.float32
+    assert weights is None
+    torch.testing.assert_close(
+        attn_out,
+        expected,
+    )
+    torch.testing.assert_close(
+        attn_from_half,
+        expected,
+    )
+
+
 def test_state_dict_contains_weights_indices_and_digest():
     layer = PackedMultiheadAttention(
         [0, 1],

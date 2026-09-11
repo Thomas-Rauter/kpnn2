@@ -10,6 +10,10 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `MaskedLinear`, `PackedLinear`, and
+  `PackedMultiheadAttention`: `forward` disables
+  `torch.autocast` and computes in the parameter dtype.
+  Mixed precision is still `.to(dtype=...)` / `.half()`.
 - `PackedMultiheadAttention`: `need_weights=True` returns
   packed per-edge weights aligned with `source_index` /
   `target_index`, not a dense `(L, S)` matrix and not an

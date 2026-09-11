@@ -362,6 +362,59 @@ def test_packed_linear_module_dtype_cast_forward(apply_cast):
     assert y.dtype == layer.weight.dtype
 
 
+def test_packed_linear_autocast_keeps_parameter_dtype():
+    torch.manual_seed(42)
+    layer = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+    )
+    x = torch.ones(
+        2,
+        2,
+        dtype=torch.float32,
+    )
+    expected = layer(x)
+    with torch.autocast(
+        device_type="cpu",
+        dtype=torch.bfloat16,
+    ):
+        y = layer(x)
+        y_from_half = layer(
+            x.to(dtype=torch.float16),
+        )
+    assert y.dtype == torch.float32
+    assert y_from_half.dtype == torch.float32
+    torch.testing.assert_close(
+        y,
+        expected,
+    )
+    torch.testing.assert_close(
+        y_from_half,
+        expected,
+    )
+
+
+def test_packed_linear_casts_input_to_parameter_dtype():
+    torch.manual_seed(42)
+    layer = PackedLinear(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        bias=False,
+    )
+    x = torch.ones(
+        3,
+        2,
+        dtype=torch.float16,
+    )
+    y = layer(x)
+    assert y.dtype == torch.float32
+    assert y.shape == (3, 2)
+
+
 def test_packed_linear_device_move_keeps_indices_integer():
     layer = PackedLinear(
         [0, 1],

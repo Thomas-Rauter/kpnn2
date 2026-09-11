@@ -1118,10 +1118,13 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   Equivalently `Y = X @ (C(W) ⊙ M).T + b` with `C` the
   constructor constraint (identity when omitted) and `M`
   cast to `W`'s dtype/device. This is why `.half()` /
-  bfloat16 / `.double()` work like `nn.Linear`. In the
-  common float32 case that `.to` returns the buffer itself,
-  so forward allocates nothing extra for the mask. The
-  multiply is **dense** on purpose.
+  bfloat16 / `.double()` work like `nn.Linear`.
+  `torch.autocast` is unsupported: `forward` disables it
+  and casts `x` to the parameter dtype. Skip-edge
+  `gather_hop_inputs` then still sees one dtype. In the
+  common float32 case `mask.to` returns the buffer
+  itself, so forward allocates nothing extra for the
+  mask. The multiply is **dense** on purpose.
   `x` is an ordinary dense activation tensor, not a sparse
   host feature matrix. Sparse-tensor acceleration is not
   planned; see **Locked contrasts**.
@@ -1232,19 +1235,23 @@ PackedLinear(
   persistent so the module round-trips. They stay integer
   after `.half()` / bfloat16 / `.double()`; `weight` and
   `bias` follow the module floating dtype like `nn.Linear`.
-  `torch.autocast` is unsupported: this forward path is
-  not on the AMP allowlist. Cast the module with
+  `torch.autocast` is unsupported: `forward` disables it
+  and casts `x` to the parameter dtype so AMP cannot mix
+  Half into `index_add`. Cast the module with
   `.to(dtype=...)` (or `.half()` / `.double()`) instead.
 - Forward, `x` shape `(..., in_features)`:
 
   ```text
   live = constraint(weight) if constraint else weight
+  x = x.to(dtype=live.dtype)
   contrib = x[..., source_index] * live
   y = zeros(..., out_features)  # same batch dims, dtype, device
   y.index_add_(-1, target_index, contrib)
   if bias is not None:
       y = y + bias
   ```
+
+  The recipe runs with `torch.autocast` disabled.
 
   Never allocate `(out, in)`. Never scatter into a dense
   `(out, in)` matrix in forward. Never import
@@ -1452,7 +1459,9 @@ PackedMultiheadAttention(
   persistent so the module round-trips. They stay
   integer after `.half()` / bfloat16 / `.double()`.
   `torch.autocast` is unsupported, as on `PackedLinear`.
-  Cast the module with `.to(dtype=...)` instead.
+  `forward` disables it and casts query, key, and value
+  to the parameter dtype. Cast the module with
+  `.to(dtype=...)` instead.
 
 ```text
 forward(
@@ -2240,6 +2249,13 @@ itself justify a changelog line.
   own `reset_parameters` would fight ours). `constraint=`
   is the supported inner map (`nn.Module`, per-entry). Do
   not add `ConstrainedMaskedLinear`.
+- Do not make `MaskedLinear`, `PackedLinear`, or
+  `PackedMultiheadAttention` participate in
+  `torch.autocast`. Each `forward` disables autocast
+  and casts activations to the parameter dtype.
+  Mixed precision is `.to(dtype=...)` / `.half()` /
+  `.to(bfloat16)`. Do not silently promote dtypes in
+  `gather_hop_inputs`.
 - Do not add a high-level `LayeredNet` / convenience model unless
   a later prompt explicitly asks. Do not add an encoder
   class, a `TiedAutoencoder`, a reverse parser, a packed-slot

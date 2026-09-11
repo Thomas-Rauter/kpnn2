@@ -237,6 +237,40 @@ def test_hop_forward_equals_a_hand_written_residual_add():
     )
 
 
+def test_skip_hop_gather_under_autocast_shares_parameter_dtype():
+    spec = parse_layered(_one_skip_edgelist())
+    torch.manual_seed(42)
+    layer0 = MaskedLinear(
+        spec.hops[0].to_mask(),
+        bias=False,
+    )
+    layer1 = MaskedLinear(
+        spec.hops[1].to_mask(),
+        bias=False,
+    )
+    x = torch.tensor(
+        [[2.0], [-1.0]],
+        dtype=torch.float32,
+    )
+    with torch.autocast(
+        device_type="cpu",
+        dtype=torch.bfloat16,
+    ):
+        hidden = F.relu(layer0(x))
+        saved = {
+            0: x,
+            1: hidden,
+        }
+        grouped = layer1(
+            gather_hop_inputs(
+                saved,
+                spec.hops[1],
+            )
+        )
+    assert hidden.dtype == torch.float32
+    assert grouped.dtype == torch.float32
+
+
 def test_hop_forward_gradient_reaches_the_skip_source_directly():
     spec = parse_layered(_one_skip_edgelist())
     net = LayeredNet(

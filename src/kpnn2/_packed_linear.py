@@ -284,8 +284,9 @@ class PackedLinear(nn.Module):
     buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``; ``weight`` and ``bias`` follow the module
     floating dtype like ``nn.Linear``. ``torch.autocast`` is
-    unsupported: this forward path is not on the AMP
-    allowlist. Cast the module with ``.to(dtype=...)``
+    unsupported: ``forward`` disables it and casts ``x`` to
+    the parameter dtype so AMP cannot mix Half into
+    ``index_add``. Cast the module with ``.to(dtype=...)``
     (or ``.half()`` / ``.double()``) instead.
 
     ``reset_parameters`` uses per-row packed degree as
@@ -737,21 +738,28 @@ class PackedLinear(nn.Module):
         otherwise ``weight``. Adds ``bias`` when present.
         Packed 1-D weights, one per live edge; not
         ``torch.sparse``; forward is ``index_add``.
+        ``torch.autocast`` is unsupported: this path
+        disables it and casts ``x`` to the parameter dtype.
         """
-        weight = self.weight
-        if self.constraint is not None:
-            weight = self.constraint(weight)
-        contrib = x[..., self.source_index] * weight
-        y = torch.zeros(
-            (*x.shape[:-1], self.out_features),
-            dtype=x.dtype,
-            device=x.device,
-        )
-        y.index_add_(
-            -1,
-            self.target_index,
-            contrib,
-        )
-        if self.bias is not None:
-            y = y + self.bias
-        return y
+        with torch.autocast(
+            device_type=x.device.type,
+            enabled=False,
+        ):
+            weight = self.weight
+            if self.constraint is not None:
+                weight = self.constraint(weight)
+            x = x.to(dtype=weight.dtype)
+            contrib = x[..., self.source_index] * weight
+            y = torch.zeros(
+                (*x.shape[:-1], self.out_features),
+                dtype=x.dtype,
+                device=x.device,
+            )
+            y.index_add_(
+                -1,
+                self.target_index,
+                contrib,
+            )
+            if self.bias is not None:
+                y = y + self.bias
+            return y

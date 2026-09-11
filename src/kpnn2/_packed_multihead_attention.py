@@ -562,9 +562,10 @@ class PackedMultiheadAttention(nn.Module):
     Index buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``; projection weights follow the module floating
     dtype like ``nn.Linear``. ``torch.autocast`` is unsupported:
-    the packed score path is not on the AMP allowlist. Cast the
-    module with ``.to(dtype=...)`` (or ``.half()`` /
-    ``.double()``) instead. ``state_dict`` adds
+    ``forward`` disables it and casts query, key, and value to
+    the parameter dtype. Cast the module with
+    ``.to(dtype=...)`` (or ``.half()`` / ``.double()``)
+    instead. ``state_dict`` adds
     ``index_digest``, a 1-D CPU ``uint8`` tensor of length 32:
     the SHA-256 of the packed indices plus ``query_features``,
     ``key_features``, ``embed_dim``, and ``num_heads``, so a
@@ -980,39 +981,47 @@ class PackedMultiheadAttention(nn.Module):
             raise Kpnn2Error(
                 "query, key, and value batch dimensions must match."
             )
-        q = self._shape_heads(self.q_proj(query_bf))
-        k = self._shape_heads(self.k_proj(key_bf))
-        v = self._shape_heads(self.v_proj(value_bf))
-        participate = _padding_participate(
-            key_padding_mask,
-            self.source_index,
-            tuple(query_bf.shape[:-2]),
-            self.key_features,
-            query_bf.device,
-        )
-        mixed, attn = _packed_attention(
-            q,
-            k,
-            v,
-            self.source_index,
-            self.target_index,
-            self.dropout,
-            self.training,
-            participate,
-        )
-        output = self.out_proj(
-            mixed.reshape(
-                *mixed.shape[:-2],
-                self.embed_dim,
+        dtype = self.q_proj.weight.dtype
+        with torch.autocast(
+            device_type=query_bf.device.type,
+            enabled=False,
+        ):
+            query_bf = query_bf.to(dtype=dtype)
+            key_bf = key_bf.to(dtype=dtype)
+            value_bf = value_bf.to(dtype=dtype)
+            q = self._shape_heads(self.q_proj(query_bf))
+            k = self._shape_heads(self.k_proj(key_bf))
+            v = self._shape_heads(self.v_proj(value_bf))
+            participate = _padding_participate(
+                key_padding_mask,
+                self.source_index,
+                tuple(query_bf.shape[:-2]),
+                self.key_features,
+                query_bf.device,
             )
-        )
-        if transposed:
-            output = output.transpose(0, 1)
-        if not need_weights:
-            return (output, None)
-        weights = attn
-        if average_attn_weights:
-            weights = weights.mean(dim=-1)
-        if transposed:
-            weights = weights.transpose(0, 1)
-        return (output, weights)
+            mixed, attn = _packed_attention(
+                q,
+                k,
+                v,
+                self.source_index,
+                self.target_index,
+                self.dropout,
+                self.training,
+                participate,
+            )
+            output = self.out_proj(
+                mixed.reshape(
+                    *mixed.shape[:-2],
+                    self.embed_dim,
+                )
+            )
+            if transposed:
+                output = output.transpose(0, 1)
+            if not need_weights:
+                return (output, None)
+            weights = attn
+            if average_attn_weights:
+                weights = weights.mean(dim=-1)
+            if transposed:
+                weights = weights.transpose(0, 1)
+            return (output, weights)

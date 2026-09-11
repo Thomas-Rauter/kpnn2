@@ -285,9 +285,11 @@ class MaskedLinear(nn.Module):
     with ``weight`` the effective tensor above, equivalently
     ``Y = X @ (C(W) ⊙ M).T + b`` when ``constraint`` is ``C``
     (the identity when omitted), so ``.half()``, bfloat16, and
-    ``.double()`` work as on ``nn.Linear``. The multiply is dense
-    on purpose, and ``X`` is an ordinary dense activation tensor.
-    Nothing in the forward path is a tensor subclass, so
+    ``.double()`` work as on ``nn.Linear``. ``torch.autocast``
+    is unsupported: ``forward`` disables it and casts ``x`` to
+    the parameter dtype. The multiply is dense on purpose, and
+    ``X`` is an ordinary dense activation tensor. Nothing in
+    the forward path is a tensor subclass, so
     ``torch.compile(layer, fullgraph=True)`` traces it,
     parametrization included.
 
@@ -608,10 +610,18 @@ class MaskedLinear(nn.Module):
         then a ``mask`` cast to the trainable tensor's dtype and
         device. The stored ``mask`` remains float32, so
         ``.half()``, bfloat16, and ``.double()`` match
-        ``nn.Linear``.
+        ``nn.Linear``. ``torch.autocast`` is unsupported:
+        this path disables it and casts ``x`` to the parameter
+        dtype.
         """
-        return F.linear(
-            x,
-            self.weight,
-            self.bias,
-        )
+        with torch.autocast(
+            device_type=x.device.type,
+            enabled=False,
+        ):
+            weight = self.weight
+            x = x.to(dtype=weight.dtype)
+            return F.linear(
+                x,
+                weight,
+                self.bias,
+            )
