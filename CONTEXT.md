@@ -158,10 +158,17 @@ this package unless a later prompt asks.
   user convenience on top of the spec, not a missing
   primitive: keep extra columns on the caller's DataFrame,
   parse `source`/`target` only, locate slots with
-  `edge_location`, then apply ordinary PyTorch (a custom
-  `constraint=` module, a loss barrier, a gradient hook, or
-  `torch.where`). `constraint=` stays one `nn.Module` over
-  the whole weight tensor. `PackedLinear.weight` is one
+  `edge_location`, then apply ordinary PyTorch. A hard
+  freeze is a `constraint=` module that `torch.where`-
+  replaces those slots in forward. That is what holds the
+  live-edge value: AdamW's decoupled weight decay and SGD
+  with momentum still update the stored `nn.Parameter`,
+  but the forward map overwrites the slot every step. A
+  loss barrier is a soft prior, not a hold. A gradient
+  hook that zeroes the slot is not a freeze: those
+  optimizers still move it, so a "frozen" prior silently
+  drifts. `constraint=` stays one `nn.Module` over the
+  whole weight tensor. `PackedLinear.weight` is one
   `nn.Parameter`; per-slot `requires_grad=False` is not a
   PyTorch operation. First-class `sign` / `freeze` /
   `initial_weight` columns would change parse,
@@ -245,10 +252,12 @@ are. It does not own mixed per-edge signs, freeze flags, or
 initial numerical values. Those appear in published KPNNs
 and are not blocked: the user keeps them on their own table
 and implements them with standard PyTorch together with
-`constraint=` and `edge_location`. Shipping that as parse
-columns or spec fields would be convenience, not a
-necessity, and would make the public contract heavier. Do
-not add it. See **What kpnn2 is NOT**.
+`constraint=` and `edge_location`. A hard freeze is
+`torch.where` inside that `constraint=` module. A loss
+barrier is a soft prior. Do not treat a gradient hook as a
+freeze. Shipping that as parse columns or spec fields would
+be convenience, not a necessity, and would make the public
+contract heavier. Do not add it. See **What kpnn2 is NOT**.
 
 **Topology is frozen after parse.** Specs are parse snapshots,
 not a live graph. Training-time prune and grow (ParsVNN,
@@ -371,8 +380,10 @@ column. A uniform per-entry map belongs on `MaskedLinear` /
 `PackedLinear` as `constraint=` (one `nn.Module` over the
 whole tensor). Mixed signs and frozen live-edge values are
 the caller's: keep those columns on the DataFrame, parse
-connectivity only, and apply them in user PyTorch after
-`edge_location`. First-class support is convenience, not a
+connectivity only, locate slots with `edge_location`, and
+`torch.where`-replace frozen slots inside `constraint=`.
+A loss barrier is a soft prior; a gradient hook is not a
+freeze. First-class support is convenience, not a
 necessity; do not add those columns.
 
 A spec returns this two-column form from `to_edgelist()`. Rows
@@ -657,7 +668,8 @@ block of live unit pairs, target-unit outer, source-unit
 inner, in the order already stored. This is identity into
 those packed slots, not a constraint DSL. Mixed signs and
 frozen values belong in user PyTorch that indexes these
-slots, not on the spec.
+slots (`torch.where` inside `constraint=` to hold a
+value), not on the spec.
 
 Missing pair, empty names, or a name that is not a node:
 `Kpnn2Error`. The message names the pair as
@@ -819,7 +831,8 @@ parse. Missing pair, empty names, or a name that is not a
 node: `Kpnn2Error`. The message names the pair as
 `{source} -> {target}`. This is identity into packed slots,
 not a constraint DSL. Mixed signs and frozen values belong
-in user PyTorch that indexes these slots, not on the spec.
+in user PyTorch that indexes these slots (`torch.where`
+inside `constraint=` to hold a value), not on the spec.
 
 ### `to_mask()` (allocating dense escape hatch)
 
@@ -1014,10 +1027,13 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   `PackedLinear` takes the same argument. Do not add a
   second class (`ConstrainedMaskedLinear`) and do not
   read a `constraint` column from the edgelist. Mixed
-  per-edge signs and frozen slots are not this argument:
-  put a sign buffer or `torch.where` inside the caller's
-  module, or a barrier in the loss. That is user PyTorch,
-  not a missing primitive.
+  per-edge signs and frozen slots go inside this module
+  (a sign buffer, or `torch.where` for a hard freeze).
+  That holds the effective `layer.weight` even when AdamW
+  or SGD with momentum updates the stored tensor. A loss
+  barrier is a soft prior. A gradient hook that zeroes a
+  slot is not a freeze. That is user PyTorch, not a
+  missing primitive.
 - Optional `generator`: `torch.Generator` or `None`. Init
   draws from that generator. `None` (the default) uses the
   process default generator, bit-identical to omitting the
@@ -1129,7 +1145,8 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
 - No edgelist `initial_weight` column. `constraint=` is the
   supported per-entry map; do not stack `softplus` after the
   mask yourself. Mixed signs and frozen live-edge values
-  stay in the caller's PyTorch; see **Package philosophy**.
+  stay in the caller's `constraint=` module (`torch.where`
+  for a hard freeze); see **Package philosophy**.
 - Masked-out weights still exist as parameters but are multiplied
   by 0 in the effective weight and the forward pass.
 
@@ -1191,8 +1208,15 @@ PackedLinear(
   `MaskedLinear` takes the same argument. `layer.constraint`
   is that module, or `None`. Still no `parametrize`. Mixed
   per-edge signs and frozen slots are user PyTorch on this
-  tensor (custom module, loss barrier, or hook), not parse
-  columns and not per-slot `requires_grad=False`.
+  tensor, not parse columns and not per-slot
+  `requires_grad=False`. A hard freeze is `torch.where`
+  inside this module: forward uses the replaced value, so
+  AdamW and SGD with momentum cannot move the live edge.
+  The stored unconstrained slot may still drift; read
+  `constraint(weight)`, or write the constants back after
+  `optimizer.step()` if a checkpoint must match. A loss
+  barrier is a soft prior. A gradient hook that zeroes the
+  slot is not a freeze.
 - Optional `generator`: `torch.Generator` or `None`. Init
   draws from that generator. `None` (the default) uses the
   process default generator, bit-identical to omitting the
@@ -1793,7 +1817,8 @@ edge / block start. Do not implement adjacency width.
   are that lookup for callers: a named edge to packed weight
   slots. They are identity, not constraints. Callers who
   need mixed signs or frozen values index these slots in
-  their own PyTorch; do not store that policy on the spec.
+  their own `constraint=` module (`torch.where` to hold a
+  value); do not store that policy on the spec.
   `LayeredSpec.node_units` and `LayeredSpec.hop_units` are
   the matching lookup for a named node: a contiguous unit
   slice on a layer tensor or a hop source axis. Do not
@@ -2126,12 +2151,15 @@ itself justify a changelog line.
   `constraint=` on `MaskedLinear` and `PackedLinear`. Do not
   add an edgelist `constraint` column. Mixed per-edge signs
   and frozen live-edge values are caller PyTorch
-  (`constraint=`, loss barriers, hooks, `edge_location`),
-  not parse columns or spec fields. They occur in real
-  KPNNs and are not blocked. First-class `sign` / `freeze`
-  / `initial_weight` columns, a sign tensor on the spec,
-  or per-slot `requires_grad` would be convenience, not a
-  necessity; do not add them.
+  (`constraint=` with `torch.where` for a hard freeze,
+  `edge_location` to find slots), not parse columns or spec
+  fields. A loss barrier is a soft prior. A gradient hook
+  that zeroes a slot is not a freeze: AdamW's decoupled
+  weight decay and SGD with momentum still move the stored
+  parameter. They occur in real KPNNs and are not blocked.
+  First-class `sign` / `freeze` / `initial_weight` columns,
+  a sign tensor on the spec, or per-slot `requires_grad`
+  would be convenience, not a necessity; do not add them.
 - Optional `generator=` on `MaskedLinear`, `PackedLinear`,
   `PackedMultiheadAttention`, and `PackedLinear.transpose`
   is a `torch.Generator` or `None`. `None` keeps the

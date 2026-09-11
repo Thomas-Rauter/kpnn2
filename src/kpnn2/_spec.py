@@ -452,9 +452,10 @@ class LayeredSpec:
     when compacted layers equal longest-path on the same edges.
     Pickle and ``torch.save`` of the dataclass are not.
     ``edge_location`` finds packed slots of a named edge; it is
-    not a constraint. ``node_units`` and ``hop_units`` map a
-    named node to its contiguous unit slice on a layer tensor
-    or a hop source axis.
+    not a constraint. A hard freeze of those slots is
+    ``torch.where`` inside ``constraint=``. ``node_units`` and
+    ``hop_units`` map a named node to its contiguous unit slice
+    on a layer tensor or a hop source axis.
 
     Examples
     --------
@@ -630,7 +631,10 @@ class LayeredSpec:
         -----
         Width greater than 1 does not change the named edge. It
         returns several packed indices, one per unit pair of
-        the block.
+        the block. Mixed signs and frozen values are caller
+        PyTorch on these slots. A hard freeze is
+        ``torch.where`` inside ``constraint=``, not a
+        gradient hook.
 
         Examples
         --------

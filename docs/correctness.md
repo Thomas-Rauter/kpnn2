@@ -240,9 +240,13 @@ pair in exactly one hop, the hop of its target, skips included.
 gives the same forward values. Absent edges are not
 parameters. Construction does not call `to_mask()`.
 `transpose()` matches dense `W.T` on the live edges and
-ties `weight` when `tie=True`.
+ties `weight` when `tie=True`. A `constraint=` module that
+`torch.where`-replaces packed slots holds those live-edge
+values under AdamW and SGD with momentum; a gradient hook
+that zeroes `grad[i]` does not.
 [`tests/module/test_packed_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear.py),
-[`tests/module/test_packed_linear_transpose.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear_transpose.py).
+[`tests/module/test_packed_linear_transpose.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear_transpose.py),
+[`tests/module/test_constraint_freeze.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py).
 
 **Hop source axis.** `gather_hop_inputs` concatenates whole
 source layers; `scatter_hop_outputs` splits that axis back.
@@ -256,11 +260,14 @@ forward pass, in `layer.weight`, and in the gradient, even
 when another parametrization is stacked on `weight`.
 `constraint=` (an `nn.Module`, for example `nn.Softplus`)
 runs on the unconstrained tensor before that mask.
+`torch.where` inside that module holds a live cell under
+AdamW; a gradient hook that zeroes the slot does not.
 Optimizer steps leave blocked edges dead. Degree-aware
 init uses the row’s live count, not `in_features`.
 `torch.compile(..., fullgraph=True)` traces without a
 graph break.
-[`tests/module/test_masked_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_masked_linear.py).
+[`tests/module/test_masked_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_masked_linear.py),
+[`tests/module/test_constraint_freeze.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py).
 
 **Packed attention.** Scores exist only for live
 `(source, target)` pairs. An absent key does not influence a

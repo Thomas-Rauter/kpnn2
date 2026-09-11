@@ -144,3 +144,68 @@ for layer, piece in kpnn2.scatter_hop_outputs(
 `MaskedLinear` can keep using `F.linear(h, enc.weight.T,
 dec_bias)`. There is no autoencoder class; `forward()` is
 yours.
+
+## Frozen live edges
+
+`constraint=` is one `nn.Module` over the packed `weight`.
+A hard freeze is `torch.where` inside that module, using
+slots from `edge_location`. A gradient hook that zeroes a
+slot is not a freeze: AdamW's decoupled weight decay and
+SGD with momentum still move the stored parameter. A loss
+barrier is a soft prior, not a hold.
+
+The stored unconstrained slot may still drift. Read
+`constraint(weight)`, or write the constants back after
+`optimizer.step()` if a checkpoint must match.
+
+```python
+class FreezeSlots(torch.nn.Module):
+    def __init__(
+        self,
+        mask,
+        values,
+    ):
+        super().__init__()
+        self.register_buffer(
+            "mask",
+            mask,
+        )
+        self.register_buffer(
+            "values",
+            values,
+        )
+
+    def forward(
+        self,
+        weight,
+    ):
+        return torch.where(
+            self.mask,
+            self.values,
+            weight,
+        )
+
+
+spec = kpnn2.parse_adjacency(edgelist)
+packed = spec.edge_location("a", "b")
+nnz = len(spec.source_index)
+mask = torch.zeros(nnz, dtype=torch.bool)
+mask[list(packed)] = True
+values = torch.zeros(nnz)
+values[list(packed)] = 1.5
+core = kpnn2.PackedLinear(
+    spec.source_index,
+    spec.target_index,
+    len(spec.nodes),
+    len(spec.nodes),
+    constraint=FreezeSlots(
+        mask,
+        values,
+    ),
+)
+```
+
+The same module works on `MaskedLinear`: freeze at
+`[target_index, source_index]` of the dense rectangle,
+not at packed slots. `constraint=` still runs before the
+mask.

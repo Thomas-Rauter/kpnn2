@@ -106,7 +106,8 @@ class AdjacencySpec:
     round-trips through ``parse_adjacency``, cycle edges and
     self-loops included. Pickle and ``torch.save`` of the
     dataclass are not. ``edge_location`` finds packed slots of
-    a named edge; it is not a constraint.
+    a named edge; it is not a constraint. A hard freeze of
+    those slots is ``torch.where`` inside ``constraint=``.
 
     Examples
     --------
@@ -320,7 +321,10 @@ class AdjacencySpec:
         Notes
         -----
         There is no hop index and no ``widths=``. A named edge
-        is one packed slot.
+        is one packed slot. Mixed signs and frozen values are
+        caller PyTorch on these slots. A hard freeze is
+        ``torch.where`` inside ``constraint=``, not a
+        gradient hook.
 
         Examples
         --------

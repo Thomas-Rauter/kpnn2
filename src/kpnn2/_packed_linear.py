@@ -194,6 +194,12 @@ class PackedLinear(nn.Module):
         blocked cell. ``reset_parameters`` writes the
         unconstrained packed tensor; it does not invert this
         map. ``MaskedLinear`` takes the same argument.
+        Mixed per-edge signs and frozen slots belong in this
+        module, not in parse columns. A hard freeze is
+        ``torch.where`` replacing those slots in ``forward``;
+        a gradient hook that zeroes ``grad[i]`` is not a
+        freeze (AdamW and SGD with momentum still move the
+        stored parameter).
     generator : torch.Generator or None, default=None
         Isolated RNG for ``reset_parameters``. ``None`` uses
         the default torch generator, bit-identical to omitting

@@ -200,7 +200,12 @@ class MaskedLinear(nn.Module):
         module must return a tensor of the same shape as the
         unconstrained weight. ``reset_parameters`` writes that
         unconstrained tensor; it does not invert this map.
-        ``PackedLinear`` takes the same argument.
+        ``PackedLinear`` takes the same argument. Mixed
+        per-edge signs and frozen slots belong in this
+        module, not in parse columns. A hard freeze is
+        ``torch.where`` replacing those slots; a gradient
+        hook that zeroes a slot is not a freeze (AdamW and
+        SGD with momentum still move the stored tensor).
     generator : torch.Generator or None, default=None
         Isolated RNG for ``reset_parameters``. ``None`` uses
         the default torch generator, bit-identical to omitting
