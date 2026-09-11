@@ -73,7 +73,7 @@ not_in_nav: |
   /literature/*.md
 
 hooks:
-  - scripts/docs_notebooks.py
+  - dev/docs_notebooks.py
 
 plugins:
   - search

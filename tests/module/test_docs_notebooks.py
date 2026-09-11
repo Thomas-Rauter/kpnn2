@@ -8,7 +8,7 @@ import pytest
 
 _DOCS = Path(__file__).resolve().parents[2] / "docs"
 _REPO = _DOCS.parent
-_SCRIPT = _REPO / "scripts" / "docs_notebooks.py"
+_SCRIPT = _REPO / "dev" / "docs_notebooks.py"
 
 _spec = importlib.util.spec_from_file_location(
     "docs_notebooks_script",

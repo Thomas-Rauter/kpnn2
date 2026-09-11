@@ -2,7 +2,7 @@
 
 This directory is **not** pytest and **not** CI. Pytest does not
 collect it. Do not execute these notebooks with
-`python scripts/docs_notebooks.py`.
+`python dev/docs_notebooks.py`.
 
 ## When to run
 

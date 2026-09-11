@@ -46,7 +46,7 @@ jobs:
 
       - name: Execute documentation notebooks
         run: |
-          python scripts/docs_notebooks.py
+          python dev/docs_notebooks.py
 
       - name: Validate docs build
         run: |

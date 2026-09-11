@@ -14,6 +14,12 @@ This project follows semantic versioning.
   packed per-edge weights aligned with `source_index` /
   `target_index`, not a dense `(L, S)` matrix and not an
   error. Default `False` still returns `None`.
+- `Hop` stores packed `source_index` / `target_index`. There is
+  no `mask` field; densify with `Hop.to_mask()`.
+- `Skip.source_index` / `target_index` renamed to
+  `source_in_layer` / `target_in_layer`.
+- `PackedLinear` is the large-n path on hops as well as on an
+  `AdjacencySpec`.
 
 ### Added
 
@@ -40,24 +46,6 @@ This project follows semantic versioning.
   `PackedMultiheadAttention`, and `PackedLinear.transpose`:
   optional `torch.Generator` for isolated parameter init.
   Default `None` keeps the global stream.
-
-
-## [0.3.0] - 9. September 2026
-
-### Changed
-
-- `Hop` stores packed `source_index` / `target_index`. There is
-  no `mask` field; densify with `Hop.to_mask()`.
-- `Skip.source_index` / `target_index` renamed to
-  `source_in_layer` / `target_in_layer`.
-- `PackedLinear` is the large-n path on hops as well as on an
-  `AdjacencySpec`.
-
-
-## [0.2.0] - 11. September 2026
-
-### Added
-
 - `identity=` on `MaskedLinear`, `PackedLinear`, and
   `PackedMultiheadAttention`: opaque spec fingerprint in
   `state_dict`, checked on load.

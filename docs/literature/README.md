@@ -11,7 +11,7 @@ these notebooks.
 2. From a clone with the `docs` extra:
 
    ```bash
-   python scripts/docs_notebooks.py --literature
+   python dev/docs_notebooks.py --literature
    ```
 
 Set `KPNN2_LITERATURE_DATA` if the data live outside the

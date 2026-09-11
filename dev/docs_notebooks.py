@@ -4,9 +4,9 @@ Stream outputs need ``name`` (``stdout`` / ``stderr``). Editors often
 drop it; mkdocs-jupyter then fails validation. This module repairs
 that on ``mkdocs`` pre-build, and is the supported execute path:
 
-    python scripts/docs_notebooks.py
-    python scripts/docs_notebooks.py --fix-only
-    python scripts/docs_notebooks.py --literature
+    python dev/docs_notebooks.py
+    python dev/docs_notebooks.py --fix-only
+    python dev/docs_notebooks.py --literature
 
 Tutorial notebooks under ``docs/*.ipynb`` are executed in CI.
 Notebooks under ``docs/literature/`` are frozen reproductions:

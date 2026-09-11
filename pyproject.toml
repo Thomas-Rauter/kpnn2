@@ -96,7 +96,7 @@ convention = "numpy"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
 "docs/**" = ["D"]
-"scripts/**" = ["D"]
+"dev/**" = ["D"]
 "noxfile.py" = ["D"]
 # Temporary: existing summaries wrap at 80 cols (D200/D205) or use
 # a descriptive rather than imperative mood (D401). Shrink this list
@@ -150,7 +150,7 @@ exclude = [
 exclude_files = [
     '^tests/',
     '^docs/',
-    '^scripts/',
+    '^dev/',
     # Temporary: internal modules, not the public façade.
     '^src/kpnn2/_layout.py$',
     '^src/kpnn2/_mask_tensor.py$',

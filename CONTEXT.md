@@ -2014,7 +2014,7 @@ tests/
   integration/                # real tabular task
   manual/                     # Colab GPU/TPU smoke; not pytest
 
-scripts/
+dev/
   docs_notebooks.py           # tutorials in CI; literature opt-in
 
 CONTEXT.md                    # this file
@@ -2268,18 +2268,18 @@ itself justify a changelog line.
 - Docs notebooks must be valid nbformat v4. Stream outputs need
   `name` (`stdout` / `stderr`); editors often drop it and
   mkdocs-jupyter then fails. Execute tutorials with
-  `python scripts/docs_notebooks.py` (venv kernel, not
+  `python dev/docs_notebooks.py` (venv kernel, not
   `ipykernel install --user --name python3`). `mkdocs serve`
   repairs missing stream names on pre-build. Notebooks under
   `docs/literature/` are frozen paper reproductions: repair
   them, do not execute them in CI. Re-run with
-  `python scripts/docs_notebooks.py --literature` after
+  `python dev/docs_notebooks.py --literature` after
   downloading files into gitignored `.literature-data/`
   (see `docs/literature/README.md`). Do not add bulk omics
   matrices to git.
 - `tests/manual/` is Colab GPU/TPU smoke, not pytest and not
   docs. Do not execute it in CI or with
-  `scripts/docs_notebooks.py`. Open from GitHub via
+  `dev/docs_notebooks.py`. Open from GitHub via
   `dev/colab.txt`. Install from TestPyPI with `--no-deps`.
 - `CHANGELOG.md`: important API and core changes only,
   concise. See **Changelog**. Do not log docs pages,

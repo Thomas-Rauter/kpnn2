@@ -1,1 +1,1 @@
-python scripts/docs_notebooks.py
+python dev/docs_notebooks.py
