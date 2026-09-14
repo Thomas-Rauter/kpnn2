@@ -4,12 +4,13 @@ This file is **AI-first documentation** for assistants working in this
 repository or explaining the package to users. It is more detailed and
 operational than `README.md`.
 
-**Release:** `0.3.0` as package `kpnn2` (`import kpnn2`).
 This document is the implementation contract.
 
 Do not reintroduce a graph compiler or a ready-made model object.
 Do not rename the distribution, import, or `src/` package away
 from `kpnn2`.
+Do not pin a package version number in this file; it lives in
+`pyproject.toml` and `kpnn2.__version__`.
 
 ---
 
@@ -2197,8 +2198,9 @@ repository.
 name, a removed or renamed public name, a breaking
 signature or behavior change, or a core-dependency /
 contract change. Keep the bullet short (the name and
-what it is). `[0.2.0]` already has
-`PackedMultiheadAttention`; that is the bar.
+what it is). A new public primitive is the bar;
+`PackedMultiheadAttention` is an example, not a
+version pin.
 
 **Do not add a line** for documentation, examples,
 notebooks, site nav, wording, spelling, architecture

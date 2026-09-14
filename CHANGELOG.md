@@ -6,7 +6,7 @@ examples, and other small edits are not listed.
 This project follows semantic versioning.
 
 
-## [Unreleased]
+## [Unreleased] — 0.2.0
 
 ### Changed
 
