@@ -2171,8 +2171,10 @@ Tests may import private modules directly to reach internal helpers.
 ## Dependencies
 
 **Core:** `torch`, `pandas`, `numpy`, `xarray`, Python `>=3.10`.
-On Python 3.11+, `xarray>=2026.4,<2026.8`. On Python 3.10,
-`xarray>=2024.11,<2025.7` (last xarray line that supports 3.10).
+`xarray>=2024.11`. No CalVer upper bound; xarray's own
+`Requires-Python` selects a 3.10-capable wheel on 3.10
+(last line `2025.6`). Do not add a sliding ceiling unless
+a tested release breaks `DataArray` construction.
 
 **Not required:** captum, anndata.
 
