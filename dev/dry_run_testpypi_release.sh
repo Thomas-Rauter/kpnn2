@@ -12,7 +12,7 @@ set -euo pipefail
 # Notes:
 # - TWINE_PASSWORD must be a TestPyPI API token, not a real PyPI token.
 # - TestPyPI does not allow re-uploading the same version.
-# - For test releases, use versions such as 0.1.0rc1, 0.1.0rc2, etc.
+# - For test releases, use versions such as 0.2.0rc1, 0.2.0rc2, etc.
 # - This script creates and deletes a temporary virtual environment.
 # - The TestPyPI install bypasses pip's HTTP cache and retries, because a
 #   just-uploaded version can be missing from a cached or lagging index.
@@ -28,10 +28,10 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Step 1: Running local quality checks"
-ruff check .
-ruff format --check .
-mypy src
-pytest
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy src
+python -m pytest
 
 echo "Step 2: Removing old build artifacts"
 rm -rf dist build *.egg-info src/*.egg-info
@@ -141,7 +141,7 @@ data = pd.DataFrame(
     }
 )
 x = align_inputs(data, spec)
-layer = MaskedLinear(spec.hops[0].mask)
+layer = MaskedLinear(spec.hops[0].to_mask())
 with torch.no_grad():
     h = layer(x)
 

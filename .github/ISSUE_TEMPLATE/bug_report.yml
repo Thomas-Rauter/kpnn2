@@ -83,7 +83,8 @@ body:
     id: kpnn2-version
     attributes:
       label: kpnn2 version
-      placeholder: "0.1.0"
+      description: Output of `kpnn2.__version__`.
+      placeholder: "<version>"
     validations:
       required: true
 

@@ -31,7 +31,7 @@ from ._parse import parse_layered
 from ._parse_adjacency import parse_adjacency
 from ._spec import Hop, LayeredSpec, Skip
 
-__version__ = "0.2.0"
+__version__ = "0.2.0rc1"
 
 __all__ = [
     "parse_layered",

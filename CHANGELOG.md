@@ -14,10 +14,6 @@ This project follows semantic versioning.
   `PackedMultiheadAttention`: `forward` disables
   `torch.autocast` and computes in the parameter dtype.
   Mixed precision is still `.to(dtype=...)` / `.half()`.
-- `PackedMultiheadAttention`: `need_weights=True` returns
-  packed per-edge weights aligned with `source_index` /
-  `target_index`, not a dense `(L, S)` matrix and not an
-  error. Default `False` still returns `None`.
 - `Hop` stores packed `source_index` / `target_index`. There is
   no `mask` field; densify with `Hop.to_mask()`.
 - `Skip.source_index` / `target_index` renamed to
@@ -27,6 +23,10 @@ This project follows semantic versioning.
 
 ### Added
 
+- `PackedMultiheadAttention`: scores only live edgelist pairs.
+  `need_weights=True` returns packed per-edge weights aligned
+  with `source_index` / `target_index`, not a dense `(L, S)`
+  matrix. Default `False` still returns `None`.
 - `PackedLinear.transpose()`: swapped packed indices, tied or
   copied `weight`, untied bias. The tied autoencoder path.
 - `scatter_hop_outputs`: split a hop's concatenated source
