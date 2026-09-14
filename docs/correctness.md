@@ -1,17 +1,21 @@
 # Correctness
 
 `kpnn2` turns a named edgelist into the wiring of a neural net.
-A bug that drops a skip, leaks a missing edge, or mislabels an
-attribution axis is a scientific error, not only a software
-bug. The test suite is built around that.
+A bug that drops a skip edge, lets an edge outside the edgelist
+influence a prediction, or mislabels an attribution axis is a
+scientific error, not only a software bug. The test suite is
+built around that.
 
 This page is an overview of **what the tests claim**, not a
-catalog of every `test_*` function. The files live on GitHub
-under
+catalog of every `test_*` function. It has three parts: the
+scientific claims, which ask whether the named graph really
+constrains the model; the technical claims underneath them; and
+an explicit list of what none of it proves. The files live on
+GitHub under
 [`tests/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests).
 
 CI runs the full pytest suite, including the slow controls, on
-every change. That is a process check. The scientific argument
+every change. That is a process check; the scientific argument
 is the claims below.
 
 A separate, frozen notebook repeats one published simulation
@@ -33,8 +37,8 @@ important. An edge that is not in the edgelist must not
 influence a prediction. A shuffled or rewired prior must not
 look like a recovery of the true nodes.
 
-The second kind is the distinctive part of the suite. It lives
-in
+Scientific correctness is the distinctive part of the suite. It
+lives in
 [`tests/controls/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/controls),
 with a few related checks in
 [`tests/module/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/module).
@@ -46,25 +50,27 @@ inputs and hidden nodes can affect a chosen output. The tests
 do not ask whether a real biological prior is true. They ask
 whether the primitives respect the prior they were given.
 
-Two different ways an edge can be inert:
+A control graph needs edges that carry no signal, and an edge
+can be inert in two ways:
 
 - **Absent.** The pair is not a row of the edgelist. There is
   no mask entry and no parameter.
-- **Dead.** The pair is in the edgelist, so node roles stay the
-  same, but tests pin that weight to 0.
+- **Dead.** The pair is a row of the edgelist, so node roles
+  stay the same, but tests pin that weight to 0.
 
 ### Live-path labels
 
 <img class="correctness-icon" src="../figures/correctness/live_path.svg" alt="A live red path reaches the output; a grey branch stops short">
 
-A name is important if and only if some path of live edges runs
-from an input through that name to at least one attributed
-output.
+Every later check needs to know which names should score as
+important, so the definition comes first. A name is important
+if and only if some path of live edges runs from an input
+through that name to at least one attributed output.
 
-Each control graph **declares** those labels. An independent
-reachability solver **derives** them from the edgelist and the
-dead pins. The two must match, so a bug in the labels cannot
-cancel a bug in the model.
+Each control graph **declares** those labels by hand. An
+independent reachability solver **derives** them from the
+edgelist and the dead pins. The two must match, so a mistake in
+the hand-written labels cannot cancel a mistake in the model.
 
 Pinned in
 [`tests/controls/ground_truth.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/ground_truth.py)
@@ -78,9 +84,10 @@ index 0.
 
 <img class="correctness-icon" src="../figures/correctness/pinned_weights.svg" alt="Live edges pinned in red; a dead edge dashed and pinned at zero">
 
-No training. Weights on live edges are pinned; dead edges stay
-at 0. The net is linear so a live path has a deterministic
-nonzero score.
+The first check takes training out of the picture, so that
+nothing but the wiring can explain a score. Weights on live
+edges are pinned, dead edges stay at 0, and the net is linear,
+so every live path carries a deterministic nonzero score.
 
 Feature scores are `|input gradient|`. Hidden scores are
 `|activation × layer gradient|` at that node's layer. Dead
@@ -96,11 +103,11 @@ Pinned in
 
 <img class="correctness-icon" src="../figures/correctness/trained_importance.svg" alt="Two matched towers into one prediction node, one red and one grey">
 
-Two structurally matched towers, both wired to `prediction`.
-Labels come from tower A only. After a learnability gate
-(held-out ROC-AUC high enough that the net actually fit),
-autograd scores must rank the data-generating tower above the
-decoy.
+The next check lets training set the weights. Two structurally
+matched towers are both wired to `prediction`, but only tower A
+generates the labels. After a learnability gate (held-out
+ROC-AUC high enough that the net actually fit), autograd scores
+must rank the data-generating tower above the decoy.
 
 The cases are a linear no-bias net, the same graph with ReLU
 and bias, and a ReLU net whose labels are a product of tower-A
@@ -122,9 +129,9 @@ These break what trained importance is supposed to detect.
   [Adebayo et al., 2018](https://papers.nips.cc/paper/8160-sanity-checks-for-saliency-maps):
   a saliency method that still “recovers” structure after the
   labels are destroyed is following topology, not the data.
-- **Swapped labels.** After a model that did learn, swapping
-  which tower is called important must fail the trained
-  criterion.
+- **Swapped labels.** Take a model that did pass the
+  learnability gate, then swap which tower is called important:
+  the trained criterion must fail.
 
 Pinned in
 [`tests/controls/test_negative_controls.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_negative_controls.py).
@@ -133,10 +140,12 @@ Pinned in
 
 <img class="correctness-icon" src="../figures/correctness/rewired_prior.svg" alt="A red stack plugged into a grey decoy; the prediction socket is empty">
 
-Same feature names, same simulator (labels linear in tower A).
-`G_true` gives both towers a path to `prediction`. `G_broken`
-keeps the names but ends tower A at `decoy_readout`, with no
-live path to the task output.
+A prior only constrains a model if breaking the prior breaks
+the fit. Both graphs here use the same feature names and the
+same simulator, whose labels are linear in tower A. `G_true`
+gives both towers a path to `prediction`. `G_broken` keeps the
+names but ends tower A at `decoy_readout`, with no live path to
+the task output.
 
 `G_true` must fit. `G_broken` must stay at chance. If a model
 can learn the labels without a live path from the causal
@@ -150,18 +159,21 @@ Pinned in
 
 <img class="correctness-icon" src="../figures/correctness/absent_edge.svg" alt="A complete red path above a grey path with a missing edge marked by an X">
 
-On two independent paths, raising a feature that feeds only a
-decoy output must not change the prediction, in the forward
-pass or in the input gradient.
+An absent edge has no weight to pin, so the claim is about the
+prediction itself. In a graph of two disjoint paths, raising a
+feature that feeds only a decoy output must not change the
+prediction, either in the forward pass or in the input
+gradient.
 
 Pinned in
 [`tests/module/test_absent_edge_influence.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_absent_edge_influence.py).
 
-Skip edges are the other direction: they **are** in the graph,
+Skip edges make the opposite claim: they **are** in the graph,
 as ordinary packed pairs of the target hop, not a second
-module. A skip still drives the target when the adjacent chain
-is ReLU-zeroed. Zeroing only that packed weight removes only
-that term. Gradient reaches the skip source directly.
+module. A skip therefore still drives the target when the
+adjacent chain is ReLU-zeroed. Zeroing only that packed weight
+removes only that term. Gradient reaches the skip source
+directly.
 
 Pinned in
 [`tests/module/test_hop_forward.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_hop_forward.py).
@@ -171,11 +183,13 @@ Pinned in
 
 <img class="correctness-icon" src="../figures/correctness/unrolled_adjacency.svg" alt="A grey first hop around a cycle; a red wrap reaches the output">
 
-`parse_adjacency` graphs are a shared state vector applied `T`
-times. A walk that needs three hops is dead at `T=2` and live
-at `T=3` on the same edgelist. Unbounded DAG reachability is
-the wrong ground truth. `T` is chosen in the test, not by
-`kpnn2`.
+A `parse_adjacency` graph has no layers: the user applies one
+shared state vector `T` times, so how far a signal travels
+depends on `T`. The step count therefore enters the ground
+truth. A walk that needs three hops is dead at `T=2` and live
+at `T=3` on the same edgelist, which makes unbounded DAG
+reachability the wrong labels here. `T` is chosen in the test,
+not by `kpnn2`.
 
 Pinned-weight scores on a linear `PackedLinear` must match those
 T-bounded labels. Swapping the `T=2` and `T=3` labels must fail.
@@ -183,8 +197,9 @@ After several extra steps, a feature that feeds only a decoy
 must still not change the prediction. Dropping the self-loop
 that would carry an early pulse must leave the net at chance.
 
-Packed attention is the same absent-pair claim: a key that is
-not a live edgelist source must not influence a query.
+Packed attention is the same absent-pair claim in another
+module: a key that is not a live edgelist source must not
+influence a query.
 
 Pinned in
 [`tests/controls/unroll.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/unroll.py),
@@ -202,9 +217,11 @@ and
 
 <img class="correctness-icon" src="../figures/correctness/name_mapping.svg" alt="Anonymous squares with a name tag clipped onto each column">
 
-`kpnn2` does not import Captum. The library only attaches spec
-names to a tensor axis. Tests still run Integrated Gradients
-in the suite (Captum is a dev extra), then pass the tensor to
+An attribution score is only interpretable if it carries the
+right name, and attaching spec names to a tensor axis is all
+the library does here: `kpnn2` does not import Captum. The
+tests still run Integrated Gradients in the suite (Captum is a
+dev extra), then pass the resulting tensor to
 `map_node_attributions`. Dead inputs stay near zero; live
 inputs stay above a floor. Hidden-layer names are checked on a
 synthetic tensor whose values would fail if the axis were
@@ -219,8 +236,8 @@ workflow.
 
 ## Technical correctness
 
-Shorter on purpose. These pin the contract that the scientific
-checks assume.
+Shorter on purpose: these checks pin the contract that every
+scientific claim above rests on.
 
 **Edgelist and layering.** `parse_layered` enforces a DAG, no
 self-loops, no duplicate pairs, inferred inputs and outputs.
@@ -236,9 +253,10 @@ all hops equals the edgelist length. Each original edge is a
 pair in exactly one hop, the hop of its target, skips included.
 [`tests/module/test_parse_layered_hops.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py).
 
-**PackedLinear.** Same graph as `MaskedLinear(spec.to_mask())`
-gives the same forward values. Absent edges are not
-parameters. Construction does not call `to_mask()`.
+**PackedLinear.** On the same graph, `PackedLinear` and
+`MaskedLinear(spec.to_mask())` produce the same forward values.
+Absent edges are not parameters. Construction does not call
+`to_mask()`.
 `transpose()` matches dense `W.T` on the live edges and
 ties `weight` when `tie=True`. A `constraint=` module that
 `torch.where`-replaces packed slots holds those live-edge
@@ -287,9 +305,10 @@ shape raises. Loading into a same-shape rename raises when
 surface is a frozen list.
 [`tests/api/test_public_api.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/api/test_public_api.py).
 
-**A real table.** Breast Cancer Wisconsin Diagnostic, a sparse
-DAG from named features, ordinary PyTorch training. Catches
-breakage that still passes tiny unit tests.
+**A real table.** One integration test trains on the Breast
+Cancer Wisconsin Diagnostic data through a sparse DAG built
+from the named features, with ordinary PyTorch training. It
+catches breakage that tiny unit tests still pass.
 [`tests/integration/test_real_tabular_task.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/integration/test_real_tabular_task.py).
 
 ## What the tests do not prove
@@ -306,7 +325,7 @@ breakage that still passes tiny unit tests.
   with a learnability gate.
 - That the package picks `n_steps` or writes your time loop.
   Unrolled-adjacency checks use tiny graphs and a fixed `T`.
-- GPU or TPU numerics in CI.
+- That GPU or TPU numerics are covered in CI.
   [`tests/manual/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/manual)
   is Colab smoke, not pytest.
 
@@ -318,7 +337,7 @@ From a clone with the `dev` extra:
 pytest
 ```
 
-That includes the slow scientific controls. They are marked
+That includes the slow scientific controls, which are marked
 `integration` and `slow`. [Installation](installation.md)
 covers the development extra. CI status is on
 [GitHub Actions](https://github.com/Thomas-Rauter/kpnn2/actions/workflows/ci.yml).

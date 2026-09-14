@@ -4,7 +4,8 @@
 on a `Hop` or an `AdjacencySpec` when the dense rectangle
 `MaskedLinear(to_mask())` would strain RAM.
 
-On a `LayeredSpec`, each hop is already packed:
+On a `LayeredSpec`, a hop's packed indices go straight into the
+constructor:
 
 ```python
 layer = kpnn2.PackedLinear(
@@ -15,12 +16,14 @@ layer = kpnn2.PackedLinear(
 )
 ```
 
-`gather_hop_inputs` still concatenates whole source layers.
-`PackedLinear` then reads only the live columns. Small graphs
-may keep `MaskedLinear(hop.to_mask())` for GEMM.
+Nothing upstream changes: `gather_hop_inputs` still concatenates
+whole source layers, and `PackedLinear` reads only the live
+columns. Small graphs may keep `MaskedLinear(hop.to_mask())` for
+GEMM.
 
-On an `AdjacencySpec`, every node shares one state vector, so
-`MaskedLinear(spec.to_mask())` stores an `(n, n)` parameter:
+On an `AdjacencySpec` every node shares one state vector, so
+`MaskedLinear(spec.to_mask())` is an `(n, n)` parameter. The
+packed form is one scalar per edge:
 
 ```python
 core = kpnn2.PackedLinear(
@@ -40,24 +43,29 @@ is the shared-state path.
 
 ## The RAM problem
 
-A hop that concatenates a 20k-gene input layer into a skip
-makes `MaskedLinear` store an `(out, ~20k)` parameter, a dense
-float32 mask, and Adam state of the same shape, even when only
-a handful of those columns are live edges. An `AdjacencySpec`
-with a wide input layer has the same problem as an `(n, n)`
-square. Dataset size and minibatch size are not this problem.
+Dense storage costs memory in proportion to the rectangle, not to
+the live edges in it. A hop that concatenates a 20k-gene input
+layer into a skip makes `MaskedLinear` store an `(out, ~20k)`
+parameter, a dense float32 mask, and Adam state of the same
+shape, even when only a handful of those columns are live edges.
+An `AdjacencySpec` with a wide input layer has the same problem
+as an `(n, n)` square. Dataset size and minibatch size are not
+this problem.
 
-Dead mask entries never affected learning. They were RAM (and
-extra GEMM work), not extra capacity.
+Nothing is lost by dropping the dead entries: masked-out cells
+are multiplied by zero, so they never affected learning. They
+were RAM (and extra GEMM work), not extra capacity.
 
 ## What PackedLinear stores
 
-`PackedLinear` stores one ordinary dense 1-D weight per live
-edge and updates with `index_add`. It is not `torch.sparse` and
-not sparse-tensor acceleration.
+The weight is one 1-D dense tensor with an entry per live edge;
+forward accumulates each edge's contribution with `index_add`
+on ordinary dense tensors. It is not `torch.sparse` and not
+sparse-tensor acceleration.
 
 Use `PackedLinear` when the dense rectangle would hurt.
-Otherwise `MaskedLinear` is better (GEMM, `(out, in)` weight).
+Otherwise `MaskedLinear` is better: its `(out, in)` weight runs
+as one GEMM.
 
 ## Construction
 
@@ -85,10 +93,12 @@ core = kpnn2.PackedLinear(
 )
 ```
 
-Scatter inputs the same way as the
-[Cyclic graph example](cyclic-graph-example.ipynb). Input nodes
-have in-degree 0, so writing them into the state each step is
-required:
+An adjacency layer maps the state vector onto itself, so the
+aligned inputs must be scattered into it. Input nodes have
+in-degree 0, so no packed edge ever reaches them: writing them
+in each step is required, not cosmetic. The
+[Cyclic graph example](cyclic-graph-example.ipynb) does the same
+scatter inside a full loop:
 
 ```python
 x = kpnn2.align_inputs(df, spec)
@@ -99,17 +109,19 @@ state = torch.relu(core(state))
 ```
 
 The same packed indices can feed
-[`PackedMultiheadAttention`](reference/PackedMultiheadAttention.md).
-That is a different primitive (attention on live pairs, not one
-scalar per edge). The
+[`PackedMultiheadAttention`](reference/PackedMultiheadAttention.md),
+a different primitive: attention on live pairs, not one scalar
+per edge. The
 [Transformer example](transformer-example.ipynb) is that
 walkthrough.
 
 ## Tied transpose
 
-`PackedLinear.weight` is 1-D, so there is no `enc.weight.T`.
-`layer.transpose()` is that helper: same packed slots, indices
-swapped, `weight` shared by default, bias never shared.
+A tied decoder runs the same edges backwards: it needs the
+transpose. `PackedLinear.weight` is 1-D, so there is no
+`enc.weight.T` to take. `layer.transpose()` is that helper:
+same packed slots, indices swapped, `weight` shared by default,
+bias never shared.
 
 ```python
 enc = kpnn2.PackedLinear(
@@ -123,11 +135,13 @@ dec = enc.transpose()
 ```
 
 Do not reparse a reversed edgelist and assign
-`dec.weight = enc.weight`: packed slot order will not match.
+`dec.weight = enc.weight`. Packed order is lexicographic per
+spec, so those slots will not match.
 
 On a hop that concatenates several source layers, split the
-transposed output and add the pieces into your decoder
-`saved` dict:
+transposed output and add the pieces into your decoder `saved`
+dict; two reversed hops can write the same earlier layer, so add
+rather than overwrite:
 
 ```python
 concat = dec(restored[hop.target_layer])
@@ -141,18 +155,21 @@ for layer, piece in kpnn2.scatter_hop_outputs(
         restored[layer] = piece
 ```
 
-`MaskedLinear` can keep using `F.linear(h, enc.weight.T,
-dec_bias)`. There is no autoencoder class; `forward()` is
-yours.
+`MaskedLinear` has a dense rectangle, so
+`F.linear(h, enc.weight.T, dec_bias)` is its tied decoder. There
+is no autoencoder class; `forward()` is yours.
 
 ## Frozen live edges
 
-`constraint=` is one `nn.Module` over the packed `weight`.
-A hard freeze is `torch.where` inside that module, using
-slots from `edge_location`. A gradient hook that zeroes a
-slot is not a freeze: AdamW's decoupled weight decay and
-SGD with momentum still move the stored parameter. A loss
-barrier is a soft prior, not a hold.
+Some priors fix individual edge values. `constraint=` is where
+that belongs: one `nn.Module` over the packed `weight`.
+A hard freeze is a `torch.where` inside it that replaces the
+slots `edge_location` reports: forward overwrites them every
+step, so no optimizer can move the value the layer uses.
+
+A gradient hook that zeroes a slot is not a freeze: AdamW's
+decoupled weight decay and SGD with momentum still move the
+stored parameter. A loss barrier is a soft prior, not a hold.
 
 The stored unconstrained slot may still drift. Read
 `constraint(weight)`, or write the constants back after
@@ -205,10 +222,9 @@ core = kpnn2.PackedLinear(
 )
 ```
 
-The same module works on `MaskedLinear`: freeze at
-`[target_index, source_index]` of the dense rectangle,
-not at packed slots. `constraint=` still runs before the
-mask.
+The same approach works on `MaskedLinear`: freeze at
+`[target_index, source_index]` of the dense rectangle, not at
+packed slots. `constraint=` still runs before the mask.
 
 ## Changing the prior (reparse)
 
@@ -216,34 +232,38 @@ Specs are frozen after parse. To prune or grow the prior,
 edit the edgelist, parse again, build **new** layers from
 the new spec, and copy surviving tensors **by name**.
 
-Look up each surviving named edge on **both** specs with
-`edge_location` and copy those packed slots. A surviving
-edge can sit on a different hop with a different packed
-index. Do not `Tensor.copy_` a whole `weight`, and do not
-`load_state_dict` across different priors.
+Copy edge by edge. Look up each surviving named edge on **both**
+specs with `edge_location` and copy those packed slots.
+A surviving edge can sit on a different hop with a different
+packed index.
+
+Bulk shortcuts do not work. Do not `Tensor.copy_` a whole
+`weight`, and do not `load_state_dict` across different priors.
 `PackedLinear.weight` is 1-D of length `nnz`. If you drop
 one named edge and add another, `nnz` is unchanged and
 slot `i` is a different named edge. `index_digest` /
 `mask_digest` hash numeric indices (or the mask) and
-shapes, not names. Always pass `identity=spec.fingerprint`
+shapes, not names, so a rename that leaves the index pattern
+unchanged passes them. Always pass `identity=spec.fingerprint`
 on the new `PackedLinear` or `MaskedLinear`.
 
-Reparse is not "the same graph minus a row." Both parsers
-recompute `input_nodes` / `output_nodes`. `parse_layered`
-also recomputes longest-path depths (unless you pass the
-same `ranks=`), hop membership, concat source axes, and
+Reparse rebuilds the blueprint; it is not "the same graph minus
+a row." Both parsers recompute `input_nodes` / `output_nodes`.
+`parse_layered` also recomputes longest-path depths (unless you
+pass the same `ranks=`), hop membership, concat source axes, and
 `skips`. Pass the same `widths=` / `ranks=` as the original
 parse.
 
-Bias is `(out_features,)`, one value per output unit, not
-per edge. Copy it by named node → unit slice, not by packed
-slot. On a `LayeredSpec`, `node_units` indexes the hop's
-output axis; copy only when the node still exists and its
+Bias moves by node, not by edge: it is `(out_features,)`, one
+value per output unit. Copy it by named node → unit slice, not
+by packed slot. On a `LayeredSpec`, `node_units` indexes the
+hop's output axis; copy only when the node still exists and its
 width and layer still match. On an `AdjacencySpec`, index
 `spec.nodes` by name.
 
-Construct a new optimizer on the new parameters, or accept
-that Adam moments on the old `Parameter` objects are lost.
+Optimizer state does not follow. Adam moments are keyed by
+`Parameter` identity on the old module: construct a new
+optimizer on the new parameters, or accept losing them.
 
 ```python
 old_spec = kpnn2.parse_adjacency(old_edgelist)
@@ -307,10 +327,10 @@ with torch.no_grad():
 optimizer = torch.optim.Adam(new_core.parameters())
 ```
 
-On a `LayeredSpec`, `edge_location` returns
-`(hop_index, packed_indices)`. Copy into
-`layers[hop_index]` on each spec. Copy bias with
-`node_units` only when layer and width still match:
+That example is adjacency. On a `LayeredSpec`, `edge_location`
+returns `(hop_index, packed_indices)`; copy into
+`layers[hop_index]` on each spec. Copy bias with `node_units`
+only when layer and width still match:
 
 ```python
 old_layer, old_units = old_spec.node_units(name)
@@ -327,6 +347,6 @@ new_layers[new_layer - 1].bias[new_units] = (
 ```
 
 On `MaskedLinear`, copy the named live cells of
-`parametrizations.weight.original`. Do not `copy_` the
-`(out, in)` rectangle. `load_state_dict` is still
-name-blind when the mask pattern and `nnz` are unchanged.
+`parametrizations.weight.original`. Do not `copy_` the whole
+`(out, in)` rectangle. `load_state_dict` is still name-blind
+when the mask pattern and `nnz` are unchanged.

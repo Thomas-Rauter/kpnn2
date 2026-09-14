@@ -1,8 +1,9 @@
 # Supported architectures
 
-`kpnn2` does not ship ready-made models. You write an ordinary
-`nn.Module`. This table is which architecture families you can
-assemble from these primitives.
+`kpnn2` supplies connectivity primitives, not finished models: you
+write an ordinary `nn.Module` and call them from your own
+`forward()`. The table below says which architecture families you
+can build that way.
 
 | Type | Supported | What to use |
 | --- | --- | --- |
@@ -15,26 +16,31 @@ assemble from these primitives.
 
 ## Sequence models
 
-`nn.RNN`, `nn.GRU`, and `nn.LSTM` are fused convenience modules
-with dense `W_ih` / `W_hh`. They cannot take an edgelist, so they
-cannot be the recurrent map of a KPNN. This package does not
-ship `MaskedRNN`, `MaskedGRU`, or `MaskedLSTM`.
+The sequence row needs a longer answer: PyTorch's recurrent
+modules cannot carry a prior. `nn.RNN`, `nn.GRU`, and `nn.LSTM`
+are fused convenience modules whose maps are dense `W_ih` /
+`W_hh`. None accepts an edgelist, so none can be the recurrent map
+of a KPNN; this package does not ship `MaskedRNN`, `MaskedGRU`, or
+`MaskedLSTM`.
 
-A time-series KPNN is the same primitives as a cyclic graph, with
-a **changing** `x_t` at each step:
+What replaces them is the cyclic-graph recipe with a **changing**
+`x_t` at each step. Memory lives in the edgelist; the time loop is
+yours:
 
-1. `parse_adjacency()` (a self-loop or hidden→hidden edge is how
-   a named node carries state across time; `parse_layered()`
-   rejects those).
-2. One shared `MaskedLinear(spec.to_mask())`, or `PackedLinear`
-   when `n` is large.
-3. In your `forward()`, for each time `t`: write `x_t` into
-   `spec.input_index`, apply the map, keep the state.
-4. `n_steps` is the sequence length you chose. `kpnn2` does not
-   unroll time.
+1. Parse with `parse_adjacency()`. A self-loop or hidden→hidden
+   edge lets a named node carry state across time;
+   `parse_layered()` is DAG-only and rejects both.
+2. One map, shared across steps:
+   `MaskedLinear(spec.to_mask())`, or `PackedLinear` when `n` is
+   large, since `to_mask()` allocates `(n, n)`.
+3. In your `forward()`, loop over time `t`: write `x_t` into the
+   state vector at `spec.input_index`, apply the map, keep the
+   state.
+4. You choose `n_steps`, the sequence length. `kpnn2` does not
+   unroll time or pick a step count.
 
 An Elman-style net is that loop. A GRU or LSTM is the usual gate
-equations with one `MaskedLinear` per map. Whether every gate
+equations with one `MaskedLinear` per map; whether every gate
 shares the same prior is your modeling choice.
 
 The [Time-series example](time-series-example.ipynb) walks through
