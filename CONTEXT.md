@@ -1,10 +1,12 @@
-# kpnn2 — AI context document
+# kpnn2 — implementation contract
 
-This file is **AI-first documentation** for assistants working in this
-repository or explaining the package to users. It is more detailed and
-operational than `README.md`.
+This file is the **product contract**: purpose, architecture,
+locked decisions, public API, and primitive specs. It is more
+detailed than `README.md`.
 
-This document is the implementation contract.
+How to work in this repository lives in `AGENTS.md`. Read
+that file first. Open this file when the task needs the
+contract (see `AGENTS.md`).
 
 Do not reintroduce a graph compiler or a ready-made model object.
 Do not rename the distribution, import, or `src/` package away
@@ -210,6 +212,7 @@ this package unless a later prompt asks.
   self-loops, but nothing here unrolls time, picks a step count, or
   re-injects inputs between steps. The loop is user `forward()`
   over `PackedLinear(...)` or `MaskedLinear(spec.to_mask())`.
+  Do not add `MaskedRNN` / `MaskedGRU` / `MaskedLSTM`.
   `parse_layered` stays DAG-only and still raises `Kpnn2Error`
   on a cycle.
 - **Not pseudo-node expansion.** A skip edge is a packed pair of
@@ -245,7 +248,9 @@ parsing, packed hop and adjacency indices, hop input assembly,
 hop-output split, packed transpose, named I/O alignment, and
 attribution column names. The user owns `nn.Module.forward()`,
 call order, nonlinearities, and training. There is no
-ready-made autoencoder class.
+ready-made autoencoder class. Do not add a high-level
+`LayeredNet` / convenience model unless a later prompt
+explicitly asks.
 
 **Per-edge signs and frozen values stay with the caller.**
 kpnn2 owns which edges exist and where their packed slots
@@ -1199,6 +1204,11 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
 - The forward path holds no tensor subclass, so
   `torch.compile(layer, fullgraph=True)` traces it without a
   graph break, parametrization included. Keep it that way.
+  Do not add a `__torch_function__` override or any other
+  write guard. A previous `FrozenMask` subclass broke
+  `fullgraph=True` and cloned the whole mask on every
+  forward pass. `tests/module/test_masked_linear.py` keeps
+  a `fullgraph` regression test.
 - **Degree-aware init:** for each output row `j`,
   `fan_in = int(mask[j].sum())` (count of 1s in that row).
   Use that `fan_in` for kaiming/uniform scale of that row (and for
@@ -2121,19 +2131,20 @@ tests/
 dev/
   docs_notebooks.py           # tutorials in CI; literature opt-in
 
-CONTEXT.md                    # this file
+AGENTS.md                     # how to work; read first
+CONTEXT.md                    # this file (product contract)
 README.md
 CHANGELOG.md                  # notable API / core only; see below
 docs/
   reference/                  # index + one page per public name
   supported.md                # architecture-family support table
-  packed_linear.md            # PackedLinear; tutorials stay MaskedLinear
+  packed_linear.md            # PackedLinear; tutorials use it on hops
   correctness.md              # test overview; scientific + technical
   literature/                 # frozen paper notebooks; not CI-executed
   literature/fortelny-bock-2020.ipynb
-  feedforward-example.ipynb   # feedforward DAG; tutorials stay MaskedLinear
-  cyclic-graph-example.ipynb  # cyclic graph; tutorials stay MaskedLinear
-  time-series-example.ipynb   # sequence x_t; tutorials stay MaskedLinear
+  feedforward-example.ipynb   # feedforward DAG; PackedLinear on hops
+  cyclic-graph-example.ipynb  # cyclic graph; AdjacencySpec
+  time-series-example.ipynb   # sequence x_t; AdjacencySpec
   transformer-example.ipynb   # PackedMultiheadAttention walkthrough
   fig_gen/                    # figure generators; write to figures/
   fig_gen/correctness/        # scientific-correctness icons
@@ -2346,193 +2357,10 @@ architecture. The word stops at the parser: what comes out is a
 
 ---
 
-## Guidance for AI assistants
+## Agent process
 
-- CONTEXT.md is the contract. If a later prompt disagrees, this
-  file wins after it exists.
-- Do not rename the package, import, or `src/kpnn2/` directory.
-- Do not reintroduce compilers, backends, pseudo nodes, Captum
-  adapters, or AnnData in v1. Do not add
-  `ConstrainedMaskedLinear`. Per-entry maps are
-  `constraint=` on `MaskedLinear` and `PackedLinear`. Do not
-  add an edgelist `constraint` column. Mixed per-edge signs
-  and frozen live-edge values are caller PyTorch
-  (`constraint=` with `torch.where` for a hard freeze,
-  `edge_location` to find slots), not parse columns or spec
-  fields. A loss barrier is a soft prior. A gradient hook
-  that zeroes a slot is not a freeze: AdamW's decoupled
-  weight decay and SGD with momentum still move the stored
-  parameter. They occur in real KPNNs and are not blocked.
-  First-class `sign` / `freeze` / `initial_weight` columns,
-  a sign tensor on the spec, or per-slot `requires_grad`
-  would be convenience, not a necessity; do not add them.
-- Optional `generator=` on `MaskedLinear`, `PackedLinear`,
-  `PackedMultiheadAttention`, and `PackedLinear.transpose`
-  is a `torch.Generator` or `None`. `None` keeps the
-  default global stream, bit-identical to omitting it. Do
-  not store it on the module. Do not add `seed=`. When it
-  is set, `PackedMultiheadAttention` must not let
-  `nn.Linear` constructors consume the global stream.
-- Do **not** add topology mutation after parse: `add_edge` /
-  `remove_edge` on specs, PackedLinear index-buffer setters,
-  or an in-place prune / grow API. `LayeredSpec` and
-  `AdjacencySpec` stay frozen dataclasses. ParsVNN /
-  self-pruning BINN / PathExpSurv are caller reparse, not a
-  public contract. Document the hatch (name-to-name copy;
-  see **Reparse hatch**). Do not add a weight-transfer
-  helper, a bias remapper, or an optimizer-state migrator.
-  Those cases are rare; first-class support would make the
-  code much more complex and harder to maintain. See
-  **What kpnn2 is NOT**.
-- Two sparsity axes (see **Locked contrasts**). Graph
-  connectivity is always dense compute in this package.
-  Feature-matrix storage is the caller's. Do not collapse
-  "sparse X" into `torch.sparse` kernels, and do not treat
-  host-sparse scipy CSR in a caller loop as a violation of
-  the graph rule.
-- Do **not** add sparse-tensor acceleration (`torch.sparse`,
-  COO/CSR storage, sparse mm). `MaskedLinear` stays dense
-  float32 tensors times `F.linear`. `PackedLinear` is a 1-D
-  dense `weight` of length `nnz` plus `index_add` on
-  ordinary dense tensors; it must not densify to `(out, in)`
-  inside the module, must not take a dense mask, and must
-  not import `torch.sparse`. Do not fold packed into
-  `MaskedLinear`. Do not fold `PackedMultiheadAttention`
-  into `PackedLinear` or `MaskedLinear`. `PackedLinear` is
-  the large-n path on hops and on an `AdjacencySpec`.
-  `MaskedLinear(to_mask())` is the dense GEMM hatch when
-  the rectangle fits. Do not add `parse(...,
-  sparse=)`. Sparse-tensor formats are not a v1
-  deferral: they are not planned. Correctness, ease of
-  maintenance, and explainability of the code outrank
-  memory and speed.
-- Do not add AnnData, scipy sparse, a sparse-preserving
-  `align_inputs`, a minibatcher, or device-copy helpers so
-  this package can "support sparse X." `align_inputs` stays
-  a full named-DataFrame densifier on CPU. Sparse host X
-  must not go through `align_inputs` (including via
-  `adata.to_df()`). Callers densify only each row block and
-  pass a dense tensor to the model. Do not put the full
-  feature matrix on GPU inside this package; this package
-  never moves X to a device.
-- Do not add sparse minibatches or sparse Captum / IG.
-  Module inputs stay ordinary dense tensors.
-- `parse_adjacency` must not allocate an `(n, n)` tensor. Do
-  not add a densifying `mask` property on `AdjacencySpec`.
-  Materialize the square only through `to_mask()`. Still no
-  `layout=` parser flag.
-- `parse_layered` must not allocate an `(out, in)` hop
-  rectangle. Do not add a densifying `mask` property on
-  `Hop`. Materialize the rectangle only through
-  `Hop.to_mask()`.
-- Masks are plain `torch.Tensor`. Do not add a tensor subclass,
-  a `__torch_function__` override, or any other write guard.
-  A previous `FrozenMask` subclass broke
-  `torch.compile(fullgraph=True)` and cloned the whole mask on
-  every forward pass. Document masks as read-only instead;
-  PyTorch does not write-protect buffers either.
-  `tests/module/test_masked_linear.py` keeps a `fullgraph`
-  regression test.
-- `MaskedLinear` stores the unconstrained weight with
-  `torch.nn.utils.parametrize`. The public attribute is
-  `weight` (effective: constructor `constraint` if any,
-  then any later maps, then the mask). The trainable tensor
-  is `parametrizations.weight.original`. Connectivity is
-  applied last even if the caller stacks another
-  parametrization; do not let a later map resurrect blocked
-  edges. `named_parameters` / `state_dict` keys use that
-  path, not `weight`. Do not claim suffix-`.weight` filters
-  or "the usual weight name" see it. Do not reintroduce a
-  second name such as `raw_weight`, do not shadow `weight`
-  with a plain property, and do not make `MaskedLinear` a
-  subclass of `nn.Linear` (its `__init__` signature and its
-  own `reset_parameters` would fight ours). `constraint=`
-  is the supported inner map (`nn.Module`, per-entry). Do
-  not add `ConstrainedMaskedLinear`.
-- Do not make `MaskedLinear`, `PackedLinear`, or
-  `PackedMultiheadAttention` participate in
-  `torch.autocast`. Each `forward` disables autocast
-  and casts activations to the parameter dtype.
-  Mixed precision is `.to(dtype=...)` / `.half()` /
-  `.to(bfloat16)`. Do not silently promote dtypes in
-  `gather_hop_inputs`.
-- Do not add a high-level `LayeredNet` / convenience model unless
-  a later prompt explicitly asks. Do not add an encoder
-  class, a `TiedAutoencoder`, a reverse parser, a packed-slot
-  permutation helper, Transformer block, or `parse_attention`.
-  `PackedMultiheadAttention` is a contraction primitive.
-  `PackedLinear.transpose` is the tied packed `W.T` path;
-  `scatter_hop_outputs` is the gather inverse. Do not add
-  `MaskedLinear.transpose`; dense tied decode is
-  `F.linear(h, layer.weight.T, dec_bias)`.
-- `parse_layered` and `parse_adjacency` must not instantiate
-  `nn.Module`.
-- Keep the two parsers separate: no `layout=` flag, no dispatch
-  on whether the graph has a cycle, and no `AdjacencySpec`
-  faked as a one-layer `LayeredSpec`.
-- `MaskedLinear` must not store other layers' activations. The
-  user owns the `saved` dict, call order, and nonlinearities.
-- Do **not** reintroduce a skip module, a per-skip parameter, or
-  any second place where an edge weight can live. A skip edge is
-  a block of packed unit pairs of its target's hop; that is what
-  makes the edge count, the fan-in, and the "no silently dropped
-  edge" guarantee hold. `SkipAdd` existed until 0.1.0 and was
-  removed for exactly these reasons: it could be forgotten at a
-  call site without any error, its per-edge scalar left skip
-  parents out of the degree-aware init, it allocated one
-  batch-sized temporary per skip edge, and its single scalar
-  could not generalize to node width.
-- Layered node width is public on `parse_layered(..., widths=)`
-  only. Store `layer_widths` on `LayeredSpec`. Packed hop indices
-  are units; `source_nodes` stays one name per node. Keep index
-  arithmetic in `_layout.py`: build a `Layout`, ask it for slots,
-  expand named edges with `iter_block_pairs`, and map a unit
-  index back with `slot_containing`. Callers use `node_units`,
-  `hop_units`, and `edge_location`; do **not** export `Layout`.
-  Do **not** add `widths=` or `ranks=` to `parse_adjacency`.
-  See "Internal unit layout".
-- Public failures: `Kpnn2Error` only.
-- After Python edits, run `python -m ruff format .` from the
-  `dev` extra. Do not use a global `ruff` on `PATH`.
-- Docs, README, and doctests use `import kpnn2` and
-  `kpnn2.parse_layered(...)` (same for the other public names).
-  Do not introduce `import kpnn2 as k2`.
-- Docs tutorials: feedforward-example, skip-edges, and
-  layered vs adjacency use `PackedLinear` on hops.
-  `MaskedLinear(hop.to_mask())` remains valid in those
-  pages as the dense hatch. Cyclic graph and time-series
-  examples stay on `AdjacencySpec`. `PackedLinear` also
-  has its own page (`docs/packed_linear.md`), including
-  the reparse hatch.
-  The transformer example
-  (`docs/transformer-example.ipynb`) is the
-  `PackedMultiheadAttention` walkthrough. Do not sprinkle
-  `PackedMultiheadAttention` through feedforward-example.
-  Do not add `parse_attention`.
-  Do not add `MaskedRNN` / `MaskedGRU` / `MaskedLSTM`.
-- Docs notebooks must be valid nbformat v4. Stream outputs need
-  `name` (`stdout` / `stderr`); editors often drop it and
-  mkdocs-jupyter then fails. Execute tutorials with
-  `python dev/docs_notebooks.py` (venv kernel, not
-  `ipykernel install --user --name python3`). `mkdocs serve`
-  repairs missing stream names on pre-build. Notebooks under
-  `docs/literature/` are frozen paper reproductions: repair
-  them, do not execute them in CI. Re-run with
-  `python dev/docs_notebooks.py --literature` after
-  downloading files into gitignored `.literature-data/`
-  (see `docs/literature/README.md`). Do not add bulk omics
-  matrices to git.
-- `tests/manual/` is Colab GPU/TPU smoke, not pytest and not
-  docs. Do not execute it in CI or with
-  `dev/docs_notebooks.py`. Open from GitHub via
-  `dev/colab.txt`. Install from TestPyPI with `--no-deps`.
-- Docs terminology: `docs/concepts.md` owns concepts,
-  `docs/includes/abbreviations.md` owns expansions, docstrings
-  own contracts. First use per page gets a short gloss plus an
-  anchor link; later mentions are bare. An abbr is expansion-only
-  when the term has a Concepts entry. Never link an acronym
-  directly: link the spelled-out phrase. See **Docs terminology**.
-- `CHANGELOG.md`: important API and core changes only,
-  concise. See **Changelog**. Do not log docs pages,
-  notebooks, nav, wording, tests, or other small edits.
-  Leave the file alone when nothing notable shipped.
+Process, commands, and conventions live in `AGENTS.md`.
+Read that file first. This file is the product contract.
+Do not paste either file into replies or into other rules.
+Product locks stay in the sections above; do not copy them
+into `AGENTS.md`.
