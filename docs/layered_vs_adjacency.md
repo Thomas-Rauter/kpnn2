@@ -1,26 +1,35 @@
 # Layered vs. Adjacency
 
-`kpnn2` has two parsers, and the one you call fixes the shape of
-everything you build afterwards. `parse_layered()` ranks nodes
-by depth and returns a `LayeredSpec`; `parse_adjacency()` puts
-every node in one state vector and returns an `AdjacencySpec`.
+`kpnn2` has two [parsers](concepts.md#parser), and the one you
+call fixes the shape of everything you build afterwards.
+`parse_layered()` ranks [nodes](concepts.md#node) by depth and
+returns a `LayeredSpec`; `parse_adjacency()` puts
+every node in one [state vector](concepts.md#state-vector), a
+single vector with one unit per node, and returns an
+`AdjacencySpec`.
 The same `source` / `target` edgelist goes through either one,
-and a DAG is valid for both, so the layout is your choice. Only
+and a [directed acyclic graph](concepts.md#dag) (DAG) is valid
+for both, so the layout is your choice. Only
 `parse_adjacency()` allows cycles and self-loops.
 
-This page is the difference between the two specs.
+This page is the difference between the two
+[specs](concepts.md#spec), the frozen structures the parsers
+return.
 [Feedforward example](feedforward-example.ipynb) is a feedforward
 `parse_layered()` workflow.
 [Cyclic graph example](cyclic-graph-example.ipynb) is a
 `parse_adjacency()` workflow on a graph with a feedback loop.
 [Transformer example](transformer-example.ipynb) and
 [Time-series example](time-series-example.ipynb) use that same
-packed layout: they need named nodes and packed pairs, not hop
-rectangles.
+packed layout: they need named nodes and
+[packed pairs](concepts.md#packed-indices), not
+[hop](concepts.md#hop) rectangles — a hop being everything
+entering one layer.
 
 ## How edges are stored
 
-The toy is `A -> H -> C` plus the skip `A -> C`:
+The toy is `A -> H -> C` plus the [skip](concepts.md#skip-edge)
+`A -> C`, an edge whose endpoints are more than one layer apart:
 
 | source | target |
 | ------ | ------ |
@@ -35,8 +44,9 @@ and puts every incoming edge in one packed hop (the skip is a
 pair of `hops[1]`). Adjacency puts every node in one
 alphabetical state vector and every edge in packed indices.
 
-`parse_layered()` gives every node a depth, its longest path
-from the inputs: `A` is layer 0, `H` is layer 1, `C` is layer 2.
+`parse_layered()` gives every node a [depth](concepts.md#layer),
+its longest path from the inputs: `A` is layer 0, `H` is layer 1,
+`C` is layer 2.
 Each layer after the first owns one hop, holding all of that
 layer's incoming edges. `hops[0]` is the packed hop into `H`;
 `hops[1]` is the hop into `C`, which reads both earlier layers
@@ -115,7 +125,8 @@ y = state[:, spec.output_index]
 fixed, that loop is the shared-state one
 [Cyclic graph example](cyclic-graph-example.ipynb) trains on a
 graph with a feedback edge. When `x` changes at each step, it is
-a time-series KPNN; see
+a time-series [knowledge-primed neural network](concepts.md#kpnn)
+(KPNN); see
 [Time-series example](time-series-example.ipynb).
 
 This toy is small, so `MaskedLinear` is appropriate; for large
@@ -133,8 +144,8 @@ walkthrough is the
   time-series loop, or packed attention. It is the packed
   layout: one state vector and packed edge indices.
 - A DAG may go through `parse_adjacency()` if you want that
-  layout. The package never inspects the graph to pick a
-  parser.
+  layout. The package never inspects the
+  [graph](concepts.md#graph) to pick a parser.
 - Both still need at least one in-degree-0 node and one
   out-degree-0 node. A pure ring, or a lone self-loop, is
   rejected on both sides.

@@ -35,8 +35,8 @@ PyTorch.
 
 A sparsely connected NN with skip edges is not. Only some pairs of
 nodes are linked, and some edges skip layers. That is the gap
-`kpnn2` (**K**nowledge **P**rimed **N**eural **N**etworks) fills: the same
-PyTorch workflow, with that connectivity.
+`kpnn2` ([**K**nowledge **P**rimed **N**eural **N**etworks](docs/concepts.md#kpnn))
+fills: the same PyTorch workflow, with that connectivity.
 Figure 1 shows a dense NN next to a sparse NN with skip edges.
 
 ![Fully connected versus sparse](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/dense_vs_sparse.png)
@@ -55,15 +55,26 @@ a `source` node to a `target` node. For example:
 | B | H |
 | H | C |
 
+The **graph** is what that table describes: the named nodes, and the
+directed edges between them. Edgelist and graph are the same object in
+two forms — the table you pass in, and the structure it encodes. These
+docs use "graph" in that sense throughout: the prior wiring that becomes
+the architecture. It never means PyTorch's autograd graph, and never a
+graph as *data* in the GNN sense (see [Why not PyG?](#why-not-pyg)).
+[**Concepts**](docs/concepts.md) defines the rest of the vocabulary.
+
 `parse_layered()` layers that table into a `LayeredSpec`. You
 write the `nn.Module` yourself, but the maps that carry the
 wiring are this package's (`MaskedLinear`, or `PackedLinear` /
 `PackedMultiheadAttention` after `parse_adjacency()`), not
 `nn.Linear`. Training stays standard PyTorch, and you can map
-attributions back onto the named nodes. That parser needs a
-directed acyclic graph (DAG); a graph with feedback loops goes
-through `parse_adjacency()` instead, which puts every node into
-one state vector with packed edge indices (see the
+[attributions](docs/concepts.md#attribution) back onto the named
+nodes. That [parser](docs/concepts.md#parser) needs a
+[directed acyclic graph](docs/concepts.md#dag) (DAG); a graph
+with feedback loops goes through `parse_adjacency()` instead,
+which puts every node into one
+[state vector](docs/concepts.md#state-vector) and every edge into
+a [packed index pair](docs/concepts.md#packed-indices) (see the
 [Cyclic graph example](docs/cyclic-graph-example.ipynb) and the
 [Time-series example](docs/time-series-example.ipynb)).
 
@@ -120,17 +131,21 @@ layers you assemble yourself. See
 ## Core workflow
 
 1. Define a model architecture as an edgelist with named `source`
-   and `target` nodes.
+   and `target` [nodes](docs/concepts.md#node).
 2. Parse it with `parse_layered()` to a `LayeredSpec` when the
-   graph is a DAG that should become one packed hop per layer.
+   graph is a DAG that should become one packed
+   [hop](docs/concepts.md#hop) per layer — a hop being everything
+   entering one layer.
    Use `parse_adjacency()` for the packed layout (`AdjacencySpec`):
    one state vector, packed indices, cycles allowed. A DAG is
    valid for both; pick the layout, do not inspect the graph.
 3. Write an `nn.Module` with one `PackedLinear` per
    `spec.hops`, feeding each one
-   `gather_hop_inputs(saved, hop)`. Skip edges are already
-   packed pairs of those hops, so there is nothing extra to
-   call. `MaskedLinear(hop.to_mask())` is the dense hatch.
+   `gather_hop_inputs(saved, hop)`.
+   [Skip edges](docs/concepts.md#skip-edge), whose endpoints are
+   more than one layer apart, are already packed pairs of those
+   hops, so there is nothing extra to call.
+   `MaskedLinear(hop.to_mask())` is the dense hatch.
 4. Align named input tables with `align_inputs()`.
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
@@ -281,6 +296,9 @@ If you are new to the package, start with a tutorial:
 
 The other pages are not second examples:
 
+- [**Concepts**](docs/concepts.md) for the vocabulary these docs
+  use: graph, edgelist, spec, hop, skip edge, live edge, and the
+  rest, in the order the pipeline uses them
 - [**Layered vs. Adjacency**](docs/layered_vs_adjacency.md) for
   how the two parsers differ and when to pick one
 - [**Skip edges**](docs/skip-edges.ipynb) for edges that jump a

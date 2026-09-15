@@ -20,7 +20,8 @@ The sequence row needs a longer answer: PyTorch's recurrent
 modules cannot carry a prior. `nn.RNN`, `nn.GRU`, and `nn.LSTM`
 are fused convenience modules whose maps are dense `W_ih` /
 `W_hh`. None accepts an edgelist, so none can be the recurrent map
-of a KPNN; this package does not ship `MaskedRNN`, `MaskedGRU`, or
+of a [knowledge-primed neural network](concepts.md#kpnn) (KPNN);
+this package does not ship `MaskedRNN`, `MaskedGRU`, or
 `MaskedLSTM`.
 
 What replaces them is the cyclic-graph recipe with a **changing**
@@ -28,14 +29,15 @@ What replaces them is the cyclic-graph recipe with a **changing**
 yours:
 
 1. Parse with `parse_adjacency()`. A self-loop or hidden→hidden
-   edge lets a named node carry state across time;
+   edge lets a named [node](concepts.md#node) carry state across
+   time;
    `parse_layered()` is DAG-only and rejects both.
 2. One map, shared across steps:
    `MaskedLinear(spec.to_mask())`, or `PackedLinear` when `n` is
    large, since `to_mask()` allocates `(n, n)`.
 3. In your `forward()`, loop over time `t`: write `x_t` into the
-   state vector at `spec.input_index`, apply the map, keep the
-   state.
+   [state vector](concepts.md#state-vector) at `spec.input_index`,
+   apply the map, keep the state.
 4. You choose `n_steps`, the sequence length. `kpnn2` does not
    unroll time or pick a step count.
 
@@ -44,5 +46,5 @@ equations with one `MaskedLinear` per map; whether every gate
 shares the same prior is your modeling choice.
 
 The [Time-series example](time-series-example.ipynb) walks through
-the Elman loop, attributions on a `step` axis, and a no-memory
-control.
+the Elman loop, [attributions](concepts.md#attribution) on a
+`step` axis, and a no-memory control.

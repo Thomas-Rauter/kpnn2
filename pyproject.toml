@@ -52,7 +52,8 @@ dev = [
     "pre-commit",
 ]
 docs = [
-    "mkdocs",
+    # >=1.6 for validation.links.anchors (exclude_docs needs >=1.5).
+    "mkdocs>=1.6",
     "mkdocs-material",
     "mkdocstrings[python]",
     "mkdocs-jupyter",

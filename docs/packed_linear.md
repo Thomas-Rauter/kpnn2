@@ -1,11 +1,14 @@
 # PackedLinear
 
-`PackedLinear` stores one trainable scalar per live edge. Use it
-on a `Hop` or an `AdjacencySpec` when the dense rectangle
+`PackedLinear` stores one trainable scalar per
+[live edge](concepts.md#live-edge) — an edge the graph actually
+has. Use it on a [`Hop`](concepts.md#hop) — everything entering
+one layer — or on an `AdjacencySpec` when the dense rectangle
 `MaskedLinear(to_mask())` would strain RAM.
 
-On a `LayeredSpec`, a hop's packed indices go straight into the
-constructor:
+On a `LayeredSpec`, a hop's
+[packed indices](concepts.md#packed-indices) — two parallel lists,
+one entry per edge — go straight into the constructor:
 
 ```python
 layer = kpnn2.PackedLinear(
@@ -21,7 +24,9 @@ whole source layers, and `PackedLinear` reads only the live
 columns. Small graphs may keep `MaskedLinear(hop.to_mask())` for
 GEMM.
 
-On an `AdjacencySpec` every node shares one state vector, so
+On an `AdjacencySpec` every node shares one
+[state vector](concepts.md#state-vector), a single vector with one
+unit per node, so
 `MaskedLinear(spec.to_mask())` is an `(n, n)` parameter. The
 packed form is one scalar per edge:
 
@@ -45,7 +50,8 @@ is the shared-state path.
 
 Dense storage costs memory in proportion to the rectangle, not to
 the live edges in it. A hop that concatenates a 20k-gene input
-layer into a skip makes `MaskedLinear` store an `(out, ~20k)`
+layer into a [skip](concepts.md#skip-edge), an edge spanning more
+than one layer, makes `MaskedLinear` store an `(out, ~20k)`
 parameter, a dense float32 mask, and Adam state of the same
 shape, even when only a handful of those columns are live edges.
 An `AdjacencySpec` with a wide input layer has the same problem
@@ -136,7 +142,7 @@ dec = enc.transpose()
 
 Do not reparse a reversed edgelist and assign
 `dec.weight = enc.weight`. Packed order is lexicographic per
-spec, so those slots will not match.
+[spec](concepts.md#spec), so those slots will not match.
 
 On a hop that concatenates several source layers, split the
 transposed output and add the pieces into your decoder `saved`

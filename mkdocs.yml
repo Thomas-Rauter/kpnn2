@@ -54,6 +54,7 @@ nav:
       - Time-series example: time-series-example.ipynb
       - Transformer example: transformer-example.ipynb
   - How it works:
+      - Concepts: concepts.md
       - Layered vs. Adjacency: layered_vs_adjacency.md
       - Skip edges: skip-edges.ipynb
       - Mapping attributions: map-node-attributions.ipynb
@@ -67,6 +68,15 @@ nav:
       - Changelog: changelog.md
       - Citing: citing.md
       - Feedback: feedback.md
+
+validation:
+  links:
+    anchors: warn
+    unrecognized_links: warn
+    absolute_links: warn
+
+exclude_docs: |
+  includes/
 
 not_in_nav: |
   /reference/*.md
@@ -112,6 +122,7 @@ plugins:
       ignore_h1_titles: true
 
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
   - md_in_html
@@ -121,3 +132,8 @@ markdown_extensions:
   - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - docs
+      auto_append:
+        - includes/abbreviations.md

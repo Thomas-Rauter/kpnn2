@@ -1,16 +1,18 @@
 # Correctness
 
 `kpnn2` turns a named edgelist into the wiring of a neural net.
-A bug that drops a skip edge, lets an edge outside the edgelist
-influence a prediction, or mislabels an attribution axis is a
-scientific error, not only a software bug. The test suite is
+A bug that drops a [skip edge](concepts.md#skip-edge), lets an
+edge outside the edgelist influence a prediction, or mislabels an
+[attribution](concepts.md#attribution) axis is a scientific error,
+not only a software bug. The test suite is
 built around that.
 
 This page is an overview of **what the tests claim**, not a
 catalog of every `test_*` function. It has three parts: the
-scientific claims, which ask whether the named graph really
-constrains the model; the technical claims underneath them; and
-an explicit list of what none of it proves. The files live on
+scientific claims, which ask whether the
+[named graph](concepts.md#graph) really constrains the model; the
+technical claims underneath them; and an explicit list of what
+none of it proves. The files live on
 GitHub under
 [`tests/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests).
 
@@ -25,16 +27,17 @@ That page is not part of the test suite.
 
 ## Two kinds of correctness
 
-**Technical.** The parsers, masks, packed layers, alignment,
-and checkpoints do what the public contract says. A cycle is
+**Technical.** The [parsers](concepts.md#parser), masks,
+[packed](concepts.md#packed-indices) layers, alignment, and
+checkpoints do what the public contract says. A cycle is
 rejected by `parse_layered`. A masked-out weight cannot affect
 the output. `PackedLinear` matches `MaskedLinear` on the same
 graph.
 
-**Scientific.** The named graph is the architecture. A node
-with no live path to the attributed output must not score as
-important. An edge that is not in the edgelist must not
-influence a prediction. A shuffled or rewired prior must not
+**Scientific.** The named graph is the architecture. A
+[node](concepts.md#node) with no live path to the attributed
+output must not score as important. An edge that is not in the
+edgelist must not influence a prediction. A shuffled or rewired prior must not
 look like a recovery of the true nodes.
 
 Scientific correctness is the distinctive part of the suite. It
@@ -64,8 +67,9 @@ can be inert in two ways:
 
 Every later check needs to know which names should score as
 important, so the definition comes first. A name is important
-if and only if some path of live edges runs from an input
-through that name to at least one attributed output.
+if and only if some path of [live edges](concepts.md#live-edge),
+edges the graph actually has, runs from an input through that
+name to at least one attributed output.
 
 Each control graph **declares** those labels by hand. An
 independent reachability solver **derives** them from the
@@ -76,7 +80,8 @@ Pinned in
 [`tests/controls/ground_truth.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/ground_truth.py)
 and
 [`tests/controls/test_ground_truth.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_ground_truth.py).
-Graphs include a disconnected decoy tower, a dead first hop, a
+Graphs include a disconnected decoy tower, a dead first
+[hop](concepts.md#hop) — everything arriving at one layer — a
 skip, multiple outputs, and live units that are not at tensor
 index 0.
 
@@ -184,7 +189,8 @@ Pinned in
 <img class="correctness-icon" src="../figures/correctness/unrolled_adjacency.svg" alt="A grey first hop around a cycle; a red wrap reaches the output">
 
 A `parse_adjacency` graph has no layers: the user applies one
-shared state vector `T` times, so how far a signal travels
+shared [state vector](concepts.md#state-vector), one unit per
+node, `T` times, so how far a signal travels
 depends on `T`. The step count therefore enters the ground
 truth. A walk that needs three hops is dead at `T=2` and live
 at `T=3` on the same edgelist, which makes unbounded DAG
@@ -218,7 +224,8 @@ and
 <img class="correctness-icon" src="../figures/correctness/name_mapping.svg" alt="Anonymous squares with a name tag clipped onto each column">
 
 An attribution score is only interpretable if it carries the
-right name, and attaching spec names to a tensor axis is all
+right name, and attaching [spec](concepts.md#spec) names — the
+frozen structure a parser returns — to a tensor axis is all
 the library does here: `kpnn2` does not import Captum. The
 tests still run Integrated Gradients in the suite (Captum is a
 dev extra), then pass the resulting tensor to

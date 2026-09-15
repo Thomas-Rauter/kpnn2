@@ -2222,6 +2222,130 @@ itself justify a changelog line.
 
 ---
 
+## Docs terminology (Concepts, glosses, abbreviations)
+
+Three homes, one question each. Do not add a fourth. A first-use
+gloss is not a home: it is a pointer at one of these, deliberately
+too short to define anything.
+
+| Home | Answers | Examples |
+|------|---------|----------|
+| `docs/concepts.md` | What is the idea? | hop, spec, live edge |
+| `docs/includes/abbreviations.md` | What do the letters mean? | GEMM, GNN |
+| Docstring → `docs/reference/` | What is the exact contract? | `Hop.source_layers` |
+
+**Concepts page.** Ordered by the pipeline (graph → edgelist →
+node → DAG → parser → spec → layer → hop → skip edge → packed
+indices → live edge → state vector → attribution → KPNN), never
+alphabetically: the terms are a dependency chain, not a set. One
+`##` per term so every entry is a link target. It carries the
+concept; the docstring carries the contract.
+
+**First use per page gets a short gloss plus a link to the
+anchor; every later mention on that page is bare.** Pages are
+meant to be read start to finish. Do not gloss or link the same
+term twice on one page.
+
+`README.md` is the exception to first-use: its overview
+paragraphs are deliberately pre-terminology, so its links start
+after the **Concepts** pointer that follows the edgelist and
+graph definitions, not at a term's literal first mention.
+
+**A gloss is a handhold, not a definition** — just enough that a
+reader does not stall ("an edge the graph actually has", "one
+unit per node", "everything entering one layer"). It must never
+restate the entry.
+
+**A gloss must not sit inside a list, split a fixed phrase, or
+hang off a negated noun.** "the parsers, masks, packed layers — two parallel index
+lists — alignment, and checkpoints" breaks the list it interrupts,
+"one packed hop — everything entering one layer — per layer"
+splits the phrase "one hop per layer" the reader is still holding,
+and "not hop rectangles, one packed block per layer" glosses the
+thing the sentence is rejecting. Where no natural slot exists,
+link without glossing and let the entry carry it; where a slot
+exists, prefer em-dashes over commas so the aside cannot be read
+as another list item.
+
+**Zero-edit test (governs glosses and abbr strings alike):**
+changing a definition on the Concepts page must not make any
+other file wrong. If an edit elsewhere would become *wrong*
+rather than merely terse, it was a definition in disguise and is
+too long.
+
+**How much gloss depends on the term:**
+
+- **Coinages** a PyTorch user cannot guess — hop, live edge,
+  packed indices, skip edge, spec, state vector — get gloss and
+  link.
+- **Borrowed words that are narrower here** — graph, node,
+  layer, attribution, parser — get the link; gloss only where
+  the local meaning differs from the obvious one (e.g. layer,
+  because depth is longest-path).
+
+**Abbreviations.** `abbr` text is the **expansion only** when the
+term has a Concepts entry (DAG, KPNN). One orienting clause is
+allowed only when it has **no** entry (GNN, GEMM), because that
+clause is then the whole explanation the reader gets. Do not add
+an abbreviation whose expansion tells a reader of this package
+nothing (`NN`, `RAM`).
+
+**A term may have both, but never stack them on one word.** Link
+the spelled-out phrase and let the acronym carry the tooltip:
+
+```markdown
+a [directed acyclic graph](concepts.md#dag) (DAG)
+```
+
+Not `[DAG](concepts.md#dag)`, which renders `<a><abbr>` with two
+competing affordances. For these terms the spelled-out phrase is
+the gloss; add no further aside. Where the acronym appears bare and
+spelling it out would be clumsy (`parse_layered()` is DAG-only),
+add no link on that page and let the tooltip stand alone.
+
+**An unlinked entry is not a dead entry.** The page is read
+start to finish, so the chain must stay complete even where
+nothing points in. `edgelist` is introduced on the landing page
+because it is that central; the entry still carries it, so that is
+a preview, not a fourth home, and it needs no inbound link.
+
+**Link form by source:** `concepts.md#anchor` from a `docs/*.md`
+page, `../concepts/#anchor` from a `docs/*.ipynb` notebook,
+`../../concepts/#anchor` from `docs/literature/*.ipynb`, and
+`docs/concepts.md#anchor` from `README.md` (include-markdown
+rewrites it). Do not link from docstrings into narrative docs.
+
+**`abbr` reaches `.md` pages only.** mkdocs-jupyter renders
+notebooks outside the markdown pipeline, so acronyms in
+notebooks get no tooltip; that is accepted. Do not post-process
+rendered notebook HTML to inject them — it would match inside
+code cells and outputs. Notebooks still follow the gloss-and-link
+rule.
+
+**These rules are enforced, not aspirational.**
+`validation.links.anchors: warn` in `mkdocs.yml` makes
+`mkdocs build --strict` fail on a link to a missing anchor — but
+only for `.md` pages, because mkdocs never sees notebook links.
+`test_notebook_concepts_links_resolve` in
+`tests/module/test_docs_notebooks.py` covers the notebooks.
+Renaming a Concepts heading therefore breaks CI rather than
+silently 404-ing eleven pages; rename the anchor and its inbound
+links together.
+
+Build config, both traps found the hard way: `pymdownx.snippets`
+needs `base_path: [docs]` or `auto_append` silently renders
+nothing, and `docs/includes/` needs `exclude_docs` or the
+snippet is published as an empty page and lands in `sitemap.xml`
+(`not_in_nav` only silences the nav warning). Both keys, plus
+`validation`, need mkdocs >= 1.6, declared in the `docs` extra.
+
+**"Graph" never means** PyTorch's autograd graph, nor a graph as
+*data* in the GNN sense. It is the prior wiring that becomes the
+architecture. The word stops at the parser: what comes out is a
+**spec**, a chosen layout of that graph.
+
+---
+
 ## Guidance for AI assistants
 
 - CONTEXT.md is the contract. If a later prompt disagrees, this
@@ -2402,6 +2526,12 @@ itself justify a changelog line.
   docs. Do not execute it in CI or with
   `dev/docs_notebooks.py`. Open from GitHub via
   `dev/colab.txt`. Install from TestPyPI with `--no-deps`.
+- Docs terminology: `docs/concepts.md` owns concepts,
+  `docs/includes/abbreviations.md` owns expansions, docstrings
+  own contracts. First use per page gets a short gloss plus an
+  anchor link; later mentions are bare. An abbr is expansion-only
+  when the term has a Concepts entry. Never link an acronym
+  directly: link the spelled-out phrase. See **Docs terminology**.
 - `CHANGELOG.md`: important API and core changes only,
   concise. See **Changelog**. Do not log docs pages,
   notebooks, nav, wording, tests, or other small edits.
