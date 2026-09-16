@@ -113,7 +113,7 @@ def map_node_attributions(
 
     See Also
     --------
-    aggregate_node_attribution : Folds named scores to one
+    aggregate_node_attributions : Folds named scores to one
         value per node; call this after mapping.
     align_inputs : Applies the same node order on the way in,
         mapping a named DataFrame onto ``spec.input_nodes``.

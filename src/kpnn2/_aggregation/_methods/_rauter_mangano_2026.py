@@ -89,7 +89,7 @@ def rauter_mangano_2026(
 
     This function is not exported. Pass
     ``method="rauter_mangano_2026"`` to
-    ``aggregate_node_attribution``.
+    ``aggregate_node_attributions``.
 
     Parameters
     ----------
@@ -143,7 +143,7 @@ def rauter_mangano_2026(
 
     See Also
     --------
-    aggregate_node_attribution : Public dispatcher; pass
+    aggregate_node_attributions : Public dispatcher; pass
         ``method="rauter_mangano_2026"``.
     list_aggregation_methods : Registry table.
 

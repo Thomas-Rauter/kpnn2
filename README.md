@@ -150,7 +150,7 @@ layers you assemble yourself. See
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
    layer tensor with `map_node_attributions()` (returns xarray).
-7. Optionally fold those scores with `aggregate_node_attribution()`.
+7. Optionally fold those scores with `aggregate_node_attributions()`.
 8. A checkpoint is `spec.to_dict()` plus `state_dict`, not
    weights alone.
 
@@ -226,7 +226,7 @@ The documented public names are:
 - `scatter_hop_outputs()`
 - `align_inputs()`
 - `map_node_attributions()`
-- `aggregate_node_attribution()`
+- `aggregate_node_attributions()`
 - `list_aggregation_methods()`
 
 `LayeredSpec.hops` holds one `Hop` per layer after the first, and

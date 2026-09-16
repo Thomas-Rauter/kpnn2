@@ -224,7 +224,7 @@ gradients, or anything else. `kpnn2` does not import Captum. What
 `map_node_attributions()` does is label the node axis of the
 tensor that comes back, using the names the spec already holds, and
 return it as an `xarray.DataArray`.
-`aggregate_node_attribution()` can then fold observations (and
+`aggregate_node_attributions()` can then fold observations (and
 optional seeds) to one score per node; that step is optional and
 does not run Captum.
 

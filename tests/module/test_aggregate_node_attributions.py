@@ -6,7 +6,7 @@ import xarray as xr
 from kpnn2 import (
     Kpnn2Error,
     __version__,
-    aggregate_node_attribution,
+    aggregate_node_attributions,
     list_aggregation_methods,
 )
 from kpnn2._aggregation._registry import (
@@ -43,7 +43,7 @@ def _da(data, *, nodes=None, layer=None):
 
 
 def _agg(da, labels, **kwargs):
-    return aggregate_node_attribution(
+    return aggregate_node_attributions(
         da,
         labels,
         class_0=kwargs.pop("class_0", 0),
@@ -201,7 +201,7 @@ def test_deprecated_method_emits_future_warning():
     )
     try:
         with pytest.warns(FutureWarning, match="deprecated in"):
-            aggregate_node_attribution(
+            aggregate_node_attributions(
                 da,
                 np.array([0, 1]),
                 method=name,
@@ -234,7 +234,7 @@ def test_removed_method_raises_and_names_replacement():
             Kpnn2Error,
             match="Use 'rauter_mangano_2026' instead",
         ):
-            aggregate_node_attribution(
+            aggregate_node_attributions(
                 da,
                 np.array([0, 1]),
                 method=name,
@@ -254,7 +254,7 @@ def test_unknown_method_lists_available_names():
         Kpnn2Error,
         match="Available methods: .*rauter_mangano_2026",
     ):
-        aggregate_node_attribution(
+        aggregate_node_attributions(
             da,
             np.array([0, 1]),
             method="not_a_method",
@@ -281,7 +281,7 @@ def test_registered_dummy_is_dispatched_and_listed():
         nodes=["a", "b"],
     )
     try:
-        out = aggregate_node_attribution(
+        out = aggregate_node_attributions(
             da,
             np.array([0, 1]),
             method=name,
@@ -338,7 +338,7 @@ def test_experimental_method_emits_user_warning():
     )
     try:
         with pytest.warns(UserWarning, match="experimental"):
-            aggregate_node_attribution(
+            aggregate_node_attributions(
                 da,
                 np.array([0, 1]),
                 method=name,
@@ -405,7 +405,7 @@ def test_missing_class_mapping_raises():
         Kpnn2Error,
         match="requires 'class_0' and 'class_1'",
     ):
-        aggregate_node_attribution(
+        aggregate_node_attributions(
             da,
             np.array([0, 1]),
         )
@@ -461,7 +461,7 @@ def test_rejects_non_dataarray():
         Kpnn2Error,
         match="xarray.DataArray",
     ):
-        aggregate_node_attribution(
+        aggregate_node_attributions(
             np.array([[1.0], [0.0]]),
             np.array([0, 1]),
             class_0=0,

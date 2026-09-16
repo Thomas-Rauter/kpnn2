@@ -19,7 +19,7 @@ _PUBLIC_NAMES = [
     "scatter_hop_outputs",
     "align_inputs",
     "map_node_attributions",
-    "aggregate_node_attribution",
+    "aggregate_node_attributions",
     "list_aggregation_methods",
     "Kpnn2Error",
     "__version__",
@@ -84,7 +84,7 @@ def test_aggregation_method_pages_match_registry():
     assert names
     folder = _REFERENCE / "aggregation"
     leftover = {path.stem for path in folder.glob("*.md")}
-    dispatcher = (_REFERENCE / "aggregate_node_attribution.md").read_text(
+    dispatcher = (_REFERENCE / "aggregate_node_attributions.md").read_text(
         encoding="utf-8",
     )
     index = (_REFERENCE / "index.md").read_text(encoding="utf-8")

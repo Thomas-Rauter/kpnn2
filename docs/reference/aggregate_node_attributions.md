@@ -1,4 +1,4 @@
-::: kpnn2.aggregate_node_attribution
+::: kpnn2.aggregate_node_attributions
 
 ## Methods
 

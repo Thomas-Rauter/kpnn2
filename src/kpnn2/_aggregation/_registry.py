@@ -158,7 +158,7 @@ def list_aggregation_methods() -> pd.DataFrame:
 
     See Also
     --------
-    aggregate_node_attribution : Dispatches to a registered
+    aggregate_node_attributions : Dispatches to a registered
         method.
     """
     rows = sorted(

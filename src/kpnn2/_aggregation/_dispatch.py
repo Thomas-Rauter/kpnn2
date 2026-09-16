@@ -19,7 +19,7 @@ from ._registry import (
 _DEFAULT_METHOD = "rauter_mangano_2026"
 
 
-def aggregate_node_attribution(
+def aggregate_node_attributions(
     attributions: xr.DataArray,
     labels: object | None = None,
     *,
@@ -100,7 +100,7 @@ def aggregate_node_attribution(
     ...     dims=("observation", "node"),
     ...     coords={"node": ["A", "B"]},
     ... )
-    >>> out = kpnn2.aggregate_node_attribution(
+    >>> out = kpnn2.aggregate_node_attributions(
     ...     da,
     ...     labels=np.array([0, 1]),
     ...     class_0=0,

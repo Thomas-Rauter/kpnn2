@@ -53,7 +53,7 @@ This project follows semantic versioning.
 - `identity=` on `MaskedLinear`, `PackedLinear`, and
   `PackedMultiheadAttention`: opaque spec fingerprint in
   `state_dict`, checked on load.
-- `aggregate_node_attribution` / `list_aggregation_methods`:
+- `aggregate_node_attributions` / `list_aggregation_methods`:
   fold mapped node scores with a registered method. Default
   `rauter_mangano_2026` (binary signed class-mean
   difference).

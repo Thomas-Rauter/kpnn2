@@ -129,9 +129,9 @@ this package unless a later prompt asks.
    one hop, as an `xarray.DataArray`. Captum is not a library
    dependency; the user runs Captum (or any other method)
    themselves. `xarray` is a core dependency used for that
-   mapping and for `aggregate_node_attribution()`.
+   mapping and for `aggregate_node_attributions()`.
 7. **Aggregate attributions (optional):**
-   `aggregate_node_attribution()` folds named scores with a
+   `aggregate_node_attributions()` folds named scores with a
    registered method. The default `rauter_mangano_2026` is
    binary classification. `list_aggregation_methods()` lists
    the registry. The mapper still does not aggregate.
@@ -351,7 +351,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `scatter_hop_outputs` | Concatenated hop axis → per-source-layer tensors |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
-| `aggregate_node_attribution` | Named scores → per-node `xarray.Dataset` (method registry) |
+| `aggregate_node_attributions` | Named scores → per-node `xarray.Dataset` (method registry) |
 | `list_aggregation_methods` | Registry table of aggregation methods |
 | `Kpnn2Error` | User-facing error type |
 | `__version__` | Package version string |
@@ -1859,7 +1859,7 @@ concat_layouts(
 - Invalid `spec`, `layer`, `hop`, shape, `dims`, or `coords`:
   `Kpnn2Error`.
 
-Fold those named scores with `aggregate_node_attribution`
+Fold those named scores with `aggregate_node_attributions`
 (does not change this function).
 
 The user obtains `attributions` however they like (Captum
@@ -1879,7 +1879,7 @@ unrolled step as a sequence and they stack onto
 
 ---
 
-## `aggregate_node_attribution(attributions, labels=None, *, method="rauter_mangano_2026", **method_kwargs)`
+## `aggregate_node_attributions(attributions, labels=None, *, method="rauter_mangano_2026", **method_kwargs)`
 
 Dispatcher only. Looks up `method`, emits status warnings,
 calls the registered function with
@@ -1908,7 +1908,7 @@ that shared signature, decorate it, import the module from
 function's docstring, add
 `docs/reference/aggregation/{name}.md`, and add a row to
 the Methods table on
-`docs/reference/aggregate_node_attribution.md`. No
+`docs/reference/aggregate_node_attributions.md`. No
 dispatcher code or dispatcher docstring edits. Method
 pages are not public names and do not appear in the
 Reference index Callables table. See `AGENTS.md`.
@@ -2099,7 +2099,7 @@ da = kpnn2.map_node_attributions(
 # optional: fold observations (and seeds) to one score
 # per node; class_0 / class_1 required for the default
 # binary method
-agg = kpnn2.aggregate_node_attribution(
+agg = kpnn2.aggregate_node_attributions(
     da,
     labels=[0, 1],
     class_0=0,
@@ -2183,7 +2183,7 @@ PyTorch:
    device); do not send it through `align_inputs`.
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
-7. Optionally `aggregate_node_attribution(...)` to fold
+7. Optionally `aggregate_node_attributions(...)` to fold
    observations (and optional seeds) with a registered method.
 8. Save `spec.to_dict()` next to `state_dict`. Rebuild from
    `from_dict`, then `load_state_dict`. Weights alone cannot
@@ -2217,7 +2217,7 @@ src/kpnn2/
   _gather.py                  # gather_hop_inputs, scatter_hop_outputs
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions
-  _aggregation/               # aggregate_node_attribution
+  _aggregation/               # aggregate_node_attributions
     _registry.py              # method decorator and table
     _dispatch.py              # dispatcher
     _bind.py                  # labels onto observation

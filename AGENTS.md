@@ -65,7 +65,7 @@ Do not export compiler leftovers (`compile_graph`,
 
 ## How to add an aggregation method
 
-`aggregate_node_attribution` is a dispatcher. Methods live
+`aggregate_node_attributions` is a dispatcher. Methods live
 under `src/kpnn2/_aggregation/_methods/`. They share one
 internal signature
 `(attributions, labels, **kwargs) -> xarray.Dataset`.
@@ -95,7 +95,7 @@ Do not change the dispatcher to add a method.
    the function is not imported from `kpnn2`; users pass
    `method="{name}"`.
 7. Add a row to the Methods table on
-   `docs/reference/aggregate_node_attribution.md`.
+   `docs/reference/aggregate_node_attributions.md`.
 
 Do not export the method function or the decorator.
 Do not put method pages in `docs/reference/*.md` or in
