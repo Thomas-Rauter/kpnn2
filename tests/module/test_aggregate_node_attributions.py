@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -373,7 +375,7 @@ def test_registered_dummy_is_dispatched_and_listed():
         assert row["status"] == "supported"
         assert row["added_in"] == "0.0.0"
         assert out.attrs["method"] == name
-        assert out.attrs["method_params"]["scale"] == 2.0
+        assert json.loads(out.attrs["method_params"]) == {"scale": 2.0}
         assert out.attrs["kpnn2_version"] == __version__
     finally:
         unregister_aggregation_method(name)
@@ -529,7 +531,12 @@ def test_no_seed_dim_sets_n_seeds_one():
     assert int(out["n_seeds"].item()) == 1
     assert out["sign_consistency"].item() == pytest.approx(1.0)
     assert out.attrs["method"] == "rauter_mangano_2026"
-    assert out.attrs["method_params"]["sign_reference"] == ("per_seed")
+    assert json.loads(out.attrs["method_params"]) == {
+        "class_0": 0,
+        "class_1": 1,
+        "sign_reference": "per_seed",
+        "tie_tolerance": 0.05,
+    }
 
 
 def test_rejects_non_dataarray():
@@ -542,4 +549,72 @@ def test_rejects_non_dataarray():
             np.array([0, 1]),
             class_0=0,
             class_1=1,
+        )
+
+
+def test_netcdf_round_trip_keeps_attrs(tmp_path):
+    out = _agg(
+        _da(
+            [[1.0], [2.0]],
+            nodes=["n"],
+        ),
+        np.array([0, 1]),
+        class_0=np.int64(0),
+    )
+    path = tmp_path / "scores.nc"
+    out.to_netcdf(path)
+    with xr.open_dataset(path) as loaded:
+        assert loaded.attrs["method"] == "rauter_mangano_2026"
+        assert loaded.attrs["kpnn2_version"] == __version__
+        params = json.loads(loaded.attrs["method_params"])
+    assert params["class_0"] == 0
+    assert params["sign_reference"] == "per_seed"
+
+
+def test_method_params_skip_data_arguments_by_position():
+    name = "_dummy_renamed"
+    marker = object()
+
+    @register_aggregation_method(
+        name=name,
+        status="supported",
+        description="Test renamed data arguments.",
+        references=(),
+        added_in="0.0.0",
+    )
+    def dummy(data, y, *, weights=None, token=None):
+        del y, weights, token
+        result = xr.Dataset({"score": data.mean("observation")})
+        result.attrs["note"] = "kept"
+        return result
+
+    try:
+        out = aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
+            weights=np.array([1, 2]),
+            token=marker,
+        )
+    finally:
+        unregister_aggregation_method(name)
+    assert json.loads(out.attrs["method_params"]) == {
+        "weights": [1, 2],
+        "token": repr(marker),
+    }
+    assert out.attrs["note"] == "kept"
+
+
+def test_deprecation_message_requires_deprecated_status():
+    with pytest.raises(
+        ValueError,
+        match="not 'deprecated'",
+    ):
+        register_aggregation_method(
+            name="_dummy_bad_message",
+            status="supported",
+            description="Test misplaced message.",
+            references=(),
+            added_in="0.0.0",
+            deprecation_message="Not deprecated.",
         )

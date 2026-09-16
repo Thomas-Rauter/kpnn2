@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import warnings
 from collections.abc import Callable
 from typing import Any
@@ -57,8 +58,12 @@ def aggregate_node_attributions(
     xarray.Dataset
         The method's per-node result, with attributes
         ``method``, ``method_params``, and ``kpnn2_version``
-        added here. ``.attrs`` is dropped by a CSV round-trip.
-        For a table, ``.to_dataframe().reset_index()``.
+        added here. ``method_params`` is a JSON string of
+        the parameters actually used, defaults included;
+        read it with ``json.loads``. Every attribute is a
+        string, so ``.to_netcdf`` keeps them. ``.attrs`` is
+        dropped by a CSV round-trip. For a table,
+        ``.to_dataframe().reset_index()``.
 
     Raises
     ------
@@ -110,15 +115,18 @@ def aggregate_node_attributions(
     [-1.0, 2.0]
     >>> out.attrs["method"]
     'rauter_mangano_2026'
+    >>> import json
+    >>> json.loads(out.attrs["method_params"])["sign_reference"]
+    'per_seed'
     """
     if not isinstance(attributions, xr.DataArray):
         raise Kpnn2Error("'attributions' must be an xarray.DataArray.")
     if not isinstance(method, str):
         raise Kpnn2Error("'method' must be a str.")
     entry = lookup_aggregation_method(method)
-    _emit_status_signal(entry)
     if entry.func is None:
         raise Kpnn2Error(_removed_message(entry))
+    _emit_status_signal(entry)
     params = _bound_method_params(
         entry.func,
         attributions,
@@ -135,7 +143,6 @@ def aggregate_node_attributions(
             f"Aggregation method {method!r} must return an xarray.Dataset."
         )
     stamped = result.copy(deep=False)
-    stamped.attrs = dict(result.attrs)
     stamped.attrs["method"] = method
     stamped.attrs["method_params"] = params
     stamped.attrs["kpnn2_version"] = _kpnn2_version()
@@ -143,7 +150,7 @@ def aggregate_node_attributions(
 
 
 def _emit_status_signal(entry: AggregationMethod) -> None:
-    """Warn or reject according to the registry status."""
+    """Warn for an experimental or deprecated method."""
     status = entry.status
     if status == "experimental":
         warnings.warn(
@@ -169,20 +176,15 @@ def _emit_status_signal(entry: AggregationMethod) -> None:
             FutureWarning,
             stacklevel=3,
         )
-        return
-    if status == "removed":
-        raise Kpnn2Error(_removed_message(entry))
 
 
 def _removed_message(entry: AggregationMethod) -> str:
     """Build the error for a removed method."""
-    message = (
+    return (
         f"Aggregation method {entry.name!r} was removed in "
-        f"kpnn2 {entry.removed_in}."
+        f"kpnn2 {entry.removed_in}. Use {entry.replacement!r} "
+        "instead."
     )
-    if entry.replacement:
-        message += f" Use {entry.replacement!r} instead."
-    return message
 
 
 def _bound_method_params(
@@ -190,8 +192,8 @@ def _bound_method_params(
     attributions: xr.DataArray,
     labels: object | None,
     method_kwargs: dict[str, object],
-) -> dict[str, object]:
-    """Bind kwargs and defaults, dropping the data arguments."""
+) -> str:
+    """Bind kwargs and defaults as JSON, without the data arguments."""
     signature = inspect.signature(func)
     try:
         bound = signature.bind(
@@ -202,19 +204,26 @@ def _bound_method_params(
     except TypeError as exc:
         raise Kpnn2Error(str(exc)) from exc
     bound.apply_defaults()
-    params: dict[str, object] = {}
-    for key, value in bound.arguments.items():
-        if key in {"attributions", "labels"}:
-            continue
-        params[key] = _attr_value(value)
-    return params
+    # The first two parameters receive the data, whatever their names.
+    data_names = set(list(signature.parameters)[:2])
+    params = {
+        key: value
+        for key, value in bound.arguments.items()
+        if key not in data_names
+    }
+    return json.dumps(
+        params,
+        default=_json_value,
+    )
 
 
-def _attr_value(value: object) -> object:
-    """Store a method parameter in Dataset attrs."""
+def _json_value(value: object) -> object:
+    """Encode a method parameter that ``json`` cannot."""
     if isinstance(value, np.generic):
         return value.item()
-    return value
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    return repr(value)
 
 
 def _kpnn2_version() -> str:

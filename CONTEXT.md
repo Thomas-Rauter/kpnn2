@@ -1884,7 +1884,12 @@ unrolled step as a sequence and they stack onto
 Dispatcher only. Looks up `method`, emits status warnings,
 calls the registered function with
 `(attributions, labels, **method_kwargs)`, stamps `method`,
-`method_params`, and `kpnn2_version` on the result. Does not
+`method_params`, and `kpnn2_version` on the result. All
+three are strings so `.to_netcdf` keeps them:
+`method_params` is JSON of the bound parameters with
+defaults, minus the first two (data) parameters; numpy
+values are unwrapped, anything else not JSON-encodable is
+stored as its `repr`. Does not
 know about binary classes or seeds. Public failures:
 `Kpnn2Error`. Unknown names list callable methods (not
 `removed`).

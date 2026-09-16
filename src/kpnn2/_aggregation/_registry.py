@@ -86,6 +86,12 @@ def register_aggregation_method(
             f"Aggregation method {name!r} with status "
             "'removed' requires 'removed_in'."
         )
+    if deprecation_message and status != "deprecated":
+        raise ValueError(
+            f"Aggregation method {name!r} sets "
+            "'deprecation_message' but its status is "
+            f"{status!r}, not 'deprecated'."
+        )
 
     def decorator(func: AggregationFn) -> AggregationFn:
         if name in _REGISTRY:
