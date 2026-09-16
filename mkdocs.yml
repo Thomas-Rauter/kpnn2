@@ -80,6 +80,7 @@ exclude_docs: |
 
 not_in_nav: |
   /reference/*.md
+  /reference/aggregation/*.md
   /literature/*.md
 
 hooks:

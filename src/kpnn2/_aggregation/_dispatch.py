@@ -30,89 +30,35 @@ def aggregate_node_attribution(
     Reduce mapped node attributions with a registered method.
 
     ``map_node_attributions`` names a tensor; this call folds
-    observations (and optional seeds) according to ``method``.
-    The dispatcher does not know about binary classes or seeds:
-    it looks up the name, applies the method's status warnings,
-    calls the registered function, and stores the method name,
-    the parameters actually used, and the ``kpnn2`` version on
-    the result. Adding a method does not change this function.
-
-    The default method ``rauter_mangano_2026`` is binary
-    classification only. For each seed ``s``, layer, and node
-    ``i`` (a missing ``seed`` dim is one seed):
-
-    1. ``mean_c`` is the mean attribution over observations of
-       class ``c`` (``c`` in {0, 1}).
-    2. ``D = mean_1 - mean_0``.
-    3. ``eps = +1`` if ``|mean_1| >= |mean_0|``, else ``-1``
-       (ties go to class 1).
-    4. ``score = eps * |D|``.
-
-    The magnitude is always the absolute class-mean difference.
-    The sign is the class whose mean attribution is farther from
-    the all-zero baseline (positive: class 1, negative: class 0),
-    including nodes with ``D < 0`` that counteract class
-    separation. Ranking by ``abs_score`` is independent of that
-    sign convention.
-
-    ``sign_reference`` controls folding across seeds:
-
-    - ``"per_seed"`` (default): compute ``score`` per seed, then
-      average.
-    - ``"seed_mean"``: average ``mean_0`` and ``mean_1`` across
-      seeds, then compute ``D``, ``eps``, and ``score`` once.
-      This avoids shrinking nodes whose per-seed sign varies.
-
-    ``mean_class0``, ``mean_class1``, and ``class_difference``
-    are always seed-averaged. ``near_tie`` is true when the
-    absolute class means differ by less than relative
-    ``tie_tolerance`` (default 0.05); in those cases the sign is
-    unreliable.
+    it according to ``method``. The dispatcher looks up the
+    name, applies the method's status warnings, calls the
+    registered function, and stores the method name, the
+    parameters actually used, and the ``kpnn2`` version on
+    the result. Adding a method does not change this
+    function.
 
     Parameters
     ----------
     attributions : xarray.DataArray
-        Output of ``map_node_attributions``, or an array with the
-        same named dims. ``rauter_mangano_2026`` requires
-        ``observation`` and ``node``, accepts optional ``seed``,
-        and rejects any other dim (reduce or ``.rename`` first).
-        Concatenate trained models with
-        ``xr.concat(..., dim="seed")``. A scalar ``layer``
-        coordinate is copied through when present. The array is
-        read, never modified.
+        Output of ``map_node_attributions``, or an array with
+        the same named dims. Required dims depend on the
+        method. The array is read, never modified.
     labels : 1-d array or pandas.Series, optional
-        Observation-to-class mapping aligned to ``observation``.
-        A numpy array or sequence is paired in order and must be
-        as long as that axis. A pandas Series is reindexed to
-        the observation coordinate; missing or extra ids raise.
-        Required by ``rauter_mangano_2026``. Methods that do not
-        use labels leave this as ``None``.
+        Forwarded to the method. Some methods require it.
     method : str, optional
         Registered method name. Default
         ``"rauter_mangano_2026"``. See
         ``list_aggregation_methods()``.
     **method_kwargs
-        Forwarded to the method. ``rauter_mangano_2026`` requires
-        ``class_0`` and ``class_1`` (the label values for class 0
-        and class 1; pass them even when labels are already
-        ``0``/``1``). Optional ``sign_reference``
-        (``"per_seed"`` or ``"seed_mean"``) and
-        ``tie_tolerance``.
+        Forwarded to the method.
 
     Returns
     -------
     xarray.Dataset
-        One value per node (the same ``node`` axis as the input,
-        including a repeated name when a node is wider than 1).
-        Variables: ``score``, ``abs_score``, ``mean_class0``,
-        ``mean_class1``, ``class_difference``, ``sign`` (+1 or
-        -1; ``score == 0`` is +1), ``n_seeds``,
-        ``sign_consistency`` (fraction of seeds whose per-seed
-        ``eps`` matches the final sign), ``counteracting``
-        (seed-averaged ``D < 0``), ``near_tie``. Attributes
-        ``method``, ``method_params``, and ``kpnn2_version``.
-        ``.attrs`` is dropped by a CSV round-trip. For a table,
-        ``.to_dataframe().reset_index()``.
+        The method's per-node result, with attributes
+        ``method``, ``method_params``, and ``kpnn2_version``
+        added here. ``.attrs`` is dropped by a CSV round-trip.
+        For a table, ``.to_dataframe().reset_index()``.
 
     Raises
     ------
@@ -140,10 +86,9 @@ def aggregate_node_attribution(
 
     Notes
     -----
-    Captum is not imported here. Sample labels (which row is
-    class 0 or 1) are not Captum's ``target=`` (which output
-    class was explained). If a Captum ``class`` dim is still on
-    the array, select one class before calling.
+    Captum is not imported here. Method formulas, required
+    dims, and extra kwargs are documented on each method's
+    reference page.
 
     Examples
     --------

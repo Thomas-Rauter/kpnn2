@@ -73,3 +73,29 @@ def test_each_public_name_has_a_reference_page():
         text = path.read_text(encoding="utf-8")
         assert f"::: kpnn2.{name}" in text
     assert leftover == set()
+
+
+def test_aggregation_method_pages_match_registry():
+    names = [
+        name
+        for name in kpnn2.list_aggregation_methods()["name"]
+        if not str(name).startswith("_")
+    ]
+    assert names
+    folder = _REFERENCE / "aggregation"
+    leftover = {path.stem for path in folder.glob("*.md")}
+    dispatcher = (_REFERENCE / "aggregate_node_attribution.md").read_text(
+        encoding="utf-8",
+    )
+    index = (_REFERENCE / "index.md").read_text(encoding="utf-8")
+    assert "## Methods" in dispatcher
+    for name in names:
+        leftover.discard(name)
+        path = folder / f"{name}.md"
+        assert path.is_file(), path
+        text = path.read_text(encoding="utf-8")
+        assert "::: " in text
+        assert "not imported from `kpnn2`" in text
+        assert f"aggregation/{name}.md" in dispatcher
+        assert f"[`{name}`]" not in index
+    assert leftover == set()

@@ -87,8 +87,20 @@ Do not change the dispatcher to add a method.
 4. The method checks its own dims and whether `labels` is
    required. Optional `seed` is this method's concern, not
    the dispatcher's. Reject unexpected dims.
+5. Put the full numpy contract on that function's
+   docstring (formulas, dims, kwargs, return variables).
+   Do not add them to the dispatcher docstring.
+6. Add `docs/reference/aggregation/{name}.md` that
+   mkdocstrings-renders the private function. Note that
+   the function is not imported from `kpnn2`; users pass
+   `method="{name}"`.
+7. Add a row to the Methods table on
+   `docs/reference/aggregate_node_attribution.md`.
 
 Do not export the method function or the decorator.
+Do not put method pages in `docs/reference/*.md` or in
+the Reference index Callables table. Do not change the
+dispatcher function or its docstring to add a method.
 `list_aggregation_methods()` and the dispatcher pick the
 new name up with no other code changes. Tests may import
 `register_aggregation_method` from

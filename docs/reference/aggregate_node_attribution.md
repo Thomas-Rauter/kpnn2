@@ -1,1 +1,12 @@
 ::: kpnn2.aggregate_node_attribution
+
+## Methods
+
+Pass a name as `method=`. These functions are not imported
+from `kpnn2`.
+[`list_aggregation_methods`][kpnn2.list_aggregation_methods]
+returns the same catalog in Python.
+
+| Method | Status | Description |
+| --- | --- | --- |
+| [`rauter_mangano_2026`](aggregation/rauter_mangano_2026.md) | recommended | Binary signed class-mean difference: magnitude \|mean_1 - mean_0\|, sign of the class farther from zero. |

@@ -49,8 +49,110 @@ def rauter_mangano_2026(
     """
     Score nodes by signed class-mean difference, ``eps * |D|``.
 
-    See ``aggregate_node_attribution`` for the formulas, the
-    ``seed`` dim, and ``sign_reference``.
+    Binary classification only. For each seed ``s`` and node
+    ``i`` (a missing ``seed`` dim is one seed):
+
+    1. ``mean_c`` is the mean attribution over observations of
+       class ``c`` (``c`` in {0, 1}).
+    2. ``D = mean_1 - mean_0``.
+    3. ``eps = +1`` if ``|mean_1| >= |mean_0|``, else ``-1``
+       (ties go to class 1).
+    4. ``score = eps * |D|``.
+
+    The magnitude at this step is the absolute class-mean
+    difference. The sign is the class whose mean attribution
+    is farther from the all-zero baseline (positive: class 1,
+    negative: class 0), including nodes with ``D < 0`` that
+    counteract class separation.
+
+    On one seed, and with ``sign_reference="seed_mean"``,
+    ``abs_score`` equals ``|D|`` (or the seed-averaged
+    ``|D|``), so ranking by ``abs_score`` does not depend on
+    ``eps``. With the default ``"per_seed"``, ``score`` is
+    the mean of per-seed scores, so mixed per-seed signs can
+    shrink ``abs_score``.
+
+    ``sign_reference`` controls folding across seeds:
+
+    - ``"per_seed"`` (default): compute ``score`` per seed,
+      then average.
+    - ``"seed_mean"``: average ``mean_0`` and ``mean_1``
+      across seeds, then compute ``D``, ``eps``, and
+      ``score`` once. This avoids shrinking nodes whose
+      per-seed sign varies.
+
+    ``mean_class0``, ``mean_class1``, and
+    ``class_difference`` are always seed-averaged.
+    ``near_tie`` is true when the absolute class means
+    differ by less than relative ``tie_tolerance`` (default
+    0.05); in those cases the sign is unreliable.
+
+    This function is not exported. Pass
+    ``method="rauter_mangano_2026"`` to
+    ``aggregate_node_attribution``.
+
+    Parameters
+    ----------
+    attributions : xarray.DataArray
+        Output of ``map_node_attributions``, or an array
+        with the same named dims. Requires ``observation``
+        and ``node``, accepts optional ``seed``, and rejects
+        any other dim (reduce or ``.rename`` first).
+        Concatenate trained models with
+        ``xr.concat(..., dim="seed")``. A scalar ``layer``
+        coordinate is copied through when present. The
+        array is read, never modified.
+    labels : 1-d array or pandas.Series
+        Observation-to-class mapping aligned to
+        ``observation``. A numpy array or sequence is
+        paired in order and must be as long as that axis.
+        A pandas Series is reindexed to the observation
+        coordinate; missing or extra ids raise.
+    class_0 : scalar
+        Label value for class 0. Required even when labels
+        are already ``0`` / ``1``.
+    class_1 : scalar
+        Label value for class 1. Must differ from
+        ``class_0``.
+    sign_reference : {"per_seed", "seed_mean"}, optional
+        How to fold the ``seed`` dim. Default
+        ``"per_seed"``.
+    tie_tolerance : float, optional
+        Relative tolerance for ``near_tie``. Default 0.05.
+        Must be ``>= 0``.
+
+    Returns
+    -------
+    xarray.Dataset
+        One value per node (the same ``node`` axis as the
+        input, including a repeated name when a node is
+        wider than 1). Variables: ``score``, ``abs_score``,
+        ``mean_class0``, ``mean_class1``,
+        ``class_difference``, ``sign`` (+1 or -1;
+        ``score == 0`` is +1), ``n_seeds``,
+        ``sign_consistency`` (fraction of seeds whose
+        per-seed ``eps`` matches the final sign),
+        ``counteracting`` (seed-averaged ``D < 0``),
+        ``near_tie``.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``labels`` or kwargs are invalid, or the
+        DataArray dims do not match this method.
+
+    See Also
+    --------
+    aggregate_node_attribution : Public dispatcher; pass
+        ``method="rauter_mangano_2026"``.
+    list_aggregation_methods : Registry table.
+
+    Notes
+    -----
+    Sample labels (which row is class 0 or 1) are not
+    Captum's ``target=`` (which output class was explained).
+    If a Captum ``class`` dim is still on the array, select
+    one class before calling.
     """
     _check_class_mapping(
         class_0,

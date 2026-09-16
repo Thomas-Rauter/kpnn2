@@ -1904,10 +1904,26 @@ Implementation lives in private package
 `register_aggregation_method` is not public. Do not export
 `rauter_mangano_2026`. Adding a method: one function with
 that shared signature, decorate it, import the module from
-`_methods/__init__.py`. No dispatcher edits. See
-`AGENTS.md`.
+`_methods/__init__.py`, put the full contract on that
+function's docstring, add
+`docs/reference/aggregation/{name}.md`, and add a row to
+the Methods table on
+`docs/reference/aggregate_node_attribution.md`. No
+dispatcher code or dispatcher docstring edits. Method
+pages are not public names and do not appear in the
+Reference index Callables table. See `AGENTS.md`.
 
-Default method `rauter_mangano_2026` (binary only):
+Do not attach labels inside `map_node_attributions`. Do not
+guess that `step` or a Captum `class` dim is `seed`.
+
+---
+
+## `rauter_mangano_2026` (default aggregation method)
+
+Binary only. Not a public import; pass
+`method="rauter_mangano_2026"`. Docstring on the private
+function is the user-facing contract (rendered at
+`docs/reference/aggregation/rauter_mangano_2026.md`).
 
 - Required dims: `observation`, `node`. Optional dim:
   `seed` (trained replicates). Any other dim: `Kpnn2Error`
@@ -1921,10 +1937,13 @@ Default method `rauter_mangano_2026` (binary only):
 - Per seed and node: `mean_c` over observations of class
   `c`; `D = mean_1 - mean_0`; `eps = +1` if
   `|mean_1| >= |mean_0|` else `-1` (ties to class 1);
-  `score = eps * |D|`. Ranking by `abs_score` does not
-  depend on the sign convention. `near_tie` uses relative
-  `tie_tolerance` (default 0.05) on seed-averaged absolute
-  class means; the sign is then unreliable.
+  `score = eps * |D|`. On one seed, and with
+  `sign_reference="seed_mean"`, `abs_score` equals `|D|`
+  (or the seed-averaged `|D|`). With default `"per_seed"`,
+  mixed per-seed signs can shrink `abs_score`. `near_tie`
+  uses relative `tie_tolerance` (default 0.05) on
+  seed-averaged absolute class means; the sign is then
+  unreliable.
 - `sign_reference`: `"per_seed"` (default; score then
   average) or `"seed_mean"` (average class means, then
   score). `mean_class0`, `mean_class1`,
@@ -1933,10 +1952,9 @@ Default method `rauter_mangano_2026` (binary only):
   `abs_score`, `mean_class0`, `mean_class1`,
   `class_difference`, `sign`, `n_seeds`,
   `sign_consistency`, `counteracting`, `near_tie`. Copy a
-  scalar `layer` coordinate when present.
-
-Do not attach labels inside `map_node_attributions`. Do not
-guess that `step` or a Captum `class` dim is `seed`.
+  scalar `layer` coordinate when present. The dispatcher
+  then stamps `method`, `method_params`, and
+  `kpnn2_version`.
 
 ---
 
@@ -2226,6 +2244,7 @@ README.md
 CHANGELOG.md                  # notable API / core only; see below
 docs/
   reference/                  # index + one page per public name
+    aggregation/              # one page per method; not public names
   supported.md                # architecture-family support table
   packed_linear.md            # PackedLinear; tutorials use it on hops
   correctness.md              # test overview; scientific + technical
@@ -2264,6 +2283,8 @@ symbol that `__init__.py` already exports.
 `docs/reference/` therefore points mkdocstrings at the façade paths
 (`::: kpnn2.MaskedLinear`), not at module paths. Each public name
 has its own page; `docs/reference/index.md` is the grouped index.
+Aggregation method pages under `docs/reference/aggregation/`
+render the private method function; they are not public names.
 Tests may import private modules directly to reach internal helpers.
 
 ---
