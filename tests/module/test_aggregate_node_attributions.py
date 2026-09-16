@@ -177,6 +177,82 @@ def test_per_seed_and_seed_mean_differ_when_scores_vary():
     assert seed_mean["sign_consistency"].item() == pytest.approx(1.0)
 
 
+def test_per_seed_sign_consistency_counts_disagreeing_seeds():
+    # eps per seed: +1, -1, +1 → mean score (4 - 2 + 3) / 3 = 5/3
+    data = np.stack(
+        [
+            np.array([[0.0], [4.0]]),
+            np.array([[3.0], [1.0]]),
+            np.array([[0.0], [3.0]]),
+        ],
+        axis=0,
+    )
+    out = _agg(
+        _da(data, nodes=["n"]),
+        np.array([0, 1]),
+    )
+    assert out["score"].item() == pytest.approx(5.0 / 3.0)
+    assert out["sign"].item() == 1
+    assert out["sign_consistency"].item() == pytest.approx(2.0 / 3.0)
+
+
+@pytest.mark.filterwarnings("error")
+@pytest.mark.parametrize("sign_reference", ["per_seed", "seed_mean"])
+def test_node_without_class_mean_is_nan_with_neutral_flags(sign_reference):
+    data = np.array(
+        [
+            [np.nan, 1.0],
+            [np.nan, 2.0],
+        ]
+    )
+    out = _agg(
+        _da(data, nodes=["missing", "ok"]),
+        np.array([0, 1]),
+        sign_reference=sign_reference,
+    )
+    missing = out.sel(node="missing")
+    for name in (
+        "score",
+        "abs_score",
+        "mean_class0",
+        "mean_class1",
+        "class_difference",
+        "sign_consistency",
+    ):
+        assert np.isnan(missing[name].item()), name
+    assert missing["sign"].item() == 0
+    assert out["sign"].dtype == np.int64
+    assert bool(missing["counteracting"].item()) is False
+    assert bool(missing["near_tie"].item()) is False
+    ok = out.sel(node="ok")
+    assert ok["score"].item() == pytest.approx(1.0)
+    assert ok["sign"].item() == 1
+    assert ok["sign_consistency"].item() == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("sign_reference", ["per_seed", "seed_mean"])
+def test_seed_missing_a_class_mean_is_left_out(sign_reference):
+    # Seed 1 has no class-0 mean, so its class-1 value -5 is
+    # dropped too and seed 0 alone decides every output.
+    data = np.stack(
+        [
+            np.array([[1.0], [3.0]]),
+            np.array([[np.nan], [-5.0]]),
+        ],
+        axis=0,
+    )
+    out = _agg(
+        _da(data, nodes=["n"]),
+        np.array([0, 1]),
+        sign_reference=sign_reference,
+    )
+    assert out["score"].item() == pytest.approx(2.0)
+    assert out["mean_class0"].item() == pytest.approx(1.0)
+    assert out["mean_class1"].item() == pytest.approx(3.0)
+    assert out["sign_consistency"].item() == pytest.approx(1.0)
+    assert int(out["n_seeds"].item()) == 2
+
+
 def test_deprecated_method_emits_future_warning():
     name = "_dummy_deprecated"
 

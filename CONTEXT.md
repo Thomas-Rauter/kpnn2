@@ -1940,6 +1940,9 @@ ranking advice or other claims beyond those formulas.
   and means that omit NaN: `mu_c = mean_{o in C_c} a`;
   `D = mu_1 - mu_0`; `eps = +1` if `|mu_1| >= |mu_0|`
   else `-1`; `score_s = eps * |D|`.
+- A seed is valid for a node when both class means are not
+  NaN; otherwise both are set to NaN for that seed. Every
+  seed average below runs over valid seeds only.
 - Always `mu_c_bar = (1/S) sum_s mu_c` and
   `class_difference = mu_1_bar - mu_0_bar`.
 - `sign_reference="per_seed"` (default):
@@ -1947,7 +1950,8 @@ ranking advice or other claims beyond those formulas.
   `score = eps_bar * |D_bar|` from `mu_c_bar`. Same when
   `S = 1`; can differ when `S > 1`.
 - `abs_score = |score|`. `sign` is `+1` if `score > 0`,
-  `-1` if `score < 0`, `+1` if `score == 0`. `n_seeds = S`.
+  `-1` if `score < 0`, `+1` if `score == 0`, `0` if
+  `score` is NaN. `n_seeds = S` (all seeds).
   `sign_consistency = (1/S) sum_s 1[eps_s == sign]`
   (`1` when `S = 1`). `counteracting` is
   `class_difference < 0`. With
@@ -1955,6 +1959,9 @@ ranking advice or other claims beyond those formulas.
   `v = max(|mu_0_bar|, |mu_1_bar|, 1e-12)`,
   `near_tie` is `u / v < tie_tolerance` (default
   `tie_tolerance` 0.05).
+- No valid seed for a node: scores, means,
+  `class_difference`, and `sign_consistency` are NaN,
+  `sign` is `0`, `counteracting` and `near_tie` are False.
 - Return: `xarray.Dataset` on `node` with those
   variables. Copy a scalar `layer` coordinate when
   present. The dispatcher then stamps `method`,

@@ -56,14 +56,22 @@ def rauter_mangano_2026(
     Write ``a[s, o, i]`` for the attribution at seed ``s``,
     observation ``o``, and node ``i``. A missing ``seed`` dim
     is ``S = 1``. ``C_0`` and ``C_1`` are the observations
-    whose labels equal ``class_0`` and ``class_1``. Every mean
-    below omits NaN (xarray ``skipna=True``).
+    whose labels equal ``class_0`` and ``class_1``. The
+    class means omit NaN attributions (xarray
+    ``skipna=True``).
 
     For each seed and node, the class-c mean is the mean
     attribution over observations of that class:
 
     ``mu_c(s, i) = mean_{o in C_c} a[s, o, i]``
     for ``c`` in {0, 1}.
+
+    Seed ``s`` is valid for node ``i`` when both
+    ``mu_0(s, i)`` and ``mu_1(s, i)`` are not NaN. For an
+    invalid seed both are set to NaN. ``V(i)`` is the set
+    of valid seeds. Every average over seeds below,
+    written ``(1/S) * sum_s``, runs over ``V(i)`` only.
+    Without NaN, ``V(i)`` holds all ``S`` seeds.
 
     The class-mean difference is
 
@@ -115,6 +123,7 @@ def rauter_mangano_2026(
     ``sign(i) = +1 if score(i) > 0``
     ``          -1 if score(i) < 0``
     ``          +1 if score(i) = 0``
+    ``           0 if score(i) is NaN``
 
     ``n_seeds = S``
 
@@ -122,6 +131,12 @@ def rauter_mangano_2026(
     ``    = (1/S) * sum_s 1[eps(s, i) == sign(i)]``
 
     With ``S = 1``, ``sign_consistency(i) = 1``.
+
+    When ``V(i)`` is empty, ``score``, ``abs_score``,
+    ``mean_class0``, ``mean_class1``, ``class_difference``,
+    and ``sign_consistency`` are NaN, ``sign`` is 0, and
+    ``counteracting`` and ``near_tie`` are False.
+    ``n_seeds`` counts every seed, valid or not.
 
     ``counteracting(i) = [class_difference(i) < 0]``
 
@@ -214,6 +229,10 @@ def rauter_mangano_2026(
     )
     mean0 = scored.where(is0).mean(OBSERVATION_DIM)
     mean1 = scored.where(is1).mean(OBSERVATION_DIM)
+    # A seed counts for a node only when both class means exist.
+    valid = mean0.notnull() & mean1.notnull()
+    mean0 = mean0.where(valid)
+    mean1 = mean1.where(valid)
     has_seed = SEED_DIM in scored.dims
     if has_seed:
         n_seeds = int(scored.sizes[SEED_DIM])
@@ -237,18 +256,19 @@ def rauter_mangano_2026(
         score = score_s.mean(SEED_DIM)
     else:
         score = score_s
-    sign = xr.where(
-        score > 0,
-        1,
-        xr.where(score < 0, -1, 1),
-    ).astype(np.int64)
-    if has_seed:
-        sign_consistency = (eps_s == sign).mean(SEED_DIM)
-    else:
-        sign_consistency = xr.ones_like(
-            score,
-            dtype=np.float64,
+    sign = (
+        xr.where(score < 0, -1, 1)
+        .where(
+            score.notnull(),
+            0,
         )
+        .astype(np.int64)
+    )
+    agrees = (eps_s == sign).astype(np.float64).where(eps_s.notnull())
+    if has_seed:
+        sign_consistency = agrees.mean(SEED_DIM)
+    else:
+        sign_consistency = agrees
     abs0 = np.abs(mean0_bar)
     abs1 = np.abs(mean1_bar)
     numer = np.abs(abs1 - abs0)
@@ -284,13 +304,13 @@ def _signed_scores(
     mean0: xr.DataArray,
     mean1: xr.DataArray,
 ) -> tuple[xr.DataArray, xr.DataArray]:
-    """Return ``eps`` and ``score = eps * |D|`` for class means."""
+    """Return ``eps`` and ``score = eps * |D|``, NaN where ``D`` is."""
     difference = mean1 - mean0
     eps = xr.where(
         np.abs(mean1) >= np.abs(mean0),
         1.0,
         -1.0,
-    )
+    ).where(difference.notnull())
     score = eps * np.abs(difference)
     return eps, score
 
