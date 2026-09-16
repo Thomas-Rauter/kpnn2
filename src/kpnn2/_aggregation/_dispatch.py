@@ -112,12 +112,12 @@ def aggregate_node_attributions(
     ...     class_1=1,
     ... )
     >>> out["score"].values.tolist()
-    [-1.0, 2.0]
+    [1.0, 2.0]
     >>> out.attrs["method"]
     'rauter_mangano_2026'
     >>> import json
-    >>> json.loads(out.attrs["method_params"])["sign_reference"]
-    'per_seed'
+    >>> json.loads(out.attrs["method_params"])
+    {'class_0': 0, 'class_1': 1}
     """
     if not isinstance(attributions, xr.DataArray):
         raise Kpnn2Error("'attributions' must be an xarray.DataArray.")

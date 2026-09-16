@@ -1,9 +1,6 @@
-"""Rauter and Mangano 2026 binary class-difference scores."""
+"""Rauter and Mangano 2026 winner-minus-loser node scores."""
 
 from __future__ import annotations
-
-import math
-from numbers import Real
 
 import numpy as np
 import pandas as pd
@@ -23,13 +20,10 @@ from .._bind import (
 from .._registry import register_aggregation_method
 
 _METHOD_NAME = "rauter_mangano_2026"
-_SIGN_REFERENCES = frozenset({"per_seed", "seed_mean"})
-_NEAR_TIE_EPS = 1e-12
-_DEFAULT_TIE_TOLERANCE = 0.05
 
 _RAUTER_MANGANO_DESCRIPTION = (
-    "Binary signed class-mean difference: magnitude |mean_1 - "
-    "mean_0|, sign of the class farther from zero."
+    "Binary: class mean with the larger absolute value minus "
+    "the other class mean, averaged over seeds."
 )
 _RAUTER_MANGANO_REFERENCES = ("Rauter and Mangano, 2026",)
 
@@ -47,111 +41,47 @@ def rauter_mangano_2026(
     *,
     class_0: object | None = None,
     class_1: object | None = None,
-    sign_reference: str = "per_seed",
-    tie_tolerance: float = _DEFAULT_TIE_TOLERANCE,
 ) -> xr.Dataset:
     """
-    Score nodes by signed class-mean difference, ``eps * |D|``.
+    Score each node by winner minus loser of its class means.
 
     Binary classification only. This function is not exported.
     Pass ``method="rauter_mangano_2026"`` to
     ``aggregate_node_attributions``.
 
     Write ``a[s, o, i]`` for the attribution at seed ``s``,
-    observation ``o``, and node ``i``. A missing ``seed`` dim
-    is ``S = 1``. ``C_0`` and ``C_1`` are the observations
-    whose labels equal ``class_0`` and ``class_1``. The
-    class means omit NaN attributions (xarray
-    ``skipna=True``).
+    observation ``o``, and node ``i``, with seeds
+    ``s = 1, ..., S``. A missing ``seed`` dim is ``S = 1``.
+    ``O_0`` and ``O_1`` are the observations whose labels
+    equal ``class_0`` and ``class_1``.
 
-    For each seed and node, the class-c mean is the mean
-    attribution over observations of that class:
+    Step 1. For each seed and node, the class-c mean is the
+    mean attribution over the observations of that class:
 
-    ``mu_c(s, i) = mean_{o in C_c} a[s, o, i]``
+    ``mu_c(s, i) = mean_{o in O_c} a[s, o, i]``
     for ``c`` in {0, 1}.
 
-    Seed ``s`` is valid for node ``i`` when both
-    ``mu_0(s, i)`` and ``mu_1(s, i)`` are not NaN. For an
-    invalid seed both are set to NaN. ``V(i)`` is the set
-    of valid seeds. Every average over seeds below,
-    written ``(1/S) * sum_s``, runs over ``V(i)`` only.
-    Without NaN, ``V(i)`` holds all ``S`` seeds.
+    Step 2. The winner ``w(s, i)`` is the class mean with the
+    larger absolute value, and the loser ``l(s, i)`` is the
+    other class mean. On a tie, class 1 is the winner:
 
-    The class-mean difference is
+    ``(w, l) = (mu_1, mu_0)  if |mu_1(s, i)| >= |mu_0(s, i)|``
+    ``(w, l) = (mu_0, mu_1)  otherwise``.
 
-    ``D(s, i) = mu_1(s, i) - mu_0(s, i)``.
+    The score of node ``i`` under seed ``s`` is the winner
+    minus the loser, both with their original signs:
 
-    The sign ``eps`` is ``+1`` when class 1's mean is at
-    least as far from 0 as class 0's mean, else ``-1``
-    (equality goes to class 1):
+    ``r(s, i) = w(s, i) - l(s, i)``.
 
-    ``eps(s, i) = +1 if |mu_1(s, i)| >= |mu_0(s, i)|``
-    ``            -1 otherwise``.
+    Step 3. The score of node ``i`` is the mean over seeds:
 
-    The per-seed score is that sign times the absolute
-    difference:
+    ``score(i) = (1/S) * sum_s r(s, i)``.
 
-    ``score(s, i) = eps(s, i) * |D(s, i)|``.
-
-    Seed-averaged class means are always
-
-    ``mu_c_bar(i) = (1/S) * sum_s mu_c(s, i)``,
-
-    and
-
-    ``class_difference(i) = mu_1_bar(i) - mu_0_bar(i)``.
-
-    With no ``seed`` dim, ``mu_c_bar = mu_c``.
-
-    ``sign_reference`` selects how ``score`` is folded over
-    seeds. For ``"per_seed"`` (default), average the
-    per-seed scores:
-
-    ``score(i) = (1/S) * sum_s score(s, i)``.
-
-    For ``"seed_mean"``, compute ``D``, ``eps``, and
-    ``score`` once from the seed-averaged class means:
-
-    ``D_bar(i) = mu_1_bar(i) - mu_0_bar(i)``
-    ``eps_bar(i) = +1 if |mu_1_bar(i)| >= |mu_0_bar(i)|``
-    ``             -1 otherwise``
-    ``score(i) = eps_bar(i) * |D_bar(i)|``.
-
-    The two folding rules are the same when ``S = 1``. They
-    can differ when ``S > 1``.
-
-    The remaining outputs are
-
-    ``abs_score(i) = |score(i)|``
-
-    ``sign(i) = +1 if score(i) > 0``
-    ``          -1 if score(i) < 0``
-    ``          +1 if score(i) = 0``
-    ``           0 if score(i) is NaN``
-
-    ``n_seeds = S``
-
-    ``n_valid_seeds(i) = |V(i)|``
-
-    ``sign_consistency(i)``
-    ``    = (1/S) * sum_s 1[eps(s, i) == sign(i)]``
-
-    With ``S = 1``, ``sign_consistency(i) = 1``.
-
-    When ``V(i)`` is empty, ``score``, ``abs_score``,
-    ``mean_class0``, ``mean_class1``, ``class_difference``,
-    and ``sign_consistency`` are NaN, ``sign`` is 0,
-    ``n_valid_seeds`` is 0, and ``counteracting`` and
-    ``near_tie`` are False. ``n_seeds`` counts every seed,
-    valid or not.
-
-    ``counteracting(i) = [class_difference(i) < 0]``
-
-    ``u(i) = abs(|mu_1_bar(i)| - |mu_0_bar(i)|)``
-    ``v(i) = max(|mu_0_bar(i)|, |mu_1_bar(i)|, 1e-12)``
-    ``near_tie(i) = [u(i) / v(i) < tie_tolerance]``
-
-    Default ``tie_tolerance`` is 0.05.
+    Missing values: a NaN attribution is left out of its
+    class mean. Seed ``s`` counts for node ``i`` only when
+    both ``mu_0(s, i)`` and ``mu_1(s, i)`` exist; Step 3 then
+    averages over those seeds only. A node with no such seed
+    has ``score`` NaN. Without NaN, every seed counts.
 
     Parameters
     ----------
@@ -178,24 +108,12 @@ def rauter_mangano_2026(
     class_1 : scalar
         Label value for class 1. Must differ from
         ``class_0``. Arrays are rejected.
-    sign_reference : {"per_seed", "seed_mean"}, optional
-        Folding rule for ``score`` over seeds, as above.
-        Default ``"per_seed"``.
-    tie_tolerance : float, optional
-        Threshold in the ``near_tie`` formula. Default
-        0.05. Any real number (numpy scalars included) that
-        is finite and ``>= 0``.
 
     Returns
     -------
     xarray.Dataset
-        One value per node (the same ``node`` axis as the
-        input). Variables ``score``, ``abs_score``,
-        ``mean_class0`` (``mu_0_bar``), ``mean_class1``
-        (``mu_1_bar``), ``class_difference``, ``sign``,
-        ``n_seeds``, ``n_valid_seeds``, ``sign_consistency``,
-        ``counteracting``, and ``near_tie``, as defined
-        above.
+        One variable, ``score``, with one value per node (the
+        same ``node`` axis as the input).
 
     Raises
     ------
@@ -221,8 +139,6 @@ def rauter_mangano_2026(
         class_0,
         class_1,
     )
-    _check_sign_reference(sign_reference)
-    _check_tie_tolerance(tie_tolerance)
     require_named_dims(
         attributions,
         required=(OBSERVATION_DIM, NODE_DIM),
@@ -242,91 +158,24 @@ def rauter_mangano_2026(
     mean1 = scored.isel({OBSERVATION_DIM: is1}).mean(OBSERVATION_DIM)
     # A seed counts for a node only when both class means exist.
     valid = mean0.notnull() & mean1.notnull()
-    mean0 = mean0.where(valid)
-    mean1 = mean1.where(valid)
-    has_seed = SEED_DIM in scored.dims
-    if has_seed:
-        n_seeds = int(scored.sizes[SEED_DIM])
-        n_valid_seeds = valid.sum(SEED_DIM).astype(np.int64)
-        mean0_bar = mean0.mean(SEED_DIM)
-        mean1_bar = mean1.mean(SEED_DIM)
+    per_seed = xr.where(
+        np.abs(mean1) >= np.abs(mean0),
+        mean1 - mean0,
+        mean0 - mean1,
+    ).where(valid)
+    if SEED_DIM in scored.dims:
+        score = per_seed.mean(SEED_DIM)
     else:
-        n_seeds = 1
-        n_valid_seeds = valid.astype(np.int64)
-        mean0_bar = mean0
-        mean1_bar = mean1
-    eps_s, score_s = _signed_scores(
-        mean0,
-        mean1,
-    )
-    class_difference = mean1_bar - mean0_bar
-    if sign_reference == "seed_mean":
-        _, score = _signed_scores(
-            mean0_bar,
-            mean1_bar,
-        )
-    elif has_seed:
-        score = score_s.mean(SEED_DIM)
-    else:
-        score = score_s
-    sign = (
-        xr.where(score < 0, -1, 1)
-        .where(
-            score.notnull(),
-            0,
-        )
-        .astype(np.int64)
-    )
-    agrees = (eps_s == sign).astype(np.float64).where(eps_s.notnull())
-    if has_seed:
-        sign_consistency = agrees.mean(SEED_DIM)
-    else:
-        sign_consistency = agrees
-    abs0 = np.abs(mean0_bar)
-    abs1 = np.abs(mean1_bar)
-    numer = np.abs(abs1 - abs0)
-    denom = np.maximum(
-        np.maximum(abs0, abs1),
-        _NEAR_TIE_EPS,
-    )
-    near_tie = (numer / denom) < float(tie_tolerance)
-    data_vars = {
-        "score": score,
-        "abs_score": np.abs(score),
-        "mean_class0": mean0_bar,
-        "mean_class1": mean1_bar,
-        "class_difference": class_difference,
-        "sign": sign,
-        "sign_consistency": sign_consistency,
-        "counteracting": class_difference < 0,
-        "near_tie": near_tie,
-        "n_seeds": n_seeds,
-        "n_valid_seeds": n_valid_seeds,
-    }
+        score = per_seed
     coords: dict[str, object] = {}
     if NODE_DIM in scored.coords:
         coords[NODE_DIM] = scored.coords[NODE_DIM]
     if LAYER_COORD in scored.coords and LAYER_COORD not in scored.dims:
         coords[LAYER_COORD] = scored.coords[LAYER_COORD]
     return xr.Dataset(
-        data_vars=data_vars,
+        data_vars={"score": score},
         coords=coords,
     )
-
-
-def _signed_scores(
-    mean0: xr.DataArray,
-    mean1: xr.DataArray,
-) -> tuple[xr.DataArray, xr.DataArray]:
-    """Return ``eps`` and ``score = eps * |D|``, NaN where ``D`` is."""
-    difference = mean1 - mean0
-    eps = xr.where(
-        np.abs(mean1) >= np.abs(mean0),
-        1.0,
-        -1.0,
-    ).where(difference.notnull())
-    score = eps * np.abs(difference)
-    return eps, score
 
 
 def _check_class_mapping(
@@ -345,23 +194,6 @@ def _check_class_mapping(
             raise Kpnn2Error(f"'{name}' must be a scalar label value.")
     if class_0 == class_1:
         raise Kpnn2Error("'class_0' and 'class_1' must be distinct.")
-
-
-def _check_sign_reference(sign_reference: str) -> None:
-    """Accept only the two seed-folding rules."""
-    if sign_reference not in _SIGN_REFERENCES:
-        raise Kpnn2Error("'sign_reference' must be 'per_seed' or 'seed_mean'.")
-
-
-def _check_tie_tolerance(tie_tolerance: object) -> None:
-    """Require a finite, non-negative real tolerance."""
-    if isinstance(tie_tolerance, (bool, np.bool_)) or not isinstance(
-        tie_tolerance,
-        Real,
-    ):
-        raise Kpnn2Error("'tie_tolerance' must be a real number.")
-    if not math.isfinite(tie_tolerance) or tie_tolerance < 0:
-        raise Kpnn2Error("'tie_tolerance' must be finite and >= 0.")
 
 
 def _binary_masks(

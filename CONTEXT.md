@@ -1944,38 +1944,19 @@ ranking advice or other claims beyond those formulas.
   Required kwargs `class_0` and `class_1` (even when labels
   are already 0/1), each a scalar. More than two classes, a
   missing class, or labels outside that pair: `Kpnn2Error`.
-  Labels may mix types. `tie_tolerance` is any finite real
-  `>= 0` (numpy scalars included).
-- Per seed `s` and node `i`, with class sets `C_0`, `C_1`
-  and means that omit NaN: `mu_c = mean_{o in C_c} a`;
-  `D = mu_1 - mu_0`; `eps = +1` if `|mu_1| >= |mu_0|`
-  else `-1`; `score_s = eps * |D|`.
-- A seed is valid for a node when both class means are not
-  NaN; otherwise both are set to NaN for that seed. Every
-  seed average below runs over valid seeds only.
-- Always `mu_c_bar = (1/S) sum_s mu_c` and
-  `class_difference = mu_1_bar - mu_0_bar`.
-- `sign_reference="per_seed"` (default):
-  `score = (1/S) sum_s score_s`. `"seed_mean"`:
-  `score = eps_bar * |D_bar|` from `mu_c_bar`. Same when
-  `S = 1`; can differ when `S > 1`.
-- `abs_score = |score|`. `sign` is `+1` if `score > 0`,
-  `-1` if `score < 0`, `+1` if `score == 0`, `0` if
-  `score` is NaN. `n_seeds = S` (all seeds).
-  `n_valid_seeds` counts the valid seeds for that node.
-  `sign_consistency = (1/S) sum_s 1[eps_s == sign]`
-  (`1` when `S = 1`). `counteracting` is
-  `class_difference < 0`. With
-  `u = abs(|mu_1_bar| - |mu_0_bar|)` and
-  `v = max(|mu_0_bar|, |mu_1_bar|, 1e-12)`,
-  `near_tie` is `u / v < tie_tolerance` (default
-  `tie_tolerance` 0.05).
-- No valid seed for a node: scores, means,
-  `class_difference`, and `sign_consistency` are NaN,
-  `sign` is `0`, `n_valid_seeds` is `0`, `counteracting`
-  and `near_tie` are False.
-- Return: `xarray.Dataset` on `node` with those
-  variables. Copy a scalar `layer` coordinate when
+  Labels may mix types. No other kwargs.
+- Per seed `s` and node `i`, with class sets `O_0`, `O_1`:
+  `mu_c = mean_{o in O_c} a`. The winner `w` is the class
+  mean with the larger absolute value, the loser `l` the
+  other (tie: class 1 wins). `r_s = w - l`, both with their
+  original signs.
+- `score = (1/S) sum_s r_s`.
+- NaN safeguard: a NaN attribution is left out of its class
+  mean. A seed counts for a node only when both class means
+  exist; the seed mean runs over those seeds. No such seed:
+  `score` is NaN.
+- Return: `xarray.Dataset` on `node` with the single
+  variable `score`. Copy a scalar `layer` coordinate when
   present. The dispatcher then stamps `method`,
   `method_params`, and `kpnn2_version`.
 
