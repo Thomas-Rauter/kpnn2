@@ -54,6 +54,32 @@ def _agg(da, labels, **kwargs):
     )
 
 
+@pytest.fixture
+def register_dummy():
+    """Register test methods and always drop them afterwards."""
+    names = []
+
+    def register(name, *, status="supported", **options):
+        names.append(name)
+        return register_aggregation_method(
+            name=name,
+            status=status,
+            description=f"Test method {name}.",
+            references=(),
+            added_in="0.0.0",
+            **options,
+        )
+
+    yield register
+    for name in names:
+        unregister_aggregation_method(name)
+
+
+def _mean_dataset(attributions, labels):
+    del labels
+    return xr.Dataset({"score": attributions.mean("observation")})
+
+
 def test_toy_linear_abs_score_matches_weight_times_mean_gap():
     weights = np.array([1.5, -2.0, 0.5])
     mu0 = np.array([1.0, 2.0, 0.0])
@@ -255,72 +281,45 @@ def test_seed_missing_a_class_mean_is_left_out(sign_reference):
     assert int(out["n_seeds"].item()) == 2
 
 
-def test_deprecated_method_emits_future_warning():
+def test_deprecated_method_emits_future_warning(register_dummy):
     name = "_dummy_deprecated"
-
-    @register_aggregation_method(
-        name=name,
+    register_dummy(
+        name,
         status="deprecated",
-        description="Test deprecated method.",
-        references=(),
-        added_in="0.0.0",
         deprecated_in="0.2.0",
         replacement="rauter_mangano_2026",
-    )
-    def dummy(attributions, labels):
-        del labels
-        return xr.Dataset(
-            {"score": attributions.mean("observation")},
+    )(_mean_dataset)
+    with pytest.warns(FutureWarning, match="deprecated in"):
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
         )
 
-    da = _da(
-        [[1.0], [0.0]],
-        nodes=["n"],
-    )
-    try:
-        with pytest.warns(FutureWarning, match="deprecated in"):
-            aggregate_node_attributions(
-                da,
-                np.array([0, 1]),
-                method=name,
-            )
-    finally:
-        unregister_aggregation_method(name)
 
-
-def test_removed_method_raises_and_names_replacement():
+def test_removed_method_raises_and_names_replacement(register_dummy):
     name = "_dummy_removed"
 
-    @register_aggregation_method(
-        name=name,
+    @register_dummy(
+        name,
         status="removed",
-        description="Test removed method.",
-        references=(),
-        added_in="0.0.0",
         removed_in="0.2.0",
         replacement="rauter_mangano_2026",
     )
     def _never_called(attributions, labels, **kwargs):
         raise AssertionError("removed method must not run")
 
-    da = _da(
-        [[1.0], [0.0]],
-        nodes=["n"],
-    )
-    try:
-        with pytest.raises(
-            Kpnn2Error,
-            match="Use 'rauter_mangano_2026' instead",
-        ):
-            aggregate_node_attributions(
-                da,
-                np.array([0, 1]),
-                method=name,
-            )
-        table = list_aggregation_methods()
-        assert name in set(table["name"])
-    finally:
-        unregister_aggregation_method(name)
+    with pytest.raises(
+        Kpnn2Error,
+        match="Use 'rauter_mangano_2026' instead",
+    ):
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
+        )
+    table = list_aggregation_methods()
+    assert name in set(table["name"])
 
 
 def test_unknown_method_lists_available_names():
@@ -339,46 +338,51 @@ def test_unknown_method_lists_available_names():
         )
 
 
-def test_registered_dummy_is_dispatched_and_listed():
+def test_registered_dummy_is_dispatched_and_listed(register_dummy):
     name = "_dummy_sum"
 
-    @register_aggregation_method(
-        name=name,
-        status="supported",
-        description="Test dummy sum.",
-        references=("dummy",),
-        added_in="0.0.0",
-    )
+    @register_dummy(name)
     def dummy(attributions, labels, *, scale=1.0):
         del labels
         score = scale * attributions.mean("observation")
         return xr.Dataset({"score": score})
 
-    da = _da(
-        [[1.0, 3.0], [2.0, 4.0]],
-        nodes=["a", "b"],
+    out = aggregate_node_attributions(
+        _da([[1.0, 3.0], [2.0, 4.0]], nodes=["a", "b"]),
+        np.array([0, 1]),
+        method=name,
+        scale=2.0,
     )
-    try:
-        out = aggregate_node_attributions(
-            da,
+    np.testing.assert_allclose(
+        out["score"].values,
+        [3.0, 7.0],
+    )
+    table = list_aggregation_methods()
+    row = table[table["name"] == name].iloc[0]
+    assert row["status"] == "supported"
+    assert row["added_in"] == "0.0.0"
+    assert out.attrs["method"] == name
+    assert json.loads(out.attrs["method_params"]) == {"scale": 2.0}
+    assert out.attrs["kpnn2_version"] == __version__
+
+
+def test_method_must_return_a_dataset(register_dummy):
+    name = "_dummy_array"
+
+    @register_dummy(name)
+    def dummy(attributions, labels):
+        del labels
+        return attributions.mean("observation")
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="must return an xarray.Dataset",
+    ):
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
             np.array([0, 1]),
             method=name,
-            scale=2.0,
         )
-        np.testing.assert_allclose(
-            out["score"].values,
-            [3.0, 7.0],
-        )
-        table = list_aggregation_methods()
-        assert name in set(table["name"])
-        row = table[table["name"] == name].iloc[0]
-        assert row["status"] == "supported"
-        assert row["added_in"] == "0.0.0"
-        assert out.attrs["method"] == name
-        assert json.loads(out.attrs["method_params"]) == {"scale": 2.0}
-        assert out.attrs["kpnn2_version"] == __version__
-    finally:
-        unregister_aggregation_method(name)
 
 
 def test_more_than_two_classes_raises():
@@ -396,33 +400,15 @@ def test_more_than_two_classes_raises():
         )
 
 
-def test_experimental_method_emits_user_warning():
+def test_experimental_method_emits_user_warning(register_dummy):
     name = "_dummy_experimental"
-
-    @register_aggregation_method(
-        name=name,
-        status="experimental",
-        description="Test experimental method.",
-        references=(),
-        added_in="0.0.0",
-    )
-    def dummy(attributions, labels):
-        del labels
-        return xr.Dataset({"score": attributions.mean("observation")})
-
-    da = _da(
-        [[1.0], [0.0]],
-        nodes=["n"],
-    )
-    try:
-        with pytest.warns(UserWarning, match="experimental"):
-            aggregate_node_attributions(
-                da,
-                np.array([0, 1]),
-                method=name,
-            )
-    finally:
-        unregister_aggregation_method(name)
+    register_dummy(name, status="experimental")(_mean_dataset)
+    with pytest.warns(UserWarning, match="experimental"):
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
+        )
 
 
 def test_series_labels_align_to_observation_coord():
@@ -571,33 +557,24 @@ def test_netcdf_round_trip_keeps_attrs(tmp_path):
     assert params["sign_reference"] == "per_seed"
 
 
-def test_method_params_skip_data_arguments_by_position():
+def test_method_params_skip_data_arguments_by_position(register_dummy):
     name = "_dummy_renamed"
     marker = object()
 
-    @register_aggregation_method(
-        name=name,
-        status="supported",
-        description="Test renamed data arguments.",
-        references=(),
-        added_in="0.0.0",
-    )
+    @register_dummy(name)
     def dummy(data, y, *, weights=None, token=None):
         del y, weights, token
         result = xr.Dataset({"score": data.mean("observation")})
         result.attrs["note"] = "kept"
         return result
 
-    try:
-        out = aggregate_node_attributions(
-            _da([[1.0], [0.0]], nodes=["n"]),
-            np.array([0, 1]),
-            method=name,
-            weights=np.array([1, 2]),
-            token=marker,
-        )
-    finally:
-        unregister_aggregation_method(name)
+    out = aggregate_node_attributions(
+        _da([[1.0], [0.0]], nodes=["n"]),
+        np.array([0, 1]),
+        method=name,
+        weights=np.array([1, 2]),
+        token=marker,
+    )
     assert json.loads(out.attrs["method_params"]) == {
         "weights": [1, 2],
         "token": repr(marker),
@@ -605,16 +582,115 @@ def test_method_params_skip_data_arguments_by_position():
     assert out.attrs["note"] == "kept"
 
 
-def test_deprecation_message_requires_deprecated_status():
+def test_deprecation_message_requires_deprecated_status(register_dummy):
     with pytest.raises(
         ValueError,
         match="not 'deprecated'",
     ):
-        register_aggregation_method(
-            name="_dummy_bad_message",
-            status="supported",
-            description="Test misplaced message.",
-            references=(),
-            added_in="0.0.0",
+        register_dummy(
+            "_dummy_bad_message",
             deprecation_message="Not deprecated.",
+        )
+
+
+def test_string_labels_and_list_labels():
+    data = [[1.0], [3.0], [0.0]]
+    out = _agg(
+        _da(data, nodes=["n"]),
+        ["ctrl", "case", "ctrl"],
+        class_0="ctrl",
+        class_1="case",
+    )
+    assert out["mean_class0"].item() == pytest.approx(0.5)
+    assert out["mean_class1"].item() == pytest.approx(3.0)
+
+
+def test_mixed_type_labels_are_supported():
+    labels = np.array([0, "case"], dtype=object)
+    out = _agg(
+        _da([[1.0], [3.0]], nodes=["n"]),
+        labels,
+        class_1="case",
+    )
+    assert out["score"].item() == pytest.approx(2.0)
+
+
+def test_mixed_type_labels_outside_the_pair_raise():
+    labels = np.array([0, "case", "other"], dtype=object)
+    with pytest.raises(Kpnn2Error, match="more than two classes"):
+        _agg(
+            _da([[1.0], [3.0], [2.0]], nodes=["n"]),
+            labels,
+            class_1="case",
+        )
+
+
+def test_integer_attributions_are_averaged_as_floats():
+    da = _da([[1.0], [2.0], [4.0]], nodes=["n"]).astype(np.int64)
+    out = _agg(da, np.array([0, 0, 1]))
+    assert out["mean_class0"].item() == pytest.approx(1.5)
+    assert out["score"].item() == pytest.approx(2.5)
+
+
+def test_input_is_not_modified():
+    da = _da([[1.0], [2.0]], nodes=["n"])
+    da.attrs["origin"] = "test"
+    before = da.copy(deep=True)
+    _agg(da, np.array([0, 1]))
+    xr.testing.assert_identical(da, before)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"class_0": 1, "class_1": 1}, "must be distinct"),
+        ({"class_0": np.array([0])}, "'class_0' must be a scalar"),
+        ({"class_1": [1, 2]}, "'class_1' must be a scalar"),
+        ({"class_1": 2}, "class_1=2"),
+        ({"sign_reference": "median"}, "'sign_reference' must be"),
+        ({"tie_tolerance": "0.1"}, "must be a real number"),
+        ({"tie_tolerance": True}, "must be a real number"),
+        ({"tie_tolerance": -0.1}, "finite and >= 0"),
+        ({"tie_tolerance": float("nan")}, "finite and >= 0"),
+        ({"tie_tolerance": float("inf")}, "finite and >= 0"),
+        ({"unknown": 1}, "unexpected keyword argument 'unknown'"),
+    ],
+)
+def test_invalid_method_arguments_raise(kwargs, match):
+    with pytest.raises(Kpnn2Error, match=match):
+        _agg(
+            _da([[1.0], [2.0]], nodes=["n"]),
+            np.array([0, 1]),
+            **kwargs,
+        )
+
+
+def test_missing_class_in_labels_raises():
+    with pytest.raises(Kpnn2Error, match="class_1=1 is missing"):
+        _agg(
+            _da([[1.0], [2.0]], nodes=["n"]),
+            np.array([0, 0]),
+        )
+
+
+@pytest.mark.parametrize(
+    "tie_tolerance",
+    [np.float32(0.1), np.int64(0), 0],
+)
+def test_numpy_and_int_tie_tolerance_are_accepted(tie_tolerance):
+    out = _agg(
+        _da([[1.0], [2.0]], nodes=["n"]),
+        np.array([0, 1]),
+        tie_tolerance=tie_tolerance,
+    )
+    params = json.loads(out.attrs["method_params"])
+    assert params["tie_tolerance"] == pytest.approx(float(tie_tolerance))
+
+
+def test_method_name_must_be_a_string():
+    with pytest.raises(Kpnn2Error, match="'method' must be a str"):
+        aggregate_node_attributions(
+            _da([[1.0], [2.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=None,
         )

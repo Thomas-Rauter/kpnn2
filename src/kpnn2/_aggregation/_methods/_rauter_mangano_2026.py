@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from numbers import Real
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -165,16 +168,17 @@ def rauter_mangano_2026(
         coordinate; missing or extra ids raise.
     class_0 : scalar
         Label value for class 0. Required even when labels
-        are already ``0`` / ``1``.
+        are already ``0`` / ``1``. Arrays are rejected.
     class_1 : scalar
         Label value for class 1. Must differ from
-        ``class_0``.
+        ``class_0``. Arrays are rejected.
     sign_reference : {"per_seed", "seed_mean"}, optional
         Folding rule for ``score`` over seeds, as above.
         Default ``"per_seed"``.
     tie_tolerance : float, optional
         Threshold in the ``near_tie`` formula. Default
-        0.05. Must be ``>= 0``.
+        0.05. Any real number (numpy scalars included) that
+        is finite and ``>= 0``.
 
     Returns
     -------
@@ -227,8 +231,8 @@ def rauter_mangano_2026(
         class_0=class_0,
         class_1=class_1,
     )
-    mean0 = scored.where(is0).mean(OBSERVATION_DIM)
-    mean1 = scored.where(is1).mean(OBSERVATION_DIM)
+    mean0 = scored.isel({OBSERVATION_DIM: is0}).mean(OBSERVATION_DIM)
+    mean1 = scored.isel({OBSERVATION_DIM: is1}).mean(OBSERVATION_DIM)
     # A seed counts for a node only when both class means exist.
     valid = mean0.notnull() & mean1.notnull()
     mean0 = mean0.where(valid)
@@ -326,6 +330,9 @@ def _check_class_mapping(
             "'class_1' to map label values onto class 0 and "
             "class 1."
         )
+    for name, value in (("class_0", class_0), ("class_1", class_1)):
+        if np.ndim(value) != 0:
+            raise Kpnn2Error(f"'{name}' must be a scalar label value.")
     if class_0 == class_1:
         raise Kpnn2Error("'class_0' and 'class_1' must be distinct.")
 
@@ -337,14 +344,14 @@ def _check_sign_reference(sign_reference: str) -> None:
 
 
 def _check_tie_tolerance(tie_tolerance: object) -> None:
-    """Require a non-negative float tolerance."""
-    if isinstance(tie_tolerance, bool) or not isinstance(
+    """Require a finite, non-negative real tolerance."""
+    if isinstance(tie_tolerance, (bool, np.bool_)) or not isinstance(
         tie_tolerance,
-        (int, float),
+        Real,
     ):
-        raise Kpnn2Error("'tie_tolerance' must be a float.")
-    if float(tie_tolerance) < 0:
-        raise Kpnn2Error("'tie_tolerance' must be >= 0.")
+        raise Kpnn2Error("'tie_tolerance' must be a real number.")
+    if not math.isfinite(tie_tolerance) or tie_tolerance < 0:
+        raise Kpnn2Error("'tie_tolerance' must be finite and >= 0.")
 
 
 def _binary_masks(
@@ -352,14 +359,14 @@ def _binary_masks(
     *,
     class_0: object,
     class_1: object,
-) -> tuple[xr.DataArray, xr.DataArray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Boolean masks for the two classes along observation."""
     label_coord = scored.coords[LABEL_COORD]
     values = np.asarray(label_coord.values)
     if np.any(np.asarray(pd.isna(values), dtype=bool)):
         raise Kpnn2Error("'labels' must not contain missing values.")
-    unique = np.unique(values)
-    unique_list = unique.tolist()
+    # pd.unique hashes instead of sorting, so mixed label types work.
+    unique_list = pd.unique(values).tolist()
     if len(unique_list) > 2:
         extra_str = ", ".join(repr(v) for v in unique_list)
         raise Kpnn2Error(
@@ -367,11 +374,11 @@ def _binary_masks(
             "classification only. 'labels' has more than "
             f"two classes: {extra_str}."
         )
-    is0 = label_coord == class_0
-    is1 = label_coord == class_1
-    unmatched = ~(np.asarray(is0.values) | np.asarray(is1.values))
+    is0 = np.asarray((label_coord == class_0).values, dtype=bool)
+    is1 = np.asarray((label_coord == class_1).values, dtype=bool)
+    unmatched = ~(is0 | is1)
     if np.any(unmatched):
-        extras = np.unique(values[unmatched])
+        extras = pd.unique(values[unmatched])
         extra_str = ", ".join(repr(v) for v in extras.tolist())
         raise Kpnn2Error(
             f"Method {_METHOD_NAME!r} supports binary "
@@ -379,12 +386,12 @@ def _binary_masks(
             f"class_0={class_0!r} and class_1={class_1!r}. "
             f"Unknown label(s): {extra_str}."
         )
-    if not bool(np.any(np.asarray(is0.values))):
+    if not is0.any():
         raise Kpnn2Error(
             "Both class_0 and class_1 must appear in 'labels'. "
             f"class_0={class_0!r} is missing."
         )
-    if not bool(np.any(np.asarray(is1.values))):
+    if not is1.any():
         raise Kpnn2Error(
             "Both class_0 and class_1 must appear in 'labels'. "
             f"class_1={class_1!r} is missing."

@@ -1939,8 +1939,10 @@ ranking advice or other claims beyond those formulas.
 - `labels` required: 1-d array paired in order, or
   `pandas.Series` reindexed to the observation coordinate.
   Required kwargs `class_0` and `class_1` (even when labels
-  are already 0/1). More than two classes, a missing class,
-  or labels outside that pair: `Kpnn2Error`.
+  are already 0/1), each a scalar. More than two classes, a
+  missing class, or labels outside that pair: `Kpnn2Error`.
+  Labels may mix types. `tie_tolerance` is any finite real
+  `>= 0` (numpy scalars included).
 - Per seed `s` and node `i`, with class sets `C_0`, `C_1`
   and means that omit NaN: `mu_c = mean_{o in C_c} a`;
   `D = mu_1 - mu_0`; `eps = +1` if `|mu_1| >= |mu_0|`
