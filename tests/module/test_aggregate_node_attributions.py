@@ -249,6 +249,8 @@ def test_node_without_class_mean_is_nan_with_neutral_flags(sign_reference):
     ):
         assert np.isnan(missing[name].item()), name
     assert missing["sign"].item() == 0
+    assert missing["n_valid_seeds"].item() == 0
+    assert out.sel(node="ok")["n_valid_seeds"].item() == 1
     assert out["sign"].dtype == np.int64
     assert bool(missing["counteracting"].item()) is False
     assert bool(missing["near_tie"].item()) is False
@@ -279,6 +281,28 @@ def test_seed_missing_a_class_mean_is_left_out(sign_reference):
     assert out["mean_class1"].item() == pytest.approx(3.0)
     assert out["sign_consistency"].item() == pytest.approx(1.0)
     assert int(out["n_seeds"].item()) == 2
+    assert int(out["n_valid_seeds"].item()) == 1
+    assert out["n_valid_seeds"].dtype == np.int64
+
+
+def test_repeated_node_names_are_rejected():
+    with pytest.raises(Kpnn2Error, match="repeats name"):
+        _agg(
+            _da([[1.0, 2.0], [3.0, 4.0]], nodes=["wide", "wide"]),
+            np.array([0, 1]),
+        )
+
+
+def test_method_signature_is_checked_at_registration(register_dummy):
+    def keyword_labels(attributions, *, labels=None):
+        return xr.Dataset()
+
+    def star_args(attributions, labels, *extra):
+        return xr.Dataset()
+
+    for bad in (keyword_labels, star_args):
+        with pytest.raises(ValueError, match="Aggregation method"):
+            register_dummy(f"_dummy_{bad.__name__}")(bad)
 
 
 def test_deprecated_method_emits_future_warning(register_dummy):

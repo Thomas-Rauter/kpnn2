@@ -18,6 +18,7 @@ from .._bind import (
     SEED_DIM,
     bind_labels,
     require_named_dims,
+    require_unique_nodes,
 )
 from .._registry import register_aggregation_method
 
@@ -130,6 +131,8 @@ def rauter_mangano_2026(
 
     ``n_seeds = S``
 
+    ``n_valid_seeds(i) = |V(i)|``
+
     ``sign_consistency(i)``
     ``    = (1/S) * sum_s 1[eps(s, i) == sign(i)]``
 
@@ -137,9 +140,10 @@ def rauter_mangano_2026(
 
     When ``V(i)`` is empty, ``score``, ``abs_score``,
     ``mean_class0``, ``mean_class1``, ``class_difference``,
-    and ``sign_consistency`` are NaN, ``sign`` is 0, and
-    ``counteracting`` and ``near_tie`` are False.
-    ``n_seeds`` counts every seed, valid or not.
+    and ``sign_consistency`` are NaN, ``sign`` is 0,
+    ``n_valid_seeds`` is 0, and ``counteracting`` and
+    ``near_tie`` are False. ``n_seeds`` counts every seed,
+    valid or not.
 
     ``counteracting(i) = [class_difference(i) < 0]``
 
@@ -155,7 +159,9 @@ def rauter_mangano_2026(
         Output of ``map_node_attributions``, or an array
         with the same named dims. Requires ``observation``
         and ``node``, accepts optional ``seed``, and rejects
-        any other dim (reduce or ``.rename`` first).
+        any other dim (reduce or ``.rename`` first). Node
+        names must be unique: reduce the units of a node
+        wider than 1 to one column first.
         Concatenate trained models with
         ``xr.concat(..., dim="seed")``. A scalar ``layer``
         coordinate is copied through when present. The
@@ -184,19 +190,19 @@ def rauter_mangano_2026(
     -------
     xarray.Dataset
         One value per node (the same ``node`` axis as the
-        input, including a repeated name when a node is
-        wider than 1). Variables ``score``, ``abs_score``,
+        input). Variables ``score``, ``abs_score``,
         ``mean_class0`` (``mu_0_bar``), ``mean_class1``
         (``mu_1_bar``), ``class_difference``, ``sign``,
-        ``n_seeds``, ``sign_consistency``,
+        ``n_seeds``, ``n_valid_seeds``, ``sign_consistency``,
         ``counteracting``, and ``near_tie``, as defined
         above.
 
     Raises
     ------
     Kpnn2Error
-        If ``labels`` or kwargs are invalid, or the
-        DataArray dims do not match this method.
+        If ``labels`` or kwargs are invalid, the DataArray
+        dims do not match this method, or a node name
+        repeats.
 
     See Also
     --------
@@ -222,6 +228,7 @@ def rauter_mangano_2026(
         required=(OBSERVATION_DIM, NODE_DIM),
         optional=(SEED_DIM,),
     )
+    require_unique_nodes(attributions)
     scored = bind_labels(
         attributions,
         labels,
@@ -240,10 +247,12 @@ def rauter_mangano_2026(
     has_seed = SEED_DIM in scored.dims
     if has_seed:
         n_seeds = int(scored.sizes[SEED_DIM])
+        n_valid_seeds = valid.sum(SEED_DIM).astype(np.int64)
         mean0_bar = mean0.mean(SEED_DIM)
         mean1_bar = mean1.mean(SEED_DIM)
     else:
         n_seeds = 1
+        n_valid_seeds = valid.astype(np.int64)
         mean0_bar = mean0
         mean1_bar = mean1
     eps_s, score_s = _signed_scores(
@@ -292,6 +301,7 @@ def rauter_mangano_2026(
         "counteracting": class_difference < 0,
         "near_tie": near_tie,
         "n_seeds": n_seeds,
+        "n_valid_seeds": n_valid_seeds,
     }
     coords: dict[str, object] = {}
     if NODE_DIM in scored.coords:

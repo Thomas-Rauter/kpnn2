@@ -1,5 +1,6 @@
 """Registry for node-attribution aggregation methods."""
 
+import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -94,6 +95,7 @@ def register_aggregation_method(
         )
 
     def decorator(func: AggregationFn) -> AggregationFn:
+        _check_method_signature(name, func)
         if name in _REGISTRY:
             raise ValueError(
                 f"Aggregation method {name!r} is already registered."
@@ -113,6 +115,25 @@ def register_aggregation_method(
         return func
 
     return decorator
+
+
+def _check_method_signature(name: str, func: AggregationFn) -> None:
+    """Require the ``(attributions, labels, **kwargs)`` shape."""
+    positional_kinds = {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
+    params = list(inspect.signature(func).parameters.values())
+    leading = params[:2]
+    if len(leading) < 2 or any(
+        param.kind not in positional_kinds for param in leading
+    ):
+        raise ValueError(
+            f"Aggregation method {name!r} must take the data as its "
+            "first two positional parameters (attributions, labels)."
+        )
+    if any(param.kind is inspect.Parameter.VAR_POSITIONAL for param in params):
+        raise ValueError(f"Aggregation method {name!r} must not take *args.")
 
 
 def unregister_aggregation_method(name: str) -> None:

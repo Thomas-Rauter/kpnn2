@@ -1934,7 +1934,10 @@ ranking advice or other claims beyond those formulas.
 
 - Required dims: `observation`, `node`. Optional dim:
   `seed` (trained replicates). Any other dim: `Kpnn2Error`
-  (reduce or `.rename` first). Concatenate seeds with
+  (reduce or `.rename` first). Repeated `node` names
+  (a node wider than 1, or a hop axis): `Kpnn2Error`;
+  reduce units to one column per node first.
+  Concatenate seeds with
   `xr.concat(..., dim="seed")`. No `seed` dim is `S = 1`.
 - `labels` required: 1-d array paired in order, or
   `pandas.Series` reindexed to the observation coordinate.
@@ -1959,6 +1962,7 @@ ranking advice or other claims beyond those formulas.
 - `abs_score = |score|`. `sign` is `+1` if `score > 0`,
   `-1` if `score < 0`, `+1` if `score == 0`, `0` if
   `score` is NaN. `n_seeds = S` (all seeds).
+  `n_valid_seeds` counts the valid seeds for that node.
   `sign_consistency = (1/S) sum_s 1[eps_s == sign]`
   (`1` when `S = 1`). `counteracting` is
   `class_difference < 0`. With
@@ -1968,7 +1972,8 @@ ranking advice or other claims beyond those formulas.
   `tie_tolerance` 0.05).
 - No valid seed for a node: scores, means,
   `class_difference`, and `sign_consistency` are NaN,
-  `sign` is `0`, `counteracting` and `near_tie` are False.
+  `sign` is `0`, `n_valid_seeds` is `0`, `counteracting`
+  and `near_tie` are False.
 - Return: `xarray.Dataset` on `node` with those
   variables. Copy a scalar `layer` coordinate when
   present. The dispatcher then stamps `method`,

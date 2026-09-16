@@ -41,6 +41,22 @@ def require_named_dims(
         )
 
 
+def require_unique_nodes(attributions: xr.DataArray) -> None:
+    """Reject a ``node`` coordinate that repeats a name."""
+    if NODE_DIM not in attributions.coords:
+        return
+    names = pd.Index(attributions.coords[NODE_DIM].values)
+    if names.has_duplicates:
+        repeated = ", ".join(
+            repr(name) for name in names[names.duplicated()].unique().tolist()
+        )
+        raise Kpnn2Error(
+            f"The {NODE_DIM!r} coordinate repeats name(s): {repeated}. "
+            "A node wider than 1 (or a hop axis) has one column per "
+            "unit; reduce the units to one column per node first."
+        )
+
+
 def bind_labels(
     attributions: xr.DataArray,
     labels: object,
