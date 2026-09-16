@@ -1935,9 +1935,6 @@ Default method `rauter_mangano_2026` (binary only):
   `sign_consistency`, `counteracting`, `near_tie`. Copy a
   scalar `layer` coordinate when present.
 
-Deprecated `rauter_mangano_2026_legacy`: `score = eps * D`
-(same magnitude, reversed sign when `D < 0`).
-
 Do not attach labels inside `map_node_attributions`. Do not
 guess that `step` or a Captum `class` dim is `seed`.
 

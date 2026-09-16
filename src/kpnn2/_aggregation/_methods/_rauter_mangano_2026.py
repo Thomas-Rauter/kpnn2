@@ -18,6 +18,7 @@ from .._bind import (
 )
 from .._registry import register_aggregation_method
 
+_METHOD_NAME = "rauter_mangano_2026"
 _SIGN_REFERENCES = frozenset({"per_seed", "seed_mean"})
 _NEAR_TIE_EPS = 1e-12
 _DEFAULT_TIE_TOLERANCE = 0.05
@@ -27,18 +28,10 @@ _RAUTER_MANGANO_DESCRIPTION = (
     "mean_0|, sign of the class farther from zero."
 )
 _RAUTER_MANGANO_REFERENCES = ("Rauter and Mangano, 2026",)
-_LEGACY_DEPRECATION = (
-    "Aggregation method 'rauter_mangano_2026_legacy' uses "
-    "score = eps * D, which reverses the sign relative to "
-    "'rauter_mangano_2026' when the class-mean difference D "
-    "is negative (same magnitude). It was deprecated in "
-    "kpnn2 0.2.0. Use 'rauter_mangano_2026' "
-    "(score = eps * |D|) instead."
-)
 
 
 @register_aggregation_method(
-    name="rauter_mangano_2026",
+    name=_METHOD_NAME,
     status="recommended",
     description=_RAUTER_MANGANO_DESCRIPTION,
     references=_RAUTER_MANGANO_REFERENCES,
@@ -59,75 +52,9 @@ def rauter_mangano_2026(
     See ``aggregate_node_attribution`` for the formulas, the
     ``seed`` dim, and ``sign_reference``.
     """
-    return _rauter_mangano_core(
-        attributions,
-        labels,
-        class_0=class_0,
-        class_1=class_1,
-        sign_reference=sign_reference,
-        tie_tolerance=tie_tolerance,
-        abs_magnitude=True,
-        method_name="rauter_mangano_2026",
-    )
-
-
-@register_aggregation_method(
-    name="rauter_mangano_2026_legacy",
-    status="deprecated",
-    description=(
-        "Legacy signed class-mean difference: score = eps * D "
-        "(reversed sign when D < 0)."
-    ),
-    references=_RAUTER_MANGANO_REFERENCES,
-    added_in="0.2.0",
-    deprecated_in="0.2.0",
-    replacement="rauter_mangano_2026",
-    deprecation_message=_LEGACY_DEPRECATION,
-)
-def rauter_mangano_2026_legacy(
-    attributions: xr.DataArray,
-    labels: object | None,
-    *,
-    class_0: object | None = None,
-    class_1: object | None = None,
-    sign_reference: str = "per_seed",
-    tie_tolerance: float = _DEFAULT_TIE_TOLERANCE,
-) -> xr.Dataset:
-    """
-    Score nodes with the legacy rule ``score = eps * D``.
-
-    Same magnitude as ``rauter_mangano_2026``; the sign is
-    reversed when ``D < 0``. Deprecated; use
-    ``rauter_mangano_2026``.
-    """
-    return _rauter_mangano_core(
-        attributions,
-        labels,
-        class_0=class_0,
-        class_1=class_1,
-        sign_reference=sign_reference,
-        tie_tolerance=tie_tolerance,
-        abs_magnitude=False,
-        method_name="rauter_mangano_2026_legacy",
-    )
-
-
-def _rauter_mangano_core(
-    attributions: xr.DataArray,
-    labels: object | None,
-    *,
-    class_0: object | None,
-    class_1: object | None,
-    sign_reference: str,
-    tie_tolerance: float,
-    abs_magnitude: bool,
-    method_name: str,
-) -> xr.Dataset:
-    """Shared Rauter–Mangano reduction."""
     _check_class_mapping(
         class_0,
         class_1,
-        method_name=method_name,
     )
     _check_sign_reference(sign_reference)
     _check_tie_tolerance(tie_tolerance)
@@ -144,7 +71,6 @@ def _rauter_mangano_core(
         scored,
         class_0=class_0,
         class_1=class_1,
-        method_name=method_name,
     )
     mean0 = scored.where(is0).mean(OBSERVATION_DIM)
     mean1 = scored.where(is1).mean(OBSERVATION_DIM)
@@ -157,17 +83,15 @@ def _rauter_mangano_core(
         n_seeds = 1
         mean0_bar = mean0
         mean1_bar = mean1
-    _diff_s, eps_s, score_s = _signed_scores(
+    eps_s, score_s = _signed_scores(
         mean0,
         mean1,
-        abs_magnitude=abs_magnitude,
     )
     class_difference = mean1_bar - mean0_bar
     if sign_reference == "seed_mean":
-        _diff, _eps, score = _signed_scores(
+        _, score = _signed_scores(
             mean0_bar,
             mean1_bar,
-            abs_magnitude=abs_magnitude,
         )
     elif has_seed:
         score = score_s.mean(SEED_DIM)
@@ -219,33 +143,26 @@ def _rauter_mangano_core(
 def _signed_scores(
     mean0: xr.DataArray,
     mean1: xr.DataArray,
-    *,
-    abs_magnitude: bool,
-) -> tuple[xr.DataArray, xr.DataArray, xr.DataArray]:
-    """Return ``D``, ``eps``, and ``score`` for class means."""
+) -> tuple[xr.DataArray, xr.DataArray]:
+    """Return ``eps`` and ``score = eps * |D|`` for class means."""
     difference = mean1 - mean0
     eps = xr.where(
         np.abs(mean1) >= np.abs(mean0),
         1.0,
         -1.0,
     )
-    if abs_magnitude:
-        score = eps * np.abs(difference)
-    else:
-        score = eps * difference
-    return difference, eps, score
+    score = eps * np.abs(difference)
+    return eps, score
 
 
 def _check_class_mapping(
     class_0: object | None,
     class_1: object | None,
-    *,
-    method_name: str,
 ) -> None:
     """Require two distinct class-label values."""
     if class_0 is None or class_1 is None:
         raise Kpnn2Error(
-            f"Method {method_name!r} requires 'class_0' and "
+            f"Method {_METHOD_NAME!r} requires 'class_0' and "
             "'class_1' to map label values onto class 0 and "
             "class 1."
         )
@@ -275,7 +192,6 @@ def _binary_masks(
     *,
     class_0: object,
     class_1: object,
-    method_name: str,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """Boolean masks for the two classes along observation."""
     label_coord = scored.coords[LABEL_COORD]
@@ -287,7 +203,7 @@ def _binary_masks(
     if len(unique_list) > 2:
         extra_str = ", ".join(repr(v) for v in unique_list)
         raise Kpnn2Error(
-            f"Method {method_name!r} supports binary "
+            f"Method {_METHOD_NAME!r} supports binary "
             "classification only. 'labels' has more than "
             f"two classes: {extra_str}."
         )
@@ -298,7 +214,7 @@ def _binary_masks(
         extras = np.unique(values[unmatched])
         extra_str = ", ".join(repr(v) for v in extras.tolist())
         raise Kpnn2Error(
-            f"Method {method_name!r} supports binary "
+            f"Method {_METHOD_NAME!r} supports binary "
             "classification only. 'labels' must contain only "
             f"class_0={class_0!r} and class_1={class_1!r}. "
             f"Unknown label(s): {extra_str}."

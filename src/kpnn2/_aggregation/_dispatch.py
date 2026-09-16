@@ -145,11 +145,6 @@ def aggregate_node_attribution(
     class was explained). If a Captum ``class`` dim is still on
     the array, select one class before calling.
 
-    The deprecated method ``rauter_mangano_2026_legacy`` uses
-    ``score = eps * D``. It has the same magnitude and a
-    reversed sign when ``D < 0``. Keep it only to reproduce
-    earlier results.
-
     Examples
     --------
     >>> import numpy as np

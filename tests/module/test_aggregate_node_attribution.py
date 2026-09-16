@@ -73,7 +73,7 @@ def test_toy_linear_abs_score_matches_weight_times_mean_gap():
     )
 
 
-def test_negative_d_new_sign_is_extreme_class_legacy_flips():
+def test_negative_d_sign_is_the_class_farther_from_zero():
     # mean0=2, mean1=-1 → D=-3, |m0| > |m1|, eps=-1
     data = np.array(
         [
@@ -84,25 +84,16 @@ def test_negative_d_new_sign_is_extreme_class_legacy_flips():
         ]
     )
     labels = np.array([0, 0, 1, 1])
-    da = _da(
-        data,
-        nodes=["x"],
+    out = _agg(
+        _da(
+            data,
+            nodes=["x"],
+        ),
+        labels,
     )
-    new = _agg(da, labels)
-    with pytest.warns(FutureWarning, match="eps \\* D"):
-        legacy = _agg(
-            da,
-            labels,
-            method="rauter_mangano_2026_legacy",
-        )
-    assert new["score"].item() == pytest.approx(-3.0)
-    assert new["sign"].item() == -1
-    assert bool(new["counteracting"].item()) is True
-    assert legacy["score"].item() == pytest.approx(3.0)
-    assert legacy["sign"].item() == 1
-    assert abs(new["score"].item()) == pytest.approx(
-        abs(legacy["score"].item())
-    )
+    assert out["score"].item() == pytest.approx(-3.0)
+    assert out["sign"].item() == -1
+    assert bool(out["counteracting"].item()) is True
 
 
 def test_tie_goes_to_class_1_and_near_tie_is_flagged():
@@ -149,8 +140,8 @@ def test_near_tie_relative_tolerance():
 
 
 def test_per_seed_and_seed_mean_differ_when_scores_vary():
-    # Seed 0: m0=0, m1=4 → score_new = 4
-    # Seed 1: m0=0, m1=-2 → score_new = 2
+    # Seed 0: m0=0, m1=4 → score = 4
+    # Seed 1: m0=0, m1=-2 → score = 2
     # per_seed mean = 3; seed_mean |D| = 1
     seed0 = np.array(
         [
@@ -187,18 +178,36 @@ def test_per_seed_and_seed_mean_differ_when_scores_vary():
 
 
 def test_deprecated_method_emits_future_warning():
+    name = "_dummy_deprecated"
+
+    @register_aggregation_method(
+        name=name,
+        status="deprecated",
+        description="Test deprecated method.",
+        references=(),
+        added_in="0.0.0",
+        deprecated_in="0.2.0",
+        replacement="rauter_mangano_2026",
+    )
+    def dummy(attributions, labels):
+        del labels
+        return xr.Dataset(
+            {"score": attributions.mean("observation")},
+        )
+
     da = _da(
         [[1.0], [0.0]],
         nodes=["n"],
     )
-    with pytest.warns(FutureWarning, match="deprecated in"):
-        aggregate_node_attribution(
-            da,
-            np.array([0, 1]),
-            method="rauter_mangano_2026_legacy",
-            class_0=0,
-            class_1=1,
-        )
+    try:
+        with pytest.warns(FutureWarning, match="deprecated in"):
+            aggregate_node_attribution(
+                da,
+                np.array([0, 1]),
+                method=name,
+            )
+    finally:
+        unregister_aggregation_method(name)
 
 
 def test_removed_method_raises_and_names_replacement():
@@ -429,7 +438,6 @@ def test_list_aggregation_methods_includes_default():
     ]
     names = set(table["name"])
     assert "rauter_mangano_2026" in names
-    assert "rauter_mangano_2026_legacy" in names
     recommended = table[table["status"] == "recommended"]
     assert list(recommended["name"]) == ["rauter_mangano_2026"]
 
