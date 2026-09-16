@@ -1921,40 +1921,44 @@ guess that `step` or a Captum `class` dim is `seed`.
 ## `rauter_mangano_2026` (default aggregation method)
 
 Binary only. Not a public import; pass
-`method="rauter_mangano_2026"`. Docstring on the private
-function is the user-facing contract (rendered at
+`method="rauter_mangano_2026"`. The private function's
+docstring is the user-facing contract (rendered at
 `docs/reference/aggregation/rauter_mangano_2026.md`).
+State the formulas that the code computes. Do not add
+ranking advice or other claims beyond those formulas.
 
 - Required dims: `observation`, `node`. Optional dim:
   `seed` (trained replicates). Any other dim: `Kpnn2Error`
   (reduce or `.rename` first). Concatenate seeds with
-  `xr.concat(..., dim="seed")`. No `seed` dim is one seed.
+  `xr.concat(..., dim="seed")`. No `seed` dim is `S = 1`.
 - `labels` required: 1-d array paired in order, or
   `pandas.Series` reindexed to the observation coordinate.
   Required kwargs `class_0` and `class_1` (even when labels
   are already 0/1). More than two classes, a missing class,
   or labels outside that pair: `Kpnn2Error`.
-- Per seed and node: `mean_c` over observations of class
-  `c`; `D = mean_1 - mean_0`; `eps = +1` if
-  `|mean_1| >= |mean_0|` else `-1` (ties to class 1);
-  `score = eps * |D|`. On one seed, and with
-  `sign_reference="seed_mean"`, `abs_score` equals `|D|`
-  (or the seed-averaged `|D|`). With default `"per_seed"`,
-  mixed per-seed signs can shrink `abs_score`. `near_tie`
-  uses relative `tie_tolerance` (default 0.05) on
-  seed-averaged absolute class means; the sign is then
-  unreliable.
-- `sign_reference`: `"per_seed"` (default; score then
-  average) or `"seed_mean"` (average class means, then
-  score). `mean_class0`, `mean_class1`,
-  `class_difference` are always seed-averaged `D`.
-- Return: `xarray.Dataset` on `node`, variables `score`,
-  `abs_score`, `mean_class0`, `mean_class1`,
-  `class_difference`, `sign`, `n_seeds`,
-  `sign_consistency`, `counteracting`, `near_tie`. Copy a
-  scalar `layer` coordinate when present. The dispatcher
-  then stamps `method`, `method_params`, and
-  `kpnn2_version`.
+- Per seed `s` and node `i`, with class sets `C_0`, `C_1`
+  and means that omit NaN: `mu_c = mean_{o in C_c} a`;
+  `D = mu_1 - mu_0`; `eps = +1` if `|mu_1| >= |mu_0|`
+  else `-1`; `score_s = eps * |D|`.
+- Always `mu_c_bar = (1/S) sum_s mu_c` and
+  `class_difference = mu_1_bar - mu_0_bar`.
+- `sign_reference="per_seed"` (default):
+  `score = (1/S) sum_s score_s`. `"seed_mean"`:
+  `score = eps_bar * |D_bar|` from `mu_c_bar`. Same when
+  `S = 1`; can differ when `S > 1`.
+- `abs_score = |score|`. `sign` is `+1` if `score > 0`,
+  `-1` if `score < 0`, `+1` if `score == 0`. `n_seeds = S`.
+  `sign_consistency = (1/S) sum_s 1[eps_s == sign]`
+  (`1` when `S = 1`). `counteracting` is
+  `class_difference < 0`. With
+  `u = abs(|mu_1_bar| - |mu_0_bar|)` and
+  `v = max(|mu_0_bar|, |mu_1_bar|, 1e-12)`,
+  `near_tie` is `u / v < tie_tolerance` (default
+  `tie_tolerance` 0.05).
+- Return: `xarray.Dataset` on `node` with those
+  variables. Copy a scalar `layer` coordinate when
+  present. The dispatcher then stamps `method`,
+  `method_params`, and `kpnn2_version`.
 
 ---
 

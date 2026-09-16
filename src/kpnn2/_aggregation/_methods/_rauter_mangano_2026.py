@@ -49,47 +49,87 @@ def rauter_mangano_2026(
     """
     Score nodes by signed class-mean difference, ``eps * |D|``.
 
-    Binary classification only. For each seed ``s`` and node
-    ``i`` (a missing ``seed`` dim is one seed):
-
-    1. ``mean_c`` is the mean attribution over observations of
-       class ``c`` (``c`` in {0, 1}).
-    2. ``D = mean_1 - mean_0``.
-    3. ``eps = +1`` if ``|mean_1| >= |mean_0|``, else ``-1``
-       (ties go to class 1).
-    4. ``score = eps * |D|``.
-
-    The magnitude at this step is the absolute class-mean
-    difference. The sign is the class whose mean attribution
-    is farther from the all-zero baseline (positive: class 1,
-    negative: class 0), including nodes with ``D < 0`` that
-    counteract class separation.
-
-    On one seed, and with ``sign_reference="seed_mean"``,
-    ``abs_score`` equals ``|D|`` (or the seed-averaged
-    ``|D|``), so ranking by ``abs_score`` does not depend on
-    ``eps``. With the default ``"per_seed"``, ``score`` is
-    the mean of per-seed scores, so mixed per-seed signs can
-    shrink ``abs_score``.
-
-    ``sign_reference`` controls folding across seeds:
-
-    - ``"per_seed"`` (default): compute ``score`` per seed,
-      then average.
-    - ``"seed_mean"``: average ``mean_0`` and ``mean_1``
-      across seeds, then compute ``D``, ``eps``, and
-      ``score`` once. This avoids shrinking nodes whose
-      per-seed sign varies.
-
-    ``mean_class0``, ``mean_class1``, and
-    ``class_difference`` are always seed-averaged.
-    ``near_tie`` is true when the absolute class means
-    differ by less than relative ``tie_tolerance`` (default
-    0.05); in those cases the sign is unreliable.
-
-    This function is not exported. Pass
-    ``method="rauter_mangano_2026"`` to
+    Binary classification only. This function is not exported.
+    Pass ``method="rauter_mangano_2026"`` to
     ``aggregate_node_attributions``.
+
+    Write ``a[s, o, i]`` for the attribution at seed ``s``,
+    observation ``o``, and node ``i``. A missing ``seed`` dim
+    is ``S = 1``. ``C_0`` and ``C_1`` are the observations
+    whose labels equal ``class_0`` and ``class_1``. Every mean
+    below omits NaN (xarray ``skipna=True``).
+
+    For each seed and node, the class-c mean is the mean
+    attribution over observations of that class:
+
+    ``mu_c(s, i) = mean_{o in C_c} a[s, o, i]``
+    for ``c`` in {0, 1}.
+
+    The class-mean difference is
+
+    ``D(s, i) = mu_1(s, i) - mu_0(s, i)``.
+
+    The sign ``eps`` is ``+1`` when class 1's mean is at
+    least as far from 0 as class 0's mean, else ``-1``
+    (equality goes to class 1):
+
+    ``eps(s, i) = +1 if |mu_1(s, i)| >= |mu_0(s, i)|``
+    ``            -1 otherwise``.
+
+    The per-seed score is that sign times the absolute
+    difference:
+
+    ``score(s, i) = eps(s, i) * |D(s, i)|``.
+
+    Seed-averaged class means are always
+
+    ``mu_c_bar(i) = (1/S) * sum_s mu_c(s, i)``,
+
+    and
+
+    ``class_difference(i) = mu_1_bar(i) - mu_0_bar(i)``.
+
+    With no ``seed`` dim, ``mu_c_bar = mu_c``.
+
+    ``sign_reference`` selects how ``score`` is folded over
+    seeds. For ``"per_seed"`` (default), average the
+    per-seed scores:
+
+    ``score(i) = (1/S) * sum_s score(s, i)``.
+
+    For ``"seed_mean"``, compute ``D``, ``eps``, and
+    ``score`` once from the seed-averaged class means:
+
+    ``D_bar(i) = mu_1_bar(i) - mu_0_bar(i)``
+    ``eps_bar(i) = +1 if |mu_1_bar(i)| >= |mu_0_bar(i)|``
+    ``             -1 otherwise``
+    ``score(i) = eps_bar(i) * |D_bar(i)|``.
+
+    The two folding rules are the same when ``S = 1``. They
+    can differ when ``S > 1``.
+
+    The remaining outputs are
+
+    ``abs_score(i) = |score(i)|``
+
+    ``sign(i) = +1 if score(i) > 0``
+    ``          -1 if score(i) < 0``
+    ``          +1 if score(i) = 0``
+
+    ``n_seeds = S``
+
+    ``sign_consistency(i)``
+    ``    = (1/S) * sum_s 1[eps(s, i) == sign(i)]``
+
+    With ``S = 1``, ``sign_consistency(i) = 1``.
+
+    ``counteracting(i) = [class_difference(i) < 0]``
+
+    ``u(i) = abs(|mu_1_bar(i)| - |mu_0_bar(i)|)``
+    ``v(i) = max(|mu_0_bar(i)|, |mu_1_bar(i)|, 1e-12)``
+    ``near_tie(i) = [u(i) / v(i) < tie_tolerance]``
+
+    Default ``tie_tolerance`` is 0.05.
 
     Parameters
     ----------
@@ -115,25 +155,23 @@ def rauter_mangano_2026(
         Label value for class 1. Must differ from
         ``class_0``.
     sign_reference : {"per_seed", "seed_mean"}, optional
-        How to fold the ``seed`` dim. Default
-        ``"per_seed"``.
+        Folding rule for ``score`` over seeds, as above.
+        Default ``"per_seed"``.
     tie_tolerance : float, optional
-        Relative tolerance for ``near_tie``. Default 0.05.
-        Must be ``>= 0``.
+        Threshold in the ``near_tie`` formula. Default
+        0.05. Must be ``>= 0``.
 
     Returns
     -------
     xarray.Dataset
         One value per node (the same ``node`` axis as the
         input, including a repeated name when a node is
-        wider than 1). Variables: ``score``, ``abs_score``,
-        ``mean_class0``, ``mean_class1``,
-        ``class_difference``, ``sign`` (+1 or -1;
-        ``score == 0`` is +1), ``n_seeds``,
-        ``sign_consistency`` (fraction of seeds whose
-        per-seed ``eps`` matches the final sign),
-        ``counteracting`` (seed-averaged ``D < 0``),
-        ``near_tie``.
+        wider than 1). Variables ``score``, ``abs_score``,
+        ``mean_class0`` (``mu_0_bar``), ``mean_class1``
+        (``mu_1_bar``), ``class_difference``, ``sign``,
+        ``n_seeds``, ``sign_consistency``,
+        ``counteracting``, and ``near_tie``, as defined
+        above.
 
     Raises
     ------
