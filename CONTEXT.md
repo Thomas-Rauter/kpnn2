@@ -128,7 +128,13 @@ this package unless a later prompt asks.
    at one LayeredSpec layer, or the concatenated source axis of
    one hop, as an `xarray.DataArray`. Captum is not a library
    dependency; the user runs Captum (or any other method)
-   themselves. `xarray` is a core dependency used only here.
+   themselves. `xarray` is a core dependency used for that
+   mapping and for `aggregate_node_attribution()`.
+7. **Aggregate attributions (optional):**
+   `aggregate_node_attribution()` folds named scores with a
+   registered method. The default `rauter_mangano_2026` is
+   binary classification. `list_aggregation_methods()` lists
+   the registry. The mapper still does not aggregate.
 
 ### Primary use cases
 
@@ -321,6 +327,7 @@ Division of labor:
 | Minibatch slice → densify that block → device copy | User |
 | Captum / other attribution algorithms | User |
 | Tensor → named `xarray.DataArray` | kpnn2 |
+| Named scores → per-node aggregate | kpnn2 |
 | Sparse-tensor kernels (`torch.sparse`, sparse mm) | Not planned |
 
 ---
@@ -344,6 +351,8 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `scatter_hop_outputs` | Concatenated hop axis → per-source-layer tensors |
 | `align_inputs` | Named DataFrame → `float32` input tensor |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
+| `aggregate_node_attribution` | Named scores → per-node `xarray.Dataset` (method registry) |
+| `list_aggregation_methods` | Registry table of aggregation methods |
 | `Kpnn2Error` | User-facing error type |
 | `__version__` | Package version string |
 
@@ -1850,6 +1859,9 @@ concat_layouts(
 - Invalid `spec`, `layer`, `hop`, shape, `dims`, or `coords`:
   `Kpnn2Error`.
 
+Fold those named scores with `aggregate_node_attribution`
+(does not change this function).
+
 The user obtains `attributions` however they like (Captum
 LayerConductance, IntegratedGradients, custom grads, etc.). This
 function only attaches spec names to the `node` axis. The input
@@ -1864,6 +1876,70 @@ For a cyclic net on an `AdjacencySpec` there is no layer to
 index; the natural extra axis is `step`. Pass one tensor per
 unrolled step as a sequence and they stack onto
 `(step, observation, node)`.
+
+---
+
+## `aggregate_node_attribution(attributions, labels=None, *, method="rauter_mangano_2026", **method_kwargs)`
+
+Dispatcher only. Looks up `method`, emits status warnings,
+calls the registered function with
+`(attributions, labels, **method_kwargs)`, stamps `method`,
+`method_params`, and `kpnn2_version` on the result. Does not
+know about binary classes or seeds. Public failures:
+`Kpnn2Error`. Unknown names list callable methods (not
+`removed`).
+
+`list_aggregation_methods()` returns a pandas table of every
+registry row: name, status, description, references,
+`added_in`, `deprecated_in`, `removed_in`, replacement.
+
+Statuses: `recommended` (default), `supported`,
+`experimental` (`UserWarning`: results may change),
+`deprecated` (`FutureWarning`, not `DeprecationWarning`),
+`removed` (entry stays, call raises, names the replacement).
+
+Implementation lives in private package
+`src/kpnn2/_aggregation/`. Methods are modules under
+`_aggregation/_methods/`. The decorator
+`register_aggregation_method` is not public. Do not export
+`rauter_mangano_2026`. Adding a method: one function with
+that shared signature, decorate it, import the module from
+`_methods/__init__.py`. No dispatcher edits. See
+`AGENTS.md`.
+
+Default method `rauter_mangano_2026` (binary only):
+
+- Required dims: `observation`, `node`. Optional dim:
+  `seed` (trained replicates). Any other dim: `Kpnn2Error`
+  (reduce or `.rename` first). Concatenate seeds with
+  `xr.concat(..., dim="seed")`. No `seed` dim is one seed.
+- `labels` required: 1-d array paired in order, or
+  `pandas.Series` reindexed to the observation coordinate.
+  Required kwargs `class_0` and `class_1` (even when labels
+  are already 0/1). More than two classes, a missing class,
+  or labels outside that pair: `Kpnn2Error`.
+- Per seed and node: `mean_c` over observations of class
+  `c`; `D = mean_1 - mean_0`; `eps = +1` if
+  `|mean_1| >= |mean_0|` else `-1` (ties to class 1);
+  `score = eps * |D|`. Ranking by `abs_score` does not
+  depend on the sign convention. `near_tie` uses relative
+  `tie_tolerance` (default 0.05) on seed-averaged absolute
+  class means; the sign is then unreliable.
+- `sign_reference`: `"per_seed"` (default; score then
+  average) or `"seed_mean"` (average class means, then
+  score). `mean_class0`, `mean_class1`,
+  `class_difference` are always seed-averaged `D`.
+- Return: `xarray.Dataset` on `node`, variables `score`,
+  `abs_score`, `mean_class0`, `mean_class1`,
+  `class_difference`, `sign`, `n_seeds`,
+  `sign_consistency`, `counteracting`, `near_tie`. Copy a
+  scalar `layer` coordinate when present.
+
+Deprecated `rauter_mangano_2026_legacy`: `score = eps * D`
+(same magnitude, reversed sign when `D < 0`).
+
+Do not attach labels inside `map_node_attributions`. Do not
+guess that `step` or a Captum `class` dim is `seed`.
 
 ---
 
@@ -2005,6 +2081,15 @@ da = kpnn2.map_node_attributions(
     spec=spec,
     layer=len(spec.layer_nodes) - 1,
 )
+# optional: fold observations (and seeds) to one score
+# per node; class_0 / class_1 required for the default
+# binary method
+agg = kpnn2.aggregate_node_attribution(
+    da,
+    labels=[0, 1],
+    class_0=0,
+    class_1=1,
+)
 ```
 
 Every edge, including `A → C` when that row is present, is
@@ -2083,7 +2168,9 @@ PyTorch:
    device); do not send it through `align_inputs`.
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
-7. Save `spec.to_dict()` next to `state_dict`. Rebuild from
+7. Optionally `aggregate_node_attribution(...)` to fold
+   observations (and optional seeds) with a registered method.
+8. Save `spec.to_dict()` next to `state_dict`. Rebuild from
    `from_dict`, then `load_state_dict`. Weights alone cannot
    reconstruct names or layout. Pass
    `identity=spec.fingerprint` on each connectivity module
@@ -2115,6 +2202,11 @@ src/kpnn2/
   _gather.py                  # gather_hop_inputs, scatter_hop_outputs
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions
+  _aggregation/               # aggregate_node_attribution
+    _registry.py              # method decorator and table
+    _dispatch.py              # dispatcher
+    _bind.py                  # labels onto observation
+    _methods/                 # one module per method
   _errors.py                  # Kpnn2Error
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis

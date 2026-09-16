@@ -20,6 +20,10 @@ and no training loop.
 """
 
 from ._adjacency_spec import AdjacencySpec
+from ._aggregation import (
+    aggregate_node_attribution,
+    list_aggregation_methods,
+)
 from ._align import align_inputs
 from ._attributions import map_node_attributions
 from ._errors import Kpnn2Error
@@ -47,6 +51,8 @@ __all__ = [
     "scatter_hop_outputs",
     "align_inputs",
     "map_node_attributions",
+    "aggregate_node_attribution",
+    "list_aggregation_methods",
     "Kpnn2Error",
     "__version__",
 ]

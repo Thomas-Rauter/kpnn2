@@ -63,6 +63,38 @@ changes, update **all** of these in the same change:
 Do not export compiler leftovers (`compile_graph`,
 `customize_model`, and the rest listed in that test).
 
+## How to add an aggregation method
+
+`aggregate_node_attribution` is a dispatcher. Methods live
+under `src/kpnn2/_aggregation/_methods/`. They share one
+internal signature
+`(attributions, labels, **kwargs) -> xarray.Dataset`.
+Do not change the dispatcher to add a method.
+
+1. Add a module, for example
+   `_aggregation/_methods/_someone_2027.py`.
+2. Decorate the function with
+   `@register_aggregation_method(name, status, description,
+   references, added_in, ...)`. Statuses are `recommended`,
+   `supported`, `experimental`, `deprecated`, `removed`.
+   Deprecated entries need `deprecated_in` and
+   `replacement`; removed entries need `removed_in` and
+   `replacement`. Use `FutureWarning` for deprecated
+   (not `DeprecationWarning`).
+3. Import the module in
+   `_aggregation/_methods/__init__.py` so the decorator
+   runs.
+4. The method checks its own dims and whether `labels` is
+   required. Optional `seed` is this method's concern, not
+   the dispatcher's. Reject unexpected dims.
+
+Do not export the method function or the decorator.
+`list_aggregation_methods()` and the dispatcher pick the
+new name up with no other code changes. Tests may import
+`register_aggregation_method` from
+`kpnn2._aggregation._registry` and must unregister dummy
+entries.
+
 ## Changelog
 
 `CHANGELOG.md` is for important API and core changes only,

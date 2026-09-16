@@ -32,6 +32,7 @@ body:
         - MaskedLinear
         - align_inputs
         - map_node_attributions
+        - aggregate_node_attribution
         - examples / tutorials
         - other
     validations:

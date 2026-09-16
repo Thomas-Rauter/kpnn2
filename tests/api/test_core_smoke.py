@@ -6,6 +6,7 @@ import torch
 from kpnn2 import (
     LayeredSpec,
     MaskedLinear,
+    aggregate_node_attribution,
     align_inputs,
     gather_hop_inputs,
     map_node_attributions,
@@ -53,6 +54,15 @@ def test_core_smoke():
     assert list(da["node"].values) == list(spec.layer_nodes[1])
     assert int(da.sizes["observation"]) == 2
     assert int(da.coords["layer"]) == 1
+
+    agg = aggregate_node_attribution(
+        da,
+        labels=[0, 1],
+        class_0=0,
+        class_1=1,
+    )
+    assert "score" in agg
+    assert int(agg.sizes["node"]) == 1
 
 
 if __name__ == "__main__":

@@ -19,6 +19,8 @@ _PUBLIC_NAMES = [
     "scatter_hop_outputs",
     "align_inputs",
     "map_node_attributions",
+    "aggregate_node_attribution",
+    "list_aggregation_methods",
     "Kpnn2Error",
     "__version__",
 ]

@@ -9,8 +9,9 @@ class Kpnn2Error(Exception):
 
     Raised for invalid edgelists, illegal ``LayeredSpec`` operations,
     bad ``MaskedLinear`` masks, saved activations that do not match
-    the hop they are gathered for, and input or attribution tensors
-    that do not match the spec.
+    the hop they are gathered for, input or attribution tensors that
+    do not match the spec, and invalid attribution aggregation
+    calls.
 
     Examples
     --------

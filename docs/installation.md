@@ -37,6 +37,9 @@ pip install captum
 
 Then pass the resulting tensor to
 [`map_node_attributions`][kpnn2.map_node_attributions].
+Fold named scores with
+[`aggregate_node_attribution`][kpnn2.aggregate_node_attribution]
+when you want one value per node.
 Any other attribution method that yields a tensor of named-layer
 units works the same way. Extra axes (class, step, …) stay as extra
 xarray dimensions.
