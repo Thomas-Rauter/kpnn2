@@ -20,9 +20,6 @@ This project follows semantic versioning.
   `source_in_layer` / `target_in_layer`.
 - `PackedLinear` is the large-n path on hops as well as on an
   `AdjacencySpec`.
-- `xarray>=2024.11` with no CalVer upper bound. On
-  Python 3.10, xarray's `Requires-Python` still
-  selects a 3.10-capable wheel.
 
 ### Added
 
