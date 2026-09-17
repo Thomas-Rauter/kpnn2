@@ -170,13 +170,114 @@ def test_seed_scores_are_averaged():
     assert out["score"].item() == pytest.approx(1.0)
 
 
-def test_returns_only_the_score():
+def test_returns_score_and_flag():
     out = _agg(
         _da([[1.0], [2.0]], nodes=["n"]),
         np.array([0, 1]),
     )
-    assert list(out.data_vars) == ["score"]
+    assert list(out.data_vars) == ["score", "mean_class1_below_class0"]
     assert out["score"].dims == ("node",)
+    assert out["mean_class1_below_class0"].dims == ("node",)
+    assert out["mean_class1_below_class0"].dtype == bool
+
+
+@pytest.mark.parametrize(
+    ("mean0", "mean1", "below", "corrected"),
+    [
+        (1.0, 5.0, False, 4.0),
+        (-5.0, -1.0, False, -4.0),
+        (1.0, -5.0, True, 6.0),
+        (5.0, -1.0, True, -6.0),
+        (-1.0, 1.0, False, 2.0),
+        (1.0, -1.0, True, 2.0),
+        (2.0, 2.0, False, 0.0),
+    ],
+)
+def test_flag_and_corrected_sign(mean0, mean1, below, corrected):
+    da = _da([[mean0], [mean1]], nodes=["n"])
+    labels = np.array([0, 1])
+    plain = _agg(da, labels)
+    fixed = _agg(da, labels, correct_sign=True)
+    assert bool(plain["mean_class1_below_class0"].item()) is below
+    xr.testing.assert_identical(
+        plain["mean_class1_below_class0"],
+        fixed["mean_class1_below_class0"],
+    )
+    # Corrected score: eps * |mu_1 - mu_0|, ties to class 1.
+    eps = 1.0 if abs(mean1) >= abs(mean0) else -1.0
+    assert corrected == pytest.approx(eps * abs(mean1 - mean0))
+    assert fixed["score"].item() == pytest.approx(corrected)
+    expected_plain = -corrected if below else corrected
+    assert plain["score"].item() == pytest.approx(expected_plain)
+
+
+def test_flag_is_per_seed_and_correction_happens_before_the_mean():
+    # Seed 0: mu_0=1, mu_1=-5 → r=-6, flagged.
+    # Seed 1: mu_0=0, mu_1=4 → r=4, not flagged.
+    data = np.stack(
+        [
+            np.array([[1.0], [-5.0]]),
+            np.array([[0.0], [4.0]]),
+        ],
+        axis=0,
+    )
+    da = _da(data, nodes=["n"])
+    labels = np.array([0, 1])
+    plain = _agg(da, labels)
+    fixed = _agg(da, labels, correct_sign=True)
+    flag = plain["mean_class1_below_class0"]
+    assert flag.dims == ("seed", "node")
+    assert flag.values.tolist() == [[True], [False]]
+    assert plain["score"].item() == pytest.approx(-1.0)
+    assert fixed["score"].item() == pytest.approx(5.0)
+
+
+def test_flag_is_false_for_a_seed_that_does_not_count():
+    data = np.stack(
+        [
+            np.array([[1.0], [3.0]]),
+            np.array([[np.nan], [-5.0]]),
+        ],
+        axis=0,
+    )
+    out = _agg(
+        _da(data, nodes=["n"]),
+        np.array([0, 1]),
+    )
+    flag = out["mean_class1_below_class0"]
+    assert flag.values.tolist() == [[False], [False]]
+
+
+def test_correct_sign_matches_loop_form_of_the_epsilon_method():
+    np.random.seed(42)
+    attributions = np.random.normal(size=(4, 9, 6))
+    labels = np.array([0, 1, 1, 0, 1, 0, 0, 1, 1])
+    out = _agg(
+        _da(attributions),
+        labels,
+        correct_sign=True,
+    )
+    mean0 = attributions[:, labels == 0, :].mean(axis=1)
+    mean1 = attributions[:, labels == 1, :].mean(axis=1)
+    eps = np.where(np.abs(mean1) >= np.abs(mean0), 1.0, -1.0)
+    np.testing.assert_allclose(
+        out["score"].values,
+        (eps * np.abs(mean1 - mean0)).mean(axis=0),
+    )
+    np.testing.assert_array_equal(
+        out["mean_class1_below_class0"].values,
+        mean1 < mean0,
+    )
+
+
+def test_numpy_bool_correct_sign_is_accepted():
+    out = _agg(
+        _da([[1.0], [-5.0]], nodes=["n"]),
+        np.array([0, 1]),
+        correct_sign=np.bool_(True),
+    )
+    assert out["score"].item() == pytest.approx(6.0)
+    assert json.loads(out.attrs["method_params"])["correct_sign"] is True
 
 
 def test_nan_attribution_is_left_out_of_its_class_mean():
@@ -486,6 +587,7 @@ def test_default_method_stamps_attrs():
     assert json.loads(out.attrs["method_params"]) == {
         "class_0": 0,
         "class_1": 1,
+        "correct_sign": False,
     }
 
 
@@ -608,6 +710,8 @@ def test_input_is_not_modified():
         ({"class_0": np.array([0])}, "'class_0' must be a scalar"),
         ({"class_1": [1, 2]}, "'class_1' must be a scalar"),
         ({"class_1": 2}, "class_1=2"),
+        ({"correct_sign": 1}, "'correct_sign' must be a bool"),
+        ({"correct_sign": "yes"}, "'correct_sign' must be a bool"),
         ({"unknown": 1}, "unexpected keyword argument 'unknown'"),
         (
             {"sign_reference": "per_seed"},

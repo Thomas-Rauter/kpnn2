@@ -1944,21 +1944,29 @@ ranking advice or other claims beyond those formulas.
   Required kwargs `class_0` and `class_1` (even when labels
   are already 0/1), each a scalar. More than two classes, a
   missing class, or labels outside that pair: `Kpnn2Error`.
-  Labels may mix types. No other kwargs.
+  Labels may mix types. One more kwarg: `correct_sign`, a
+  bool, default False.
 - Per seed `s` and node `i`, with class sets `O_0`, `O_1`:
   `mu_c = mean_{o in O_c} a`. The winner `w` is the class
   mean with the larger absolute value, the loser `l` the
   other (tie: class 1 wins). `r_s = w - l`, both with their
   original signs.
-- `score = (1/S) sum_s r_s`.
+- Flag `f_s = [mu_1 < mu_0]`, always computed. With
+  `correct_sign=True`, `r_s` becomes `-r_s` wherever `f_s`
+  is True, which gives `eps * |mu_1 - mu_0|`.
+- `score = (1/S) sum_s r_s`. The default
+  (`correct_sign=False`) is winner minus loser, as in the
+  paper.
 - NaN safeguard: a NaN attribution is left out of its class
   mean. A seed counts for a node only when both class means
-  exist; the seed mean runs over those seeds. No such seed:
-  `score` is NaN.
-- Return: `xarray.Dataset` on `node` with the single
-  variable `score`. Copy a scalar `layer` coordinate when
-  present. The dispatcher then stamps `method`,
-  `method_params`, and `kpnn2_version`.
+  exist; the seed mean runs over those seeds, and `f_s` is
+  False for the others. No such seed: `score` is NaN.
+- Return: `xarray.Dataset` with `score` on `node` and the
+  boolean flag `mean_class1_below_class0` on
+  `(seed, node)`, or `node` without a `seed` dim. Copy a
+  scalar `layer` coordinate when present. The dispatcher
+  then stamps `method`, `method_params`, and
+  `kpnn2_version`.
 
 ---
 

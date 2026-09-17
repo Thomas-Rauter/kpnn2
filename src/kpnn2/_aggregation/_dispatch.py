@@ -117,7 +117,7 @@ def aggregate_node_attributions(
     'rauter_mangano_2026'
     >>> import json
     >>> json.loads(out.attrs["method_params"])
-    {'class_0': 0, 'class_1': 1}
+    {'class_0': 0, 'class_1': 1, 'correct_sign': False}
     """
     if not isinstance(attributions, xr.DataArray):
         raise Kpnn2Error("'attributions' must be an xarray.DataArray.")

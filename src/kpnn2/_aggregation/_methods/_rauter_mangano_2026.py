@@ -20,6 +20,7 @@ from .._bind import (
 from .._registry import register_aggregation_method
 
 _METHOD_NAME = "rauter_mangano_2026"
+_FLAG_NAME = "mean_class1_below_class0"
 
 _RAUTER_MANGANO_DESCRIPTION = (
     "Binary: class mean with the larger absolute value minus "
@@ -41,6 +42,7 @@ def rauter_mangano_2026(
     *,
     class_0: object | None = None,
     class_1: object | None = None,
+    correct_sign: bool = False,
 ) -> xr.Dataset:
     """
     Score each node by winner minus loser of its class means.
@@ -77,11 +79,28 @@ def rauter_mangano_2026(
 
     ``score(i) = (1/S) * sum_s r(s, i)``.
 
+    Flag. For each seed and node, the method records whether
+    the class 1 mean is below the class 0 mean:
+
+    ``f(s, i) = [mu_1(s, i) < mu_0(s, i)]``.
+
+    Exactly when ``f(s, i)`` is True, ``r(s, i)`` has the
+    opposite sign to ``eps(s, i) * |mu_1(s, i) - mu_0(s, i)|``,
+    where ``eps(s, i) = +1`` if class 1 is the winner and
+    ``-1`` otherwise. With ``correct_sign=True``, Step 3
+    averages ``-r(s, i)`` instead of ``r(s, i)`` wherever
+    ``f(s, i)`` is True, so the score becomes
+
+    ``score(i) = (1/S) * sum_s eps(s, i) * |mu_1(s, i) - mu_0(s, i)|``.
+
+    The flag is computed and returned either way.
+
     Missing values: a NaN attribution is left out of its
     class mean. Seed ``s`` counts for node ``i`` only when
     both ``mu_0(s, i)`` and ``mu_1(s, i)`` exist; Step 3 then
-    averages over those seeds only. A node with no such seed
-    has ``score`` NaN. Without NaN, every seed counts.
+    averages over those seeds only, and ``f(s, i)`` is False
+    for the other seeds. A node with no such seed has
+    ``score`` NaN. Without NaN, every seed counts.
 
     Parameters
     ----------
@@ -108,12 +127,19 @@ def rauter_mangano_2026(
     class_1 : scalar
         Label value for class 1. Must differ from
         ``class_0``. Arrays are rejected.
+    correct_sign : bool, optional
+        If True, flip the sign of ``r(s, i)`` wherever
+        ``f(s, i)`` is True before Step 3, as above. Default
+        False, which is the winner-minus-loser score.
 
     Returns
     -------
     xarray.Dataset
-        One variable, ``score``, with one value per node (the
+        Two variables. ``score`` has one value per node (the
         same ``node`` axis as the input).
+        ``mean_class1_below_class0`` is the boolean flag
+        ``f(s, i)``, with dims ``(seed, node)``, or ``(node,)``
+        when the input has no ``seed`` dim.
 
     Raises
     ------
@@ -134,11 +160,19 @@ def rauter_mangano_2026(
     Captum's ``target=`` (which output class was explained).
     If a Captum ``class`` dim is still on the array, select
     one class before calling.
+
+    ``mean_class1_below_class0`` compares the class means of
+    the attributions as given. If the attributions explain
+    the class 1 output (for example Captum ``target=None`` on
+    a single logit), True means that, in that seed, the node
+    pushes class 1 observations less toward class 1 than
+    class 0 observations.
     """
     _check_class_mapping(
         class_0,
         class_1,
     )
+    _check_correct_sign(correct_sign)
     require_named_dims(
         attributions,
         required=(OBSERVATION_DIM, NODE_DIM),
@@ -163,6 +197,13 @@ def rauter_mangano_2026(
         mean1 - mean0,
         mean0 - mean1,
     ).where(valid)
+    below = (mean1 < mean0) & valid
+    if correct_sign:
+        per_seed = xr.where(
+            below,
+            -per_seed,
+            per_seed,
+        )
     if SEED_DIM in scored.dims:
         score = per_seed.mean(SEED_DIM)
     else:
@@ -173,7 +214,10 @@ def rauter_mangano_2026(
     if LAYER_COORD in scored.coords and LAYER_COORD not in scored.dims:
         coords[LAYER_COORD] = scored.coords[LAYER_COORD]
     return xr.Dataset(
-        data_vars={"score": score},
+        data_vars={
+            "score": score,
+            _FLAG_NAME: below,
+        },
         coords=coords,
     )
 
@@ -194,6 +238,12 @@ def _check_class_mapping(
             raise Kpnn2Error(f"'{name}' must be a scalar label value.")
     if class_0 == class_1:
         raise Kpnn2Error("'class_0' and 'class_1' must be distinct.")
+
+
+def _check_correct_sign(correct_sign: object) -> None:
+    """Require a boolean ``correct_sign``."""
+    if not isinstance(correct_sign, (bool, np.bool_)):
+        raise Kpnn2Error("'correct_sign' must be a bool.")
 
 
 def _binary_masks(
