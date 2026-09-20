@@ -157,8 +157,10 @@ layers you assemble yourself. See
 The snippet below is a minimal run of steps 1–4, using the
 edgelist from the table above. Column order in the input table
 does not matter: `align_inputs()` matches names. Skip edges are
-omitted here; see [**Skip edges**](docs/skip-edges.ipynb). A full
-walkthrough, including training and attribution, is in
+omitted here; [**Skip edges**](docs/skip-edges.ipynb) works them
+through. [**Why not custom PyTorch?**](#why-not-custom-pytorch)
+sets this hop loop against the equivalent module written by hand.
+A full walkthrough, including training and attribution, is in
 [**Feedforward example**](docs/feedforward-example.ipynb).
 
 ```python
@@ -208,6 +210,270 @@ x = kpnn2.align_inputs(
 y = model(x)
 # Continue training with ordinary PyTorch.
 ```
+
+## Why not custom PyTorch?
+
+A pathway prior is still a feedforward network, so you *can*
+write one in plain PyTorch: sort the named nodes into layers,
+build a mask for each hop, and pass `W * mask` to `F.linear`.
+Written out, that preparation is a parser — the code on the left
+below is one. It also has to be rerun by hand: a single edge
+added to the table can move nodes between layers, and the masks,
+the layers each hop reads, and the column order of every
+concatenated input all change with it.
+
+Much of that column is not the model but the checks the masks
+depend on. A missing node name silently adds a node, a duplicated
+edge silently collapses into one weight, and a cycle has no
+layering at all, so the depth pass has to detect it rather than
+recurse forever. Both columns reject the same six malformed
+edgelists.
+
+`kpnn2` replaces that preparation with one call to
+`parse_layered()` and leaves the `nn.Module` as a loop over hops.
+The edgelist stays the only description of the graph, skip edges
+arrive already packed into the hops that read them, and
+`align_inputs()` matches input columns by name rather than by
+position. [**Skip edges**](docs/skip-edges.ipynb) works through
+the same point in a full example.
+
+<div>
+<img class="figure-full" src="docs/figures/custom_pytorch_pathway.svg" alt="A sparse pathway prior">
+</div>
+
+**Figure 2.** A sparse pathway prior: genes feeding transcription
+factors, kinases, cellular processes and a phenotype. Solid edges
+connect adjacent layers; dashed edges skip one. Both snippets
+below build this network from the same edgelist.
+
+<div class="grid code-compare" markdown>
+
+<div markdown>
+
+**Custom PyTorch**
+
+```python
+from collections import defaultdict, deque
+import pandas as pd
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+edgelist = pd.read_csv("pathway_prior.csv")
+
+missing = {"source", "target"} - set(
+    edgelist.columns
+)
+if missing:
+    raise ValueError(
+        f"missing columns: {sorted(missing)}"
+    )
+pairs = edgelist[["source", "target"]]
+if pairs.isna().any().any():
+    raise ValueError("missing node names")
+pairs = pairs.astype(str)
+if (pairs == "").any().any():
+    raise ValueError("empty node names")
+loop_nodes = pairs["source"][
+    pairs["source"] == pairs["target"]
+]
+if len(loop_nodes):
+    raise ValueError(
+        f"self-loops: {sorted(set(loop_nodes))}"
+    )
+if pairs.duplicated().any():
+    raise ValueError("duplicate edges")
+
+parents = defaultdict(set)
+children = defaultdict(list)
+nodes = set()
+for source, target in zip(
+    pairs["source"],
+    pairs["target"],
+):
+    parents[target].add(source)
+    children[source].append(target)
+    nodes.add(source)
+    nodes.add(target)
+
+# Kahn's algorithm: recursion would overflow
+# the stack on a deep graph and never return
+# on a cyclic one. What it leaves unranked
+# is the cycle.
+in_degree = {
+    name: len(parents[name]) for name in nodes
+}
+ready = deque(
+    name
+    for name in sorted(nodes)
+    if in_degree[name] == 0
+)
+depths = {}
+while ready:
+    name = ready.popleft()
+    if parents[name]:
+        depths[name] = 1 + max(
+            depths[parent]
+            for parent in parents[name]
+        )
+    else:
+        depths[name] = 0
+    for child in children[name]:
+        in_degree[child] -= 1
+        if in_degree[child] == 0:
+            ready.append(child)
+if len(depths) < len(nodes):
+    unranked = sorted(nodes - depths.keys())
+    raise ValueError(f"cycle: {unranked}")
+
+by_layer = defaultdict(list)
+for name, depth in depths.items():
+    by_layer[depth].append(name)
+layers = [
+    tuple(sorted(by_layer[depth]))
+    for depth in range(max(by_layer) + 1)
+]
+masks = []
+for depth in range(1, len(layers)):
+    src_layers = []
+    for src_depth, layer in enumerate(
+        layers[:depth]
+    ):
+        if any(
+            source in parents[target]
+            for target in layers[depth]
+            for source in layer
+        ):
+            src_layers.append(src_depth)
+    col_of = {}
+    col = 0
+    for src_depth in src_layers:
+        for name in layers[src_depth]:
+            col_of[name] = col
+            col += 1
+    mask = torch.zeros(
+        len(layers[depth]),
+        col,
+    )
+    for row, target in enumerate(layers[depth]):
+        for source in parents[target]:
+            mask[row, col_of[source]] = 1.0
+    masks.append((src_layers, mask))
+
+
+class Net(nn.Module):
+    def __init__(self, masks, n_inputs):
+        super().__init__()
+        self.n_inputs = n_inputs
+        self.src_layers = [
+            src for src, _ in masks
+        ]
+        self.lins = nn.ModuleList()
+        self.masks = nn.ParameterList()
+        for _, mask in masks:
+            self.lins.append(
+                nn.Linear(
+                    mask.shape[1],
+                    mask.shape[0],
+                )
+            )
+            self.masks.append(
+                nn.Parameter(
+                    mask,
+                    requires_grad=False,
+                )
+            )
+
+    def forward(self, x):
+        # Width is checkable, column order is
+        # not: ordering x to match layers[0]
+        # stays the caller's job.
+        if x.shape[-1] != self.n_inputs:
+            raise ValueError(
+                f"expected {self.n_inputs} "
+                f"columns, got {x.shape[-1]}"
+            )
+        saved = {0: x}
+        h = x
+        for i, (lin, mask) in enumerate(
+            zip(self.lins, self.masks)
+        ):
+            parts = [
+                saved[src]
+                for src in self.src_layers[i]
+            ]
+            inp = (
+                parts[0]
+                if len(parts) == 1
+                else torch.cat(parts, 1)
+            )
+            h = F.linear(
+                inp,
+                lin.weight * mask,
+                lin.bias,
+            )
+            if i + 1 < len(self.lins):
+                h = F.relu(h)
+            saved[i + 1] = h
+        return h
+
+
+model = Net(masks, len(layers[0]))
+```
+
+</div>
+
+<div markdown>
+
+**kpnn2**
+
+```python
+import pandas as pd
+import torch.nn.functional as F
+from torch import nn
+
+import kpnn2
+
+edgelist = pd.read_csv("pathway_prior.csv")
+spec = kpnn2.parse_layered(edgelist)
+
+
+class Net(nn.Module):
+    def __init__(self, spec: kpnn2.LayeredSpec):
+        super().__init__()
+        self.spec = spec
+        self.lins = nn.ModuleList(
+            [
+                kpnn2.PackedLinear(
+                    hop.source_index,
+                    hop.target_index,
+                    hop.out_features,
+                    hop.in_features,
+                    identity=spec.fingerprint,
+                )
+                for hop in spec.hops
+            ]
+        )
+
+    def forward(self, x):
+        saved = {0: x}
+        h = x
+        for i, (lin, hop) in enumerate(
+            zip(self.lins, self.spec.hops)
+        ):
+            h = lin(kpnn2.gather_hop_inputs(saved, hop))
+            if i + 1 < len(self.lins):
+                h = F.relu(h)
+            saved[i + 1] = h
+        return h
+
+
+model = Net(spec)
+```
+
+</div>
+
+</div>
 
 ## API
 

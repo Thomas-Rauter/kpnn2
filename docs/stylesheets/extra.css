@@ -1,3 +1,44 @@
+/* Soft PyTorch tint on the header bar only; page stays
+   white. Logo orange for links and accents. Header text
+   stays dark. Colors from
+   docs/pytorch_logo_surrounding_color_suggestions.png. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #fff1ec;
+  --md-primary-fg-color--light: #fff8f5;
+  --md-primary-fg-color--dark: #f5d5c8;
+  --md-primary-bg-color: rgba(0, 0, 0, 0.87);
+  --md-primary-bg-color--light: rgba(0, 0, 0, 0.54);
+  --md-accent-fg-color: #ee4c2c;
+  --md-accent-fg-color--transparent: rgba(238, 76, 44, 0.1);
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffff;
+  --md-typeset-a-color: #ee4c2c;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #3d241f;
+  --md-primary-fg-color--light: #5a2a1f;
+  --md-primary-fg-color--dark: #2a1814;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+  --md-accent-fg-color: #ee4c2c;
+  --md-accent-fg-color--transparent: rgba(238, 76, 44, 0.1);
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffff;
+  --md-typeset-a-color: #ee4c2c;
+}
+
+.md-typeset .md-button--primary {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: #ffffff;
+}
+
+/* Material's search overlay assumes a dark header. */
+[data-md-color-scheme="default"] .md-search__form {
+  background-color: #ffffff;
+}
+
 /* Package logo in the header and the mobile drawer. */
 .md-header__button.md-logo img,
 .md-header__button.md-logo svg,
@@ -5,6 +46,22 @@
 .md-nav__button.md-logo svg {
   height: 1.8rem;
   width: 1.8rem;
+}
+
+/* README hero logos: Material ignores height="72"
+   and scales the 227px SVG to the content column. */
+.md-typeset img[src*="kpnn2_logo.svg"],
+.md-typeset img[src*="kpnn2_wordmark.svg"] {
+  height: 72px;
+  width: auto;
+  max-width: none;
+  vertical-align: middle;
+}
+
+/* README has no H1, so Material would inject "Home".
+   A hidden H1 in docs/index.md blocks that. */
+.md-typeset h1.homepage-hero-title {
+  display: none;
 }
 
 /* Paper SVGs are sized in millimetres; stretch them to the
@@ -20,6 +77,21 @@
   height: 4.75rem;
   display: block;
   margin: 0.1rem 0 0.75rem;
+}
+
+/* Homepage pathway prior above the two-column snippets. */
+.md-typeset img[src*="custom_pytorch_pathway.svg"] {
+  width: 100%;
+  height: auto;
+}
+
+/* Side-by-side PyTorch vs kpnn2 snippets on the homepage. */
+.md-typeset .code-compare {
+  align-items: start;
+}
+
+.md-typeset .code-compare .highlight {
+  margin-top: 0.4em;
 }
 
 /* Grouping headers on the API reference index. */
