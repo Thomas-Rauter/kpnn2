@@ -1,0 +1,174 @@
+AGENT GUIDELINES FOR src/
+=========================
+
+Apply these rules when changing `src/` (the installed
+package). They are library-craft constraints, not the
+product contract and not a style guide for humans.
+
+`CONTEXT.md` wins on product and architecture, including
+documented dtype conversions, named densify hatches, and
+public signatures. `AGENTS.md` wins on process: tests may
+seed; pytest, ruff, lockstep, and git stay there.
+
+This file does not apply to tests, docs, notebooks, or
+`dev/`. Those trees may print, plot, write files, and set
+seeds.
+
+This package is a scientific LIBRARY: the user owns the
+program, the session, and the data; the package provides
+composable functions for its core scientific domain.
+See CONTEXT.md **Package philosophy**. When a rule
+conflicts with the task, do not break it silently: stop
+and explain the conflict.
+
+
+1. SCOPE: DO ONLY WHAT WAS ASKED
+--------------------------------
+- Implement the requested change and nothing more. Do not
+  add options, flags, parameters, helper functions, or
+  "while I'm at it" extensions. If you see a useful
+  extension, propose it in your reply; do not build it.
+- Do not add new dependencies. If one seems necessary, ask
+  first and explain why the existing stack cannot do the
+  job.
+- Do not add plotting to computational functions.
+  Computation returns results; plotting, if it exists at
+  all, lives outside `src/`.
+- Do not add file I/O. Functions take and return in-memory
+  objects.
+- Do not add generality that no concrete use case requires.
+  Prefer the simplest design that solves the actual
+  problem.
+- Do not turn the package into a framework: no taking over
+  training loops, model objects, or experiment lifecycles.
+  See CONTEXT.md **Package philosophy**.
+
+
+2. NO SIDE EFFECTS
+------------------
+- Never call print(). No progress bars. Raise `Kpnn2Error`
+  for invalid use. Warn only for recoverable oddities
+  (`warnings.warn`; `FutureWarning` for deprecation). If
+  the user need not act, stay silent. Do not add a logging
+  subsystem.
+- Never set global state in library code: no global seeds
+  (torch.manual_seed, np.random.seed, random.seed), no
+  matplotlib rcParams, no pandas options, no default device
+  selection. Accept a local RNG/generator argument instead
+  (see CONTEXT.md: `generator=`, not `seed=`). Tests still
+  seed as AGENTS.md requires.
+- Never mutate caller data: no in-place modification,
+  transposing, densifying, or dropping values in objects
+  the caller passed in, unless the function is an
+  explicitly named in-place API.
+- Preserve the caller's dtype and device. No .to("cuda"),
+  .cuda(), .double(), or extra upcasting in library code,
+  unless CONTEXT.md already specifies that conversion
+  (for example `align_inputs` returns float32 CPU;
+  MaskedLinear's stored mask stays float32).
+- No hidden expensive work: no silent densify of sparse
+  matrices, no downloads, no full copies to GPU as a side
+  effect of a helper. Named allocating APIs that CONTEXT.md
+  already specifies (`Hop.to_mask()`,
+  `AdjacencySpec.to_mask()`) are not hidden work; do not
+  add new ones.
+- Importing the package must do nothing: no downloads,
+  prints, backend selection, eager compilation, or reading
+  the user's home directory.
+
+
+3. ERRORS AND VALIDATION: FAIL LOUDLY
+-------------------------------------
+- Validate user-facing arguments (type, shape, bounds,
+  semantics) at entry and raise `Kpnn2Error` that says what
+  was wrong and how to fix it. Public failures: `Kpnn2Error`
+  only (see AGENTS.md).
+- Never write code that silently recovers from invalid
+  input: no try/except with a quiet fallback, no automatic
+  casting to make input work, no guessing what the user
+  meant.
+- Do not add silent NaN imputation, fills, or drops. Do not
+  invent a new NaN policy for an existing function; follow
+  CONTEXT.md. A new public function needs an explicit
+  policy (reject, propagate, or mask) in its contract.
+- Enforce important constraints in code, not only in
+  docstrings.
+
+
+4. NUMERICS AND API STABILITY
+-----------------------------
+- Never change a default value (eps, tolerance,
+  normalization, initializer, reduction, tie-break) to make
+  a test pass or as a "cleanup". Numerical defaults are
+  public API; changing them is a breaking change that
+  requires explicit approval.
+- Do not rename, reorder, or remove public arguments or
+  functions without explicit approval. Breaking changes
+  need deprecation and a migration path. Do not grow or
+  shrink the public API unless the user asked (see
+  AGENTS.md lockstep).
+- Make axes, units, and conventions explicit in names,
+  signatures, or returned objects. Preserve identifiers the
+  caller supplied (sample IDs, gene names, labels).
+- When adding a new public name (only if the user asked),
+  first write the realistic calling code and show it; the
+  call site is the specification. Do not do this for
+  internal bugfixes.
+- Docstrings describe behavior and usage, not internal
+  implementation.
+
+
+5. TESTS
+--------
+- Every change to behavior comes with tests. Run the full
+  suite as AGENTS.md requires.
+- Test scientific invariants, not only examples:
+  conservation laws, symmetries, analytic limits, known
+  edge cases, and agreement with an independent
+  implementation where possible.
+- Compare floats with an explicit tolerance (e.g.
+  np.testing.assert_allclose / torch.testing.assert_close).
+  Never assert exact float equality or compare against
+  bit-identical golden files.
+- Include tests for failure paths: invalid input must raise
+  the documented `Kpnn2Error`.
+- Where relevant, test that caller inputs are unchanged
+  after the call and that dtype and device are preserved,
+  except conversions CONTEXT.md already specifies.
+- Never weaken, skip, or delete an existing test to make a
+  change pass. If a test seems wrong, say so and explain
+  why.
+
+
+6. CODE STRUCTURE
+-----------------
+- Put code in the module whose responsibility it matches.
+  Do not create generic "utils"/"helpers" modules when a
+  specific name fits.
+- DRY applies to knowledge: each rule, constant, default,
+  convention, or validation check is defined once and
+  referenced elsewhere.
+- Do not merge code that merely looks similar. Unify only
+  when it represents the same concept; duplication is
+  cheaper than the wrong abstraction.
+- When goals conflict: correctness, then clarity and
+  maintainability, then performance. See CONTEXT.md
+  **Correctness over speed**.
+
+
+BEFORE FINISHING ANY CHANGE TO src/
+-----------------------------------
+[ ] No print(), global seeds, device moves, extra dtype
+    changes, or global config changes were added.
+[ ] Caller data is not mutated.
+[ ] No silent fallbacks, casts, or NaN handling were added.
+[ ] No numerical defaults or public signatures changed
+    without approval.
+[ ] No new dependencies, options, or features beyond the
+    request.
+[ ] Tests cover the change, including invariants and
+    failure paths, with float tolerances.
+[ ] No existing tests were weakened or removed.
+
+In your final reply, list any rule you could not follow
+and why.

@@ -8,8 +8,9 @@ architecture, locked product decisions, public API, and
 primitive specs. It is often the next file to open. It is
 not required for every task.
 
-Do not paste this file or `CONTEXT.md` into replies or into
-other rules.
+Do not paste this file, `CONTEXT.md`, or
+`dev/src_guidelines.txt` into replies or into other
+rules.
 
 ## When to read CONTEXT.md
 
@@ -35,6 +36,18 @@ Product locks (no compiler, no `torch.sparse`, two parsers,
 frozen topology, and the rest) live in `CONTEXT.md`. Point
 at named sections there. Do not copy those locks into this
 file.
+
+## When to read `dev/src_guidelines.txt`
+
+Read `dev/src_guidelines.txt` before changing `src/`.
+It is library-craft for package code, not the product
+contract. Skip it otherwise (tests-only, docs, process,
+git).
+
+If it conflicts with `CONTEXT.md` on product or
+architecture, `CONTEXT.md` wins. If it conflicts with
+this file on process (pytest, seeds in tests, ruff,
+lockstep, git), this file wins.
 
 ## Do not
 
@@ -223,3 +236,8 @@ repository layout, or core dependencies.
 Do not edit `CONTEXT.md` for typos in other files,
 tests-only work, or docs that already match the contract.
 Do not copy product locks from `CONTEXT.md` into this file.
+
+Library-craft rules live in `dev/src_guidelines.txt`.
+Update that file when those rules move. Do not copy
+them here. Update this file only if the pointer or
+when-to-read condition changes.
