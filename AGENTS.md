@@ -145,6 +145,9 @@ Execute tutorial notebooks with:
 python dev/docs_notebooks.py
 ```
 
+That clears cell `execution_count` and Jupyter
+`metadata.execution` afterward (outputs and cell ids
+stay). Use `--fix-only` to clear without re-running.
 Use the venv kernel, not
 `ipykernel install --user --name python3`. `mkdocs serve`
 repairs missing stream `name` fields on pre-build.

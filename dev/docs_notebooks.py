@@ -8,6 +8,11 @@ that on ``mkdocs`` pre-build, and is the supported execute path:
     python dev/docs_notebooks.py --fix-only
     python dev/docs_notebooks.py --literature
 
+After execute, cell ``execution_count`` values and Jupyter
+``metadata.execution`` timestamps are cleared so a re-run with
+unchanged outputs does not dirty the working tree. Outputs and
+cell ids are kept.
+
 Tutorial notebooks under ``docs/*.ipynb`` are executed in CI.
 Notebooks under ``docs/literature/`` are frozen reproductions:
 repair them, but do not execute them unless ``--literature`` is
@@ -61,6 +66,21 @@ def _detect_indent(text: str) -> int:
     return 1
 
 
+def _write_notebook(
+    path: Path,
+    data: dict,
+    indent: int,
+) -> None:
+    text = json.dumps(
+        data,
+        indent=indent,
+        ensure_ascii=False,
+    )
+    if not text.endswith("\n"):
+        text += "\n"
+    path.write_text(text)
+
+
 def repair_stream_names(path: Path) -> bool:
     """Add missing stream ``name`` fields. Return True if the file changed."""
     raw = path.read_text()
@@ -83,15 +103,48 @@ def repair_stream_names(path: Path) -> bool:
             changed = True
     if not changed:
         return False
-    indent = _detect_indent(raw)
-    text = json.dumps(
+    _write_notebook(
+        path,
         data,
-        indent=indent,
-        ensure_ascii=False,
+        _detect_indent(raw),
     )
-    if not text.endswith("\n"):
-        text += "\n"
-    path.write_text(text)
+    return True
+
+
+def clear_execution_metadata(path: Path) -> bool:
+    """Clear execution counts and timestamps. Keep outputs and ids.
+
+    Return True if the file changed.
+    """
+    raw = path.read_text()
+    data = json.loads(raw)
+    changed = False
+    for cell in data.get("cells", []):
+        if not isinstance(cell, dict):
+            continue
+        if cell.get("execution_count") is not None:
+            cell["execution_count"] = None
+            changed = True
+        metadata = cell.get("metadata")
+        if isinstance(metadata, dict) and "execution" in metadata:
+            del metadata["execution"]
+            changed = True
+        outputs = cell.get("outputs")
+        if not outputs:
+            continue
+        for output in outputs:
+            if not isinstance(output, dict):
+                continue
+            if output.get("execution_count") is not None:
+                output["execution_count"] = None
+                changed = True
+    if not changed:
+        return False
+    _write_notebook(
+        path,
+        data,
+        _detect_indent(raw),
+    )
     return True
 
 
@@ -152,7 +205,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--fix-only",
         action="store_true",
-        help="Repair stream names; do not execute.",
+        help=(
+            "Repair stream names and clear execution metadata; do not execute."
+        ),
     )
     parser.add_argument(
         "--literature",
@@ -187,7 +242,9 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"No notebooks in {docs_dir}")
     if args.fix_only:
         for path in notebooks:
-            if repair_stream_names(path):
+            repaired = repair_stream_names(path)
+            cleared = clear_execution_metadata(path)
+            if repaired or cleared:
                 print(f"Repaired {path}")
             else:
                 print(f"OK {path}")
@@ -197,6 +254,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Executing {path}")
         execute_notebook(path)
         repair_stream_names(path)
+        clear_execution_metadata(path)
         print(f"Wrote {path}")
 
 

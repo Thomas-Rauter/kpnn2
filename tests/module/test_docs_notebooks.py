@@ -19,6 +19,7 @@ assert _spec.loader is not None
 _docs_notebooks = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_docs_notebooks)
 _iter_notebooks = _docs_notebooks._iter_notebooks
+clear_execution_metadata = _docs_notebooks.clear_execution_metadata
 
 
 def _all_notebooks() -> list[Path]:
@@ -85,3 +86,52 @@ def test_literature_notebooks_keep_outputs() -> None:
 def test_notebooks_are_nbformat_v4(path: Path) -> None:
     data = json.loads(path.read_text())
     assert data.get("nbformat") == 4, path.name
+
+
+def test_clear_execution_metadata(
+    tmp_path: Path,
+) -> None:
+    nb = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {},
+        "cells": [
+            {
+                "cell_type": "code",
+                "execution_count": 3,
+                "id": "abc123",
+                "metadata": {
+                    "execution": {
+                        "iopub.execute_input": "t0",
+                        "iopub.status.idle": "t1",
+                    }
+                },
+                "source": ["print(1)\n"],
+                "outputs": [
+                    {
+                        "output_type": "execute_result",
+                        "execution_count": 3,
+                        "data": {"text/plain": "1"},
+                        "metadata": {},
+                    },
+                    {
+                        "output_type": "stream",
+                        "name": "stdout",
+                        "text": ["1\n"],
+                    },
+                ],
+            }
+        ],
+    }
+    path = tmp_path / "toy.ipynb"
+    path.write_text(json.dumps(nb, indent=1) + "\n")
+    assert clear_execution_metadata(path) is True
+    assert clear_execution_metadata(path) is False
+    data = json.loads(path.read_text())
+    cell = data["cells"][0]
+    assert cell["execution_count"] is None
+    assert "execution" not in cell["metadata"]
+    assert cell["id"] == "abc123"
+    assert cell["outputs"][0]["execution_count"] is None
+    assert cell["outputs"][0]["data"] == {"text/plain": "1"}
+    assert cell["outputs"][1]["text"] == ["1\n"]
