@@ -420,6 +420,8 @@ class LayeredSpec:
         edgelist.
     AdjacencySpec : Packed sibling layout, for cycles, self-loops,
         or one shared state vector instead of depths.
+    align_inputs : Column index that puts named features in
+        ``input_nodes`` order; length is ``layer_dims[0]``.
     gather_hop_inputs : Assembles one hop's input from the layer
         tensors produced so far.
     scatter_hop_outputs : Splits a transposed hop's output back

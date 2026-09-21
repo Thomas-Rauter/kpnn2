@@ -281,6 +281,16 @@ silently dropping those edges.
 [`tests/module/test_gather_hop_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_gather_hop_inputs.py),
 [`tests/module/test_scatter_hop_outputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_scatter_hop_outputs.py).
 
+**Alignment.** `align_inputs` maps a sequence of feature names
+to a 1-D `int64` column index. It does not take the matrix or
+return a data tensor. A DataFrame, tensor, string, bytes,
+mapping, set, AnnData-like object, or a matrix (`ndim != 1`)
+raises `Kpnn2Error`. On a `LayeredSpec` a wide input node
+repeats its index; on an `AdjacencySpec` the index is
+`len(input_nodes)` long and still needs scatter into the
+state vector.
+[`tests/module/test_align_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_align_inputs.py).
+
 **MaskedLinear.** A zero mask entry blocks that source in the
 forward pass, in `layer.weight`, and in the gradient, even
 when another parametrization is stacked on `weight`.

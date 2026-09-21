@@ -86,6 +86,8 @@ def _run_real_tabular_task() -> dict[str, float]:
         :,
         list(reversed(x_test_df.columns)),
     ]
+    # Same reversal on both splits, so they share a feature-axis
+    # order and one col is valid.
     col = align_inputs(
         x_train_shuffled.columns,
         spec,

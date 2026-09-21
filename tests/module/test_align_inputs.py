@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from kpnn2 import (
+    AdjacencySpec,
     Kpnn2Error,
     align_inputs,
     parse_adjacency,
@@ -304,6 +305,12 @@ def _invalid_align_cases():
             id="string",
         ),
         pytest.param(
+            b"AB",
+            spec,
+            "bytes",
+            id="bytes",
+        ),
+        pytest.param(
             {"A": 0, "B": 1},
             spec,
             "mapping",
@@ -383,6 +390,46 @@ def test_align_inputs_duplicate_labels_sorted_comma_separated():
     message = str(caught.value)
     assert "1, A" in message
     assert "converting labels to strings" in message
+
+
+def test_align_inputs_rejects_bytes():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"bytes.*feature names",
+    ) as caught:
+        align_inputs(
+            b"AB",
+            spec,
+        )
+
+    message = str(caught.value)
+    assert "string" not in message
+
+
+def test_align_inputs_empty_names_when_no_input_nodes():
+    spec = AdjacencySpec(
+        nodes=(),
+        input_nodes=(),
+        output_nodes=(),
+        hidden_nodes=(),
+        source_index=(),
+        target_index=(),
+        input_index=(),
+        output_index=(),
+    )
+    col = align_inputs(
+        [],
+        spec,
+    )
+    assert col.dtype == np.int64
+    assert col.tolist() == []
+    unused = align_inputs(
+        ["extra"],
+        spec,
+    )
+    assert unused.dtype == np.int64
+    assert unused.tolist() == []
 
 
 def test_align_inputs_accepts_adjacency_spec():

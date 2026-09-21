@@ -65,11 +65,14 @@ dense (no sparse IG here, and none to add).
 of feature names onto `spec.input_nodes` as a 1-D `int64`
 index. It does not take the matrix, copy sample rows, or
 densify. Apply the index on the caller's storage (`X[:, col]`
-for numpy, scipy, AnnData `.X`, or a tensor;
-`df.to_numpy()[:, col]` for a DataFrame). Pre-ordered dense
-tensors already skip `align_inputs`. A caller with sparse host
-X applies the index on the sparse layout, then densifies only
-each row block.
+for numpy, scipy CSR/CSC, AnnData `.X` in those formats, or
+a tensor; `df.to_numpy()[:, col]` for a DataFrame). COO-style
+sparse layouts need a format that supports integer column
+indexing. Width greater than 1 repeats indices and copies
+those columns on CSR/CSC. Pre-ordered dense tensors already
+skip `align_inputs`. A caller with sparse host X applies the
+index on the sparse layout, then densifies only each row
+block.
 
 Do not add AnnData, scipy sparse, a densifying `align_inputs`,
 minibatching, or device-copy helpers to this package unless a
@@ -1782,7 +1785,9 @@ state[:, spec.input_index] = x
   `Kpnn2Error`. The message names the unique duplicated labels
   after `str(...)`, sorted, comma-separated.
 - Accepted: a 1-D sequence of labels (`df.columns`,
-  `adata.var_names`, a numpy array, a list).
+  `adata.var_names`, a numpy array, a list). The annotated
+  type is `object` so a DataFrame or tensor is rejected at
+  runtime, not treated as names.
 
 **Rejected:**
 
@@ -1793,18 +1798,24 @@ state[:, spec.input_index] = x
   `names` is a tensor and that the feature names that label
   that axis are required. Pre-ordered dense tensors go
   **straight to the model**.
-- A string, mapping, set, AnnData-like object (`var_names`
-  and `X`), or a matrix (`ndim != 1`): `Kpnn2Error`.
+- A string, bytes, mapping, set, AnnData-like object
+  (`var_names` and `X`), or a matrix (`ndim != 1`):
+  `Kpnn2Error`. The string message must say that `names` is
+  a string; the bytes message must say that `names` is
+  bytes.
 - Do not check value dtypes. There are no values.
 - Do not return a tensor of data.
 
 **Not a kpnn2 matrix type:** AnnData, numpy matrices, dicts of
 columns, scipy sparse matrices. Pass the labels that sit on
 that axis and apply the index on the matrix (`X[:, col]`).
-A sparse host stays sparse until the caller densifies one
-row block. Passing `adata.to_df()` (or any full densify) and
-then a DataFrame into `align_inputs` is rejected at the
-DataFrame check.
+scipy CSR/CSC (and AnnData `.X` in those formats) stay sparse
+until the caller densifies one row block. COO-style layouts
+cannot be indexed that way; convert first. Width greater
+than 1 repeats indices and copies those columns on CSR/CSC.
+Passing `adata.to_df()` (or any full densify) and then a
+DataFrame into `align_inputs` is rejected at the DataFrame
+check.
 
 ---
 
@@ -2044,7 +2055,7 @@ edge / block start. Do not implement adjacency width.
 - `align_inputs` builds a `LayeredSpec` layout from
   `input_nodes` plus `layer_widths[0]` and repeats a node's
   column index across that node's units. An `AdjacencySpec`
-  still uses `build_layout(names)` at width 1.
+  does not expand widths and does not call `build_layout`.
 - `map_node_attributions` on a `LayeredSpec` uses
   `build_layout(layer_nodes[layer], layer_widths[layer])` when
   `layer=` is given. With `hop=`, it concatenates

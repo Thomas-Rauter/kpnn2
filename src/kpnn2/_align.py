@@ -26,6 +26,7 @@ _DATAFRAME_NOT_ACCEPTED_MSG = (
 _STRING_NOT_ACCEPTED_MSG = (
     "'names' is a string; pass a sequence of feature names."
 )
+_BYTES_NOT_ACCEPTED_MSG = "'names' is bytes; pass a sequence of feature names."
 _MAPPING_NOT_ACCEPTED_MSG = (
     "'names' must be a sequence of feature names, not a mapping."
 )
@@ -58,25 +59,30 @@ def align_inputs(
     into the caller's feature axis so that axis can be gathered
     into that order. It does not take the matrix, copy sample
     rows, or densify. Apply the index on whatever holds X:
-    ``X[:, col]`` for numpy, scipy, AnnData ``.X``, or a tensor;
-    ``df.to_numpy()[:, col]`` for a DataFrame. For a
+    ``X[:, col]`` for numpy, scipy CSR/CSC, AnnData ``.X`` in
+    those formats, or a tensor; ``df.to_numpy()[:, col]`` for
+    a DataFrame. COO-style sparse layouts do not support
+    integer column indexing; convert first. For a
     ``LayeredSpec``, a node with width greater than 1 repeats
     its column index across those units, so the length is
-    ``spec.layer_dims[0]``. For an ``AdjacencySpec`` the length
-    is ``len(spec.input_nodes)``. Call it after parsing, once,
-    instead of hand-ordering columns. DataFrames, tensors, and
-    matrices are rejected.
+    ``spec.layer_dims[0]``. On CSR/CSC that repeat copies
+    those columns and stays sparse; it is not a view. For an
+    ``AdjacencySpec`` the length is ``len(spec.input_nodes)``.
+    Call it after parsing, once, instead of hand-ordering
+    columns. DataFrames, tensors, and matrices are rejected.
 
     Parameters
     ----------
     names : sequence of labels
         Feature-axis labels, in the order they currently sit on
         the matrix: ``df.columns``, ``adata.var_names``, a
-        one-dimensional numpy array, or a list. Labels are
-        matched after ``str(...)``, the conversion edgelist
-        node names go through, so an integer label ``1``
-        matches node ``"1"``. Extra names are ignored. Neither
-        ``names`` nor the matrix is modified.
+        one-dimensional numpy array, or a list. The annotated
+        type is ``object`` so a DataFrame or tensor is not
+        treated as valid names; those are rejected at runtime.
+        Labels are matched after ``str(...)``, the conversion
+        edgelist node names go through, so an integer label
+        ``1`` matches node ``"1"``. Extra names are ignored.
+        Neither ``names`` nor the matrix is modified.
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
@@ -98,7 +104,7 @@ def align_inputs(
     Kpnn2Error
         If ``spec`` is neither a ``LayeredSpec`` nor an
         ``AdjacencySpec``; ``names`` is a DataFrame, tensor,
-        string, mapping, set, AnnData-like object, or a
+        string, bytes, mapping, set, AnnData-like object, or a
         matrix (ndim ≠ 1); ``names`` is not a sequence of
         labels; required names are missing or duplicated
         (including after ``str`` conversion; the message names
@@ -122,8 +128,12 @@ def align_inputs(
     needs no alignment and goes straight to the model. AnnData,
     numpy matrices, and scipy sparse matrices are not accepted
     as ``names``; pass the labels that sit on that axis and
-    apply the index on the matrix. A sparse host matrix stays
-    sparse until the caller densifies one row block.
+    apply the index on the matrix. scipy CSR/CSC and AnnData
+    ``.X`` in those formats stay sparse under ``X[:, col]``
+    until the caller densifies one row block. COO and similar
+    layouts cannot be indexed that way. Width greater than 1
+    repeats indices; on CSR/CSC that copies the duplicated
+    columns.
 
     The returned length for a ``LayeredSpec`` is
     ``spec.layer_dims[0]``, which equals
@@ -250,8 +260,10 @@ def _labels_from_names(names: object) -> list[str]:
         raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
     if isinstance(names, pd.DataFrame):
         raise Kpnn2Error(_DATAFRAME_NOT_ACCEPTED_MSG)
-    if isinstance(names, (str, bytes)):
+    if isinstance(names, str):
         raise Kpnn2Error(_STRING_NOT_ACCEPTED_MSG)
+    if isinstance(names, bytes):
+        raise Kpnn2Error(_BYTES_NOT_ACCEPTED_MSG)
     if isinstance(names, Mapping):
         raise Kpnn2Error(_MAPPING_NOT_ACCEPTED_MSG)
     if isinstance(names, Set):
