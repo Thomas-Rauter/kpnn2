@@ -31,7 +31,14 @@ def test_core_smoke():
             "feature_a": [3.0, 4.0],
         }
     )
-    x = align_inputs(data, spec)
+    col = align_inputs(
+        data.columns,
+        spec,
+    )
+    x = torch.as_tensor(
+        data.to_numpy()[:, col],
+        dtype=torch.float32,
+    )
     assert x.shape == (2, 2)
     assert x.dtype == torch.float32
 

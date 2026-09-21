@@ -103,8 +103,9 @@ source layer was never stored.
 
 On an `AdjacencySpec` there is one square multiply. Aligned
 inputs do not fit the state vector: `align_inputs()` returns
-`len(spec.input_nodes)` columns, not `len(spec.nodes)`, so you
-scatter them in at `spec.input_index`. Input rows of
+`len(spec.input_nodes)` positions, not `len(spec.nodes)`, so
+you gather those columns and scatter them in at
+`spec.input_index`. Input rows of
 `to_mask()` are structurally zero (`fan_in == 0`), so the
 multiply drives those units to zero: the scatter is required,
 and so is repeating it on every pass if you loop.

@@ -37,7 +37,7 @@ class AdjacencySpec:
         ``to_mask()``.
     input_nodes : tuple[str, ...]
         In-degree 0 names, alphabetical. This is the column order
-        of tensors returned by ``align_inputs``, which is
+        ``align_inputs`` indexes into, which is
         narrower than ``nodes`` unless every node is an input.
     output_nodes : tuple[str, ...]
         Out-degree 0 names, alphabetical.
@@ -58,8 +58,8 @@ class AdjacencySpec:
         ``[target_index[i], source_index[i]]``.
     input_index : tuple[int, ...]
         Position of each ``input_nodes`` name in ``nodes``, same
-        order. Scatter an ``align_inputs`` tensor into the state
-        vector along these columns.
+        order. Scatter gathered ``align_inputs`` columns into the
+        state vector along these columns.
     output_index : tuple[int, ...]
         Position of each ``output_nodes`` name in ``nodes``, same
         order. Read the network's outputs from the state vector
@@ -75,7 +75,8 @@ class AdjacencySpec:
         as they are, with one weight per edge and no ``(n, n)``.
     PackedMultiheadAttention : Scores only those same packed
         pairs, for an attention update instead of a linear one.
-    align_inputs : Orders a named DataFrame onto ``input_nodes``.
+    align_inputs : Column index that puts named features onto
+        ``input_nodes``.
 
     Notes
     -----
@@ -87,8 +88,8 @@ class AdjacencySpec:
     clones the square into a non-persistent buffer, so a layer
     built earlier keeps its own connectivity.
 
-    ``align_inputs`` returns ``len(input_nodes)`` columns, which
-    is not the state width. Scatter that tensor into the
+    ``align_inputs`` returns ``len(input_nodes)`` positions, which
+    is not the state width. Scatter the gathered columns into the
     ``n``-wide state vector with ``input_index``. Input rows of
     ``to_mask()`` are all zeros, so under the degree-aware init
     of ``MaskedLinear`` and ``PackedLinear`` those units stay

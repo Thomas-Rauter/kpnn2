@@ -146,7 +146,8 @@ layers you assemble yourself. See
    more than one layer apart, are already packed pairs of those
    hops, so there is nothing extra to call.
    `MaskedLinear(hop.to_mask())` is the dense hatch.
-4. Align named input tables with `align_inputs()`.
+4. Align feature names with `align_inputs()`, then index the
+   host matrix.
 5. Train with ordinary PyTorch.
 6. Optionally run Captum (or another method) yourself, then label a
    layer tensor with `map_node_attributions()` (returns xarray).
@@ -156,7 +157,8 @@ layers you assemble yourself. See
 
 The snippet below is a minimal run of steps 1–4, using the
 edgelist from the table above. Column order in the input table
-does not matter: `align_inputs()` matches names. Skip edges are
+does not matter: `align_inputs()` matches names and returns a
+column index. Skip edges are
 omitted here; [**Skip edges**](docs/skip-edges.ipynb) works them
 through. [**Why not custom PyTorch?**](#why-not-custom-pytorch)
 sets this hop loop against the equivalent module written by hand.
@@ -165,6 +167,7 @@ A full walkthrough, including training and attribution, is in
 
 ```python
 import pandas as pd
+import torch
 import torch.nn.functional as F
 from torch import nn
 
@@ -203,9 +206,11 @@ class Net(nn.Module):
 
 
 model = Net(spec)
-x = kpnn2.align_inputs(
-    pd.DataFrame({"B": [0.2, 0.4], "A": [0.1, 0.3]}),
-    spec,
+features = pd.DataFrame({"B": [0.2, 0.4], "A": [0.1, 0.3]})
+col = kpnn2.align_inputs(features.columns, spec)
+x = torch.as_tensor(
+    features.to_numpy()[:, col],
+    dtype=torch.float32,
 )
 y = model(x)
 # Continue training with ordinary PyTorch.
@@ -233,8 +238,8 @@ edgelists.
 `parse_layered()` and leaves the `nn.Module` as a loop over hops.
 The edgelist stays the only description of the graph, skip edges
 arrive already packed into the hops that read them, and
-`align_inputs()` matches input columns by name rather than by
-position. [**Skip edges**](docs/skip-edges.ipynb) works through
+`align_inputs()` matches input names rather than positions.
+[**Skip edges**](docs/skip-edges.ipynb) works through
 the same point in a full example.
 
 <div>

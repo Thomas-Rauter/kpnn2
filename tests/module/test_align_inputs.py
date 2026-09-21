@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -36,9 +37,80 @@ def _tiny_adjacency_spec():
     return parse_adjacency(_cyclic_edgelist())
 
 
-def test_align_inputs_reorders_dataframe_columns():
+def _gather_values(values, names, spec):
+    col = align_inputs(
+        names,
+        spec,
+    )
+    return values[:, col]
+
+
+def test_align_inputs_reorders_list_names():
     spec = _tiny_spec()
     assert spec.input_nodes == ("A", "B")
+    names = ["B", "A"]
+    values = np.array(
+        [
+            [2.0, 1.0],
+            [4.0, 3.0],
+        ]
+    )
+
+    col = align_inputs(
+        names,
+        spec,
+    )
+
+    assert col.dtype == np.int64
+    assert col.tolist() == [1, 0]
+    gathered = _gather_values(
+        values,
+        names,
+        spec,
+    )
+    expected = np.array(
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ]
+    )
+    np.testing.assert_array_equal(
+        gathered,
+        expected,
+    )
+
+
+def test_align_inputs_ignores_extra_names():
+    spec = _tiny_spec()
+    names = ["extra", "B", "A"]
+    values = np.array(
+        [
+            [9.0, 2.0, 1.0],
+            [8.0, 4.0, 3.0],
+        ]
+    )
+
+    col = align_inputs(
+        names,
+        spec,
+    )
+
+    assert col.tolist() == [2, 1]
+    gathered = values[:, col]
+    expected = np.array(
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ]
+    )
+    np.testing.assert_array_equal(
+        gathered,
+        expected,
+    )
+
+
+def test_align_inputs_accepts_dataframe_columns():
+    spec = _tiny_spec()
     data = pd.DataFrame(
         {
             "B": [2.0, 4.0],
@@ -46,40 +118,15 @@ def test_align_inputs_reorders_dataframe_columns():
         }
     )
 
-    aligned = align_inputs(
-        data,
+    col = align_inputs(
+        data.columns,
         spec,
     )
 
-    expected = torch.tensor(
-        [
-            [1.0, 2.0],
-            [3.0, 4.0],
-        ],
+    gathered = torch.as_tensor(
+        data.to_numpy()[:, col],
         dtype=torch.float32,
     )
-    assert aligned.dtype == torch.float32
-    assert torch.equal(
-        aligned,
-        expected,
-    )
-
-
-def test_align_inputs_ignores_extra_dataframe_columns():
-    spec = _tiny_spec()
-    data = pd.DataFrame(
-        {
-            "extra": [9.0, 8.0],
-            "B": [2.0, 4.0],
-            "A": [1.0, 3.0],
-        }
-    )
-
-    aligned = align_inputs(
-        data,
-        spec,
-    )
-
     expected = torch.tensor(
         [
             [1.0, 2.0],
@@ -88,25 +135,44 @@ def test_align_inputs_ignores_extra_dataframe_columns():
         dtype=torch.float32,
     )
     assert torch.equal(
-        aligned,
+        gathered,
         expected,
     )
 
 
-def test_align_inputs_rejects_missing_dataframe_column():
+def test_align_inputs_accepts_numpy_names():
     spec = _tiny_spec()
-    data = pd.DataFrame(
+    names = np.array(["B", "A"])
+    col = align_inputs(
+        names,
+        spec,
+    )
+    assert col.tolist() == [1, 0]
+
+
+def test_align_inputs_matches_integer_labels_after_str():
+    edgelist = pd.DataFrame(
         {
-            "A": [1.0, 3.0],
+            "source": ["1", "H"],
+            "target": ["H", "C"],
         }
     )
+    spec = parse_layered(edgelist)
+    col = align_inputs(
+        [1],
+        spec,
+    )
+    assert col.tolist() == [0]
 
+
+def test_align_inputs_rejects_missing_name():
+    spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="missing required feature",
+        match="missing required",
     ):
         align_inputs(
-            data,
+            ["A"],
             spec,
         )
 
@@ -141,14 +207,32 @@ def _tensor_reject_cases():
 
 
 @pytest.mark.parametrize(
-    "data",
+    "names",
     _tensor_reject_cases(),
 )
-def test_align_inputs_rejects_tensor(data):
+def test_align_inputs_rejects_tensor(names):
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=r"tensor.*pandas DataFrame",
+        match=r"tensor.*feature names",
+    ):
+        align_inputs(
+            names,
+            spec,
+        )
+
+
+def test_align_inputs_rejects_dataframe_values():
+    spec = _tiny_spec()
+    data = pd.DataFrame(
+        {
+            "A": [1.0],
+            "B": [2.0],
+        }
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"DataFrame.*feature names",
     ):
         align_inputs(
             data,
@@ -156,72 +240,90 @@ def test_align_inputs_rejects_tensor(data):
         )
 
 
+class _FakeAnnData:
+    var_names = pd.Index(["A", "B"])
+    X = np.array([[1.0, 2.0]])
+
+
+def test_align_inputs_rejects_anndata_like():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"AnnData.*var_names",
+    ):
+        align_inputs(
+            _FakeAnnData(),
+            spec,
+        )
+
+
+def test_align_inputs_rejects_2d_numpy_matrix():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match="one-dimensional",
+    ):
+        align_inputs(
+            np.array([[1.0, 2.0]]),
+            spec,
+        )
+
+
 def _invalid_align_cases():
     spec = _tiny_spec()
-    numeric = pd.DataFrame(
-        {
-            "A": [1.0],
-            "B": [2.0],
-        }
-    )
-    duplicate = pd.DataFrame(
-        [[1.0, 2.0, 3.0]],
-        columns=["A", "B", "A"],
-    )
-    duplicate_after_str = pd.DataFrame(
-        {
-            "A": [1.0],
-            "B": [2.0],
-            1: [3.0],
-            "1": [4.0],
-        }
-    )
-    non_numeric = pd.DataFrame(
-        {
-            "A": ["x"],
-            "B": [2.0],
-        }
-    )
+    names = ["A", "B"]
     return [
         pytest.param(
-            numeric,
+            names,
             object(),
             "LayeredSpec",
             id="non_layered_spec",
         ),
         pytest.param(
-            [[1.0, 2.0]],
+            object(),
             spec,
-            "Unsupported input data type",
+            "Unsupported names type",
             id="unsupported_type",
         ),
         pytest.param(
-            duplicate,
+            ["A", "B", "A"],
             spec,
-            "duplicate column",
-            id="duplicate_columns",
+            "duplicate",
+            id="duplicate_labels",
         ),
         pytest.param(
-            duplicate_after_str,
+            ["A", "B", 1, "1"],
             spec,
-            "duplicate column",
+            "duplicate",
             id="duplicate_after_str",
         ),
         pytest.param(
-            non_numeric,
+            "AB",
             spec,
-            "non-numeric",
-            id="non_numeric",
+            "string",
+            id="string",
+        ),
+        pytest.param(
+            {"A": 0, "B": 1},
+            spec,
+            "mapping",
+            id="mapping",
+        ),
+        pytest.param(
+            {"A", "B"},
+            spec,
+            "set",
+            id="set",
         ),
     ]
 
 
 @pytest.mark.parametrize(
-    "data, spec, match",
+    "names, spec, match",
     _invalid_align_cases(),
 )
-def test_align_inputs_rejects_invalid_data_and_spec(
-    data,
+def test_align_inputs_rejects_invalid_names_and_spec(
+    names,
     spec,
     match,
 ):
@@ -230,24 +332,19 @@ def test_align_inputs_rejects_invalid_data_and_spec(
         match=match,
     ):
         align_inputs(
-            data,
+            names,
             spec,
         )
 
 
-def test_align_inputs_duplicate_columns_name_label_a():
+def test_align_inputs_duplicate_labels_name_a():
     spec = _tiny_spec()
-    data = pd.DataFrame(
-        [[1.0, 2.0, 3.0]],
-        columns=["A", "B", "A"],
-    )
-
     with pytest.raises(
         Kpnn2Error,
-        match="duplicate column",
+        match="duplicate",
     ) as caught:
         align_inputs(
-            data,
+            ["A", "B", "A"],
             spec,
         )
 
@@ -258,21 +355,12 @@ def test_align_inputs_duplicate_columns_name_label_a():
 
 def test_align_inputs_duplicate_after_str_names_label_1():
     spec = _tiny_spec()
-    data = pd.DataFrame(
-        {
-            "A": [1.0],
-            "B": [2.0],
-            1: [3.0],
-            "1": [4.0],
-        }
-    )
-
     with pytest.raises(
         Kpnn2Error,
-        match="duplicate column",
+        match="duplicate",
     ) as caught:
         align_inputs(
-            data,
+            ["A", "B", 1, "1"],
             spec,
         )
 
@@ -283,17 +371,12 @@ def test_align_inputs_duplicate_after_str_names_label_1():
 
 def test_align_inputs_duplicate_labels_sorted_comma_separated():
     spec = _tiny_spec()
-    data = pd.DataFrame(
-        [[1.0, 2.0, 3.0, 4.0, 5.0]],
-        columns=["A", "B", "A", 1, "1"],
-    )
-
     with pytest.raises(
         Kpnn2Error,
-        match="duplicate column",
+        match="duplicate",
     ) as caught:
         align_inputs(
-            data,
+            ["A", "B", "A", 1, "1"],
             spec,
         )
 
@@ -305,88 +388,94 @@ def test_align_inputs_duplicate_labels_sorted_comma_separated():
 def test_align_inputs_accepts_adjacency_spec():
     spec = _tiny_adjacency_spec()
     assert spec.input_nodes == ("A", "B")
-    data = pd.DataFrame(
-        {
-            "A": [1.0, 3.0],
-            "B": [2.0, 4.0],
-        }
-    )
-
-    aligned = align_inputs(
-        data,
-        spec,
-    )
-
-    expected = torch.tensor(
+    names = ["A", "B"]
+    values = np.array(
         [
             [1.0, 2.0],
             [3.0, 4.0],
-        ],
-        dtype=torch.float32,
+        ]
     )
-    assert aligned.dtype == torch.float32
-    assert tuple(aligned.shape) == (2, len(spec.input_nodes))
-    assert torch.equal(
-        aligned,
+
+    col = align_inputs(
+        names,
+        spec,
+    )
+
+    assert col.dtype == np.int64
+    assert col.tolist() == [0, 1]
+    gathered = values[:, col]
+    expected = np.array(
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ]
+    )
+    np.testing.assert_array_equal(
+        gathered,
         expected,
     )
 
 
-def test_align_inputs_reorders_columns_for_adjacency_spec():
+def test_align_inputs_reorders_names_for_adjacency_spec():
     spec = _tiny_adjacency_spec()
-    data = pd.DataFrame(
-        {
-            "extra": [9.0, 8.0],
-            "B": [2.0, 4.0],
-            "A": [1.0, 3.0],
-        }
+    names = ["extra", "B", "A"]
+    values = np.array(
+        [
+            [9.0, 2.0, 1.0],
+            [8.0, 4.0, 3.0],
+        ]
     )
 
-    aligned = align_inputs(
-        data,
+    col = align_inputs(
+        names,
         spec,
     )
 
-    expected = torch.tensor(
+    assert col.tolist() == [2, 1]
+    gathered = values[:, col]
+    expected = np.array(
         [
             [1.0, 2.0],
             [3.0, 4.0],
-        ],
-        dtype=torch.float32,
+        ]
     )
-    assert torch.equal(
-        aligned,
+    np.testing.assert_array_equal(
+        gathered,
         expected,
     )
 
 
 def test_align_inputs_adjacency_width_is_narrower_than_state():
     spec = _tiny_adjacency_spec()
-    data = pd.DataFrame(
-        {
-            "A": [1.0, 3.0],
-            "B": [2.0, 4.0],
-        }
+    names = ["A", "B"]
+    values = np.array(
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ]
     )
 
-    aligned = align_inputs(
-        data,
+    col = align_inputs(
+        names,
         spec,
+    )
+    gathered = torch.as_tensor(
+        values[:, col],
+        dtype=torch.float32,
     )
 
     n_nodes = len(spec.nodes)
     assert spec.hidden_nodes == ("H", "K")
     assert n_nodes == len(spec.nodes)
-    assert aligned.shape[1] == len(spec.input_nodes)
-    assert aligned.shape[1] < n_nodes
+    assert col.shape == (len(spec.input_nodes),)
+    assert col.shape[0] < n_nodes
 
-    # The aligned tensor only reaches the layer after a scatter.
     state = torch.zeros(
-        aligned.shape[0],
+        gathered.shape[0],
         n_nodes,
     )
-    state[:, spec.input_index] = aligned
-    assert state[:, spec.input_index].tolist() == aligned.tolist()
+    state[:, spec.input_index] = gathered
+    assert state[:, spec.input_index].tolist() == gathered.tolist()
 
 
 def test_align_inputs_repeats_a_wide_layered_input():
@@ -401,13 +490,15 @@ def test_align_inputs_repeats_a_wide_layered_input():
         widths={"A": 3},
     )
     assert spec.layer_dims[0] == 3
-    data = pd.DataFrame({"A": [1.0, 2.0]})
-    aligned = align_inputs(
-        data,
+    col = align_inputs(
+        ["A"],
         spec,
     )
-    assert tuple(aligned.shape) == (2, spec.layer_dims[0])
-    assert aligned.tolist() == [
+    assert col.tolist() == [0, 0, 0]
+    values = np.array([[1.0], [2.0]])
+    gathered = values[:, col]
+    assert tuple(gathered.shape) == (2, spec.layer_dims[0])
+    assert gathered.tolist() == [
         [1.0, 1.0, 1.0],
         [2.0, 2.0, 2.0],
     ]
@@ -415,21 +506,6 @@ def test_align_inputs_repeats_a_wide_layered_input():
 
 def _invalid_adjacency_align_cases():
     spec = _tiny_adjacency_spec()
-    missing = pd.DataFrame(
-        {
-            "A": [1.0],
-        }
-    )
-    duplicate = pd.DataFrame(
-        [[1.0, 2.0, 3.0]],
-        columns=["A", "B", "A"],
-    )
-    non_numeric = pd.DataFrame(
-        {
-            "A": ["x"],
-            "B": [2.0],
-        }
-    )
     tensor = torch.tensor(
         [
             [1.0, 2.0],
@@ -437,46 +513,52 @@ def _invalid_adjacency_align_cases():
         ],
         dtype=torch.float32,
     )
+    frame = pd.DataFrame(
+        {
+            "A": [1.0],
+            "B": [2.0],
+        }
+    )
     return [
         pytest.param(
-            missing,
+            ["A"],
             spec,
-            "missing required feature",
-            id="missing_column",
+            "missing required",
+            id="missing_name",
         ),
         pytest.param(
-            duplicate,
+            ["A", "B", "A"],
             spec,
-            "duplicate column",
-            id="duplicate_columns",
-        ),
-        pytest.param(
-            non_numeric,
-            spec,
-            "non-numeric",
-            id="non_numeric",
+            "duplicate",
+            id="duplicate_labels",
         ),
         pytest.param(
             tensor,
             spec,
-            r"tensor.*pandas DataFrame",
+            r"tensor.*feature names",
             id="tensor",
         ),
         pytest.param(
-            [[1.0, 2.0]],
+            frame,
             spec,
-            "Unsupported input data type",
+            r"DataFrame.*feature names",
+            id="dataframe",
+        ),
+        pytest.param(
+            object(),
+            spec,
+            "Unsupported names type",
             id="unsupported_type",
         ),
     ]
 
 
 @pytest.mark.parametrize(
-    "data, spec, match",
+    "names, spec, match",
     _invalid_adjacency_align_cases(),
 )
-def test_align_inputs_rejects_invalid_data_for_adjacency_spec(
-    data,
+def test_align_inputs_rejects_invalid_names_for_adjacency_spec(
+    names,
     spec,
     match,
 ):
@@ -485,25 +567,18 @@ def test_align_inputs_rejects_invalid_data_for_adjacency_spec(
         match=match,
     ):
         align_inputs(
-            data,
+            names,
             spec,
         )
 
 
 def test_align_inputs_spec_error_names_both_spec_types():
-    data = pd.DataFrame(
-        {
-            "A": [1.0],
-            "B": [2.0],
-        }
-    )
-
     with pytest.raises(
         Kpnn2Error,
         match="LayeredSpec",
     ) as caught:
         align_inputs(
-            data,
+            ["A", "B"],
             object(),
         )
 

@@ -63,7 +63,7 @@ class Hop:
         previous layer when every parent is a skip. A single
         entry is a plain adjacent hop when that entry is
         ``target_layer - 1``; ``hops[0]`` is always ``(0,)``,
-        so an ``align_inputs`` tensor feeds it with no
+        so an aligned layer-0 tensor feeds it with no
         gathering.
     source_dims : tuple[int, ...]
         Units contributed by each entry of ``source_layers``,
@@ -375,9 +375,9 @@ class LayeredSpec:
     Parameters
     ----------
     input_nodes : tuple[str, ...]
-        In-degree 0 names, alphabetical. This is the DataFrame
-        column order ``align_inputs`` reads. The returned tensor
-        width is ``layer_dims[0]``.
+        In-degree 0 names, alphabetical. This is the feature-axis
+        order ``align_inputs`` returns as a column index. The
+        gathered width is ``layer_dims[0]``.
     output_nodes : tuple[str, ...]
         Out-degree 0 names, alphabetical. A terminal node below
         maximum depth belongs here too, so this is not the same

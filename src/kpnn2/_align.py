@@ -1,78 +1,108 @@
 """
-Align named DataFrame columns to ``spec.input_nodes``.
+Align feature names to ``spec.input_nodes``.
 """
 
+from collections.abc import Iterable, Mapping, Set
+
+import numpy as np
 import pandas as pd
 import torch
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
-from ._layout import build_layout, expand_columns
+from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
-    "'data' is a tensor; a pandas DataFrame is required. "
-    "Pass a DataFrame so columns can be matched to "
-    "spec.input_nodes. Pre-ordered tensors go straight to "
-    "the model."
+    "'names' is a tensor; pass the feature names that "
+    "label that axis. A tensor whose columns already follow "
+    "spec.input_nodes goes straight to the model."
+)
+_DATAFRAME_NOT_ACCEPTED_MSG = (
+    "'names' is a DataFrame; pass the feature names "
+    "(for example data.columns). Apply the returned index "
+    "on the matrix yourself."
+)
+_STRING_NOT_ACCEPTED_MSG = (
+    "'names' is a string; pass a sequence of feature names."
+)
+_MAPPING_NOT_ACCEPTED_MSG = (
+    "'names' must be a sequence of feature names, not a mapping."
+)
+_SET_NOT_ACCEPTED_MSG = (
+    "'names' must be a sequence of feature names, not a set."
+)
+_ANNDATA_NOT_ACCEPTED_MSG = (
+    "'names' looks like AnnData; pass the .var_names "
+    "and apply the index to .X yourself."
+)
+_NOT_1D_MSG = (
+    "'names' must be one-dimensional; a matrix is not a "
+    "name list. Pass the feature names and index the "
+    "matrix yourself."
+)
+_UNSUPPORTED_TYPE_MSG = (
+    "Unsupported names type. Expected a sequence of feature names."
 )
 
 
 def align_inputs(
-    data: pd.DataFrame,
+    names: object,
     spec: LayeredSpec | AdjacencySpec,
-) -> torch.Tensor:
+) -> np.ndarray:
     """
-    Return a float32 tensor of spec input units.
+    Return an integer index that orders features to spec inputs.
 
-    Feature-table column labels rarely match the input-node order
-    the parsed edgelist fixes; the returned tensor puts them in
-    that order. For a ``LayeredSpec``, a node with width greater
-    than 1 repeats its column across those units, so the tensor
-    width is ``spec.layer_dims[0]``. For an ``AdjacencySpec`` the
-    width is ``len(spec.input_nodes)``. Call it after parsing,
-    before the model's first layer, instead of hand-ordering
-    columns. Every row is materialized as one dense CPU tensor;
-    it is not a minibatch or device helper, and tensors are
-    rejected.
+    Feature-table labels rarely match the input-node order the
+    parsed edgelist fixes. This returns a 1-D ``int64`` index
+    into the caller's feature axis so that axis can be gathered
+    into that order. It does not take the matrix, copy sample
+    rows, or densify. Apply the index on whatever holds X:
+    ``X[:, col]`` for numpy, scipy, AnnData ``.X``, or a tensor;
+    ``df.to_numpy()[:, col]`` for a DataFrame. For a
+    ``LayeredSpec``, a node with width greater than 1 repeats
+    its column index across those units, so the length is
+    ``spec.layer_dims[0]``. For an ``AdjacencySpec`` the length
+    is ``len(spec.input_nodes)``. Call it after parsing, once,
+    instead of hand-ordering columns. DataFrames, tensors, and
+    matrices are rejected.
 
     Parameters
     ----------
-    data : pandas.DataFrame of shape (n_samples, n_columns)
-        Feature table, one row per sample. It must carry a
-        numeric column for every name in ``spec.input_nodes``, in
-        any order; extra columns are ignored. Labels are matched
-        after ``str(...)``, the conversion edgelist node names go
-        through, so an integer column ``1`` matches node ``"1"``.
-        Values keep whatever units the table holds: nothing is
-        scaled or imputed, and ``NaN`` survives into the result.
-        Neither the frame nor its values are modified, and the
-        returned tensor shares no memory with it.
+    names : sequence of labels
+        Feature-axis labels, in the order they currently sit on
+        the matrix: ``df.columns``, ``adata.var_names``, a
+        one-dimensional numpy array, or a list. Labels are
+        matched after ``str(...)``, the conversion edgelist
+        node names go through, so an integer label ``1``
+        matches node ``"1"``. Extra names are ignored. Neither
+        ``names`` nor the matrix is modified.
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
-        DataFrame columns and their order. A ``LayeredSpec``
-        also uses ``layer_widths[0]`` to expand columns.
+        names and their order. A ``LayeredSpec`` also uses
+        ``layer_widths[0]`` to repeat columns.
 
     Returns
     -------
-    torch.Tensor
-        Dense ``float32`` CPU tensor. Shape is
-        ``(n_samples, spec.layer_dims[0])`` for a
-        ``LayeredSpec`` and
-        ``(n_samples, len(spec.input_nodes))`` for an
-        ``AdjacencySpec``. A DataFrame with no rows gives a
-        ``(0, width)`` tensor rather than an error.
+    numpy.ndarray of dtype int64, shape (width,)
+        Positions into ``names``. Shape is
+        ``(spec.layer_dims[0],)`` for a ``LayeredSpec`` and
+        ``(len(spec.input_nodes),)`` for an ``AdjacencySpec``.
+        Index the caller's feature axis with it. An empty
+        ``names`` sequence is allowed when ``input_nodes`` is
+        empty; otherwise missing names raise.
 
     Raises
     ------
     Kpnn2Error
         If ``spec`` is neither a ``LayeredSpec`` nor an
-        ``AdjacencySpec``; ``data`` is a tensor; ``data`` is not a
-        DataFrame; required DataFrame columns are missing or
-        duplicated (including after ``str`` conversion; the
-        message names the unique duplicated labels, sorted,
-        comma-separated); or required columns are non-numeric.
+        ``AdjacencySpec``; ``names`` is a DataFrame, tensor,
+        string, mapping, set, AnnData-like object, or a
+        matrix (ndim ≠ 1); ``names`` is not a sequence of
+        labels; required names are missing or duplicated
+        (including after ``str`` conversion; the message names
+        the unique duplicated labels, sorted, comma-separated).
 
     See Also
     --------
@@ -81,36 +111,38 @@ def align_inputs(
     parse_adjacency : Builds the ``AdjacencySpec`` for the packed
         layout, where the result needs scattering first.
     gather_hop_inputs : Assembles a later hop's input; layer 0
-        comes from here instead.
+        comes from indexing with this result instead.
 
     Notes
     -----
-    PyTorch never sees feature names. Passing
-    ``DataFrame.to_numpy()`` (or any hand-stacked array) into the
-    model can silently wire the wrong features if the column order
-    differs, which is what this guards against. A tensor whose
-    columns already follow ``spec.input_nodes`` needs no
-    alignment and goes straight to the model. AnnData, numpy
-    arrays, and scipy sparse matrices are not accepted; a sparse
-    host matrix is column-aligned by the caller and densified one
-    row block at a time, never through here.
+    PyTorch never sees feature names. Passing a hand-stacked
+    array into the model can silently wire the wrong features if
+    the column order differs, which is what this guards against.
+    A tensor whose columns already follow ``spec.input_nodes``
+    needs no alignment and goes straight to the model. AnnData,
+    numpy matrices, and scipy sparse matrices are not accepted
+    as ``names``; pass the labels that sit on that axis and
+    apply the index on the matrix. A sparse host matrix stays
+    sparse until the caller densifies one row block.
 
-    The returned width for a ``LayeredSpec`` is
+    The returned length for a ``LayeredSpec`` is
     ``spec.layer_dims[0]``, which equals
     ``len(spec.input_nodes)`` only when every input node has
-    width 1. ``hops[0]`` reads layer 0 alone, so the tensor
-    feeds the first hop directly and needs no gathering. For an
-    ``AdjacencySpec`` it is **not** the state width: scatter the
-    tensor into the ``len(spec.nodes)``-wide state vector with
-    ``spec.input_index`` before calling
+    width 1. ``hops[0]`` reads layer 0 alone, so a row block
+    indexed with this result feeds the first hop directly and
+    needs no gathering. For an ``AdjacencySpec`` it is **not**
+    the state width: ``to_mask()`` is ``(n, n)`` over every
+    node, while the index is only ``len(input_nodes)`` long.
+    Scatter the gathered columns into the ``len(spec.nodes)``-wide
+    state vector with ``spec.input_index`` before calling
     ``MaskedLinear(spec.to_mask())``.
 
     Examples
     --------
-    Extra columns are dropped and remaining columns are reordered:
+    Extra names are ignored and remaining columns are reordered:
 
+    >>> import numpy as np
     >>> import pandas as pd
-    >>> import torch
     >>> import kpnn2
     >>> edgelist = pd.DataFrame(
     ...     {
@@ -121,24 +153,22 @@ def align_inputs(
     >>> spec = kpnn2.parse_layered(edgelist)
     >>> spec.input_nodes
     ('A',)
-    >>> df = pd.DataFrame(
-    ...     {
-    ...         "unused": [9.0, 8.0],
-    ...         "A": [0.5, 1.5],
-    ...     }
-    ... )
-    >>> x = kpnn2.align_inputs(df, spec)
-    >>> x.dtype
-    torch.float32
-    >>> tuple(x.shape)
-    (2, 1)
-    >>> x.tolist()
+    >>> names = ["unused", "A"]
+    >>> col = kpnn2.align_inputs(names, spec)
+    >>> col.dtype
+    dtype('int64')
+    >>> col.tolist()
+    [1]
+    >>> values = np.array([[9.0, 0.5], [8.0, 1.5]])
+    >>> values[:, col].tolist()
     [[0.5], [1.5]]
 
-    An ``AdjacencySpec`` works the same way, but the result is
-    ``len(input_nodes)`` wide and must be scattered into the state
-    vector before it reaches ``MaskedLinear(spec.to_mask())``:
+    An ``AdjacencySpec`` works the same way, but the index is
+    ``len(input_nodes)`` long and the gathered columns must be
+    scattered into the state vector before they reach
+    ``MaskedLinear(spec.to_mask())``:
 
+    >>> import torch
     >>> cyclic = pd.DataFrame(
     ...     {
     ...         "source": ["x", "a", "b", "a"],
@@ -146,10 +176,10 @@ def align_inputs(
     ...     }
     ... )
     >>> state_spec = kpnn2.parse_adjacency(cyclic)
-    >>> inputs = pd.DataFrame({"x": [0.5, 1.5]})
-    >>> x = kpnn2.align_inputs(inputs, state_spec)
-    >>> tuple(x.shape), tuple(state_spec.to_mask().shape)
-    ((2, 1), (4, 4))
+    >>> col = kpnn2.align_inputs(["x"], state_spec)
+    >>> col.tolist(), tuple(state_spec.to_mask().shape)
+    ([0], (4, 4))
+    >>> x = torch.tensor([[0.5], [1.5]])[:, col]
     >>> state = torch.zeros(
     ...     2,
     ...     len(state_spec.nodes),
@@ -158,41 +188,22 @@ def align_inputs(
     >>> state.tolist()
     [[0.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.5, 0.0]]
 
-    A tensor is not accepted; pass a DataFrame instead:
+    A tensor is not accepted; pass the names that label it:
 
     >>> t = torch.tensor([[0.5], [1.5]])
     >>> kpnn2.align_inputs(t, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    Kpnn2Error: 'data' is a tensor; a pandas DataFrame is required. ...
+    Kpnn2Error: 'names' is a tensor; pass the feature names that ...
     """
     if not isinstance(
         spec,
         (LayeredSpec, AdjacencySpec),
     ):
         raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
-    if isinstance(data, torch.Tensor):
-        raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
-    if isinstance(data, pd.DataFrame):
-        return _align_dataframe(
-            data,
-            spec,
-        )
-    raise Kpnn2Error(
-        "Unsupported input data type. Expected a pandas DataFrame."
-    )
-
-
-def _align_dataframe(
-    data: pd.DataFrame,
-    spec: LayeredSpec | AdjacencySpec,
-) -> torch.Tensor:
-    """
-    Reorder numeric DataFrame columns to ``spec.input_nodes``.
-    """
-    str_columns = [str(name) for name in data.columns]
+    labels = _labels_from_names(names)
     label_counts: dict[str, int] = {}
-    for label in str_columns:
+    for label in labels:
         label_counts[label] = label_counts.get(label, 0) + 1
     duplicated_labels = sorted(
         label for label, count in label_counts.items() if count > 1
@@ -200,46 +211,56 @@ def _align_dataframe(
     if duplicated_labels:
         labels_str = ", ".join(duplicated_labels)
         raise Kpnn2Error(
-            "Input DataFrame must not contain duplicate column names "
+            "Feature names must not contain duplicate labels "
             "(including after converting labels to strings): "
             f"{labels_str}."
         )
 
-    renamed = data.copy(deep=False)
-    renamed.columns = str_columns
-
-    missing = [name for name in spec.input_nodes if name not in renamed.columns]
+    missing = [name for name in spec.input_nodes if name not in label_counts]
     if missing:
         missing_str = ", ".join(sorted(missing))
         raise Kpnn2Error(
-            f"Input data is missing required feature name(s): {missing_str}."
+            f"Feature names are missing required name(s): {missing_str}."
         )
 
-    ordered = renamed[list(spec.input_nodes)]
-    non_numeric = [
-        name
-        for name in spec.input_nodes
-        if not pd.api.types.is_numeric_dtype(ordered[name])
-    ]
-    if non_numeric:
-        non_numeric_str = ", ".join(sorted(non_numeric))
-        raise Kpnn2Error(
-            "Input data contains non-numeric feature column(s): "
-            f"{non_numeric_str}."
-        )
-
+    position = {label: index for index, label in enumerate(labels)}
+    node_index = np.array(
+        [position[name] for name in spec.input_nodes],
+        dtype=np.int64,
+    )
     if isinstance(spec, LayeredSpec):
         layout = build_layout(
             spec.input_nodes,
             spec.layer_widths[0],
         )
-    else:
-        layout = build_layout(spec.input_nodes)
-    values = expand_columns(
-        ordered.to_numpy(copy=True),
-        layout,
-    )
-    return torch.tensor(
-        values,
-        dtype=torch.float32,
-    )
+        widths = layout.widths()
+        if any(width != DEFAULT_NODE_WIDTH for width in widths):
+            node_index = np.repeat(
+                node_index,
+                widths,
+            )
+    return node_index
+
+
+def _labels_from_names(names: object) -> list[str]:
+    """
+    Convert ``names`` to ``str`` labels, or raise ``Kpnn2Error``.
+    """
+    if isinstance(names, torch.Tensor):
+        raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
+    if isinstance(names, pd.DataFrame):
+        raise Kpnn2Error(_DATAFRAME_NOT_ACCEPTED_MSG)
+    if isinstance(names, (str, bytes)):
+        raise Kpnn2Error(_STRING_NOT_ACCEPTED_MSG)
+    if isinstance(names, Mapping):
+        raise Kpnn2Error(_MAPPING_NOT_ACCEPTED_MSG)
+    if isinstance(names, Set):
+        raise Kpnn2Error(_SET_NOT_ACCEPTED_MSG)
+    if hasattr(names, "var_names") and hasattr(names, "X"):
+        raise Kpnn2Error(_ANNDATA_NOT_ACCEPTED_MSG)
+    ndim = getattr(names, "ndim", None)
+    if ndim is not None and ndim != 1:
+        raise Kpnn2Error(_NOT_1D_MSG)
+    if not isinstance(names, Iterable):
+        raise Kpnn2Error(_UNSUPPORTED_TYPE_MSG)
+    return [str(name) for name in names]

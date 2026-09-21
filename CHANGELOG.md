@@ -10,6 +10,10 @@ This project follows semantic versioning.
 
 ### Changed
 
+- `align_inputs` maps feature names to a 1-D `int64` column
+  index. It no longer takes a DataFrame or returns a dense
+  `float32` tensor of all rows. Apply the index on host X
+  (`X[:, col]`).
 - `MaskedLinear`, `PackedLinear`, and
   `PackedMultiheadAttention`: `forward` disables
   `torch.autocast` and computes in the parameter dtype.

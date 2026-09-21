@@ -64,8 +64,7 @@ and explain the conflict.
 - Preserve the caller's dtype and device. No .to("cuda"),
   .cuda(), .double(), or extra upcasting in library code,
   unless CONTEXT.md already specifies that conversion
-  (for example `align_inputs` returns float32 CPU;
-  MaskedLinear's stored mask stays float32).
+  (for example MaskedLinear's stored mask stays float32).
 - No hidden expensive work: no silent densify of sparse
   matrices, no downloads, no full copies to GPU as a side
   effect of a helper. Named allocating APIs that CONTEXT.md

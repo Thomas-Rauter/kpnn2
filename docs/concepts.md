@@ -69,8 +69,8 @@ block rather than a single scalar.
 A parser splits nodes into three groups by degree, alphabetical
 within each:
 
-- **input nodes** have in-degree 0. This is the column order
-  `align_inputs()` expects.
+- **input nodes** have in-degree 0. This is the feature-axis
+  order `align_inputs()` indexes into.
 - **output nodes** have out-degree 0. A terminal node that sits
   below maximum depth still counts, so this is not the same tuple
   as the last layer.

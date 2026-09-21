@@ -53,7 +53,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from kpnn2 import (
     LayeredSpec,
-    align_inputs,
     map_node_attributions,
     parse_layered,
 )
@@ -73,6 +72,7 @@ from .metrics import (
 )
 from .scoring import (
     align_and_enable_grad,
+    aligned_feature_tensor,
     attributed_output_sum,
     feature_grad_table,
 )
@@ -481,11 +481,11 @@ def train_matched_linear_towers(
             model,
             bias_init,
         )
-    x_train = align_inputs(
+    x_train = aligned_feature_tensor(
         x_train_df,
         spec,
     )
-    x_eval = align_inputs(
+    x_eval = aligned_feature_tensor(
         x_eval_df,
         spec,
     )

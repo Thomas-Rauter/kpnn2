@@ -140,7 +140,11 @@ data = pd.DataFrame(
         "feature_a": [1.0, 3.0],
     }
 )
-x = align_inputs(data, spec)
+col = align_inputs(data.columns, spec)
+x = torch.as_tensor(
+    data.to_numpy()[:, col],
+    dtype=torch.float32,
+)
 layer = MaskedLinear(spec.hops[0].to_mask())
 with torch.no_grad():
     h = layer(x)

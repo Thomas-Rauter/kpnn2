@@ -61,20 +61,19 @@ and return ordinary dense `torch.Tensor`s. Captum is not
 in this package; when the caller runs it, that call stays
 dense (no sparse IG here, and none to add).
 
-**`align_inputs` is the dense-table path.** It maps a named
-pandas DataFrame onto `spec.input_nodes` as a dense
-`float32` CPU tensor of **all rows**. It is not a minibatch
-helper and not the sparse-host path. Do not convert sparse
-AnnData (or a scipy sparse matrix) to a DataFrame and pass
-it through `align_inputs`: that densifies the whole matrix.
-A caller with sparse host X column-aligns on the sparse
-layout themselves, densifies only each row block, then
-feeds a dense tensor to the model. Pre-ordered dense
-tensors already skip `align_inputs`.
+**`align_inputs` is the feature-axis index.** It maps a sequence
+of feature names onto `spec.input_nodes` as a 1-D `int64`
+index. It does not take the matrix, copy sample rows, or
+densify. Apply the index on the caller's storage (`X[:, col]`
+for numpy, scipy, AnnData `.X`, or a tensor;
+`df.to_numpy()[:, col]` for a DataFrame). Pre-ordered dense
+tensors already skip `align_inputs`. A caller with sparse host
+X applies the index on the sparse layout, then densifies only
+each row block.
 
-Do not add AnnData, scipy sparse, a sparse-preserving
-`align_inputs`, minibatching, or device-copy helpers to
-this package unless a later prompt asks.
+Do not add AnnData, scipy sparse, a densifying `align_inputs`,
+minibatching, or device-copy helpers to this package unless a
+later prompt asks.
 
 ---
 
@@ -118,10 +117,11 @@ this package unless a later prompt asks.
    `PackedMultiheadAttention`. `MaskedLinear(spec.to_mask())`
    densifies and remains valid for small graphs. The
    update (loop, attention, head) is the user's `forward()`.
-4. **Align:** `align_inputs()` maps a named DataFrame onto
-   `spec.input_nodes` as a dense `float32` CPU tensor of all
-   rows. Pre-ordered dense tensors go straight to the model.
-   Sparse host matrices are not a kpnn2 input type; see
+4. **Align:** `align_inputs()` maps feature names onto
+   `spec.input_nodes` as a 1-D `int64` column index. Apply
+   it on the host matrix (`X[:, col]`). Pre-ordered dense
+   tensors go straight to the model. Sparse host matrices
+   stay sparse until each row block is densified; see
    **Locked contrasts**.
 5. **Train:** The user owns loss, optimizer, and the training loop.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
@@ -211,9 +211,9 @@ this package unless a later prompt asks.
   path. See **Locked contrasts**.
 - **Not Captum.** No Captum import anywhere in the library. Attribution
   mapping is name alignment only.
-- **Not AnnData (v1).** No `anndata` support in `align_inputs`.
-  Callers may keep sparse AnnData in their own code; do not
-  add AnnData here to enable that.
+- **Not AnnData (v1).** No `anndata` type in `align_inputs`.
+  Pass `adata.var_names` (or any name sequence); apply the
+  index on `.X` in caller code. Do not add AnnData here.
 - **Not a time machine.** `parse_adjacency` accepts cycles and
   self-loops, but nothing here unrolls time, picks a step count, or
   re-injects inputs between steps. The loop is user `forward()`
@@ -285,8 +285,9 @@ dense compute, sparse only as "which edges exist." Feature
 matrix X is the user's: sparse host storage is allowed in
 **their** code; tensors that enter `forward()` are always
 dense. See **Locked contrasts**. Do not add `torch.sparse`
-kernels to "support sparse X." Do not route sparse X through
-`align_inputs`.
+kernels to "support sparse X." Pass feature names to
+`align_inputs` and apply the index on host X; do not densify
+sparse X to feed that function.
 
 **Correctness over speed.** `MaskedLinear` stays dense float32
 tensors times `F.linear`, not `torch.sparse` layouts.
@@ -318,7 +319,8 @@ Division of labor:
 | `scatter_hop_outputs` (split that axis onto source layers) | kpnn2 |
 | `PackedLinear.transpose` (tied packed `W.T`) | kpnn2 |
 | Named node → unit slice (`node_units` / `hop_units`) | kpnn2 |
-| Named DataFrame → dense CPU tensor (`align_inputs`) | kpnn2 |
+| Feature names → column index (`align_inputs`) | kpnn2 |
+| Apply that index on host X (`X[:, col]`) | User |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Encoder stack, FFN, residuals | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
@@ -349,7 +351,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `PackedMultiheadAttention` | `nn.Module`: packed multi-head attention on live edgelist pairs |
 | `gather_hop_inputs` | Saved layer tensors + `Hop` → that hop's input tensor |
 | `scatter_hop_outputs` | Concatenated hop axis → per-source-layer tensors |
-| `align_inputs` | Named DataFrame → `float32` input tensor |
+| `align_inputs` | Feature names → `int64` column index |
 | `map_node_attributions` | Layer tensor → labeled `xarray.DataArray` |
 | `aggregate_node_attributions` | Named scores → per-node `xarray.Dataset` (method registry) |
 | `list_aggregation_methods` | Registry table of aggregation methods |
@@ -439,8 +441,9 @@ are the only edgelist rule the two parsers disagree on.
 **Node roles (inferred, not user-declared):**
 
 - **Input nodes:** in-degree 0. Sorted alphabetically.
-  Stored in `spec.input_nodes`. These are also the tensor column
-  order for `align_inputs` / `MaskedLinear` on hop 0.
+  Stored in `spec.input_nodes`. These are also the feature-axis
+  order `align_inputs` indexes into, and the column order of
+  `MaskedLinear` on hop 0.
 - **Output nodes:** out-degree 0. Sorted alphabetically.
   Stored in `spec.output_nodes`. Early outputs (terminals whose
   depth is not the maximum depth) **are allowed**. They remain in
@@ -581,8 +584,9 @@ concatenated axis; `column_offsets` only walks source layers.
   node has only skip parents. `gather_hop_inputs` follows
   `source_layers`; it does not assume adjacency.
 - `hops[0].source_layers == (0,)` always: after compact ranking,
-  layer 1 can only have layer-0 parents. So an `align_inputs`
-  tensor feeds `hops[0]` directly, with no gathering.
+  layer 1 can only have layer-0 parents. So a row block gathered
+  with the `align_inputs` index feeds `hops[0]` directly, with
+  no gathering.
 - A graph with no skip edges gives every hop a single source
   layer, and then `hops[i]` is the plain adjacent hop from
   layer `i` to layer `i+1`.
@@ -885,10 +889,11 @@ on access: that would silently allocate.
 ### Two consequences
 
 1. **Input width is not state width.** `align_inputs` returns
-   `len(spec.input_nodes)` columns, the state vector is `n` wide.
-   The inputs are scattered into the state vector via
-   `spec.input_index`. In the layered case an aligned tensor
-   feeds `hops[0]` directly; here it does not.
+   `len(spec.input_nodes)` positions, the state vector is `n`
+   wide. Gathered input columns are scattered into the state
+   vector via `spec.input_index`. In the layered case an
+   aligned row block feeds `hops[0]` directly; here it does
+   not.
 2. **Input rows are structurally zero.** Input nodes have
    in-degree 0, so they have no packed incoming edges, their
    rows of `to_mask()` are all zeros, and `fan_in == 0`.
@@ -908,7 +913,12 @@ core = kpnn2.PackedLinear(
 )
 # MaskedLinear(spec.to_mask()) densifies; valid for small graphs
 
-x = kpnn2.align_inputs(df, spec)         # width len(input_nodes)
+col = kpnn2.align_inputs(df.columns, spec)
+x = torch.as_tensor(
+    df.to_numpy()[:, col],
+    dtype=torch.float32,
+)
+# x is len(input_nodes) wide
 state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x        # required, see above
 state = torch.relu(core(state))       # one step; loop as needed
@@ -951,7 +961,7 @@ graph minus a row." Both parsers recompute `input_nodes` /
 also recomputes longest-path depths (unless `ranks=`), hop
 membership, concat source axes, and `skips`. Adding an
 incoming edge to a former input removes it from
-`input_nodes`, so `align_inputs` columns change. Pass the
+`input_nodes`, so `align_inputs` indices change. Pass the
 same `widths=` / `ranks=` as the original parse, or the new
 spec will not match.
 
@@ -1723,69 +1733,78 @@ keeps slot `i` as the same edge.
 
 ---
 
-## `align_inputs(data, spec)`
+## `align_inputs(names, spec)`
 
 `spec` is a `LayeredSpec` **or** an `AdjacencySpec`. Only
-`spec.input_nodes` is read, so the DataFrame rules below are
-identical for both. Anything else raises `Kpnn2Error`.
+`spec.input_nodes` is read (and, for a `LayeredSpec`,
+`layer_widths[0]`). Anything else raises `Kpnn2Error`.
 
-Returns `torch.float32` tensor of shape
-`(n_samples, width)`. The tensor is dense and
-lives on CPU. This function materializes **every row** of the
-DataFrame. It is not a minibatch API, not a device-copy
-helper, and not the sparse-host path. See **Locked
-contrasts**.
+Returns a 1-D `numpy.ndarray` of dtype `int64`, length
+`width`. It is a column index into the caller's feature
+axis, not a data tensor. This function does not take the
+matrix, copy sample rows, or densify. Apply the index on
+the caller's storage. It is not a minibatch API, not a
+device-copy helper, and not a densifying path. See
+**Locked contrasts**.
 
-**Width differs by layout.** For a `LayeredSpec` that width is
+**Width differs by layout.** For a `LayeredSpec` that length is
 `layer_dims[0]` (the unit width of layer 0), not
 `len(input_nodes)` when an input node is wider than 1.
-`hops[0]` reads layer 0 alone, so the tensor
-feeds `PackedLinear` on `hops[0]` (or
+`hops[0]` reads layer 0 alone, so a row block indexed with
+this result feeds `PackedLinear` on `hops[0]` (or
 `MaskedLinear(spec.hops[0].to_mask())`) directly with no
-gathering. The DataFrame still has one column per input
-**node**; `expand_columns` repeats a column across that node's
-units. For an `AdjacencySpec` the width is **not** the state
-width: `to_mask()` is `(n, n)` over every node, while the
-aligned tensor is only `len(input_nodes)` wide. Scatter it into
-the `n`-wide state vector via `spec.input_index` before calling
-`MaskedLinear(spec.to_mask())`:
+gathering. The name list still has one label per input
+**node**; a width greater than 1 repeats that node's index
+across its units. For an `AdjacencySpec` the length is **not**
+the state width: `to_mask()` is `(n, n)` over every node,
+while the index is only `len(input_nodes)` long. Scatter the
+gathered columns into the `n`-wide state vector via
+`spec.input_index` before calling `MaskedLinear(spec.to_mask())`:
 
 ```python
-x = kpnn2.align_inputs(df, spec)
+col = kpnn2.align_inputs(df.columns, spec)
+x = torch.as_tensor(
+    df.to_numpy()[:, col],
+    dtype=torch.float32,
+)
 state = torch.zeros(x.shape[0], len(spec.nodes))
 state[:, spec.input_index] = x
 ```
 
-**`pandas.DataFrame`:**
+**Names:**
 
-- Required columns: `spec.input_nodes` (any order).
-- Match column labels after converting them to strings (so integer
-  column names can match string node ids).
-- Extra columns are ignored.
-- Missing required columns: `Kpnn2Error`.
-- Duplicate column names (including after string conversion):
+- Required labels: `spec.input_nodes` (any order).
+- Match labels after converting them to strings (so an integer
+  label `1` can match string node id `"1"`).
+- Extra names are ignored.
+- Missing required names: `Kpnn2Error`.
+- Duplicate labels (including after string conversion):
   `Kpnn2Error`. The message names the unique duplicated labels
   after `str(...)`, sorted, comma-separated.
-- Required columns must be numeric; non-numeric: `Kpnn2Error`.
-- Reorder columns to `spec.input_nodes`.
+- Accepted: a 1-D sequence of labels (`df.columns`,
+  `adata.var_names`, a numpy array, a list).
 
-**`torch.Tensor`:**
+**Rejected:**
 
-- Illegal. Raise `Kpnn2Error`. The message must say that `data`
-  is a tensor (or that a tensor is not accepted) and that a
-  pandas DataFrame is required.
-- Do not check width / ndim as a substitute for alignment.
-- Do not return a cast tensor.
-- Pre-ordered dense tensors go **straight to the model**. Users who
-  need alignment pass a DataFrame.
+- `pandas.DataFrame`: `Kpnn2Error`. The message must say that
+  `names` is a DataFrame and that feature names are required
+  (for example `data.columns`).
+- `torch.Tensor`: `Kpnn2Error`. The message must say that
+  `names` is a tensor and that the feature names that label
+  that axis are required. Pre-ordered dense tensors go
+  **straight to the model**.
+- A string, mapping, set, AnnData-like object (`var_names`
+  and `X`), or a matrix (`ndim != 1`): `Kpnn2Error`.
+- Do not check value dtypes. There are no values.
+- Do not return a tensor of data.
 
-**Not supported in v1:** AnnData, numpy arrays, dicts of columns,
-scipy sparse matrices. Do not add them here so a caller can
-keep host X sparse. That caller column-aligns on the sparse
-layout themselves and densifies only each row block before
-the model. Passing `adata.to_df()` (or any full densify)
-into `align_inputs` is exactly the silent full densify
-**Locked contrasts** forbids.
+**Not a kpnn2 matrix type:** AnnData, numpy matrices, dicts of
+columns, scipy sparse matrices. Pass the labels that sit on
+that axis and apply the index on the matrix (`X[:, col]`).
+A sparse host stays sparse until the caller densifies one
+row block. Passing `adata.to_df()` (or any full densify) and
+then a DataFrame into `align_inputs` is rejected at the
+DataFrame check.
 
 ---
 
@@ -2023,9 +2042,9 @@ edge / block start. Do not implement adjacency width.
   **block start** inside their own layer. One `Skip` per named
   edge.
 - `align_inputs` builds a `LayeredSpec` layout from
-  `input_nodes` plus `layer_widths[0]` and passes columns
-  through `expand_columns`. An `AdjacencySpec` still uses
-  `build_layout(names)` at width 1.
+  `input_nodes` plus `layer_widths[0]` and repeats a node's
+  column index across that node's units. An `AdjacencySpec`
+  still uses `build_layout(names)` at width 1.
 - `map_node_attributions` on a `LayeredSpec` uses
   `build_layout(layer_nodes[layer], layer_widths[layer])` when
   `layer=` is given. With `hop=`, it concatenates
@@ -2099,7 +2118,11 @@ class Net(nn.Module):
 
 model = Net(spec)
 x_df = pd.DataFrame({"A": [0.1, 0.2]})
-x = kpnn2.align_inputs(x_df, spec)
+col = kpnn2.align_inputs(x_df.columns, spec)
+x = torch.as_tensor(
+    x_df.to_numpy()[:, col],
+    dtype=torch.float32,
+)
 y = model(x)
 
 # optional: user ran some attribution method themselves
@@ -2123,12 +2146,11 @@ Every edge, including `A → C` when that row is present, is
 already a packed unit-pair block of some hop. The loop applies
 each hop once, so nothing has to be remembered per skip edge.
 
-That snippet is the dense-DataFrame path: `align_inputs`
-materializes the whole table on CPU. A caller who already has
-a sparse host matrix (for example AnnData `.X`) must not
-densify it through `align_inputs` or DataFrame conversion.
-They column-align on the sparse layout, densify only each
-row block, move that dense tensor, and call `model`. Tensors
+That snippet applies `align_inputs` to feature names, then
+gathers a dense table. A caller who already has a sparse host
+matrix (for example AnnData `.X`) passes `adata.var_names`,
+applies `X[:, col]` on the sparse layout, densifies only each
+row block, moves that dense tensor, and calls `model`. Tensors
 at the module boundary are always dense. See **Locked
 contrasts**.
 
@@ -2189,10 +2211,10 @@ PyTorch:
 4. Put ReLU / BatchNorm / Dropout in `forward()` yourself, after
    the hop that produced the tensor. Store the value you want
    later hops to read.
-5. `x = kpnn2.align_inputs(df, spec)` when X is a named
-   DataFrame. Pre-ordered dense tensors skip this. Sparse
-   host X is the caller's loop (row block → densify →
-   device); do not send it through `align_inputs`.
+5. `col = kpnn2.align_inputs(names, spec)` then `X[:, col]`
+   on the host matrix. Pre-ordered dense tensors skip this.
+   Sparse host X is the caller's loop (apply the index, then
+   row block → densify → device).
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`
 7. Optionally `aggregate_node_attributions(...)` to fold

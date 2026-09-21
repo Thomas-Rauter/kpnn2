@@ -151,9 +151,14 @@ def _align_sequences(
                     for index, name in enumerate(feature_names)
                 }
             )
-    flat = align_inputs(
-        pd.DataFrame(rows),
+    flat_df = pd.DataFrame(rows)
+    col = align_inputs(
+        flat_df.columns,
         spec,
+    )
+    flat = torch.as_tensor(
+        flat_df.to_numpy()[:, col],
+        dtype=torch.float32,
     )
     return flat.reshape(
         n_samples,

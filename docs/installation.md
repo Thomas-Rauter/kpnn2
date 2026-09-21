@@ -46,9 +46,11 @@ xarray dimensions.
 
 ## AnnData
 
-AnnData input is not supported in v1. `align_inputs()` accepts a
-pandas DataFrame. Tensors are not accepted; pass a pre-ordered
-tensor straight to the model.
+AnnData input is not a kpnn2 type in v1. `align_inputs()`
+accepts feature names (`adata.var_names`, `df.columns`, a
+list). Apply the returned index on the matrix yourself.
+Tensors are not accepted; a pre-ordered tensor goes straight
+to the model.
 
 ## Development installation
 

@@ -21,7 +21,7 @@ Names you call or construct.
 | [`PackedMultiheadAttention`][kpnn2.PackedMultiheadAttention] | Attention that scores only live edgelist pairs, not a full matrix. |
 | [`gather_hop_inputs`][kpnn2.gather_hop_inputs] | Build the input for one hop from the layer activations you saved. |
 | [`scatter_hop_outputs`][kpnn2.scatter_hop_outputs] | Split a hop's concatenated source axis back onto source layers. |
-| [`align_inputs`][kpnn2.align_inputs] | Align named features to the spec's input nodes so the wiring matches. |
+| [`align_inputs`][kpnn2.align_inputs] | Feature names → column index so the wiring matches. |
 | [`map_node_attributions`][kpnn2.map_node_attributions] | Attach spec node names to an attribution tensor you already computed. |
 | [`aggregate_node_attributions`][kpnn2.aggregate_node_attributions] | Reduce mapped node scores with a registered method (default: Rauter–Mangano 2026). |
 | [`list_aggregation_methods`][kpnn2.list_aggregation_methods] | Table of registered attribution aggregation methods and their status. |

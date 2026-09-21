@@ -19,6 +19,18 @@ from tests.helpers.adjacency_net import (
     pin_all_weights,
 )
 
+
+def _aligned_tensor(features: pd.DataFrame, spec) -> torch.Tensor:
+    col = align_inputs(
+        features.columns,
+        spec,
+    )
+    return torch.as_tensor(
+        features.to_numpy()[:, col],
+        dtype=torch.float32,
+    )
+
+
 _N_STEPS = 5
 
 
@@ -75,14 +87,14 @@ def test_unrolled_absent_edge_has_zero_forward_influence():
     decoy_idx = spec.output_nodes.index("decoy")
     assert spec.output_nodes == ("decoy", "prediction")
 
-    x_low = align_inputs(
+    x_low = _aligned_tensor(
         _features_frame(
             feature_a=2.0,
             feature_b=0.0,
         ),
         spec,
     )
-    x_high = align_inputs(
+    x_high = _aligned_tensor(
         _features_frame(
             feature_a=2.0,
             feature_b=100.0,
@@ -109,7 +121,7 @@ def test_unrolled_absent_edge_has_zero_input_gradient():
     feature_a_idx = spec.input_nodes.index("feature_a")
     feature_b_idx = spec.input_nodes.index("feature_b")
 
-    x = align_inputs(
+    x = _aligned_tensor(
         _features_frame(
             feature_a=2.0,
             feature_b=100.0,

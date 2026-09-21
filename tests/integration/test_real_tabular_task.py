@@ -86,13 +86,17 @@ def _run_real_tabular_task() -> dict[str, float]:
         :,
         list(reversed(x_test_df.columns)),
     ]
-    x_train = align_inputs(
-        x_train_shuffled,
+    col = align_inputs(
+        x_train_shuffled.columns,
         spec,
     )
-    x_test = align_inputs(
-        x_test_shuffled,
-        spec,
+    x_train = torch.as_tensor(
+        x_train_shuffled.to_numpy()[:, col],
+        dtype=torch.float32,
+    )
+    x_test = torch.as_tensor(
+        x_test_shuffled.to_numpy()[:, col],
+        dtype=torch.float32,
     )
     model = _TabularClassifier(spec)
     initial_loss, final_loss = _train_binary_classifier(

@@ -154,6 +154,23 @@ def attributed_output_sum(
     return output[:, indices].sum()
 
 
+def aligned_feature_tensor(
+    features: pd.DataFrame,
+    spec: LayeredSpec,
+) -> torch.Tensor:
+    """
+    Gather DataFrame columns into spec input order as float32.
+    """
+    col = align_inputs(
+        features.columns,
+        spec,
+    )
+    return torch.as_tensor(
+        features.to_numpy()[:, col],
+        dtype=torch.float32,
+    )
+
+
 def align_and_enable_grad(
     features: pd.DataFrame,
     spec: LayeredSpec,
@@ -161,7 +178,7 @@ def align_and_enable_grad(
     """
     Align a named table and mark the tensor as requiring grad.
     """
-    x = align_inputs(
+    x = aligned_feature_tensor(
         features,
         spec,
     )

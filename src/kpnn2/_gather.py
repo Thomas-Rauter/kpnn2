@@ -79,8 +79,8 @@ def gather_hop_inputs(
     MaskedLinear : Dense hatch via ``hop.to_mask()``.
     Hop : The record that fixes the source layers and the
         concatenated column order this follows.
-    align_inputs : Builds the layer-0 tensor that seeds
-        ``saved``.
+    align_inputs : Column index that puts named features in the
+        order layer 0 expects.
 
     Notes
     -----

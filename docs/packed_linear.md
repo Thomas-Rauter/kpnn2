@@ -107,7 +107,11 @@ in each step is required, not cosmetic. The
 scatter inside a full loop:
 
 ```python
-x = kpnn2.align_inputs(df, spec)
+col = kpnn2.align_inputs(df.columns, spec)
+x = torch.as_tensor(
+    df.to_numpy()[:, col],
+    dtype=torch.float32,
+)
 n = len(spec.nodes)
 state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x

@@ -115,8 +115,8 @@ def map_node_attributions(
     --------
     aggregate_node_attributions : Folds named scores to one
         value per node; call this after mapping.
-    align_inputs : Applies the same node order on the way in,
-        mapping a named DataFrame onto ``spec.input_nodes``.
+    align_inputs : Same node order on the way in; returns a
+        column index into the caller's feature names.
     gather_hop_inputs : Builds the tensor whose columns ``hop``
         names.
     Hop : One hop; pass ``hop=spec.hops[i]`` to name its source

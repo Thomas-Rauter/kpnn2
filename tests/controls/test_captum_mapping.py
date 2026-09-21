@@ -15,7 +15,6 @@ import pytest
 import torch
 
 from kpnn2 import (
-    align_inputs,
     map_node_attributions,
     parse_layered,
 )
@@ -24,6 +23,7 @@ from tests.controls.scoring import (
     DEAD_TOLERANCE,
     LIVE_FLOOR,
     SEED,
+    aligned_feature_tensor,
     independent_gaussian_features,
     median_abs_scores,
     pin_scenario_weights,
@@ -80,7 +80,7 @@ def test_integrated_gradients_maps_input_node_order() -> None:
         scenario,
     )
     features = independent_gaussian_features(spec)
-    x = align_inputs(
+    x = aligned_feature_tensor(
         features,
         spec,
     )
