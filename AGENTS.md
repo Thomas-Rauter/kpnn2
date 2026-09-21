@@ -46,8 +46,8 @@ git).
 
 If it conflicts with `CONTEXT.md` on product or
 architecture, `CONTEXT.md` wins. If it conflicts with
-this file on process (pytest, seeds in tests, ruff,
-lockstep, git), this file wins.
+this file on process (pytest, mypy, seeds in tests,
+ruff, lockstep, git), this file wins.
 
 ## Do not
 
@@ -143,14 +143,33 @@ before declaring the work done. Docs-only, rules-only, or
 tests-only edits do not require this full run unless `src/`
 also changed.
 
-After Python edits, format with the `dev` extra pin:
+After changing anything under `src/`, also type-check
+before finishing (CI runs this on Python 3.11):
+
+```
+python -m mypy src
+```
+
+Fix mypy errors from that run. Mypy is configured for
+`src/` only (`pyproject.toml`); edits under `tests/` or
+`docs/` alone do not require mypy unless `src/` also
+changed.
+
+After Python edits that Ruff covers, format and lint with
+the `dev` extra pin before finishing:
 
 ```
 python -m ruff format .
+python -m ruff check .
 ```
 
-Do not use a global `ruff` on `PATH`; it can disagree with
-CI. Exact pin: `pyproject.toml`.
+Fix format and lint failures from those runs. Ruff covers
+the repo except `*.md`, `tests/manual/`, and `out/` (see
+`pyproject.toml`). Markdown-only, rules-only, or other
+non-Python edits do not require these runs. Do not use a
+global `ruff` on `PATH`; it can disagree with CI. Exact
+pin: `pyproject.toml`. The full local checklist is
+`dev/check_code_locally.txt`.
 
 Execute tutorial notebooks with:
 
