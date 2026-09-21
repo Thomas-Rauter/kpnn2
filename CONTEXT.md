@@ -1506,6 +1506,7 @@ PackedMultiheadAttention(
     *,
     identity=None,
     generator=None,
+    chunk_size=None,
 )
 ```
 
@@ -1553,6 +1554,17 @@ PackedMultiheadAttention(
   not advance the global stream. Not stored on the
   module. `reset_parameters` takes the same argument.
   Do not add `seed=`.
+- Optional `chunk_size`: `None` (default) gathers all
+  live pairs at once. A positive int gathers chunked
+  live pairs: softmax stays over every live key of a
+  query, but `q`/`k`/`v` gathers are slices of that
+  many edges. Backward rematerializes those gathers so
+  training does not save `(..., nnz, heads, head_dim)`
+  pair tensors. Packed softmax `(..., nnz, heads)` is
+  still stored. `bool` and other non-`int` values, `0`,
+  and negatives raise `Kpnn2Error`. Not stored in
+  `state_dict` or `index_digest`; a checkpoint loads
+  into a layer with a different `chunk_size`.
 - Projections are four separate
   `embed_dim → embed_dim` `nn.Linear`s (`q_proj`,
   `k_proj`, `v_proj`, `out_proj`), not a fused
@@ -1608,12 +1620,14 @@ forward(
   query with no remaining keys also stays zeros.
   There is no NaN softmax.
 - Never allocate `(n, n)` or `(L, S)`. Never import
-  `torch.sparse`. Never take a dense mask or an
-  `AdjacencySpec`. `query` / `key` / `value` are
-  ordinary dense activation tensors.
+  `torch.sparse`. `chunk_size` does not change that:
+  it only slices live-pair gathers. Never take a dense
+  mask or an `AdjacencySpec`. `query` / `key` / `value`
+  are ordinary dense activation tensors.
 - `extra_repr` reports `query_features`,
   `key_features`, `embed_dim`, `num_heads`, `nnz`,
-  `dropout`, `batch_first`, and `add_self_loops`.
+  `dropout`, `batch_first`, `add_self_loops`, and
+  `chunk_size`.
 - `state_dict` includes `index_digest`, a 1-D CPU
   `uint8` tensor of length 32: the SHA-256 of the
   int64 C-contiguous bytes of `source_index`, then

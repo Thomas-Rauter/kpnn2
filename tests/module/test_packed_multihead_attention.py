@@ -133,6 +133,7 @@ def test_attributes_match_construction():
     assert plain.key_features == n
     assert plain.embed_dim == embed_dim
     assert plain.nnz == len(spec.source_index)
+    assert plain.chunk_size is None
     assert plain.source_index.tolist() == list(spec.source_index)
     assert plain.target_index.tolist() == list(spec.target_index)
 
@@ -1452,9 +1453,11 @@ def test_repr_reports_sizes():
     assert "embed_dim=8" in extra
     assert "num_heads=2" in extra
     assert "nnz=2" in extra
+    assert "chunk_size=None" in extra
     assert "embed_dim=8" in text
     assert "num_heads=2" in text
     assert "nnz=2" in text
+    assert "chunk_size=None" in text
 
 
 def test_construction_does_not_call_to_mask(monkeypatch):

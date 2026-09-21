@@ -394,6 +394,476 @@ def _packed_attention(
     return out, attn
 
 
+def _optional_chunk_size(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise Kpnn2Error("'chunk_size' must be None or a positive int.")
+    return value
+
+
+def _live_pair_scores(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    source_index: torch.Tensor,
+    target_index: torch.Tensor,
+    scale: float,
+) -> torch.Tensor:
+    q_live = query[..., target_index, :, :]
+    k_live = key[..., source_index, :, :]
+    return (q_live * k_live).sum(-1) * scale
+
+
+def _apply_participate_to_scores(
+    scores: torch.Tensor,
+    participate: torch.Tensor | None,
+    fill: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    scores_for_max = scores
+    exp_delta = scores
+    if participate is None:
+        return scores_for_max, exp_delta
+    scores_for_max = scores.masked_fill(
+        ~participate,
+        fill,
+    )
+    exp_delta = scores.masked_fill(
+        ~participate,
+        0.0,
+    )
+    return scores_for_max, exp_delta
+
+
+class _PackedAttentionChunked(torch.autograd.Function):
+    """
+    Softmax and mix packed pairs in edge chunks.
+
+    Forward never materializes ``(..., nnz, heads, head_dim)``
+    pair gathers. Backward rematerializes those gathers from
+    saved ``query`` / ``key`` / ``value`` and packed softmax.
+    """
+
+    @staticmethod
+    def forward(
+        ctx,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        source_index: torch.Tensor,
+        target_index: torch.Tensor,
+        participate: torch.Tensor,
+        dropout_p: float,
+        training: bool,
+        chunk_size: int,
+        has_participate: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        part = participate if has_participate else None
+        head_dim = query.shape[-1]
+        scale = head_dim**-0.5
+        n_query = query.shape[-3]
+        leading = query.shape[:-3]
+        heads = query.shape[-2]
+        nnz = int(source_index.shape[0])
+        fill = torch.finfo(query.dtype).min
+        max_buf = query.new_full(
+            (*leading, n_query, heads),
+            fill,
+        )
+        start = 0
+        while start < nnz:
+            end = min(start + chunk_size, nnz)
+            src = source_index[start:end]
+            tgt = target_index[start:end]
+            scores = _live_pair_scores(
+                query,
+                key,
+                src,
+                tgt,
+                scale,
+            )
+            part_chunk = None
+            if part is not None:
+                part_chunk = part[..., start:end, :]
+            scores_for_max, _ = _apply_participate_to_scores(
+                scores,
+                part_chunk,
+                fill,
+            )
+            score_index = _expand_index(
+                tgt,
+                scores,
+                dim=-2,
+            )
+            max_buf.scatter_reduce_(
+                -2,
+                score_index,
+                scores_for_max,
+                reduce="amax",
+                include_self=True,
+            )
+            start = end
+
+        sum_buf = query.new_zeros(
+            (*leading, n_query, heads),
+        )
+        softmax_attn = query.new_empty(
+            (
+                *leading,
+                nnz,
+                heads,
+            ),
+        )
+        start = 0
+        while start < nnz:
+            end = min(start + chunk_size, nnz)
+            src = source_index[start:end]
+            tgt = target_index[start:end]
+            scores = _live_pair_scores(
+                query,
+                key,
+                src,
+                tgt,
+                scale,
+            )
+            part_chunk = None
+            if part is not None:
+                part_chunk = part[..., start:end, :]
+            _, delta_scores = _apply_participate_to_scores(
+                scores,
+                part_chunk,
+                fill,
+            )
+            score_index = _expand_index(
+                tgt,
+                scores,
+                dim=-2,
+            )
+            gathered_max = max_buf.gather(
+                -2,
+                score_index,
+            )
+            delta = delta_scores - gathered_max
+            if part_chunk is not None:
+                delta = delta.masked_fill(
+                    ~part_chunk,
+                    0.0,
+                )
+            exp_scores = torch.exp(delta)
+            if part_chunk is not None:
+                exp_scores = exp_scores * part_chunk.to(
+                    dtype=exp_scores.dtype,
+                )
+            sum_buf.scatter_add_(
+                -2,
+                score_index,
+                exp_scores,
+            )
+            softmax_attn[..., start:end, :] = exp_scores
+            start = end
+
+        tiny = torch.finfo(query.dtype).tiny
+        start = 0
+        while start < nnz:
+            end = min(start + chunk_size, nnz)
+            tgt = target_index[start:end]
+            exp_chunk = softmax_attn[..., start:end, :]
+            score_index = _expand_index(
+                tgt,
+                exp_chunk,
+                dim=-2,
+            )
+            denom = sum_buf.gather(
+                -2,
+                score_index,
+            ).clamp_min(tiny)
+            chunk_attn = exp_chunk / denom
+            if part is not None:
+                chunk_attn = chunk_attn * part[..., start:end, :].to(
+                    dtype=chunk_attn.dtype,
+                )
+            softmax_attn[..., start:end, :] = chunk_attn
+            start = end
+
+        used_dropout = dropout_p > 0.0 and training
+        dropped_attn = softmax_attn
+        if used_dropout:
+            dropped_attn = F.dropout(
+                softmax_attn,
+                p=dropout_p,
+            )
+
+        out = torch.zeros_like(query)
+        start = 0
+        while start < nnz:
+            end = min(start + chunk_size, nnz)
+            src = source_index[start:end]
+            tgt = target_index[start:end]
+            v_live = value[..., src, :, :]
+            weighted = dropped_attn[..., start:end, :].unsqueeze(-1) * v_live
+            value_index = _expand_index(
+                tgt,
+                weighted,
+                dim=-3,
+            )
+            out.scatter_add_(
+                -3,
+                value_index,
+                weighted,
+            )
+            start = end
+
+        ctx.scale = scale
+        ctx.chunk_size = chunk_size
+        ctx.has_participate = has_participate
+        ctx.used_dropout = used_dropout
+        if used_dropout:
+            ctx.save_for_backward(
+                query,
+                key,
+                value,
+                source_index,
+                target_index,
+                participate,
+                softmax_attn,
+                dropped_attn,
+            )
+        else:
+            ctx.save_for_backward(
+                query,
+                key,
+                value,
+                source_index,
+                target_index,
+                participate,
+                softmax_attn,
+            )
+        return out, dropped_attn
+
+    @staticmethod
+    def backward(
+        ctx,
+        grad_out: torch.Tensor | None,
+        grad_attn: torch.Tensor | None,
+    ) -> tuple[
+        torch.Tensor | None,
+        torch.Tensor | None,
+        torch.Tensor | None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ]:
+        need_q, need_k, need_v, *_ = ctx.needs_input_grad
+        if not (need_q or need_k or need_v):
+            return (
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        saved = ctx.saved_tensors
+        query = saved[0]
+        key = saved[1]
+        value = saved[2]
+        source_index = saved[3]
+        target_index = saved[4]
+        participate = saved[5]
+        softmax_attn = saved[6]
+        if ctx.used_dropout:
+            dropped_attn = saved[7]
+        else:
+            dropped_attn = softmax_attn
+        part = participate if ctx.has_participate else None
+        scale = ctx.scale
+        chunk_size = ctx.chunk_size
+        n_query = query.shape[-3]
+        leading = query.shape[:-3]
+        heads = query.shape[-2]
+        nnz = int(source_index.shape[0])
+
+        grad_query = None
+        grad_key = None
+        grad_value = None
+        if need_q:
+            grad_query = torch.zeros_like(query)
+        if need_k:
+            grad_key = torch.zeros_like(key)
+        if need_v:
+            grad_value = torch.zeros_like(value)
+
+        d_dropped = None
+        if need_q or need_k:
+            if grad_attn is None:
+                d_dropped = torch.zeros_like(softmax_attn)
+            else:
+                d_dropped = grad_attn.clone()
+
+        start = 0
+        while start < nnz:
+            end = min(start + chunk_size, nnz)
+            src = source_index[start:end]
+            tgt = target_index[start:end]
+            dropped = dropped_attn[..., start:end, :]
+            if grad_out is not None:
+                d_out_live = grad_out[..., tgt, :, :]
+                if need_v and grad_value is not None:
+                    d_v_live = dropped.unsqueeze(-1) * d_out_live
+                    v_index = _expand_index(
+                        src,
+                        d_v_live,
+                        dim=-3,
+                    )
+                    grad_value.scatter_add_(
+                        -3,
+                        v_index,
+                        d_v_live,
+                    )
+                if d_dropped is not None:
+                    v_live = value[..., src, :, :]
+                    d_dropped[..., start:end, :] = d_dropped[
+                        ...,
+                        start:end,
+                        :,
+                    ] + (d_out_live * v_live).sum(-1)
+            start = end
+
+        if d_dropped is not None:
+            if ctx.used_dropout:
+                drop_scale = torch.where(
+                    softmax_attn != 0,
+                    dropped_attn / softmax_attn,
+                    torch.zeros_like(softmax_attn),
+                )
+                d_softmax = d_dropped * drop_scale
+            else:
+                d_softmax = d_dropped
+            if part is not None:
+                d_softmax = d_softmax * part.to(
+                    dtype=d_softmax.dtype,
+                )
+            dot_buf = query.new_zeros(
+                (*leading, n_query, heads),
+            )
+            start = 0
+            while start < nnz:
+                end = min(start + chunk_size, nnz)
+                tgt = target_index[start:end]
+                a_chunk = softmax_attn[..., start:end, :]
+                da_chunk = d_softmax[..., start:end, :]
+                prod = a_chunk * da_chunk
+                score_index = _expand_index(
+                    tgt,
+                    prod,
+                    dim=-2,
+                )
+                dot_buf.scatter_add_(
+                    -2,
+                    score_index,
+                    prod,
+                )
+                start = end
+            start = 0
+            while start < nnz:
+                end = min(start + chunk_size, nnz)
+                src = source_index[start:end]
+                tgt = target_index[start:end]
+                a_chunk = softmax_attn[..., start:end, :]
+                da_chunk = d_softmax[..., start:end, :]
+                score_index = _expand_index(
+                    tgt,
+                    a_chunk,
+                    dim=-2,
+                )
+                gathered_dot = dot_buf.gather(
+                    -2,
+                    score_index,
+                )
+                d_scores = a_chunk * (da_chunk - gathered_dot)
+                q_live = query[..., tgt, :, :]
+                k_live = key[..., src, :, :]
+                if need_q and grad_query is not None:
+                    d_q_live = d_scores.unsqueeze(-1) * k_live * scale
+                    q_index = _expand_index(
+                        tgt,
+                        d_q_live,
+                        dim=-3,
+                    )
+                    grad_query.scatter_add_(
+                        -3,
+                        q_index,
+                        d_q_live,
+                    )
+                if need_k and grad_key is not None:
+                    d_k_live = d_scores.unsqueeze(-1) * q_live * scale
+                    k_index = _expand_index(
+                        src,
+                        d_k_live,
+                        dim=-3,
+                    )
+                    grad_key.scatter_add_(
+                        -3,
+                        k_index,
+                        d_k_live,
+                    )
+                start = end
+
+        return (
+            grad_query,
+            grad_key,
+            grad_value,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+
+
+def _packed_attention_chunked(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    source_index: torch.Tensor,
+    target_index: torch.Tensor,
+    dropout_p: float,
+    training: bool,
+    chunk_size: int,
+    participate: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Run the packed mix in edge chunks.
+
+    Softmax is still over every live key of a query. Pair
+    gathers of shape ``(..., chunk, heads, head_dim)`` are
+    rematerialized in backward.
+    """
+    dummy = query.new_empty(0)
+    part = dummy if participate is None else participate
+    return _PackedAttentionChunked.apply(
+        query,
+        key,
+        value,
+        source_index,
+        target_index,
+        part,
+        dropout_p,
+        training,
+        chunk_size,
+        participate is not None,
+    )
+
+
 class PackedMultiheadAttention(nn.Module):
     """
     Multi-head attention restricted to the live edges of a named edgelist.
@@ -479,6 +949,16 @@ class PackedMultiheadAttention(nn.Module):
         advance the global stream. Not stored on the module;
         pass it again to ``reset_parameters`` to replay. Do
         not pass a seed integer.
+    chunk_size : int or None, default=None
+        How many live edges to gather at once in the packed
+        softmax and mix. ``None`` gathers all live pairs at
+        once. A positive int uses chunked live pairs: softmax
+        is still over every live key of a query, but pair
+        gathers are slices of that many edges and those
+        gathers are rematerialized in backward. ``bool`` and
+        values other than ``None`` or a positive ``int``
+        raise ``Kpnn2Error``. Not stored on the module
+        ``state_dict`` or in ``index_digest``.
 
     Attributes
     ----------
@@ -514,6 +994,8 @@ class PackedMultiheadAttention(nn.Module):
         a fused ``in_proj_weight``.
     identity : str | None
         The constructor ``identity``, or ``None``.
+    chunk_size : int | None
+        Edge-chunk length, or ``None`` for all live pairs.
 
     Raises
     ------
@@ -526,8 +1008,10 @@ class PackedMultiheadAttention(nn.Module):
         negative; if ``kdim`` / ``vdim`` are neither ``None`` nor
         ``embed_dim``; if ``add_self_loops`` is set when
         ``query_features != key_features``; if ``identity`` is
-        neither a ``str`` nor ``None``; or if ``generator`` is
-        neither a ``torch.Generator`` nor ``None``. From
+        neither a ``str`` nor ``None``; if ``generator`` is
+        neither a ``torch.Generator`` nor ``None``; or if
+        ``chunk_size`` is neither ``None`` nor a positive
+        ``int``. From
         ``load_state_dict``, when the checkpoint carries an index
         digest or identity that does not match this layer, in
         which case the weights are not loaded. ``forward``
@@ -549,11 +1033,16 @@ class PackedMultiheadAttention(nn.Module):
     The mix is a softmax over each query's live keys only, formed
     edge by edge, so no ``(n, n)`` or ``(L, S)`` score matrix is
     allocated and ``torch.sparse`` is not imported; cost scales
-    with ``nnz``, not with ``query_features * key_features``. A
-    query with no live keys (and none added by
-    ``add_self_loops``) mixes to zeros rather than NaN, then
-    still goes through ``out_proj``. Input nodes of an
-    ``AdjacencySpec`` are exactly that case.
+    with ``nnz``, not with ``query_features * key_features``.
+    ``chunk_size=None`` (the default) gathers all live pairs at
+    once. A positive ``chunk_size`` gathers chunked live pairs
+    and rematerializes those ``(..., chunk, heads, head_dim)``
+    tensors in backward so training does not save a full
+    ``(..., nnz, heads, head_dim)`` gather. Packed softmax
+    ``(..., nnz, heads)`` is still stored. A query with no live
+    keys (and none added by ``add_self_loops``) mixes to zeros
+    rather than NaN, then still goes through ``out_proj``. Input
+    nodes of an ``AdjacencySpec`` are exactly that case.
 
     ``forward`` documents the accepted layouts, packed
     ``need_weights``, ``attn_mask`` / ``is_causal``, and
@@ -574,7 +1063,9 @@ class PackedMultiheadAttention(nn.Module):
     even with ``strict=True``. ``identity`` is stored the same
     way when the constructor was given one: a rename that
     leaves the packed index pattern unchanged is caught when
-    callers pass ``spec.fingerprint``. ``copy.deepcopy`` works.
+    callers pass ``spec.fingerprint``. ``chunk_size`` is not
+    part of ``state_dict`` or ``index_digest``. ``copy.deepcopy``
+    works.
 
     Examples
     --------
@@ -641,6 +1132,7 @@ class PackedMultiheadAttention(nn.Module):
         *,
         identity: str | None = None,
         generator: torch.Generator | None = None,
+        chunk_size: int | None = None,
     ) -> None:
         super().__init__()
         query_features = _positive_int(
@@ -724,6 +1216,7 @@ class PackedMultiheadAttention(nn.Module):
         self.batch_first = batch_first
         self.add_self_loops = add_self_loops
         self.identity = as_identity(identity)
+        self.chunk_size = _optional_chunk_size(chunk_size)
         generator = as_generator(generator)
         self.register_buffer(
             "source_index",
@@ -802,7 +1295,7 @@ class PackedMultiheadAttention(nn.Module):
 
     def extra_repr(self) -> str:
         """
-        Sizes, live-edge count, dropout, and layout flags.
+        Sizes, live-edge count, dropout, layout, and chunk_size.
         """
         return (
             f"query_features={self.query_features}, "
@@ -812,7 +1305,8 @@ class PackedMultiheadAttention(nn.Module):
             f"nnz={self.nnz}, "
             f"dropout={self.dropout}, "
             f"batch_first={self.batch_first}, "
-            f"add_self_loops={self.add_self_loops}"
+            f"add_self_loops={self.add_self_loops}, "
+            f"chunk_size={self.chunk_size}"
         )
 
     def _save_to_state_dict(
@@ -999,16 +1493,29 @@ class PackedMultiheadAttention(nn.Module):
                 self.key_features,
                 query_bf.device,
             )
-            mixed, attn = _packed_attention(
-                q,
-                k,
-                v,
-                self.source_index,
-                self.target_index,
-                self.dropout,
-                self.training,
-                participate,
-            )
+            if self.chunk_size is None:
+                mixed, attn = _packed_attention(
+                    q,
+                    k,
+                    v,
+                    self.source_index,
+                    self.target_index,
+                    self.dropout,
+                    self.training,
+                    participate,
+                )
+            else:
+                mixed, attn = _packed_attention_chunked(
+                    q,
+                    k,
+                    v,
+                    self.source_index,
+                    self.target_index,
+                    self.dropout,
+                    self.training,
+                    self.chunk_size,
+                    participate,
+                )
             output = self.out_proj(
                 mixed.reshape(
                     *mixed.shape[:-2],

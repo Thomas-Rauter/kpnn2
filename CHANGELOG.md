@@ -31,6 +31,10 @@ This project follows semantic versioning.
   `need_weights=True` returns packed per-edge weights aligned
   with `source_index` / `target_index`, not a dense `(L, S)`
   matrix. Default `False` still returns `None`.
+- `PackedMultiheadAttention`: optional `chunk_size`. `None`
+  gathers all live pairs at once (the default). A positive
+  int softmaxes and mixes in slices of that many edges and
+  rematerializes those gathers in backward.
 - `PackedLinear.transpose()`: swapped packed indices, tied or
   copied `weight`, untied bias. The tied autoencoder path.
 - `scatter_hop_outputs`: split a hop's concatenated source

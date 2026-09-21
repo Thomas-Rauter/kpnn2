@@ -215,9 +215,10 @@ Pinned in
 and
 [`tests/controls/test_no_memory_prior.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_no_memory_prior.py).
 Attention pairs are pinned in
-[`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py)
+[`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py),
+[`tests/module/test_packed_attention_kernel.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_kernel.py),
 and
-[`tests/module/test_packed_attention_kernel.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_kernel.py).
+[`tests/module/test_packed_attention_chunk_size.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_chunk_size.py).
 
 ### Name mapping
 
@@ -309,9 +310,12 @@ traces without a graph break.
 **Packed attention.** Scores exist only for live
 `(source, target)` pairs. An absent key does not influence a
 query. Isolated queries stay zeros, not NaN. No `(n, n)` score
-parameter. `forward` disables `torch.autocast` and casts
-query, key, and value to the parameter dtype.
-[`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py).
+parameter. `chunk_size=None` gathers all live pairs at once; a
+positive `chunk_size` matches that mix and its gradients.
+`forward` disables `torch.autocast` and casts query, key, and
+value to the parameter dtype.
+[`tests/module/test_packed_attention_structure.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py),
+[`tests/module/test_packed_attention_chunk_size.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_chunk_size.py).
 
 **Checkpoints.** `state_dict` carries a digest of the live mask
 or packed indices, and an optional `identity` (typically

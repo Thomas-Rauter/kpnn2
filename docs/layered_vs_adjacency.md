@@ -132,7 +132,8 @@ a time-series [knowledge-primed neural network](concepts.md#kpnn)
 
 This toy is small, so `MaskedLinear` is appropriate; for large
 node counts and RAM see [PackedLinear](packed_linear.md). The
-same packed indices can feed `PackedMultiheadAttention`; that
+same packed indices can feed `PackedMultiheadAttention`
+(`chunk_size` when live-pair gathers strain RAM); that
 walkthrough is the
 [Transformer example](transformer-example.ipynb).
 

@@ -121,8 +121,9 @@ state = torch.relu(core(state))
 The same packed indices can feed
 [`PackedMultiheadAttention`](reference/PackedMultiheadAttention.md),
 a different primitive: attention on live pairs, not one scalar
-per edge. The
-[Transformer example](transformer-example.ipynb) is that
+per edge. That layer's training RAM is pair gathers, not an
+`(n, n)` weight; pass `chunk_size` there when `nnz` is large.
+The [Transformer example](transformer-example.ipynb) is that
 walkthrough.
 
 ## Tied transpose
