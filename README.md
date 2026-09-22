@@ -60,7 +60,7 @@ directed edges between them. Edgelist and graph are the same object in
 two forms — the table you pass in, and the structure it encodes. These
 docs use "graph" in that sense throughout: the prior wiring that becomes
 the architecture. It never means PyTorch's autograd graph, and never a
-graph as *data* in the GNN sense (see [Why not PyG?](#why-not-pyg)).
+graph as *data* in the GNN sense (see [Why not a GNN?](#why-not-a-gnn)).
 [**Concepts**](docs/concepts.md) defines the rest of the vocabulary.
 
 `parse_layered()` layers that table into a `LayeredSpec`. You
@@ -100,32 +100,56 @@ tests that pin those wiring and interpretation claims. One frozen
 notebook repeats the simulated node-recovery result from
 [Fortelny and Bock, 2020](docs/literature/fortelny-bock-2020.ipynb).
 
-## Why not PyG?
+## Why not a GNN?
 
-[PyTorch Geometric](https://pyg.org/) already builds neural nets
-from edgelists. That is the right tool when the prior should
-become a GNN. It is not a drop-in for what this package does in
-PyTorch.
+A graph neural network (GNN) is the standard model class for
+learning from graph-structured data, and
+[PyTorch Geometric](https://pyg.org/) (PyG) is its canonical
+implementation. Where the prior should become a GNN, that is the
+right tool.
 
-A knowledge graph (a pathway map, an ontology, a sensor network)
-says which interactions exist. Turning that prior into a neural
-net is a second choice: which architecture is a faithful
-computational analogue of those interactions?
+An edgelist does not by itself determine the model. A knowledge
+graph (a pathway map, an ontology, a sensor network) states which
+interactions exist; how that prior enters the model is a second
+choice, and each choice encodes a different hypothesis about the
+data-generating process. In `kpnn2` the graph is the
+**architecture**, not the data.
 
-When that analogue is message passing, use PyG. There are
-knowledge-primed GNN papers; this project will not wrap or
-replace PyG for them.
+- **Fixed structure, varying state.** A GNN assumes that the
+  structure itself varies and is informative: a sample is a graph,
+  its nodes carry feature vectors, and the batch is drawn from a
+  distribution over graphs. A KPNN assumes the converse. The graph
+  is known and identical across samples, what varies is the state
+  of its named nodes, and the batch is samples. Where no structure
+  varies, the regularity a GNN is built to exploit is not present.
+- **Prior-indexed parameters, not one shared function.** A GNN
+  applies the same message and update functions at every node and
+  edge. That sharing is what permits generalization to unseen
+  graphs, and it is also what leaves edge-level attribution
+  ill-posed. Here the prior indexes the parameters instead: each
+  named edge carries its own weights, a scalar at unit width and a
+  block once `parse_layered(..., widths=)` widens its endpoints, so
+  an attribution resolves to a named interaction rather than to a
+  rule shared across all of them. `PackedMultiheadAttention` places
+  the prior one level up, constraining which pairs may attend at
+  all.
+- **Directed propagation, not k rounds of neighborhood
+  aggregation.** A pathway or an ontology is a deep directed
+  cascade, and the quantity of interest is what propagates along
+  it. A sparsely connected feedforward network traverses that
+  cascade in one pass with skip edges intact; message passing
+  reaches the same depth only by stacking rounds, mixing
+  neighboring node states as it proceeds.
 
-When the analogue is a feedforward cascade, a cyclic or sequence
-map, or attention on known pairs, the graph is the
-**architecture**, not the data. Each named node is a unit, each
-prior edge has its own weight, and the batch is samples. A GNN is
-the other object: each node carries a feature vector, message and
-update maps are often shared, and the batch is graphs or nodes.
-Same edgelist, different hypothesis about how the world computes.
+A GNN is the better hypothesis where the structure is the object of
+study: samples that are distinct graphs, nodes or edges unseen at
+training time, or node- and link-level tasks on a single large
+knowledge graph. There are knowledge-primed GNN papers; this
+project will not wrap or replace PyG for them.
 
-`kpnn2` is the PyTorch side of that split: sparsely connected
-layers you assemble yourself. See
+Same edgelist, different hypothesis about the data-generating
+process. `kpnn2` is the PyTorch side of that split: sparsely
+connected layers you assemble yourself. See
 [**Supported architectures**](docs/supported.md).
 
 ## Core workflow

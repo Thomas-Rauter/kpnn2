@@ -40,7 +40,7 @@ node is a score on the entity it stands for.
 never a graph as *data* in the GNN sense, where each node carries a
 feature vector and the batch is graphs. Here the graph is the
 architecture and the batch is samples. See
-[Why not PyG?](index.md#why-not-pyg).
+[Why not a GNN?](index.md#why-not-a-gnn).
 
 ## Edgelist
 
