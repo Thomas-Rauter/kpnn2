@@ -1,7 +1,10 @@
-"""Minimal public-API path used by the installed-wheel CI smoke."""
+"""Minimal public-API path used by the installed-wheel CI smoke.
+
+The wheel job runs this file as a script. That venv has only the
+installed package, so this module must not import pytest.
+"""
 
 import pandas as pd
-import pytest
 import torch
 
 from kpnn2 import (
@@ -64,14 +67,16 @@ def test_core_smoke():
     assert int(da.sizes["observation"]) == 2
     assert int(da.coords["layer"]) == 1
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="not yet implemented",
-    ):
+    caught = None
+    try:
         aggregate_node_attributions(
             da,
             labels=[0, 1],
         )
+    except Kpnn2Error as exc:
+        caught = exc
+    assert caught is not None
+    assert "not yet implemented" in str(caught)
 
 
 if __name__ == "__main__":
