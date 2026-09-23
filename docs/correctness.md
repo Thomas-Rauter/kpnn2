@@ -256,10 +256,13 @@ layouts, two fingerprints.
 [`tests/module/test_parse_adjacency.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_adjacency.py),
 [`tests/module/test_spec_serialize.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_spec_serialize.py).
 
-**Every edge is one packed pair.** Summing the pair counts over
-all hops equals the edgelist length. Each original edge is a
-pair in exactly one hop, the hop of its target, skips included.
-[`tests/module/test_parse_layered_hops.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py).
+**Named edges pack as unit pairs.** Each named edge belongs to
+exactly one hop, the hop of its target, skips included. At
+width 1, summing the packed pair counts over all hops equals
+the edgelist length. A wider node expands that edge into a
+`k_source * k_target` block, and the sum counts those pairs.
+[`tests/module/test_parse_layered_hops.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py),
+[`tests/module/test_parse_layered_widths.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_widths.py).
 
 **PackedLinear.** On the same graph, `PackedLinear` and
 `MaskedLinear(spec.to_mask())` produce the same forward values.

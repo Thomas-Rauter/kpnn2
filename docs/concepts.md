@@ -20,8 +20,8 @@ instead of redefining. This page carries the concept; the
 | [Layer](#layer) | A depth in a `LayeredSpec` |
 | [Hop](#hop) | Every edge arriving at one layer |
 | [Skip edge](#skip-edge) | An edge whose endpoints are >1 layer apart |
-| [Packed indices](#packed-indices) | Two parallel lists, one entry per edge |
-| [Live edge](#live-edge) | An edge that exists, so it gets a weight |
+| [Packed indices](#packed-indices) | Two parallel lists, one entry per unit pair |
+| [Live edge](#live-edge) | A unit pair that exists, so it gets a weight |
 | [State vector](#state-vector) | Every node as one unit, in an `AdjacencySpec` |
 | [Attribution](#attribution) | A score per node or feature, after training |
 | [Knowledge-primed neural network](#kpnn) (KPNN) | The domain framing that named the package |
@@ -158,26 +158,32 @@ Hops are a `LayeredSpec` idea. An `AdjacencySpec` has none.
 
 An original edge whose endpoints are more than one layer apart.
 
-A skip needs no separate mechanism. It is already an ordinary
-packed pair inside the hop of its *target*, sitting next to that
-layer's adjacent parents, so nothing has to add it back later and
-nothing can forget to. `spec.skips` is metadata that says which
-prior edges span layers; a forward pass never reads it, and it is
-empty when no edge skips.
+A skip needs no separate mechanism. It is already packed inside
+the hop of its *target*, sitting next to that layer's adjacent
+parents, so nothing has to add it back later and nothing can
+forget to. At width 1 that is one unit pair; a wider endpoint
+is every unit pair of the block. `spec.skips` is metadata that
+says which prior edges span layers; a forward pass never reads
+it, and it is empty when no edge skips.
 
 [Skip edges](skip-edges.ipynb) works this through on a real graph.
 
 ## Packed indices
 
-Two parallel integer lists, `source_index` and `target_index`, with
-one entry per edge: pair `i` says that column `source_index[i]`
-feeds row `target_index[i]`.
+Two parallel integer lists, `source_index` and `target_index`,
+with one entry per live unit pair: pair `i` says that column
+`source_index[i]` feeds row `target_index[i]`.
+
+At width 1 that is one entry per named edge. An `AdjacencySpec`
+has no widths, so it stays that way too.
+`parse_layered(..., widths=)` expands a named edge `A -> B` into
+every unit pair of the block, `k_B` by `k_A`.
 
 This is how both specs hold connectivity. The dense alternative is
 a mask — `hop.to_mask()` or `spec.to_mask()` allocates one on
 demand, for `MaskedLinear` — but nothing stores a mask, because the
 dense rectangle grows as the product of its two axes while the
-packed lists grow with the edge count.
+packed lists grow with the number of live pairs.
 
 The saving is storage, not a different kernel. `PackedLinear` is a
 1-D dense weight plus `index_add` on ordinary dense tensors; there
@@ -187,8 +193,9 @@ are no sparse kernels in `kpnn2`, and none are planned.
 
 ## Live edge
 
-An edge that exists in the graph, and therefore gets its own
-trainable weight.
+A unit pair that exists in the graph, and therefore gets its own
+trainable weight. A named edge is one live edge when both ends
+have width 1, and `k_B * k_A` live edges when they are wider.
 
 The term earns its keep by contrast. A dense `(out, in)` rectangle
 has a cell for every *possible* connection, and on a real prior

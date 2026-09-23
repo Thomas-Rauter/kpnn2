@@ -8,7 +8,7 @@ one layer — or on an `AdjacencySpec` when the dense rectangle
 
 On a `LayeredSpec`, a hop's
 [packed indices](concepts.md#packed-indices) — two parallel lists,
-one entry per edge — go straight into the constructor:
+one entry per unit pair — go straight into the constructor:
 
 ```python
 layer = kpnn2.PackedLinear(
@@ -28,7 +28,7 @@ On an `AdjacencySpec` every node shares one
 [state vector](concepts.md#state-vector), a single vector with one
 unit per node, so
 `MaskedLinear(spec.to_mask())` is an `(n, n)` parameter. The
-packed form is one scalar per edge:
+packed form is one scalar per named edge:
 
 ```python
 core = kpnn2.PackedLinear(
