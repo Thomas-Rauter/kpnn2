@@ -195,21 +195,31 @@ later prompt asks.
 - **Not a mutable graph.** Topology is frozen after parse.
   `LayeredSpec` and `AdjacencySpec` are frozen dataclasses
   with no edge add/remove methods. `PackedLinear` index
-  buffers have no setter. Assigning `MaskedLinear.mask`
-  can prune in place, but then `mask_digest` will not
-  match a model rebuilt from the original spec. In-place
-  ParsVNN / self-pruning BINN pruning and PathExpSurv edge
-  growth are not a supported public contract. Those
-  workflows are rare special cases. First-class support
-  would re-pack hops on both layouts, resize packed
-  `weight`, remap optimizer slots, and rewrite
-  fingerprints and digests on every edge change. That
-  would make the code much more complex and harder to
-  maintain. Callers who need a different prior drop or
-  add DataFrame rows, parse again, and copy surviving
-  tensors **by name** (see **Reparse hatch**). Do not add
-  `add_edge` / `remove_edge`, PackedLinear index setters,
-  a transfer helper, or an in-place prune / grow API.
+  buffers have no setter. Pruning during training keeps
+  that topology. The supported path is a keep-mask inside
+  `constraint=`: a persistent buffer, same shape as the
+  weight, multiplied into it on the unchanged spec. A zero
+  drops that slot from the forward map. Node roles, depths,
+  `align_inputs` indices, `index_digest`, and the optimizer
+  state of `weight` stay as they were, and the buffer
+  round-trips through `state_dict` into a model rebuilt
+  from the same spec.
+  `torch.nn.utils.prune.custom_from_mask` on
+  `PackedLinear.weight` or `MaskedLinear.weight` also
+  zeroes slots; the checkpoint keys become `weight_orig`
+  and `weight_mask`. Assigning
+  `MaskedLinear.mask` changes the connectivity buffer, so
+  `mask_digest` will disagree with a model rebuilt from
+  the original spec. Edge growth (PathExpSurv) and
+  "remove, then retrain a smaller model" are a reparse:
+  drop or add DataFrame rows, parse again, and copy
+  surviving tensors **by name** (see **Reparse hatch**).
+  Repacking hops, resizing packed `weight`, remapping
+  optimizer slots, and rewriting fingerprints on an edge
+  change would make the code much more complex and harder
+  to maintain. Do not add `add_edge` / `remove_edge`,
+  PackedLinear index setters, a transfer helper, or an
+  optimizer-remap helper.
 - **Not a data-residency layer.** No minibatcher, no device
   policy, no "keep X sparse" helper, and no rule that moves
   the full feature matrix to GPU. Host-sparse storage (for
@@ -279,13 +289,18 @@ be convenience, not a necessity, and would make the public
 contract heavier. Do not add it. See **What kpnn2 is NOT**.
 
 **Topology is frozen after parse.** Specs are parse snapshots,
-not a live graph. Training-time prune and grow (ParsVNN,
-self-pruning BINN, PathExpSurv) stay in the caller's loop:
+not a live graph. Pruning during training (ParsVNN, a
+self-pruning BINN) is a keep-mask inside `constraint=` on
+that snapshot: a persistent buffer multiplied into the
+weight. The spec, packed indices, `index_digest`, and
+optimizer slots stay as parsed. Edge growth (PathExpSurv)
+and "remove, then retrain a smaller model" are a reparse:
 edit the edgelist, parse again, copy by name (see
-**Reparse hatch**). Do not add mutation APIs to make those
-papers first-class. They are rare relative to a fixed prior,
-and supporting them in kpnn2 would make the code much more
-complex and harder to maintain. See **What kpnn2 is NOT**.
+**Reparse hatch**). Do not add `add_edge` / `remove_edge`,
+index setters, a transfer helper, or an optimizer-remap
+helper. Repacking hops and resizing `weight` on an edge
+change would make the code much more complex and harder
+to maintain. See **What kpnn2 is NOT**.
 
 **Two sparsity axes.** Graph connectivity is kpnn2's: always
 dense compute, sparse only as "which edges exist." Feature
@@ -331,7 +346,8 @@ Division of labor:
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
 | Encoder stack, FFN, residuals | User (PyTorch) |
 | Training and evaluation | User (PyTorch) |
-| Training-time prune / grow of the prior | User (reparse hatch) |
+| In-training prune (keep-mask in `constraint=`) | User (PyTorch) |
+| Edge growth, or remove-then-retrain | User (reparse hatch) |
 | Host feature layout (dense table vs sparse AnnData `.X`) | User |
 | Minibatch slice → densify that block → device copy | User |
 | Captum / other attribution algorithms | User |
@@ -962,12 +978,53 @@ logits = state[:, spec.output_index]
 
 ## Reparse hatch
 
-Topology stays frozen after parse. To prune or grow the
-prior, edit the edgelist DataFrame, call `parse_layered` or
-`parse_adjacency` again, build **new** `PackedLinear` or
-`MaskedLinear` modules from the new spec, and copy surviving
-tensors **by name**. Do not add `add_edge` / `remove_edge`,
-a transfer helper, or an in-place prune / grow API.
+Topology stays frozen after parse.
+
+**In-training prune.** A keep-mask inside `constraint=` on
+the unchanged spec. The mask is a persistent buffer, same
+shape as `weight`, multiplied into the weight in
+`forward`. A zero drops that slot from the map `forward`
+uses. Node roles, depths, `align_inputs` indices,
+`index_digest` (`mask_digest` on `MaskedLinear`), and the
+optimizer state of `weight` stay in place. The buffer is
+registered on the constraint module, so `state_dict`
+round-trips it into a model rebuilt from the same spec.
+`PackedLinear.transpose(tie=True)` shares that module, so
+the tied decoder applies the same zeros.
+`torch.nn.utils.prune.custom_from_mask` on `weight` also
+zeroes slots; the checkpoint keys become `weight_orig` and
+`weight_mask`. The keep-mask leaves the key `weight`.
+
+```python
+class KeepMask(torch.nn.Module):
+    def __init__(
+        self,
+        nnz,
+    ):
+        super().__init__()
+        self.register_buffer(
+            "keep",
+            torch.ones(nnz),
+        )
+
+    def forward(
+        self,
+        weight,
+    ):
+        return weight * self.keep
+```
+
+On `MaskedLinear` the buffer has the dense
+`(out_features, in_features)` shape and is multiplied
+before the connectivity mask. Leave `layer.mask` as the
+parsed pattern.
+
+**Growth and remove-then-retrain.** Edit the edgelist
+DataFrame, call `parse_layered` or `parse_adjacency`
+again, build **new** `PackedLinear` or `MaskedLinear`
+modules from the new spec, and copy surviving tensors
+**by name**. Do not add `add_edge` / `remove_edge`, a
+transfer helper, or an optimizer-remap helper.
 
 **Name-to-name copy.** For each named edge that exists on
 both specs, look up packed slots on the **old** spec and on
@@ -1018,6 +1075,19 @@ nodes keep the degree-aware init.
 module. Construct a new optimizer on the new parameters, or
 accept that those moments are lost. Do not add an
 optimizer-remap helper.
+
+`optimizer.load_state_dict` across that reparse is accepted
+silently when each parameter shape still matches. On
+`PackedLinear`, `weight` has length `nnz` and `bias` has
+length `out_features`. On `MaskedLinear`, `weight` is the
+`(out_features, in_features)` rectangle. Dropping one named
+edge and adding another can leave those shapes unchanged.
+The moments are then applied by position, so slot `i` can
+be a different named edge. The load reads shapes only.
+`index_digest` and `identity` are checked by the layer's
+own `load_state_dict`: with `identity=spec.fingerprint`, a
+different prior raises `Kpnn2Error`. A successful optimizer
+load means the shapes matched.
 
 ---
 
@@ -1303,7 +1373,10 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   supported per-entry map; do not stack `softplus` after the
   mask yourself. Mixed signs and frozen live-edge values
   stay in the caller's `constraint=` module (`torch.where`
-  for a hard freeze); see **Package philosophy**.
+  for a hard freeze). A keep-mask for pruning during
+  training is a persistent buffer in that module,
+  multiplied into the dense weight before the connectivity
+  mask. See **Package philosophy** and **Reparse hatch**.
 - Masked-out weights still exist as parameter entries (at 0)
   and are multiplied by 0 in `effective_weight()` and the
   forward pass.
@@ -1375,7 +1448,10 @@ PackedLinear(
   `effective_weight()`, or write the constants back after
   `optimizer.step()` if a checkpoint must match. A loss
   barrier is a soft prior. A gradient hook that zeroes the
-  slot is not a freeze.
+  slot is not a freeze. A keep-mask for pruning during
+  training is a persistent buffer in this module, same
+  shape as `weight`, multiplied into it. The spec stays
+  the one that was parsed. See **Reparse hatch**.
 - Optional `generator`: `torch.Generator` or `None`. Init
   draws from that generator. `None` (the default) uses the
   process default generator, bit-identical to omitting the
@@ -1510,7 +1586,7 @@ still the same edge; the 1-D `weight` is not permuted.
   `named_parameters()` lists it once). The whole live map
   is tied: gradients from both forwards accumulate on the
   shared tensors, and a later change to the constraint's
-  state (a pruning buffer written in place, a trained
+  state (a keep-mask buffer written in place, a trained
   constraint parameter) reaches both layers. The decoder
   always applies the transpose of the encoder's live map.
 - `tie=False`: copy the current `weight` values into a new
@@ -2379,8 +2455,10 @@ PyTorch:
    so a rename cannot load silently.
 
 Do not add a compiled core or mutate connectivity after parse.
-See **What kpnn2 is NOT** (mutable graph). `copy.deepcopy` of
-this module shape succeeds.
+In-training prune is a keep-mask inside `constraint=`. Edge
+growth and remove-then-retrain are a reparse. See **What
+kpnn2 is NOT** (mutable graph) and **Reparse hatch**.
+`copy.deepcopy` of this module shape succeeds.
 
 The Python distribution and import name are **`kpnn2`**.
 Do not rename them.

@@ -135,8 +135,8 @@ same packed slots, indices swapped, `weight` shared by default,
 bias never shared. A `constraint=` module is shared along with
 `weight`, so the decoder applies the transpose of the encoder's
 live map even when that constraint has state: an edge you prune
-through a mask buffer, or a gate you train, changes both layers.
-`tie=False` copies both instead.
+through a [keep-mask](#pruning-during-training), or a gate you
+train, changes both layers. `tie=False` copies both instead.
 
 ```python
 enc = kpnn2.PackedLinear(
@@ -294,11 +294,84 @@ The same approach works on `MaskedLinear`: freeze at
 `[target_index, source_index]` of the dense rectangle, not at
 packed slots. `constraint=` still runs before the mask.
 
+## Pruning during training
+
+Specs stay frozen. To drop edges while training continues,
+keep the spec you parsed and put a keep-mask in
+`constraint=`. The mask is a persistent buffer, one entry
+per packed slot, multiplied into `weight`.
+
+```python
+class KeepMask(torch.nn.Module):
+    def __init__(
+        self,
+        nnz,
+    ):
+        super().__init__()
+        self.register_buffer(
+            "keep",
+            torch.ones(nnz),
+        )
+
+    def forward(
+        self,
+        weight,
+    ):
+        return weight * self.keep
+
+
+hop_index, packed = spec.edge_location(
+    "A",
+    "H",
+)
+hop = spec.hops[hop_index]
+core = kpnn2.PackedLinear(
+    hop.source_index,
+    hop.target_index,
+    hop.out_features,
+    hop.in_features,
+    identity=spec.fingerprint,
+    constraint=KeepMask(
+        len(hop.source_index),
+    ),
+)
+core.constraint.keep[list(packed)] = 0.0
+```
+
+A zero on `keep` drops that slot from the map `forward`
+uses. `effective_weight()` is 0 there, whatever scalar is
+stored in `weight`. Node roles, depths, and `align_inputs`
+indices stay the ones on this spec. `index_digest` stays
+the digest of the parsed indices. Adam's moments stay on
+the same `weight` parameter, in the same slot order, so
+training continues on the optimizer you already have.
+
+The buffer is in `state_dict` under `constraint.keep`. A
+model rebuilt from the same spec, with a `KeepMask` of the
+same shape, loads that checkpoint and keeps the zeros.
+`PackedLinear.transpose()` shares the module, so the tied
+decoder applies the same zeros.
+
+`torch.nn.utils.prune.custom_from_mask` on `weight` also
+zeroes slots, on `PackedLinear` and on `MaskedLinear`. The
+checkpoint keys are then `weight_orig` and `weight_mask`.
+The keep-mask checkpoint keeps the key `weight`.
+
+On `MaskedLinear` the buffer has shape
+`(out_features, in_features)` and multiplies the dense
+weight. `constraint=` still runs before the connectivity
+mask. Leave `layer.mask` as the parsed pattern:
+`mask_digest` is that pattern, and a model rebuilt from
+the original spec expects it.
+
 ## Changing the prior (reparse)
 
-Specs are frozen after parse. To prune or grow the prior,
-edit the edgelist, parse again, build **new** layers from
-the new spec, and copy surviving tensors **by name**.
+Specs are frozen after parse. Pruning during training stays
+on that spec: a keep-mask, above. Reparse is how you grow
+the prior, and how you remove edges and then retrain a
+smaller model. Edit the edgelist, parse again, build
+**new** layers from the new spec, and copy surviving
+tensors **by name**.
 
 Copy edge by edge. Look up each surviving named edge on **both**
 specs with `edge_location` and copy those packed slots.
@@ -338,6 +411,19 @@ width and layer still match. On an `AdjacencySpec`, index
 Optimizer state does not follow. Adam moments are keyed by
 `Parameter` identity on the old module: construct a new
 optimizer on the new parameters, or accept losing them.
+
+`optimizer.load_state_dict` across that reparse is accepted
+silently when each parameter shape still matches. On
+`PackedLinear`, `weight` has length `nnz` and `bias` has
+length `out_features`. On `MaskedLinear`, `weight` is the
+`(out_features, in_features)` rectangle. Dropping one named
+edge and adding another can leave those shapes unchanged.
+The moments are then applied by position, so slot `i` can
+be a different named edge. The load reads shapes only.
+`index_digest` and `identity` are checked by the layer's
+own `load_state_dict`: with `identity=spec.fingerprint`, a
+different prior raises `Kpnn2Error`. A successful optimizer
+load means the shapes matched.
 
 ```python
 old_spec = kpnn2.parse_adjacency(old_edgelist)

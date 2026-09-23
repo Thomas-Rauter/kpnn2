@@ -154,11 +154,18 @@ walkthrough is the
 
 ## Changing the prior
 
-Specs are frozen after parse. Edit the edgelist, parse again,
-and copy surviving tensors **by name** with `edge_location`. Do
-not `copy_` / `load_state_dict` a whole `weight` onto a
-different prior, because a packed slot need not hold the same
-named edge after a reparse. Reparse recomputes `input_nodes` /
-`output_nodes`; `parse_layered` also recomputes depths, hops,
-and skips. The recipe is on
-[PackedLinear](packed_linear.md#changing-the-prior-reparse).
+Specs are frozen after parse. Prune during training with a
+keep-mask inside `constraint=` on that spec. To grow the
+prior, or to remove edges and retrain a smaller model, edit
+the edgelist, parse again, and copy surviving tensors **by
+name** with `edge_location`. A whole-`weight` `copy_` or
+`load_state_dict` onto a different prior can put a slot's
+value on a different named edge. Reparse recomputes
+`input_nodes` / `output_nodes`; `parse_layered` also
+recomputes depths, hops, and skips.
+`optimizer.load_state_dict` is accepted when the parameter
+shapes still match, and then applies moments by position.
+The recipes are
+[Pruning during training](packed_linear.md#pruning-during-training)
+and
+[Changing the prior (reparse)](packed_linear.md#changing-the-prior-reparse).

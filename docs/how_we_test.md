@@ -280,11 +280,19 @@ Absent edges are not parameters. Construction does not call
 ties `weight` when `tie=True`. A `constraint=` module that
 `torch.where`-replaces packed slots holds those live-edge
 values under AdamW and SGD with momentum; a gradient hook
-that zeroes `grad[i]` does not. `forward` disables
-`torch.autocast` and casts `x` to the parameter dtype.
+that zeroes `grad[i]` does not. A keep-mask buffer in that
+module is the in-training prune: a zeroed slot contributes
+nothing, Adam state and `index_digest` stay, the buffer
+reloads into a layer rebuilt from the same spec, and a tied
+transpose sees the zero. `optimizer.load_state_dict` across
+a reparse is accepted when the parameter shapes match, which
+a packed layer still has when `nnz` is unchanged. `forward`
+disables `torch.autocast` and casts `x` to the parameter
+dtype.
 [`tests/module/test_packed_linear.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear.py),
 [`tests/module/test_packed_linear_transpose.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear_transpose.py),
-[`tests/module/test_constraint_freeze.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py).
+[`tests/module/test_constraint_freeze.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py),
+[`tests/module/test_keep_mask_prune.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_keep_mask_prune.py).
 
 **Hop source axis.** `gather_hop_inputs` concatenates whole
 source layers; `scatter_hop_outputs` splits that axis back.
