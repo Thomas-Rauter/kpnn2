@@ -57,6 +57,12 @@ This project follows semantic versioning.
   resurrect a blocked edge.
 - `effective_weight()` on `MaskedLinear` and `PackedLinear`:
   the map `forward` uses (constraint, then mask).
+- Constrained init: when a `constraint=` module defines
+  `right_inverse`, `reset_parameters` stores
+  `right_inverse(draw)` so the effective weight keeps the
+  degree-aware init. `init_bound()` on both layers returns the
+  per-entry bound. Constraints without `right_inverse`
+  (for example `nn.Softplus`) are unchanged.
 - `parse_layered(widths=)` / `LayeredSpec.layer_widths`: a named
   node can own several units.
 - `LayeredSpec.edge_location` / `AdjacencySpec.edge_location`:

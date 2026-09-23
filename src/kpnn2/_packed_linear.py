@@ -12,7 +12,11 @@ from typing import Any
 import torch
 from torch import nn
 
-from ._constraint import as_constraint, check_constraint_shape
+from ._constraint import (
+    as_constraint,
+    check_constraint_shape,
+    stored_from_effective,
+)
 from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
@@ -213,13 +217,18 @@ class PackedLinear(nn.Module):
         layer does not claim an identity.
     constraint : torch.nn.Module or None, default=None
         Optional per-entry map on the packed ``weight``, applied
-        in ``forward``. ``nn.Softplus()`` is the textbook
-        non-negative edge reparametrization. The module must
-        return a tensor of shape ``(nnz,)``. There are no
-        absent edges here, so this map cannot resurrect a
-        blocked cell. ``reset_parameters`` writes the
-        unconstrained packed tensor; it does not invert this
-        map. ``MaskedLinear`` takes the same argument.
+        in ``forward``. The module must return a tensor of shape
+        ``(nnz,)``. There are no absent edges here, so this map
+        cannot resurrect a blocked cell. Give it a
+        ``right_inverse`` (the ``torch.nn.utils.parametrize``
+        convention) and ``reset_parameters`` stores
+        ``right_inverse(draw)``, so the effective weight keeps
+        the degree-aware init; without one, ``weight`` stores
+        the draw and the map is applied on top of it.
+        ``nn.Softplus()`` is the textbook non-negative edge
+        reparametrization but has no ``right_inverse``: every
+        edge then starts near ``ln 2`` whatever its fan-in (see
+        Notes). ``MaskedLinear`` takes the same argument.
         Mixed per-edge signs and frozen slots belong in this
         module, not in parse columns. A hard freeze is
         ``torch.where`` replacing those slots in ``forward``;
@@ -322,6 +331,15 @@ class PackedLinear(nn.Module):
     the parameter dtype so AMP cannot mix Half into
     ``index_add``. Cast the module with ``.to(dtype=...)``
     (or ``.half()`` / ``.double()``) instead.
+
+    ``weight`` is the unconstrained tensor, so optimizer
+    ``weight_decay`` pulls it toward 0. Under ``softplus`` that
+    pulls the effective weight toward ``ln 2``, not toward 0.
+    Give a constrained layer ``weight_decay=0`` in its param
+    group and penalize ``effective_weight()`` in the loss
+    instead. A ``right_inverse`` on the constraint keeps the
+    degree-aware init; a constraint without one can initialize
+    ``weight`` itself from ``init_bound()``.
 
     ``reset_parameters`` uses per-row packed degree as
     ``fan_in``, not full ``in_features``. A row with
@@ -516,15 +534,31 @@ class PackedLinear(nn.Module):
         edges with ``target_index == j`` (``bincount``,
         ``minlength=out_features``). Each live edge into that
         row, and ``bias[j]`` if present, is drawn uniformly from
-        ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``. If
-        ``fan_in == 0``, that row has no packed weights and
-        ``bias[j]`` stays 0.
+        ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``
+        (``init_bound()``). If ``fan_in == 0``, that row has no
+        packed weights and ``bias[j]`` stays 0.
+
+        The draw is the degree-aware value for the **effective**
+        weight. Without ``constraint``, or when ``constraint``
+        has no ``right_inverse``, ``weight`` stores the draw
+        itself. When ``constraint`` defines ``right_inverse``
+        (the ``torch.nn.utils.parametrize`` convention),
+        ``weight`` stores ``constraint.right_inverse(draw)``, so
+        ``effective_weight()`` keeps the degree-aware scale. The
+        draws, and so the RNG stream, are the same either way.
 
         Parameters
         ----------
         generator : torch.Generator or None, default=None
             Isolated RNG for these draws. ``None`` uses the
             default torch generator. Not stored on the module.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``generator`` is neither a ``torch.Generator`` nor
+            ``None``, or ``constraint.right_inverse`` returns a
+            tensor of the wrong shape or a non-finite value.
         """
         generator = as_generator(generator)
         with torch.no_grad():
@@ -557,6 +591,37 @@ class PackedLinear(nn.Module):
                         bound,
                         generator=generator,
                     )
+            stored = stored_from_effective(
+                self.constraint,
+                self.weight,
+            )
+            if stored is not self.weight:
+                self.weight.copy_(stored)
+
+    def init_bound(self) -> torch.Tensor:
+        """
+        Return the degree-aware init bound of every packed slot.
+
+        Slot ``i`` gets ``1 / sqrt(fan_in)`` of its output row
+        ``target_index[i]``, the bound ``reset_parameters`` draws
+        that slot's effective weight from. Use it to initialize a
+        ``constraint`` that has no ``right_inverse`` yourself.
+        ``MaskedLinear`` has the same method on its rectangle.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(nnz,)``, dtype and device of ``weight``.
+        """
+        degrees = torch.bincount(
+            self.target_index,
+            minlength=self.out_features,
+        )
+        bound = degrees.to(dtype=torch.float64).rsqrt()
+        return bound[self.target_index].to(
+            dtype=self.weight.dtype,
+            device=self.weight.device,
+        )
 
     def effective_weight(self) -> torch.Tensor:
         """

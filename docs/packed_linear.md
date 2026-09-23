@@ -174,6 +174,58 @@ for layer, piece in kpnn2.scatter_hop_outputs(
 `F.linear(h, enc.effective_weight().T, dec_bias)` is its tied
 decoder. There is no autoencoder class; `forward()` is yours.
 
+## Constrained init
+
+`constraint=` maps `weight` to the effective weight in
+`forward`. `reset_parameters` draws the degree-aware value for
+that effective weight. It reaches `weight` through the
+constraint's own `right_inverse`, the same method
+`torch.nn.utils.parametrize` uses. Without one, `weight` stores
+the draw and the map is applied on top.
+
+That matters for `nn.Softplus()`, which has no `right_inverse`:
+every edge then starts near `softplus(0) = ln 2`, whatever its
+fan-in, so a node with thousands of parents starts with a
+pre-activation spread many times larger than the unconstrained
+init. Give the constraint an inverse and the init keeps its
+degree-aware scale:
+
+```python
+class PositiveEdges(torch.nn.Module):
+    def forward(
+        self,
+        weight,
+    ):
+        return torch.nn.functional.softplus(weight)
+
+    def right_inverse(
+        self,
+        weight,
+    ):
+        # The draw is uniform in [-bound, bound], possibly 0:
+        # invert its magnitude, kept away from 0.
+        magnitude = weight.abs().clamp_min(1e-6)
+        return magnitude + torch.log(-torch.expm1(-magnitude))
+
+
+core = kpnn2.PackedLinear(
+    hop.source_index,
+    hop.target_index,
+    hop.out_features,
+    hop.in_features,
+    constraint=PositiveEdges(),
+)
+```
+
+A constraint without an inverse can initialize `weight` itself
+from `layer.init_bound()`, the per-entry bound
+`reset_parameters` uses.
+
+Weight decay acts on `weight`, the unconstrained tensor. Under
+softplus it pulls edges toward `ln 2`, not toward 0. Give a
+constrained layer `weight_decay=0` in its param group and add a
+penalty on `layer.effective_weight()` to the loss instead.
+
 ## Frozen live edges
 
 Some priors fix individual edge values. `constraint=` is where

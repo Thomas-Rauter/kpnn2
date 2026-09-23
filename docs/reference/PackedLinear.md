@@ -8,6 +8,7 @@ weight slots **by name**. Do not `copy_` or
     options:
       members:
         - effective_weight
+        - init_bound
         - reset_parameters
         - transpose
         - forward

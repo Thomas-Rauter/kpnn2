@@ -1122,9 +1122,10 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   map on `weight`, applied in `forward` **before** the mask.
   `nn.Softplus()` is the textbook non-negative edge
   reparametrization. Must return a tensor of the same shape
-  as `weight`. `reset_parameters` writes `weight`; it does
-  not invert this map. `PackedLinear` takes the same
-  argument. Do not add a second class
+  as `weight`. Init goes through the constraint only via
+  its own `right_inverse`; see **Constrained init** below.
+  `PackedLinear` takes the same argument. Do not add a
+  second class
   (`ConstrainedMaskedLinear`) and do not read a `constraint`
   column from the edgelist. Mixed per-edge signs and frozen
   slots go inside this module (a sign buffer, or
@@ -1264,7 +1265,10 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   keeps the default stream. A different draw count shifts
   the torch RNG stream and which trained-tier seeds pass;
   those controls now test a pass rate over 30 seeds, not a
-  5-seed window.
+  5-seed window. `layer.init_bound()` returns that bound for
+  every entry of `weight`: `1/sqrt(fan_in)` of the row on
+  live entries, 0 on blocked entries and on rows with
+  `fan_in == 0`, in `weight`'s dtype and device.
 - Do **not** use full `in_features` as `fan_in`.
 - No edgelist `initial_weight` column. `constraint=` is the
   supported per-entry map; do not stack `softplus` after the
@@ -1328,9 +1332,10 @@ PackedLinear(
   `nn.Softplus()` is the textbook non-negative edge
   reparametrization. Must return a tensor of shape `(nnz,)`.
   There are no absent edges here, so this map cannot
-  resurrect a blocked cell. `reset_parameters` writes the
-  unconstrained packed tensor; it does not invert this map.
-  `MaskedLinear` takes the same argument. `layer.constraint`
+  resurrect a blocked cell. Init goes through the
+  constraint only via its own `right_inverse`; see
+  **Constrained init** below. `MaskedLinear` takes the same
+  argument. `layer.constraint`
   is that module, or `None`. No `parametrize`. Mixed
   per-edge signs and frozen slots are user PyTorch on this
   tensor, not parse columns and not per-slot
@@ -1404,7 +1409,9 @@ PackedLinear(
   connections. The user still writes inputs into the
   state vector each step. Optional `generator` isolates
   those draws from other torch RNG consumers; `None`
-  keeps the default stream.
+  keeps the default stream. `layer.init_bound()` returns
+  that bound for every packed slot, shape `(nnz,)`, in
+  `weight`'s dtype and device.
 - `extra_repr` reports `in_features`, `out_features`,
   `nnz`, and `bias`.
 - `state_dict` keys are `weight`, optional `bias`,
@@ -1521,6 +1528,47 @@ is already `n`-wide; no gather or scatter.
 `F.linear(h, layer.effective_weight().T, dec_bias)`. Do not add
 `MaskedLinear.transpose`. Do not add a `TiedAutoencoder`
 class; the user owns `forward()`.
+
+### Constrained init
+
+Shared by `MaskedLinear` and `PackedLinear`. `reset_parameters`
+draws the degree-aware value for the **effective** weight
+(uniform in `[-1/sqrt(fan_in), 1/sqrt(fan_in)]` per row, the
+same draws and RNG stream in every case). What is stored in
+`weight` depends on the `constraint`:
+
+- No `constraint`, or a `constraint` without a callable
+  `right_inverse`: `weight` stores the draw itself. This is
+  unchanged from earlier releases, so every existing seed
+  gives the same numbers.
+- A `constraint` that defines `right_inverse` (the
+  `torch.nn.utils.parametrize` convention): `weight` stores
+  `constraint.right_inverse(draw)`, so `effective_weight()`
+  keeps the degree-aware scale. On `MaskedLinear` blocked
+  entries stay 0 and only live entries must come back
+  finite. A non-finite value on a live entry, or a result of
+  the wrong shape, raises `Kpnn2Error`. The draw can be any
+  value in `[-bound, bound]`, including exactly 0, so a
+  `right_inverse` for a range-restricted map must handle
+  that (for softplus: invert `|draw|`, clamped away from 0).
+  The package never guesses an inverse.
+
+Why: the textbook `nn.Softplus()` has no `right_inverse`, so
+it starts every live edge near `softplus(0) = ln 2`, whatever
+its fan-in. At fan-in 4000 that inflates the pre-activation
+spread about 58x relative to the unconstrained init, which
+removes the reason the package counts real fan-in.
+`init_bound()` exposes the per-entry bound so a constraint
+without an inverse can initialize `weight` itself.
+
+Weight decay: `weight` is the unconstrained tensor, so
+optimizer `weight_decay` pulls it toward 0, which under
+softplus pulls the effective weight toward `ln 2`, not 0.
+Because a layer's weight is one `nn.Parameter`, a param group
+cannot exempt only the constrained slots. Document, do not
+work around: give a constrained layer `weight_decay=0` in its
+param group and penalize `effective_weight()` in the loss.
+Do not add a per-slot optimizer API.
 
 ---
 

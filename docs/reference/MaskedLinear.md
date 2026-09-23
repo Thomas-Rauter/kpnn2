@@ -8,5 +8,6 @@ Pass `identity=spec.fingerprint` on the new layer. See
     options:
       members:
         - effective_weight
+        - init_bound
         - reset_parameters
         - forward
