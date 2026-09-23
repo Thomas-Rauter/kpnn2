@@ -538,6 +538,134 @@ def test_map_node_attributions_adjacency_rejects_wrong_width():
     assert "Expected 4" in str(caught.value)
 
 
+def test_map_node_attributions_adjacency_inputs_axis():
+    spec = _tiny_adjacency_spec()
+    scores = torch.tensor(
+        [
+            [0.5],
+            [1.5],
+        ],
+        dtype=torch.float32,
+    )
+
+    da = map_node_attributions(
+        scores,
+        spec,
+        axis="inputs",
+    )
+
+    assert da["node"].values.tolist() == ["x"]
+    assert da.sel(node="x").values.tolist() == pytest.approx(
+        [0.5, 1.5],
+    )
+    assert "layer" not in da.coords
+    assert len(spec.input_index) == 1
+
+
+def test_map_node_attributions_adjacency_inputs_repeat_wide_names():
+    spec = parse_adjacency(
+        pd.DataFrame(
+            {
+                "source": ["x", "a", "b", "a"],
+                "target": ["a", "b", "a", "y"],
+            }
+        ),
+        widths={"x": 2},
+    )
+    scores = torch.tensor(
+        [[0.25, 0.75]],
+        dtype=torch.float32,
+    )
+
+    da = map_node_attributions(
+        scores,
+        spec,
+        axis="inputs",
+    )
+
+    assert spec.input_index == (2, 3)
+    assert da["node"].values.tolist() == ["x", "x"]
+    assert "layer" not in da.coords
+
+
+def test_map_node_attributions_does_not_infer_adjacency_inputs():
+    spec = _tiny_adjacency_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="Expected 4",
+    ):
+        map_node_attributions(
+            torch.zeros(2, 1),
+            spec,
+        )
+
+
+def test_map_node_attributions_layered_inputs_axis_matches_layer_zero():
+    spec = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "B", "H"],
+                "target": ["H", "H", "C"],
+            }
+        ),
+        widths={"A": 2},
+    )
+    scores = torch.tensor(
+        [[0.1, 0.2, 0.3]],
+        dtype=torch.float32,
+    )
+
+    by_axis = map_node_attributions(
+        scores,
+        spec,
+        axis="inputs",
+    )
+    by_layer = map_node_attributions(
+        scores,
+        spec,
+        0,
+    )
+
+    xr.testing.assert_equal(
+        by_axis,
+        by_layer,
+    )
+    assert by_axis["node"].values.tolist() == ["A", "A", "B"]
+    assert int(by_axis.coords["layer"]) == 0
+
+
+def test_map_node_attributions_rejects_inputs_axis_with_layer():
+    spec = _tiny_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="exactly one of",
+    ) as caught:
+        map_node_attributions(
+            torch.zeros(1, 1),
+            spec,
+            0,
+            axis="inputs",
+        )
+
+    assert "Got layer, axis." in str(caught.value)
+
+
+def test_map_node_attributions_rejects_an_unknown_axis():
+    spec = _tiny_adjacency_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="'axis' must be 'inputs' or None",
+    ):
+        map_node_attributions(
+            torch.zeros(2, 4),
+            spec,
+            axis="state",
+        )
+
+
 def test_map_node_attributions_adjacency_rejects_a_layer():
     spec = _tiny_adjacency_spec()
 

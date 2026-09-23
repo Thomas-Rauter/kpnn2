@@ -117,11 +117,19 @@ x = torch.as_tensor(
 )
 n = spec.state_dim
 state = torch.zeros(x.shape[0], n)
-state[:, spec.input_index] = x
+state = state.index_copy(
+    -1,
+    self.input_index,
+    x,
+)
 state = self.act(core(state))
 ```
 
-`self.act` is an `nn.ReLU` registered on the module.
+`self.input_index` is a buffer from
+`torch.as_tensor(spec.input_index)`. `self.act` is an
+`nn.ReLU` registered on the module. `index_copy` returns a
+new tensor. A step that Captum should hook is an
+`nn.Identity`.
 
 The same packed indices can feed
 [`PackedMultiheadAttention`](reference/PackedMultiheadAttention.md),

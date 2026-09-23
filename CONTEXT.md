@@ -131,8 +131,10 @@ later prompt asks.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
    at one LayeredSpec layer (`layer=`, or `hop_output=` for what
    a hop's module returns), or the concatenated source axis of
-   one hop (`hop_input=`), as an `xarray.DataArray`. The hop
-   side is always stated. Captum is not a library
+   one hop (`hop_input=`), as an `xarray.DataArray`. On an
+   `AdjacencySpec`, `axis="inputs"` names the input units and
+   omitting it names the whole state vector. The axis is
+   always stated. Captum is not a library
    dependency; the user runs Captum (or any other method)
    themselves. `xarray` is a core dependency used for that
    mapping and for `aggregate_node_attributions()`.
@@ -862,8 +864,10 @@ order; within a named edge, target-unit outer, source-unit
 inner. A dense square would still have `1.0` at
 `[target_index[i], source_index[i]]`. `input_index` has the
 length of `align_inputs(names, spec)`, so
-`state[:, spec.input_index] = x[:, col]` writes each input
-column into every unit of its node.
+`state = state.index_copy(-1, input_index, x[:, col])`
+writes each input column into every unit of its node.
+`input_index` there is a buffer,
+`torch.as_tensor(spec.input_index)`.
 
 There is no `mask` field, no `layer_nodes`, no `layer_dims`, no
 `hops` tuple, and no `skips`. Skips are a depth concept and
@@ -972,13 +976,67 @@ x = torch.as_tensor(
 )
 # x is len(spec.input_index) wide
 state = torch.zeros(x.shape[0], n)
-state[:, spec.input_index] = x        # required, see above
+index = torch.as_tensor(spec.input_index)
+state = state.index_copy(
+    -1,
+    index,
+    x,
+)
 relu = torch.nn.ReLU()
-state = relu(core(state))             # one step; loop as needed
+state = relu(core(state))             # one step
 logits = state[:, spec.output_index]
 ```
 
-Register `relu` on the module you train (`self.act = relu`).
+Register `index` as a buffer and `relu` as a child
+(`self.act = torch.nn.ReLU()`). A loop that Captum should
+hook holds one `torch.nn.Identity` per step and leaves the
+shared linear as a normal child:
+
+```python
+class Core(torch.nn.Module):
+    def __init__(
+        self,
+        spec,
+        n_steps,
+    ):
+        super().__init__()
+        n = spec.state_dim
+        self.core = kpnn2.PackedLinear(
+            spec.source_index,
+            spec.target_index,
+            n,
+            n,
+        )
+        self.register_buffer(
+            "input_index",
+            torch.as_tensor(spec.input_index),
+        )
+        self.act = torch.nn.ReLU()
+        self.taps = torch.nn.ModuleList(
+            [
+                torch.nn.Identity()
+                for _ in range(n_steps)
+            ]
+        )
+
+    def forward(self, x):
+        state = x.new_zeros(
+            x.shape[0],
+            self.core.in_features,
+        )
+        for tap in self.taps:
+            state = state.index_copy(
+                -1,
+                self.input_index,
+                x,
+            )
+            state = tap(self.act(self.core(state)))
+        return state
+```
+
+`index_copy` returns a new tensor, so the activation saved
+for backward is left alone. Each `tap` is the per-step
+module Captum hooks.
 
 ---
 
@@ -1993,7 +2051,12 @@ x = torch.as_tensor(
     dtype=torch.float32,
 )
 state = torch.zeros(x.shape[0], spec.state_dim)
-state[:, spec.input_index] = x
+index = torch.as_tensor(spec.input_index)
+state = state.index_copy(
+    -1,
+    index,
+    x,
+)
 ```
 
 **Names:**
@@ -2041,25 +2104,31 @@ check.
 
 ---
 
-## `map_node_attributions(attributions, spec, layer=None, *, hop_input=None, hop_output=None, dims=None, coords=None)`
+## `map_node_attributions(attributions, spec, layer=None, *, hop_input=None, hop_output=None, axis=None, dims=None, coords=None)`
 
 Unopinionated name mapping. No Captum import. Returns
 `xarray.DataArray`. Does not aggregate.
 
 `spec` is a `LayeredSpec` **or** an `AdjacencySpec`. `layer` stays
-positional; `hop_input` and `hop_output` are keyword-only. A
-`LayeredSpec` takes **exactly one** of the three; an
-`AdjacencySpec` takes none:
+positional; `hop_input`, `hop_output`, and `axis` are
+keyword-only. A `LayeredSpec` takes **exactly one** of
+`layer`, `hop_input`, `hop_output`, or `axis="inputs"`. An
+`AdjacencySpec` takes none of the first three. Omit `axis`
+there to name the whole state vector, or pass
+`axis="inputs"` to name the input units. The tensor width
+never chooses the axis.
 
 | Spec | Given | Result |
 |------|-------|--------|
 | `LayeredSpec` | `layer=int` | Names from `unit_names` of that layer (a wide node's name repeats); scalar `layer` coordinate attached |
 | `LayeredSpec` | `hop_output=Hop` | Same as `layer=hop.target_layer`: the layer that hop's module **writes**, length `hop.out_features`, scalar `layer` coordinate attached |
 | `LayeredSpec` | `hop_input=Hop` | Concatenated **source-unit** names of that hop (what its module **reads**), length `hop.in_features`. **No** `layer` coordinate (this axis is not one depth). |
-| `LayeredSpec` | none | `Kpnn2Error`: need one of `layer`, `hop_input`, `hop_output` |
-| `LayeredSpec` | two or three | `Kpnn2Error`: pass exactly one; the message names what was given |
+| `LayeredSpec` | `axis="inputs"` | Same result as `layer=0`: input-layer unit names, scalar `layer` coordinate `0` |
+| `LayeredSpec` | none | `Kpnn2Error`: need one of `layer`, `hop_input`, `hop_output`, or `axis="inputs"` |
+| `LayeredSpec` | two or more | `Kpnn2Error`: pass exactly one; the message names what was given |
 | `AdjacencySpec` | none | Unit names from `spec.nodes` and `node_widths` (a wide node's name repeats); **no** `layer` coordinate |
-| `AdjacencySpec` | any | `Kpnn2Error`: `layer`, `hop_input`, and `hop_output` do not apply |
+| `AdjacencySpec` | `axis="inputs"` | Input-unit names in `input_index` order, length `len(input_index)` (a wide input's name repeats); **no** `layer` coordinate |
+| `AdjacencySpec` | `layer` / hop side | `Kpnn2Error`: `layer`, `hop_input`, and `hop_output` do not apply |
 
 **The hop side is always stated, never inferred.** There is no
 side-less `hop=` keyword. A hop's input and output often have the
@@ -2071,7 +2140,10 @@ lets the caller name a Captum result on `model.hops[i]` with the
 same `i` as the module, with no `i -> i+1` translation; it
 resolves to `hop.target_layer`, so it is not a second notion of
 target layer. Do not add a side-less `hop=` back, and do not
-infer the side from the tensor width.
+infer the side from the tensor width. The same rule
+covers an input-width tensor on an `AdjacencySpec`: pass
+`axis="inputs"`. A shorter tensor is not read as the input
+axis on its own.
 
 An `AdjacencySpec` has no depths, so there is no layer index to
 report and none is invented. Do not fabricate `layer=0` for it.
@@ -2302,7 +2374,10 @@ Width 1 stays numerically identical.
   `concat_layouts` and labels with `unit_names()` (not
   `hop.source_nodes`). The node axis length is `n_units`; the
   coordinate is `layout.unit_names()`. An `AdjacencySpec`
-  uses `build_layout(nodes, node_widths)`.
+  uses `build_layout(nodes, node_widths)`. With
+  `axis="inputs"` it uses `build_layout` of
+  `input_nodes` and those nodes' widths (layer 0 on a
+  `LayeredSpec`).
 
 New code asks a `Layout` for a slot instead of using
 `list.index()` or `enumerate` positions.

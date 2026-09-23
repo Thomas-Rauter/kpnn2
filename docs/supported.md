@@ -35,9 +35,12 @@ yours:
 2. One map, shared across steps:
    `MaskedLinear(spec.to_mask())`, or `PackedLinear` when `n` is
    large, since `to_mask()` allocates `(n, n)`.
-3. In your `forward()`, loop over time `t`: write `x_t` into the
-   [state vector](concepts.md#state-vector) at `spec.input_index`,
-   apply the map, keep the state.
+3. In your `forward()`, loop over time `t`. Register
+   `torch.as_tensor(spec.input_index)` as a buffer and write
+   `x_t` with `index_copy` into the
+   [state vector](concepts.md#state-vector), then apply the
+   map. Each step Captum should hook is an `nn.Identity`.
+   The shared map stays a normal child of the module.
 4. You choose `n_steps`, the sequence length. `kpnn2` does not
    unroll time or pick a step count.
 
@@ -45,6 +48,16 @@ An Elman-style net is that loop. A GRU or LSTM is the usual gate
 equations with one `MaskedLinear` per map; whether every gate
 shares the same prior is your modeling choice.
 
-The [Time-series example](time-series-example.ipynb) walks through
+```python
+state = state.index_copy(
+    -1,
+    self.input_index,
+    x_t,
+)
+state = tap(self.act(self.core(state)))
+```
+
+`tap` is one `nn.Identity` from an `nn.ModuleList`. The
+[Time-series example](time-series-example.ipynb) walks through
 the Elman loop, [attributions](concepts.md#attribution) on a
 `step` axis, and a no-memory control.

@@ -36,6 +36,11 @@ This project follows semantic versioning.
 
 ### Added
 
+- `map_node_attributions(..., axis="inputs")` labels an
+  input-width tensor. On an `AdjacencySpec` the names are
+  the input units (`spec.input_index` order; a wide name
+  repeats). On a `LayeredSpec` the result matches `layer=0`.
+  The tensor width is not used to choose the axis.
 - `PackedMultiheadAttention`: scores only live edgelist pairs.
   `need_weights=True` returns packed per-edge weights aligned
   with `source_index` / `target_index`, not a dense `(L, S)`

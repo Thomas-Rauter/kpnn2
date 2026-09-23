@@ -119,13 +119,24 @@ state = torch.zeros(
     x.shape[0],
     spec.state_dim,
 )
-for _ in range(n_steps):
-    state[:, spec.input_index] = x
-    state = self.act(core(state))
+for tap in self.taps:
+    state = state.index_copy(
+        -1,
+        self.input_index,
+        x,
+    )
+    state = tap(self.act(core(state)))
 y = state[:, spec.output_index]
 ```
 
-`self.act` is an `nn.ReLU` registered on the module.
+`self.input_index` is a buffer,
+`torch.as_tensor(spec.input_index)`. `self.taps` is an
+`nn.ModuleList` of `nn.Identity`, one per step, and that is
+what Captum hooks. `self.act` is an `nn.ReLU`. The shared
+map stays a normal child of the module. `index_copy` returns
+a new tensor, so the activation saved for backward is left
+alone.
+
 `n_steps` is yours; `kpnn2` does not unroll time. With `x` held
 fixed, that loop is the shared-state one
 [Cyclic graph example](cyclic-graph-example.ipynb) trains on a

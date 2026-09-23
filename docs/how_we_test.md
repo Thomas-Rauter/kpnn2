@@ -241,7 +241,10 @@ which side a tensor came from. With a hidden node cut off from
 the output, its zero score must land under that node's name via
 `hop_output=`. With an input that feeds nothing, its zero score
 must land under the input's name via `hop_input=` (Captum's
-`attribute_to_layer_input=True`).
+`attribute_to_layer_input=True`). `axis="inputs"` names an
+input-width tensor (input units on an `AdjacencySpec`, the
+same result as `layer=0` on a `LayeredSpec`) and is never
+inferred from the width.
 
 Pinned in
 [`tests/controls/test_captum_mapping.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_captum_mapping.py)

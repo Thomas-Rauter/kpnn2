@@ -155,14 +155,15 @@ def feature_grad_table_adjacency(
     """
     Name input gradients by ``spec.input_nodes``.
 
-    The aligned tensor is only ``len(input_nodes)`` wide, so
-    ``map_node_attributions`` on an ``AdjacencySpec`` cannot take
-    it: that mapper wants the full state axis.
+    ``axis="inputs"`` labels that width. Omitting it still
+    requires the full state axis.
     """
-    return pd.DataFrame(
-        input_grad.detach().cpu().numpy(),
-        columns=list(spec.input_nodes),
+    named = map_node_attributions(
+        input_grad.detach(),
+        spec,
+        axis="inputs",
     )
+    return named.to_pandas()
 
 
 def hidden_score_table_unrolled(

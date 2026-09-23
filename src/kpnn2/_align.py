@@ -148,8 +148,9 @@ def align_inputs(
     the index covers the input units only
     (``len(spec.input_index)``). Scatter the gathered columns
     into the ``spec.state_dim``-wide state vector with
-    ``spec.input_index`` before calling
-    ``MaskedLinear(spec.to_mask())``.
+    ``state.index_copy(-1, input_index, x)`` before calling
+    ``MaskedLinear(spec.to_mask())``. ``input_index`` is a
+    buffer, ``torch.as_tensor(spec.input_index)``.
 
     Examples
     --------
@@ -198,7 +199,12 @@ def align_inputs(
     ...     2,
     ...     state_spec.state_dim,
     ... )
-    >>> state[:, state_spec.input_index] = x
+    >>> index = torch.as_tensor(state_spec.input_index)
+    >>> state = state.index_copy(
+    ...     -1,
+    ...     index,
+    ...     x,
+    ... )
     >>> state.tolist()
     [[0.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.5, 0.0]]
 

@@ -26,6 +26,7 @@ def map_node_attributions(
     *,
     hop_input: Hop | None = None,
     hop_output: Hop | None = None,
+    axis: str | None = None,
     dims: Sequence[str] | None = None,
     coords: Mapping[str, Sequence] | None = None,
 ) -> xr.DataArray:
@@ -37,7 +38,10 @@ def map_node_attributions(
     it after Captum or your own gradients rather than zipping names
     to columns yourself. Which spec you pass decides the contract: a
     ``LayeredSpec`` needs exactly one of ``layer``, ``hop_input``,
-    or ``hop_output``; an ``AdjacencySpec`` forbids all three.
+    ``hop_output``, or ``axis="inputs"``; an ``AdjacencySpec``
+    forbids the first three. Omit ``axis`` there to name the
+    whole state vector, or pass ``axis="inputs"`` to name the
+    input units. The width is never inferred.
     Values are detached onto CPU and never aggregated.
 
     Parameters
@@ -49,7 +53,11 @@ def map_node_attributions(
         units — ``spec.layer_dims[layer]`` when ``layer`` is given,
         ``hop.in_features`` for ``hop_input=hop``,
         ``hop.out_features`` for ``hop_output=hop``,
-        ``spec.state_dim`` for an ``AdjacencySpec`` — and the
+        ``len(spec.input_index)`` for ``axis="inputs"`` on an
+        ``AdjacencySpec``, ``spec.layer_dims[0]`` for
+        ``axis="inputs"`` on a ``LayeredSpec`` (the same axis
+        as ``layer=0``), and ``spec.state_dim`` for an
+        ``AdjacencySpec`` when ``axis`` is omitted — and the
         remaining axes are yours. A non-empty tuple or list of
         equal-shaped tensors is stacked on a new leading ``step``
         axis, one entry per unrolled step or module call. The
@@ -60,7 +68,9 @@ def map_node_attributions(
         ``LayeredSpec`` names one depth (``layer`` or
         ``hop_output``) or the concatenated source units of one hop
         (``hop_input``); an ``AdjacencySpec`` names the whole state
-        vector at once and has no depth to report.
+        vector at once and has no depth to report, unless
+        ``axis="inputs"``, which names ``spec.input_nodes``
+        (a wide node's name repeats once per unit).
     layer : int, optional
         0-based depth into ``spec.layer_nodes``, index 0 being the
         input layer, whose names label the node axis; the index
@@ -85,6 +95,16 @@ def map_node_attributions(
         ``layer=hop.target_layer``, scalar ``layer`` coordinate
         included. ``LayeredSpec`` only, and mutually exclusive with
         ``layer`` and ``hop_input``.
+    axis : {"inputs"} or None, optional
+        ``"inputs"`` labels the model-input axis and nothing
+        else. On a ``LayeredSpec`` that is ``layer=0``,
+        including the scalar ``layer`` coordinate, and it is
+        mutually exclusive with ``layer``, ``hop_input``, and
+        ``hop_output``. On an ``AdjacencySpec`` the names are
+        the input units in ``spec.input_index`` order, length
+        ``len(spec.input_index)``, with no ``layer``
+        coordinate. Any other string is rejected. The length
+        of the tensor is not used to choose this axis.
     dims : sequence of str, optional
         One name per axis of the tensor after any stacking,
         containing ``node`` exactly once and never ``layer``.
@@ -104,8 +124,10 @@ def map_node_attributions(
         spec's node names as the ``node`` coordinate in spec order
         (a name repeats once per unit when that node is wider
         than 1), and a scalar ``layer`` coordinate when ``layer``
-        or ``hop_output`` was passed. A ``hop_input`` mapping has
-        no ``layer`` coordinate. ``bfloat16`` scores are stored as
+        or ``hop_output`` was passed, and when ``axis="inputs"``
+        is passed on a ``LayeredSpec``. A ``hop_input`` mapping,
+        and ``axis="inputs"`` on an ``AdjacencySpec``, have no
+        ``layer`` coordinate. ``bfloat16`` scores are stored as
         ``float32``: NumPy has no bfloat16 dtype, and every
         bfloat16 value fits in float32, so the scores are
         unchanged. Other dtypes are kept. Use
@@ -117,10 +139,13 @@ def map_node_attributions(
     Kpnn2Error
         If ``spec`` is neither a ``LayeredSpec`` nor an
         ``AdjacencySpec``; a ``LayeredSpec`` gets none or more
-        than one of ``layer``, ``hop_input``, and ``hop_output``;
-        any of them is given for an ``AdjacencySpec``; ``layer``
-        is not an int in range; ``hop_input`` or ``hop_output`` is
-        not a ``Hop`` that matches an entry of ``spec.hops``;
+        than one of ``layer``, ``hop_input``, ``hop_output``,
+        and ``axis``; ``axis`` is neither ``"inputs"`` nor
+        ``None``; any of ``layer``, ``hop_input``, or
+        ``hop_output`` is given for an ``AdjacencySpec``;
+        ``layer`` is not an int in range; ``hop_input`` or
+        ``hop_output`` is not a ``Hop`` that matches an entry
+        of ``spec.hops``;
         ``attributions`` is neither a tensor nor a non-empty
         sequence of equal-shaped tensors; ``dims`` is missing, the
         wrong length, non-unique, or does not name ``node`` exactly
@@ -287,12 +312,22 @@ def map_node_attributions(
     ['a', 'b', 'x', 'y']
     >>> "layer" in per_step.coords
     False
+    >>> input_scores = kpnn2.map_node_attributions(
+    ...     attributions=torch.tensor([[0.5], [1.0]]),
+    ...     spec=state_spec,
+    ...     axis="inputs",
+    ... )
+    >>> input_scores["node"].values.tolist()
+    ['x']
+    >>> "layer" in input_scores.coords
+    False
     """
     layout, layer_coord = _resolve_node_layout(
         spec,
         layer,
         hop_input,
         hop_output,
+        axis,
     )
     names = layout.unit_names()
     n_units = layout.n_units
@@ -333,6 +368,7 @@ def _resolve_node_layout(
     layer: int | None,
     hop_input: Hop | None,
     hop_output: Hop | None,
+    axis: str | None,
 ) -> tuple[Layout, int | None]:
     """
     Return the ``node`` axis layout and the ``layer`` coordinate.
@@ -342,8 +378,11 @@ def _resolve_node_layout(
     each of them. The coordinate is the depth when ``layer`` or
     ``hop_output`` is given, and ``None`` for an
     ``AdjacencySpec`` or a hop input axis, neither of which is
-    one depth.
+    one depth. ``axis="inputs"`` on a ``LayeredSpec`` is layer
+    0. On an ``AdjacencySpec`` it is the input units only.
     """
+    if axis is not None and axis != "inputs":
+        raise Kpnn2Error("'axis' must be 'inputs' or None.")
     if isinstance(spec, LayeredSpec):
         given = [
             name
@@ -351,21 +390,23 @@ def _resolve_node_layout(
                 ("layer", layer),
                 ("hop_input", hop_input),
                 ("hop_output", hop_output),
+                ("axis", axis),
             )
             if value is not None
         ]
         if not given:
             raise Kpnn2Error(
                 "A LayeredSpec needs one of 'layer', 'hop_input', "
-                "or 'hop_output'. Pass the 0-based index into "
-                "spec.layer_nodes, or a Hop from spec.hops as "
-                "hop_output= (what its module returns) or "
-                "hop_input= (what its module reads)."
+                "or 'hop_output', or axis='inputs'. Pass the "
+                "0-based index into spec.layer_nodes, or a Hop "
+                "from spec.hops as hop_output= (what its module "
+                "returns) or hop_input= (what its module reads)."
             )
         if len(given) > 1:
             raise Kpnn2Error(
-                "Pass exactly one of 'layer', 'hop_input', or "
-                f"'hop_output'. Got {', '.join(given)}."
+                "Pass exactly one of 'layer', 'hop_input', "
+                "'hop_output', or 'axis'. "
+                f"Got {', '.join(given)}."
             )
         if hop_input is not None:
             return _layout_for_hop_input(
@@ -379,6 +420,11 @@ def _resolve_node_layout(
                 "hop_output",
             )
             layer = hop_output.target_layer
+        if axis == "inputs":
+            return build_layout(
+                spec.layer_nodes[0],
+                spec.layer_widths[0],
+            ), 0
         if not isinstance(layer, int) or isinstance(layer, bool):
             raise Kpnn2Error("'layer' must be an int.")
         n_layers = len(spec.layer_nodes)
@@ -396,8 +442,21 @@ def _resolve_node_layout(
                 "'layer', 'hop_input', and 'hop_output' do not apply "
                 "to an AdjacencySpec: every node is one unit of a "
                 "single state vector. Omit them to label the node "
-                "axis with spec.nodes."
+                "axis with spec.nodes, or pass axis='inputs' to "
+                "label the input units."
             )
+        if axis == "inputs":
+            width_of = {
+                name: width
+                for name, width in zip(
+                    spec.nodes,
+                    spec.node_widths,
+                )
+            }
+            return build_layout(
+                spec.input_nodes,
+                [width_of[name] for name in spec.input_nodes],
+            ), None
         return build_layout(
             spec.nodes,
             spec.node_widths,
