@@ -88,6 +88,12 @@ class Layout:
         compare=False,
         default_factory=dict,
     )
+    _by_unit: tuple[NodeSlot, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+        default_factory=tuple,
+    )
 
     def __post_init__(self) -> None:
         slots = tuple(self.slots)
@@ -97,6 +103,7 @@ class Layout:
             slots,
         )
         by_name: dict[str, NodeSlot] = {}
+        by_unit: list[NodeSlot] = []
         position = 0
         for slot in slots:
             if slot.width < 1:
@@ -113,11 +120,17 @@ class Layout:
             if slot.name in by_name:
                 raise Kpnn2Error(f"Duplicate node name in layout: {slot.name}.")
             by_name[slot.name] = slot
+            by_unit.extend([slot] * slot.width)
             position = slot.stop
         object.__setattr__(
             self,
             "_by_name",
             by_name,
+        )
+        object.__setattr__(
+            self,
+            "_by_unit",
+            tuple(by_unit),
         )
 
     @property
@@ -171,14 +184,12 @@ class Layout:
         ``slot_at`` requires a block start; this accepts any
         unit index inside the block.
         """
-        if unit < 0 or unit >= self.n_units:
+        n_units = len(self._by_unit)
+        if unit < 0 or unit >= n_units:
             raise Kpnn2Error(
-                f"Unit index {unit} is out of range [0, {self.n_units})."
+                f"Unit index {unit} is out of range [0, {n_units})."
             )
-        for slot in self.slots:
-            if slot.start <= unit < slot.stop:
-                return slot
-        raise Kpnn2Error(f"No node owns unit index {unit}.")
+        return self._by_unit[unit]
 
     def widths(self) -> tuple[int, ...]:
         """
