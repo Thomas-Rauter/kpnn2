@@ -205,7 +205,7 @@ def test_hop_forward_equals_a_hand_written_residual_add():
         spec.hops[1].to_mask(),
         bias=False,
     )
-    weights = layer1.parametrizations.weight.original
+    weights = layer1.weight
     with torch.no_grad():
         weights.copy_(
             torch.tensor(

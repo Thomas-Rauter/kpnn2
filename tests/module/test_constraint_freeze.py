@@ -128,7 +128,7 @@ def test_packed_where_constraint_holds_layered_slot_under_adamw():
         x,
         optimizer,
     )
-    live = layer.constraint(layer.weight)
+    live = layer.effective_weight()
     torch.testing.assert_close(
         live[packed[0]],
         torch.tensor(frozen),
@@ -182,7 +182,7 @@ def test_packed_where_constraint_holds_adjacency_slot_under_sgd():
         x,
         optimizer,
     )
-    live = layer.constraint(layer.weight)
+    live = layer.effective_weight()
     torch.testing.assert_close(
         live[packed[0]],
         torch.tensor(frozen),
@@ -223,7 +223,7 @@ def test_masked_where_constraint_holds_live_cell_under_adamw():
         ),
     )
     with torch.no_grad():
-        layer.parametrizations.weight.original.fill_(0.25)
+        layer.weight.fill_(0.25)
     optimizer = torch.optim.AdamW(
         layer.parameters(),
         lr=0.1,
@@ -238,11 +238,13 @@ def test_masked_where_constraint_holds_live_cell_under_adamw():
         x,
         optimizer,
     )
+    effective = layer.effective_weight()
     torch.testing.assert_close(
-        layer.weight[0, 0],
+        effective[0, 0],
         torch.tensor(frozen),
     )
-    assert layer.weight[0, 1].item() != 0.25
+    assert effective[0, 1].item() != 0.25
+    assert layer.weight[0, 0].item() != frozen
     only_a = torch.tensor(
         [[1.0, 0.0]],
     )

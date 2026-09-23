@@ -171,8 +171,8 @@ for layer, piece in kpnn2.scatter_hop_outputs(
 ```
 
 `MaskedLinear` has a dense rectangle, so
-`F.linear(h, enc.weight.T, dec_bias)` is its tied decoder. There
-is no autoencoder class; `forward()` is yours.
+`F.linear(h, enc.effective_weight().T, dec_bias)` is its tied
+decoder. There is no autoencoder class; `forward()` is yours.
 
 ## Frozen live edges
 
@@ -187,8 +187,9 @@ decoupled weight decay and SGD with momentum still move the
 stored parameter. A loss barrier is a soft prior, not a hold.
 
 The stored unconstrained slot may still drift. Read
-`constraint(weight)`, or write the constants back after
-`optimizer.step()` if a checkpoint must match.
+`effective_weight()`, the map `forward` uses, or write the
+constants back after `optimizer.step()` if a checkpoint must
+match.
 
 ```python
 class FreezeSlots(torch.nn.Module):
@@ -367,7 +368,7 @@ new_layers[new_layer - 1].bias[new_units] = (
 )
 ```
 
-On `MaskedLinear`, copy the named live cells of
-`parametrizations.weight.original`. Do not `copy_` the whole
+On `MaskedLinear`, copy the named live cells of `weight`, the
+trainable tensor, as on `PackedLinear`. Do not `copy_` the whole
 `(out, in)` rectangle. `load_state_dict` is still name-blind
 when the mask pattern and `nnz` are unchanged.

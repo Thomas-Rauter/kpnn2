@@ -7,5 +7,6 @@ Pass `identity=spec.fingerprint` on the new layer. See
 ::: kpnn2.MaskedLinear
     options:
       members:
+        - effective_weight
         - reset_parameters
         - forward

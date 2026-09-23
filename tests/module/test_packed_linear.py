@@ -6,6 +6,7 @@ import struct
 import pandas as pd
 import pytest
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from kpnn2 import (
@@ -273,8 +274,8 @@ def test_packed_linear_gradients_match_dense_on_live_edges():
     )
     dense(x).sum().backward()
     packed(x).sum().backward()
-    original_grad = dense.parametrizations.weight.original.grad
-    assert original_grad is not None
+    dense_grad = dense.weight.grad
+    assert dense_grad is not None
     assert packed.weight.grad is not None
     for index, (source, target) in enumerate(
         zip(
@@ -284,7 +285,7 @@ def test_packed_linear_gradients_match_dense_on_live_edges():
     ):
         torch.testing.assert_close(
             packed.weight.grad[index],
-            original_grad[target, source],
+            dense_grad[target, source],
         )
     torch.testing.assert_close(
         packed.bias.grad,
@@ -301,7 +302,7 @@ def test_packed_linear_gradients_match_dense_on_live_edges():
         for source in range(n):
             if (source, target) in live:
                 continue
-            assert original_grad[target, source].item() == 0.0
+            assert dense_grad[target, source].item() == 0.0
 
 
 def test_packed_linear_zero_fan_in_bias_stays_zero():
@@ -1229,7 +1230,7 @@ def test_packed_constraint_softplus_matches_masked_on_live_edges():
         len(spec.nodes),
         constraint=nn.Softplus(),
     )
-    original = dense.parametrizations.weight.original
+    dense_weight = dense.weight
     with torch.no_grad():
         for index, (source, target) in enumerate(
             zip(
@@ -1237,7 +1238,7 @@ def test_packed_constraint_softplus_matches_masked_on_live_edges():
                 spec.target_index,
             )
         ):
-            packed.weight[index] = original[target, source]
+            packed.weight[index] = dense_weight[target, source]
         packed.bias.copy_(dense.bias)
     x = torch.randn(
         5,
@@ -1371,4 +1372,100 @@ def test_packed_constraint_compiles_without_a_graph_break():
     torch.testing.assert_close(
         compiled(x),
         expected,
+    )
+
+
+def test_packed_effective_weight_is_the_constrained_weight():
+    torch.manual_seed(42)
+    plain = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+    )
+    assert plain.effective_weight() is plain.weight
+    constrained = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    torch.testing.assert_close(
+        constrained.effective_weight(),
+        F.softplus(constrained.weight),
+    )
+    x = torch.randn(
+        4,
+        3,
+    )
+    dense = torch.zeros(
+        2,
+        3,
+    )
+    dense[
+        constrained.target_index,
+        constrained.source_index,
+    ] = constrained.effective_weight().detach()
+    torch.testing.assert_close(
+        constrained(x),
+        x @ dense.T,
+    )
+
+
+def test_masked_and_packed_report_the_same_live_map():
+    """
+    Same hop, same raw live weights, same constraint.
+
+    Both layers store the trainable tensor as ``weight`` and
+    return the forward map from ``effective_weight()``, so the
+    packed values equal the dense rectangle at the live cells and
+    every blocked cell of the rectangle is 0.
+    """
+    torch.manual_seed(42)
+    spec = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "B", "H", "A"],
+                "target": ["H", "H", "C", "C"],
+            }
+        )
+    )
+    hop = spec.hops[1]
+    masked = MaskedLinear(
+        hop.to_mask(),
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    packed = PackedLinear(
+        hop.source_index,
+        hop.target_index,
+        hop.out_features,
+        hop.in_features,
+        bias=False,
+        constraint=nn.Softplus(),
+    )
+    rows = list(hop.target_index)
+    columns = list(hop.source_index)
+    with torch.no_grad():
+        packed.weight.copy_(masked.weight[rows, columns])
+
+    dense = masked.effective_weight()
+    torch.testing.assert_close(
+        packed.effective_weight(),
+        dense[rows, columns],
+    )
+    blocked = hop.to_mask() == 0
+    assert torch.equal(
+        dense[blocked],
+        torch.zeros(int(blocked.sum())),
+    )
+    x = torch.randn(
+        3,
+        hop.in_features,
+    )
+    torch.testing.assert_close(
+        packed(x),
+        masked(x),
     )

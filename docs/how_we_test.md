@@ -304,13 +304,17 @@ state vector.
 [`tests/module/test_align_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_align_inputs.py).
 
 **MaskedLinear.** A zero mask entry blocks that source in the
-forward pass, in `layer.weight`, and in the gradient, even
-when another parametrization is stacked on `weight`.
+forward pass, in `effective_weight()`, and in the gradient,
+even when a parametrization is registered on `weight`.
 `constraint=` (an `nn.Module`, for example `nn.Softplus`)
 runs on the unconstrained tensor before that mask.
 `torch.where` inside that module holds a live cell under
 AdamW; a gradient hook that zeroes the slot does not.
-Optimizer steps leave blocked edges dead. Degree-aware
+Blocked entries of `weight` start at 0 and stay 0 under SGD
+with momentum, Adam, and AdamW. `weight` is a plain parameter,
+as on `PackedLinear` and `nn.Linear`, so `.weight` param-group
+filters, pickling, and `torch.nn.utils.prune` behave the same,
+and a kpnn2 0.1 checkpoint still loads. Degree-aware
 init uses the row’s live count, not `in_features`.
 `forward` disables `torch.autocast` and casts `x` to the
 parameter dtype. `torch.compile(..., fullgraph=True)`

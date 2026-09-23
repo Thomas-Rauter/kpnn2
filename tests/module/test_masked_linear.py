@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import io
 import math
 
 import pandas as pd
@@ -12,21 +13,11 @@ from torch.nn.utils import parametrize, prune
 from kpnn2 import Kpnn2Error, MaskedLinear, parse_layered
 
 
-def _original(layer):
+def _trainable(layer):
     """
-    The trainable tensor behind ``layer.weight``.
-
-    Spelled out in full in the parametrization tests below.
+    The trainable tensor: ``layer.weight``, a plain parameter.
     """
-    return layer.parametrizations.weight.original
-
-
-class _TimesOne(nn.Module):
-    def forward(
-        self,
-        weight,
-    ):
-        return weight * 1.0
+    return layer.weight
 
 
 def test_masked_linear_output_shape():
@@ -60,7 +51,7 @@ def test_masked_linear_zero_mask_entry_blocks_source():
         bias=False,
     )
     with torch.no_grad():
-        _original(layer).fill_(1.0)
+        _trainable(layer).fill_(1.0)
 
     x_base = torch.tensor(
         [[1.0, 2.0]],
@@ -129,7 +120,7 @@ def test_masked_linear_bias_false_matches_zero_bias():
         bias=False,
     )
     with torch.no_grad():
-        _original(no_bias).copy_(_original(with_bias))
+        _trainable(no_bias).copy_(_trainable(with_bias))
         with_bias.bias.zero_()
     x = torch.randn(
         5,
@@ -149,11 +140,10 @@ def test_masked_linear_mask_is_buffer_not_parameter():
     layer = MaskedLinear(mask)
     buffers = dict(layer.named_buffers())
     parameters = dict(layer.named_parameters())
-    mask_name = "parametrizations.weight.0.mask"
-    assert mask_name in buffers
-    assert buffers[mask_name].dtype == torch.float32
-    assert mask_name not in parameters
-    assert "parametrizations.weight.original" in parameters
+    assert list(buffers) == ["mask"]
+    assert buffers["mask"].dtype == torch.float32
+    assert "mask" not in parameters
+    assert list(parameters) == ["weight", "bias"]
 
 
 def test_masked_linear_rejects_non_tensor_mask():
@@ -214,7 +204,7 @@ def _layer_with_pinned_diag_weights(bias):
         bias=bias,
     )
     with torch.no_grad():
-        _original(layer).copy_(_pinned_weight())
+        _trainable(layer).copy_(_pinned_weight())
     return layer
 
 
@@ -229,7 +219,7 @@ def _expected_linear(
     layer,
     x,
 ):
-    original = _original(layer)
+    original = _trainable(layer)
     effective = original * layer.mask.to(
         dtype=original.dtype,
         device=original.device,
@@ -303,7 +293,7 @@ def test_masked_linear_forward_leaves_trainable_tensor_alone():
     )
     _ = layer(x)
     torch.testing.assert_close(
-        _original(layer),
+        _trainable(layer),
         _pinned_weight(),
     )
 
@@ -317,7 +307,8 @@ def test_masked_linear_mask_is_not_in_state_dict():
     )
     keys = set(layer.state_dict().keys())
     assert not any(key.endswith("mask") for key in keys)
-    assert "parametrizations.weight.original" in keys
+    assert "weight" in keys
+    assert not any("parametrizations" in key for key in keys)
     assert "mask_digest" in keys
     digest = layer.state_dict()["mask_digest"]
     assert digest.dtype == torch.uint8
@@ -347,8 +338,8 @@ def test_masked_linear_forward_cast_of_mask_is_free():
         )
     )
     same = layer.mask.to(
-        dtype=_original(layer).dtype,
-        device=_original(layer).device,
+        dtype=_trainable(layer).dtype,
+        device=_trainable(layer).device,
     )
     assert same is layer.mask
 
@@ -409,11 +400,11 @@ def test_masked_linear_module_dtype_cast_forward(apply_cast):
     x = torch.ones(
         2,
         2,
-        dtype=_original(layer).dtype,
-        device=_original(layer).device,
+        dtype=_trainable(layer).dtype,
+        device=_trainable(layer).device,
     )
     y = layer(x)
-    assert y.dtype == _original(layer).dtype
+    assert y.dtype == _trainable(layer).dtype
     torch.testing.assert_close(
         y,
         _expected_linear(
@@ -463,7 +454,7 @@ def test_masked_linear_half_keeps_float32_plain_mask():
     layer = layer.half()
     assert layer.mask.dtype == torch.float32
     assert type(layer.mask) is torch.Tensor
-    assert _original(layer).dtype == torch.float16
+    assert _trainable(layer).dtype == torch.float16
     assert layer.weight.dtype == torch.float16
 
 
@@ -504,16 +495,16 @@ def test_masked_linear_state_dict_roundtrip_keeps_mask():
         bias=False,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
     mask_before = dst.mask.clone()
     mask_ptr = dst.mask.data_ptr()
     result = dst.load_state_dict(src.state_dict())
     assert result.missing_keys == []
     assert result.unexpected_keys == []
     torch.testing.assert_close(
-        _original(dst),
-        _original(src),
+        _trainable(dst),
+        _trainable(src),
     )
     torch.testing.assert_close(
         dst.mask,
@@ -544,16 +535,16 @@ def test_masked_linear_load_rejects_foreign_mask():
         bias=False,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
-    before = _original(dst).clone()
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
+    before = _trainable(dst).clone()
     with pytest.raises(
         Kpnn2Error,
         match="checkpoint mask does not match",
     ):
         dst.load_state_dict(src.state_dict())
     torch.testing.assert_close(
-        _original(dst),
+        _trainable(dst),
         before,
     )
 
@@ -574,8 +565,8 @@ def test_masked_linear_load_without_mask_digest():
         bias=False,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
     state = src.state_dict()
     del state["mask_digest"]
     result = dst.load_state_dict(
@@ -585,8 +576,8 @@ def test_masked_linear_load_without_mask_digest():
     assert result.missing_keys == []
     assert result.unexpected_keys == []
     torch.testing.assert_close(
-        _original(dst),
-        _original(src),
+        _trainable(dst),
+        _trainable(src),
     )
 
 
@@ -698,8 +689,8 @@ def test_masked_linear_generator_none_matches_omitted():
         generator=None,
     )
     torch.testing.assert_close(
-        _original(omitted),
-        _original(explicit),
+        _trainable(omitted),
+        _trainable(explicit),
     )
     torch.testing.assert_close(
         omitted.bias,
@@ -727,8 +718,8 @@ def test_masked_linear_generator_ignores_global_draws():
         generator=g2,
     )
     torch.testing.assert_close(
-        _original(polluted),
-        _original(clean),
+        _trainable(polluted),
+        _trainable(clean),
     )
     torch.testing.assert_close(
         polluted.bias,
@@ -749,8 +740,8 @@ def test_masked_linear_omitted_generator_follows_global_stream():
     torch.randn(8)
     second = MaskedLinear(mask)
     assert not torch.equal(
-        _original(first),
-        _original(second),
+        _trainable(first),
+        _trainable(second),
     )
 
 
@@ -769,8 +760,8 @@ def test_masked_linear_reset_parameters_accepts_generator():
         generator=g2,
     )
     torch.testing.assert_close(
-        _original(layer),
-        _original(other),
+        _trainable(layer),
+        _trainable(other),
     )
     assert not hasattr(
         layer,
@@ -826,14 +817,14 @@ def test_masked_linear_identity_roundtrip():
         identity="abc",
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
     result = dst.load_state_dict(src.state_dict())
     assert result.missing_keys == []
     assert result.unexpected_keys == []
     torch.testing.assert_close(
-        _original(dst),
-        _original(src),
+        _trainable(dst),
+        _trainable(src),
     )
 
 
@@ -855,16 +846,16 @@ def test_masked_linear_load_rejects_foreign_identity():
         identity="right",
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
-    before = _original(dst).clone()
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
+    before = _trainable(dst).clone()
     with pytest.raises(
         Kpnn2Error,
         match="checkpoint identity does not match",
     ):
         dst.load_state_dict(src.state_dict())
     torch.testing.assert_close(
-        _original(dst),
+        _trainable(dst),
         before,
     )
 
@@ -886,8 +877,8 @@ def test_masked_linear_load_without_identity_key():
         identity="abc",
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
     state = src.state_dict()
     assert "identity" not in state
     result = dst.load_state_dict(
@@ -897,8 +888,8 @@ def test_masked_linear_load_without_identity_key():
     assert result.missing_keys == []
     assert result.unexpected_keys == []
     torch.testing.assert_close(
-        _original(dst),
-        _original(src),
+        _trainable(dst),
+        _trainable(src),
     )
 
 
@@ -919,16 +910,16 @@ def test_masked_linear_load_rejects_identity_when_live_has_none():
         bias=False,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
-    before = _original(dst).clone()
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
+    before = _trainable(dst).clone()
     with pytest.raises(
         Kpnn2Error,
         match="checkpoint identity does not match",
     ):
         dst.load_state_dict(src.state_dict())
     torch.testing.assert_close(
-        _original(dst),
+        _trainable(dst),
         before,
     )
 
@@ -971,16 +962,16 @@ def test_masked_linear_load_rejects_renamed_nodes():
         identity=renamed.fingerprint,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
-    before = _original(dst).clone()
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
+    before = _trainable(dst).clone()
     with pytest.raises(
         Kpnn2Error,
         match="checkpoint identity does not match",
     ):
         dst.load_state_dict(src.state_dict())
     torch.testing.assert_close(
-        _original(dst),
+        _trainable(dst),
         before,
     )
 
@@ -996,14 +987,14 @@ def test_masked_linear_rename_loads_without_identity():
         bias=False,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
     result = dst.load_state_dict(src.state_dict())
     assert result.missing_keys == []
     assert result.unexpected_keys == []
     torch.testing.assert_close(
-        _original(dst),
-        _original(src),
+        _trainable(dst),
+        _trainable(src),
     )
 
 
@@ -1029,14 +1020,14 @@ def test_masked_linear_identity_accepts_permuted_edgelist():
         identity=shuffled.fingerprint,
     )
     with torch.no_grad():
-        _original(src).fill_(0.5)
-        _original(dst).fill_(0.25)
+        _trainable(src).fill_(0.5)
+        _trainable(dst).fill_(0.25)
     result = dst.load_state_dict(src.state_dict())
     assert result.missing_keys == []
     assert result.unexpected_keys == []
     torch.testing.assert_close(
-        _original(dst),
-        _original(src),
+        _trainable(dst),
+        _trainable(src),
     )
 
 
@@ -1064,7 +1055,7 @@ def test_masked_linear_zero_degree_row_stays_zero():
     )
     layer = MaskedLinear(mask)
     assert torch.equal(
-        _original(layer)[1],
+        _trainable(layer)[1],
         torch.zeros(2),
     )
     assert layer.bias[1].item() == 0.0
@@ -1092,7 +1083,7 @@ def test_masked_linear_init_respects_degree_bound():
     fan_in = 1
     bound = 1.0 / math.sqrt(fan_in)
     eps = 1e-6
-    assert torch.all(_original(layer)[0].abs() <= bound + eps)
+    assert torch.all(_trainable(layer)[0].abs() <= bound + eps)
     assert abs(layer.bias[0].item()) <= bound + eps
 
 
@@ -1113,7 +1104,7 @@ def test_masked_linear_init_not_full_in_features():
     for seed in range(42, 42 + n_resets):
         torch.manual_seed(seed)
         layer.reset_parameters()
-        row = _original(layer)[0]
+        row = _trainable(layer)[0]
         assert torch.all(row.abs() <= degree_bound + eps)
         assert abs(layer.bias[0].item()) <= degree_bound + eps
         if torch.any(row.abs() > full_width_bound):
@@ -1137,7 +1128,7 @@ def test_masked_linear_init_dense_row_tighter_bound():
     dense_bound = 1.0 / math.sqrt(in_features)
     eps = 1e-6
     assert dense_bound < sparse_bound
-    assert torch.all(_original(layer)[1].abs() <= dense_bound + eps)
+    assert torch.all(_trainable(layer)[1].abs() <= dense_bound + eps)
     assert abs(layer.bias[1].item()) <= dense_bound + eps
 
 
@@ -1149,13 +1140,13 @@ def test_masked_linear_deepcopy_independent_params_and_mask():
     copied = copy.deepcopy(layer)
 
     assert copied is not layer
-    assert _original(copied) is not _original(layer)
+    assert _trainable(copied) is not _trainable(layer)
     assert copied.bias is not layer.bias
     assert layer.mask is not copied.mask
     assert layer.mask.data_ptr() != copied.mask.data_ptr()
     torch.testing.assert_close(
-        _original(copied),
-        _original(layer),
+        _trainable(copied),
+        _trainable(layer),
     )
     torch.testing.assert_close(
         copied.bias,
@@ -1199,13 +1190,13 @@ def test_module_with_masked_linear_and_layered_spec_deepcopy():
 
     net = Net(spec)
     with torch.no_grad():
-        _original(net.lin).fill_(0.5)
+        _trainable(net.lin).fill_(0.5)
         net.lin.bias.fill_(0.1)
     copied = copy.deepcopy(net)
     assert copied is not net
     assert copied.lin is not net.lin
     assert copied.spec is not net.spec
-    assert _original(copied.lin) is not _original(net.lin)
+    assert _trainable(copied.lin) is not _trainable(net.lin)
     x = torch.ones(
         2,
         net.lin.in_features,
@@ -1282,87 +1273,59 @@ def test_masked_linear_compiles_without_a_graph_break():
     )
 
 
-def test_masked_linear_weight_is_the_effective_masked_product():
+def test_masked_linear_effective_weight_is_the_masked_product():
     layer = _layer_with_pinned_diag_weights(bias=False)
     expected = _pinned_weight() * _diag_mask()
     torch.testing.assert_close(
-        layer.weight,
+        layer.effective_weight(),
         expected,
     )
+    assert layer.effective_weight().shape == (2, 2)
+
+
+def test_masked_linear_weight_is_a_plain_parameter():
+    layer = MaskedLinear(
+        _diag_mask(),
+        bias=False,
+    )
+    assert type(layer) is MaskedLinear
+    assert not parametrize.is_parametrized(layer)
+    assert isinstance(layer.weight, nn.Parameter)
     assert layer.weight.shape == (2, 2)
-
-
-def test_masked_linear_trainable_tensor_is_the_parametrize_original():
-    layer = MaskedLinear(
-        _diag_mask(),
-        bias=False,
-    )
-    assert parametrize.is_parametrized(
-        layer,
-        "weight",
-    )
-    original = layer.parametrizations.weight.original
-    assert isinstance(original, nn.Parameter)
-    assert original.shape == (2, 2)
-    assert original is _original(layer)
     parameters = dict(layer.named_parameters())
-    assert parameters["parametrizations.weight.original"] is original
-    assert not isinstance(layer.weight, nn.Parameter)
+    assert list(parameters) == ["weight"]
+    assert parameters["weight"] is layer.weight
 
 
-def test_masked_linear_weight_assignment_writes_the_original():
-    layer = MaskedLinear(
-        _diag_mask(),
-        bias=False,
-    )
-    before = _original(layer)
-    with torch.no_grad():
-        layer.weight = torch.full(
-            (2, 2),
-            2.0,
-        )
-    assert _original(layer) is before
-    torch.testing.assert_close(
-        _original(layer),
-        torch.full(
-            (2, 2),
-            2.0,
-        ),
+def test_masked_linear_init_starts_blocked_entries_at_zero():
+    torch.manual_seed(42)
+    mask = (torch.rand(5, 7) > 0.5).float()
+    layer = MaskedLinear(mask)
+    blocked = mask == 0
+    assert blocked.any()
+    assert torch.equal(
+        layer.weight[blocked],
+        torch.zeros(int(blocked.sum())),
     )
     torch.testing.assert_close(
+        layer.effective_weight(),
         layer.weight,
-        2.0 * _diag_mask(),
     )
 
 
-def test_masked_linear_weight_assignment_copies_the_given_tensor():
-    layer = MaskedLinear(
-        _diag_mask(),
-        bias=False,
-    )
-    source = torch.full(
-        (2, 2),
-        2.0,
-    )
-    with torch.no_grad():
-        layer.weight = source
-    source.fill_(9.0)
-    torch.testing.assert_close(
-        _original(layer),
-        torch.full(
-            (2, 2),
-            2.0,
-        ),
-    )
-
-
-def test_masked_linear_in_place_write_to_weight_is_discarded():
+def test_masked_linear_write_to_blocked_entry_does_not_reach_output():
     layer = _layer_with_pinned_diag_weights(bias=False)
+    x = torch.tensor(
+        [[1.0, 2.0]],
+        dtype=torch.float32,
+    )
+    before = layer(x)
     with torch.no_grad():
-        layer.weight.fill_(7.0)
+        layer.weight[0, 1] = 7.0
+    assert layer.effective_weight()[0, 1].item() == 0.0
     torch.testing.assert_close(
-        _original(layer),
-        _pinned_weight(),
+        layer(x),
+        before,
     )
 
 
@@ -1384,7 +1347,7 @@ def test_masked_linear_grad_reaches_only_live_edges():
             2,
         )
     ).sum().backward()
-    grad = _original(layer).grad
+    grad = _trainable(layer).grad
     assert grad is not None
     torch.testing.assert_close(
         grad,
@@ -1392,71 +1355,69 @@ def test_masked_linear_grad_reaches_only_live_edges():
     )
 
 
-def test_masked_linear_optimizer_step_keeps_blocked_edges_dead():
+@pytest.mark.parametrize(
+    "make_optimizer",
+    [
+        lambda params: torch.optim.SGD(
+            params,
+            lr=0.1,
+            momentum=0.9,
+            weight_decay=0.5,
+        ),
+        lambda params: torch.optim.Adam(
+            params,
+            lr=0.1,
+            weight_decay=0.5,
+        ),
+        lambda params: torch.optim.AdamW(
+            params,
+            lr=0.1,
+            weight_decay=0.5,
+        ),
+    ],
+    ids=[
+        "sgd-momentum-l2",
+        "adam-l2",
+        "adamw",
+    ],
+)
+def test_masked_linear_optimizers_keep_blocked_entries_at_zero(
+    make_optimizer,
+):
     torch.manual_seed(42)
     layer = MaskedLinear(
         _diag_mask(),
         bias=False,
     )
-    optimizer = torch.optim.SGD(
-        layer.parameters(),
-        lr=0.1,
-        weight_decay=0.5,
-    )
-    assert optimizer.param_groups[0]["params"][0] is _original(layer)
+    optimizer = make_optimizer(layer.parameters())
+    assert optimizer.param_groups[0]["params"][0] is layer.weight
     x = torch.ones(
         4,
         2,
     )
-    loss = (layer(x) - 3.0).pow(2).sum()
-    loss.backward()
-    optimizer.step()
-    blocked = layer.weight * (1.0 - _diag_mask())
+    for _ in range(5):
+        optimizer.zero_grad()
+        loss = (layer(x) - 3.0).pow(2).sum()
+        loss.backward()
+        optimizer.step()
+    blocked = _diag_mask() == 0
     assert torch.equal(
-        blocked,
-        torch.zeros(
-            2,
-            2,
-        ),
+        layer.weight[blocked],
+        torch.zeros(2),
+    )
+    assert not torch.equal(
+        layer.weight[~blocked],
+        torch.zeros(2),
     )
 
 
-def test_masked_linear_prune_refuses_parametrized_weight():
-    layer = MaskedLinear(
-        _diag_mask(),
-        bias=False,
-    )
-    linear = nn.Linear(
-        2,
-        2,
-        bias=False,
-    )
-    parametrize.register_parametrization(
-        linear,
-        "weight",
-        _TimesOne(),
-    )
-    with pytest.raises(TypeError):
-        prune.l1_unstructured(
-            layer,
-            name="weight",
-            amount=1,
-        )
-    with pytest.raises(TypeError):
-        prune.l1_unstructured(
-            linear,
-            name="weight",
-            amount=1,
-        )
-
-
-def test_masked_linear_prune_on_original_composes_with_mask():
+def test_masked_linear_prune_composes_with_mask():
     layer = MaskedLinear(
         _diag_mask(),
         bias=False,
     )
     with torch.no_grad():
-        _original(layer).copy_(
+        layer.weight.copy_(
             torch.tensor(
                 [
                     [0.1, 10.0],
@@ -1465,18 +1426,17 @@ def test_masked_linear_prune_on_original_composes_with_mask():
                 dtype=torch.float32,
             )
         )
-    holder = layer.parametrizations.weight
     prune.l1_unstructured(
-        holder,
-        name="original",
+        layer,
+        name="weight",
         amount=1,
     )
     torch.testing.assert_close(
-        layer.weight,
-        holder.original_orig * holder.original_mask * layer.mask,
+        layer.effective_weight(),
+        layer.weight_orig * layer.weight_mask * layer.mask,
     )
     torch.testing.assert_close(
-        layer.weight,
+        layer.effective_weight(),
         torch.tensor(
             [
                 [0.0, 0.0],
@@ -1487,7 +1447,7 @@ def test_masked_linear_prune_on_original_composes_with_mask():
     )
 
 
-def test_masked_linear_substring_weight_filter_includes_original():
+def test_masked_linear_weight_filters_match_nn_linear():
     net = nn.Sequential(
         MaskedLinear(
             _diag_mask(),
@@ -1499,41 +1459,50 @@ def test_masked_linear_substring_weight_filter_includes_original():
             bias=False,
         ),
     )
-    selected = [name for name, _ in net.named_parameters() if "weight" in name]
-    assert selected == [
-        "0.parametrizations.weight.original",
-        "1.weight",
+    by_substring = [
+        name for name, _ in net.named_parameters() if "weight" in name
     ]
-
-
-def test_masked_linear_suffix_weight_filter_misses_original():
-    net = nn.Sequential(
-        MaskedLinear(
-            _diag_mask(),
-            bias=False,
-        ),
-        nn.Linear(
-            2,
-            1,
-            bias=False,
-        ),
-    )
-    selected = [
+    by_suffix = [
         name for name, _ in net.named_parameters() if name.endswith(".weight")
     ]
-    assert selected == ["1.weight"]
+    assert by_substring == ["0.weight", "1.weight"]
+    assert by_suffix == ["0.weight", "1.weight"]
 
 
-def test_masked_linear_stays_an_instance_of_its_own_class():
-    layer = MaskedLinear(
-        torch.ones(
+def test_masked_linear_pickles_with_its_mask():
+    torch.manual_seed(42)
+    net = nn.Sequential(
+        MaskedLinear(
+            _diag_mask(),
+            constraint=nn.Softplus(),
+        ),
+        nn.Linear(
             2,
-            3,
-        )
+            1,
+        ),
     )
-    assert isinstance(layer, MaskedLinear)
-    assert parametrize.type_before_parametrizations(layer) is MaskedLinear
-    assert type(layer) is not MaskedLinear
+    buffer = io.BytesIO()
+    torch.save(
+        net,
+        buffer,
+    )
+    buffer.seek(0)
+    restored = torch.load(
+        buffer,
+        weights_only=False,
+    )
+    x = torch.randn(
+        3,
+        2,
+    )
+    torch.testing.assert_close(
+        restored(x),
+        net(x),
+    )
+    assert torch.equal(
+        restored[0].mask,
+        net[0].mask,
+    )
 
 
 def test_masked_linear_repr_reports_sizes():
@@ -1545,6 +1514,7 @@ def test_masked_linear_repr_reports_sizes():
         bias=False,
     )
     text = repr(layer)
+    assert text.startswith("MaskedLinear(")
     assert "in_features=3" in text
     assert "out_features=2" in text
     assert "bias=False" in text
@@ -1560,7 +1530,7 @@ def test_masked_linear_ignores_mutation_of_constructor_tensor():
         bias=False,
     )
     with torch.no_grad():
-        _original(layer).fill_(1.0)
+        _trainable(layer).fill_(1.0)
     mask.zero_()
     x = torch.ones(
         1,
@@ -1585,32 +1555,20 @@ class _Widen(nn.Module):
         return weight.unsqueeze(0)
 
 
-def test_masked_linear_parametrization_list_remasks_last():
-    from kpnn2._masked_linear import _MaskedParametrizationList
-
-    layer = MaskedLinear(
-        _diag_mask(),
-        bias=False,
-    )
-    assert isinstance(
-        layer.parametrizations.weight,
-        _MaskedParametrizationList,
-    )
-
-
 def test_stacked_softplus_does_not_resurrect_masked_edges():
     layer = MaskedLinear(
         _diag_mask(),
         bias=False,
     )
     with torch.no_grad():
-        _original(layer).zero_()
+        layer.weight.zero_()
     parametrize.register_parametrization(
         layer,
         "weight",
         nn.Softplus(),
     )
-    blocked = layer.weight * (1.0 - _diag_mask())
+    effective = layer.effective_weight()
+    blocked = effective * (1.0 - _diag_mask())
     assert torch.equal(
         blocked,
         torch.zeros(
@@ -1619,7 +1577,7 @@ def test_stacked_softplus_does_not_resurrect_masked_edges():
         ),
     )
     torch.testing.assert_close(
-        layer.weight,
+        effective,
         F.softplus(torch.zeros(2, 2)) * _diag_mask(),
     )
     x_base = torch.tensor(
@@ -1635,6 +1593,144 @@ def test_stacked_softplus_does_not_resurrect_masked_edges():
     assert y_base[0, 1].item() == y_blocked[0, 1].item()
 
 
+def test_user_parametrization_state_dict_roundtrips():
+    torch.manual_seed(42)
+
+    def build():
+        layer = MaskedLinear(
+            _diag_mask(),
+            bias=False,
+        )
+        parametrize.register_parametrization(
+            layer,
+            "weight",
+            nn.Softplus(),
+        )
+        return layer
+
+    src = build()
+    layer_state = src.state_dict()
+    assert "parametrizations.weight.original" in layer_state
+    dst = build()
+    dst.load_state_dict(layer_state)
+    torch.testing.assert_close(
+        dst.effective_weight(),
+        src.effective_weight(),
+    )
+    dst.reset_parameters()
+    original = dst.parametrizations.weight.original
+    assert torch.equal(
+        original[_diag_mask() == 0],
+        torch.zeros(2),
+    )
+
+
+def _legacy_state_dict(
+    mask,
+    raw,
+    bias,
+):
+    """
+    A kpnn2 0.1 ``MaskedLinear`` checkpoint (torch parametrize).
+    """
+    payload = mask.detach().cpu().contiguous().numpy().tobytes()
+    return {
+        "bias": bias.clone(),
+        "parametrizations.weight.original": raw.clone(),
+        "mask_digest": torch.tensor(
+            tuple(hashlib.sha256(payload).digest()),
+            dtype=torch.uint8,
+        ),
+    }
+
+
+def test_masked_linear_loads_a_legacy_parametrize_checkpoint():
+    mask = _diag_mask()
+    raw = torch.tensor(
+        [
+            [0.5, 9.0],
+            [-9.0, 0.9],
+        ],
+        dtype=torch.float32,
+    )
+    bias = torch.tensor(
+        [0.1, -0.2],
+        dtype=torch.float32,
+    )
+    layer = MaskedLinear(mask)
+
+    layer.load_state_dict(
+        _legacy_state_dict(
+            mask,
+            raw,
+            bias,
+        ),
+        strict=True,
+    )
+
+    torch.testing.assert_close(
+        layer.weight,
+        raw * mask,
+    )
+    x = torch.randn(
+        3,
+        2,
+    )
+    torch.testing.assert_close(
+        layer(x),
+        F.linear(
+            x,
+            raw * mask,
+            bias,
+        ),
+    )
+
+
+def test_masked_linear_loads_a_legacy_checkpoint_under_a_prefix():
+    mask = _diag_mask()
+    raw = torch.full(
+        (2, 2),
+        0.5,
+    )
+    legacy = _legacy_state_dict(
+        mask,
+        raw,
+        torch.zeros(2),
+    )
+    net = nn.Sequential(MaskedLinear(mask))
+
+    net.load_state_dict(
+        {f"0.{key}": value for key, value in legacy.items()},
+        strict=True,
+    )
+
+    torch.testing.assert_close(
+        net[0].weight,
+        raw * mask,
+    )
+
+
+def test_masked_linear_legacy_checkpoint_still_checks_the_mask():
+    legacy = _legacy_state_dict(
+        torch.ones(2, 2),
+        torch.ones(2, 2),
+        torch.zeros(2),
+    )
+    layer = MaskedLinear(_diag_mask())
+    before = layer.weight.clone()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="mask does not match",
+    ):
+        layer.load_state_dict(legacy)
+
+    assert torch.equal(
+        layer.weight,
+        before,
+    )
+
+
 def test_constraint_softplus_is_applied_before_the_mask():
     layer = MaskedLinear(
         _diag_mask(),
@@ -1642,10 +1738,10 @@ def test_constraint_softplus_is_applied_before_the_mask():
         constraint=nn.Softplus(),
     )
     with torch.no_grad():
-        _original(layer).fill_(1.0)
+        _trainable(layer).fill_(1.0)
     expected = F.softplus(torch.ones(2, 2)) * _diag_mask()
     torch.testing.assert_close(
-        layer.weight,
+        layer.effective_weight(),
         expected,
     )
     assert isinstance(
@@ -1701,7 +1797,7 @@ def test_constraint_deepcopy_matches_and_is_independent():
         constraint=nn.Softplus(),
     )
     with torch.no_grad():
-        _original(layer).fill_(1.0)
+        _trainable(layer).fill_(1.0)
     copied = copy.deepcopy(layer)
     x = torch.ones(
         2,
@@ -1712,7 +1808,7 @@ def test_constraint_deepcopy_matches_and_is_independent():
         layer(x),
     )
     with torch.no_grad():
-        _original(copied).zero_()
+        _trainable(copied).zero_()
     assert not torch.equal(
         copied.weight,
         layer.weight,
@@ -1729,7 +1825,7 @@ def test_constraint_compiles_without_a_graph_break():
         constraint=nn.Softplus(),
     )
     with torch.no_grad():
-        _original(layer).fill_(1.0)
+        _trainable(layer).fill_(1.0)
     x = torch.ones(
         2,
         2,

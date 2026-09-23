@@ -24,6 +24,12 @@ This project follows semantic versioning.
   `source_in_layer` / `target_in_layer`.
 - `PackedLinear` is the large-n path on hops as well as on an
   `AdjacencySpec`.
+- `MaskedLinear.weight` is a plain `nn.Parameter` (state_dict
+  key `weight`, was `parametrizations.weight.original`), as on
+  `PackedLinear` and `nn.Linear`. The mask and `constraint` are
+  applied in `forward`; read `effective_weight()` for the
+  masked map. Blocked entries of `weight` start and stay at 0.
+  0.1 checkpoints still load, and the module now pickles.
 - `PackedLinear.forward` raises `Kpnn2Error` when the input's
   last dimension is not `in_features`. A wider input was read
   by position without error.
@@ -47,7 +53,10 @@ This project follows semantic versioning.
 - `constraint=` on `MaskedLinear` and `PackedLinear`: optional
   `nn.Module` applied to live weights before the mask
   (`MaskedLinear`) or in packed space (`PackedLinear`).
-  `MaskedLinear.weight` stays masked if later maps are stacked.
+  The mask is applied last, so a stacked map cannot
+  resurrect a blocked edge.
+- `effective_weight()` on `MaskedLinear` and `PackedLinear`:
+  the map `forward` uses (constraint, then mask).
 - `parse_layered(widths=)` / `LayeredSpec.layer_widths`: a named
   node can own several units.
 - `LayeredSpec.edge_location` / `AdjacencySpec.edge_location`:

@@ -7,6 +7,7 @@ weight slots **by name**. Do not `copy_` or
 ::: kpnn2.PackedLinear
     options:
       members:
+        - effective_weight
         - reset_parameters
         - transpose
         - forward

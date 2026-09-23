@@ -18,6 +18,8 @@ from ._identity import as_identity, check_identity, save_identity
 from ._mask_tensor import as_mask_tensor
 
 _MASK_DIGEST_KEY = "mask_digest"
+# kpnn2 0.1 stored the trainable tensor through torch parametrize.
+_LEGACY_WEIGHT_KEY = "parametrizations.weight.original"
 
 
 def _mask_digest(mask: torch.Tensor) -> torch.Tensor:
@@ -46,115 +48,6 @@ def _mask_digest_matches(
     )
 
 
-class _MaskParametrization(nn.Module):
-    """
-    Connectivity buffer behind ``MaskedLinear.weight``.
-
-    Registered first on ``MaskedLinear`` with
-    ``torch.nn.utils.parametrize.register_parametrization``.
-    ``forward`` is the identity: later maps must not run after a
-    mask multiply, or a non-zero-preserving map (for example
-    ``softplus``) would resurrect blocked edges.
-    ``_MaskedParametrizationList`` multiplies by this mask after
-    every registered map, so ``layer.weight`` stays masked.
-
-    ``right_inverse`` is the identity on a copy: assigning
-    ``layer.weight = w`` stores ``w`` unchanged in ``original``,
-    where the mask hides the entries it zeroes. It is not a true
-    inverse, because the product is not surjective.
-    """
-
-    mask: torch.Tensor
-
-    def __init__(self, mask: torch.Tensor) -> None:
-        super().__init__()
-        self.register_buffer(
-            "mask",
-            mask,
-            persistent=False,
-        )
-
-    def forward(self, weight: torch.Tensor) -> torch.Tensor:
-        """
-        Return ``weight`` unchanged. The list applies the mask.
-        """
-        return weight
-
-    def right_inverse(self, weight: torch.Tensor) -> torch.Tensor:
-        """
-        Return an independent copy of ``weight``.
-        """
-        return weight.clone()
-
-    def _apply(
-        self,
-        fn: Any,
-        *args: Any,
-        **kwargs: Any,
-    ) -> "_MaskParametrization":
-        out = super()._apply(
-            fn,
-            *args,
-            **kwargs,
-        )
-        stored = self._buffers.get("mask")
-        if stored is not None and stored.dtype != torch.float32:
-            self._buffers["mask"] = stored.to(dtype=torch.float32)
-        return cast("_MaskParametrization", out)
-
-
-class _ConstraintParametrization(nn.Module):
-    """
-    Optional per-entry map applied before the connectivity mask.
-
-    ``right_inverse`` is a clone, like ``_MaskParametrization``:
-    assigning ``layer.weight = w`` writes ``w`` into
-    ``original``, and the constraint is applied on read.
-    """
-
-    def __init__(self, constraint: nn.Module) -> None:
-        super().__init__()
-        self.constraint = constraint
-
-    def forward(self, weight: torch.Tensor) -> torch.Tensor:
-        """
-        Apply the stored ``constraint`` module.
-        """
-        return self.constraint(weight)
-
-    def right_inverse(self, weight: torch.Tensor) -> torch.Tensor:
-        """
-        Return an independent copy of ``weight``.
-        """
-        return weight.clone()
-
-
-class _MaskedParametrizationList(parametrize.ParametrizationList):
-    """
-    Parametrization list that always remasks last.
-
-    ``register_parametrization`` appends. Connectivity is not a
-    composable inner map: a blocked entry must stay zero in
-    ``layer.weight`` no matter what else is stacked. Index 0
-    holds the mask; this ``forward`` multiplies by it after every
-    other registered map.
-    """
-
-    def forward(self) -> torch.Tensor:
-        """
-        Apply registered maps, then the connectivity mask.
-        """
-        weight = super().forward()
-        mask = cast(
-            _MaskParametrization,
-            self[0],
-        ).mask
-        return weight * mask.to(
-            dtype=weight.dtype,
-            device=weight.device,
-        )
-
-
 class MaskedLinear(nn.Module):
     """
     Affine hop whose connectivity is fixed by an edgelist mask.
@@ -166,9 +59,10 @@ class MaskedLinear(nn.Module):
     Build one from ``spec.hops[i].to_mask()`` or
     ``spec.to_mask()``, fed by ``gather_hop_inputs`` on a
     layered hop. The large-n path on the same indices is
-    ``PackedLinear``. The masked ``weight`` is recomputed rather
-    than stored, and initialization scales by per-row mask
-    degree.
+    ``PackedLinear``, which stores its weight the same way:
+    ``weight`` is the trainable tensor and ``effective_weight()``
+    is what ``forward`` uses. Initialization scales by per-row
+    mask degree.
 
     Parameters
     ----------
@@ -180,7 +74,7 @@ class MaskedLinear(nn.Module):
         layer. Stored as an independent float32 copy, so later
         writes to the tensor passed in do not reach this layer.
         Non-finite values are not special-cased: the stored
-        tensor is multiplied with the trainable weight as it is.
+        tensor is multiplied with the weight as it is.
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
         If ``False``, there is no bias.
@@ -194,18 +88,17 @@ class MaskedLinear(nn.Module):
         error, even with ``strict=True``. ``None`` means this
         layer does not claim an identity.
     constraint : torch.nn.Module or None, default=None
-        Optional per-entry map on the unconstrained weight,
-        applied **before** the mask. ``nn.Softplus()`` is the
-        textbook non-negative edge reparametrization. The
-        module must return a tensor of the same shape as the
-        unconstrained weight. ``reset_parameters`` writes that
-        unconstrained tensor; it does not invert this map.
-        ``PackedLinear`` takes the same argument. Mixed
-        per-edge signs and frozen slots belong in this
-        module, not in parse columns. A hard freeze is
-        ``torch.where`` replacing those slots; a gradient
-        hook that zeroes a slot is not a freeze (AdamW and
-        SGD with momentum still move the stored tensor).
+        Optional per-entry map on ``weight``, applied in
+        ``forward`` **before** the mask. ``nn.Softplus()`` is the
+        textbook non-negative edge reparametrization. The module
+        must return a tensor of the same shape as ``weight``.
+        ``reset_parameters`` writes ``weight``; it does not
+        invert this map. ``PackedLinear`` takes the same
+        argument. Mixed per-edge signs and frozen slots belong
+        in this module, not in parse columns. A hard freeze is
+        ``torch.where`` replacing those slots; a gradient hook
+        that zeroes a slot is not a freeze (AdamW and SGD with
+        momentum still move the stored tensor).
     generator : torch.Generator or None, default=None
         Isolated RNG for ``reset_parameters``. ``None`` uses
         the default torch generator, bit-identical to omitting
@@ -219,25 +112,15 @@ class MaskedLinear(nn.Module):
         Number of input columns, ``mask.shape[1]``.
     out_features : int
         Number of output columns, ``mask.shape[0]``.
-    weight : torch.Tensor
-        Effective weight: the constructor ``constraint``, if
-        any, then any later parametrizations, then a ``mask``
-        cast to that tensor's dtype and device. Recomputed on
-        every access, so it is **not** a parameter: in-place
-        writes to it are discarded. Assigning
-        (``layer.weight = w``, under ``torch.no_grad()``)
-        copies ``w`` into ``original``; the mask (and
-        ``constraint``, if set) are applied on read.
-    parametrizations : nn.ModuleDict
-        Holds ``parametrizations.weight.original``, the trainable
-        ``nn.Parameter`` of shape
-        ``(out_features, in_features)``, the mask module, and
-        the constructor ``constraint`` when one was given.
-        Masked-out entries can be nonzero in ``original``; they
-        never reach the output. ``model.parameters()`` includes
-        that tensor. A param-group filter that uses
-        ``"weight" in name`` matches it;
-        ``name.endswith(".weight")`` does not.
+    weight : nn.Parameter
+        The trainable tensor, shape
+        ``(out_features, in_features)``, stored under the name
+        ``weight`` as on ``nn.Linear``. Masked-out entries start
+        at exactly 0; their gradient is always 0, so SGD,
+        momentum, Adam, and weight decay keep them at 0. When
+        ``constraint`` is set, this tensor is unconstrained.
+        Read ``effective_weight()`` for the map ``forward``
+        uses.
     mask : torch.Tensor
         Float32 buffer, same shape as the constructor ``mask``.
         Not trained and not saved in ``state_dict``. Stays
@@ -272,7 +155,7 @@ class MaskedLinear(nn.Module):
         whose dense ``(out_features, in_features)`` weight would
         not fit in RAM. Tied decode is
         ``PackedLinear.transpose``; on this layer use
-        ``F.linear(h, weight.T, dec_bias)``.
+        ``F.linear(h, layer.effective_weight().T, dec_bias)``.
     gather_hop_inputs : Assembles the input tensor of a hop that
         reads more than one saved layer.
     torch.nn.Linear : Dense equivalent, and the reference for
@@ -281,57 +164,47 @@ class MaskedLinear(nn.Module):
     Notes
     -----
     Sizes come from ``mask.shape``; there are no separate size
-    arguments. Forward is ``Y = F.linear(X, weight, bias)``
-    with ``weight`` the effective tensor above, equivalently
-    ``Y = X @ (C(W) ⊙ M).T + b`` when ``constraint`` is ``C``
-    (the identity when omitted), so ``.half()``, bfloat16, and
-    ``.double()`` work as on ``nn.Linear``. ``torch.autocast``
-    is unsupported: ``forward`` disables it and casts ``x`` to
-    the parameter dtype. The multiply is dense on purpose, and
-    ``X`` is an ordinary dense activation tensor. Nothing in
-    the forward path is a tensor subclass, so
-    ``torch.compile(layer, fullgraph=True)`` traces it,
-    parametrization included.
+    arguments. Forward is
+    ``Y = F.linear(X, effective_weight(), bias)``, that is
+    ``Y = X @ (C(W) ⊙ M).T + b`` with ``W`` the ``weight``
+    parameter, ``C`` the ``constraint`` (the identity when
+    omitted), and ``M`` the mask cast to ``W``'s dtype and
+    device, so ``.half()``, bfloat16, and ``.double()`` work as
+    on ``nn.Linear``. ``torch.autocast`` is unsupported:
+    ``forward`` disables it and casts ``x`` to the parameter
+    dtype. The multiply is dense on purpose, and ``X`` is an
+    ordinary dense activation tensor. Nothing in the forward
+    path is a tensor subclass, so
+    ``torch.compile(layer, fullgraph=True)`` traces it.
 
-    The mask is the outermost factor of ``layer.weight``, even
-    if the caller later
-    ``register_parametrization``s another map. A blocked entry
-    stays zero there and in the forward pass. ``constraint`` is
-    the supported inner map for sign-constrained edges; do not
-    stack ``softplus`` after the mask yourself.
+    The mask is always applied last. A map you
+    ``register_parametrization`` on ``weight`` yourself runs when
+    ``weight`` is read, before ``constraint`` and before the
+    mask, so it cannot resurrect a blocked entry. ``constraint``
+    is the supported per-entry map for sign-constrained edges.
 
-    The unconstrained tensor is stored with
-    ``torch.nn.utils.parametrize.register_parametrization``, the
-    PyTorch mechanism for "the effective weight is a function of
-    a stored parameter", and it comes with that machinery's
-    conventions:
+    ``weight`` is a plain ``nn.Parameter``, as on ``nn.Linear``
+    and ``PackedLinear``:
 
-    - ``state_dict`` keys are ``parametrizations.weight.original``,
-      optional ``bias``, ``mask_digest``, and ``identity`` when
-      the constructor was given one; ``mask`` stays out of it.
-      ``mask_digest`` is a 1-D CPU ``uint8`` tensor of length 32:
-      the SHA-256 of the live mask's float32 C-contiguous bytes
-      at save time, not a registered buffer. A missing digest is
-      not an error, even with ``strict=True``. The digest
-      catches same-shape rewiring. A rename that leaves the 0/1
-      pattern unchanged is caught by ``identity`` when callers
-      pass ``spec.fingerprint``.
-    - ``repr`` reports ``ParametrizedMaskedLinear``, because
-      PyTorch swaps in a subclass to install the ``weight``
-      property. ``isinstance(layer, MaskedLinear)`` is still
-      ``True``.
-    - ``copy.deepcopy`` works; pickling the module object does
-      not, here as for any parametrized module. Save
-      ``state_dict``, not the module.
-    - Utilities that need ``weight`` to be a raw
-      ``nn.Parameter``, such as ``torch.nn.utils.prune``, reject
-      a parametrized ``weight`` here exactly as they do on a
-      parametrized ``nn.Linear``. Point them at
-      ``layer.parametrizations.weight`` under the name
-      ``original``; their mask then composes with the
-      connectivity mask.
-    - Do not call ``parametrize.remove_parametrizations`` on
-      ``weight``: that drops the mask and leaves a dense layer.
+    - ``state_dict`` keys are ``weight``, optional ``bias``,
+      ``mask_digest``, and ``identity`` when the constructor was
+      given one; ``mask`` stays out of it. ``mask_digest`` is a
+      1-D CPU ``uint8`` tensor of length 32: the SHA-256 of the
+      live mask's float32 C-contiguous bytes at save time, not a
+      registered buffer. A missing digest is not an error, even
+      with ``strict=True``. The digest catches same-shape
+      rewiring. A rename that leaves the 0/1 pattern unchanged
+      is caught by ``identity`` when callers pass
+      ``spec.fingerprint``. A kpnn2 0.1 checkpoint, which stored
+      the trainable tensor as ``parametrizations.weight.original``,
+      still loads; its masked-out entries are set to 0 on load,
+      which does not change the output.
+    - Param-group filters match ``weight`` the same way on this
+      layer, ``PackedLinear``, and ``nn.Linear``.
+    - ``copy.deepcopy`` and pickling (``torch.save(model)``)
+      work.
+    - ``torch.nn.utils.prune`` works on ``weight``; its mask
+      composes with the connectivity mask.
 
     ``reset_parameters`` uses per-row mask degree as ``fan_in``,
     not full ``in_features``. Because a hop carries every parent
@@ -362,29 +235,33 @@ class MaskedLinear(nn.Module):
     >>> tuple(y.shape)
     (3, 2)
 
-    ``layer.weight`` is the masked product; the trainable tensor
-    is one level down:
+    ``weight`` is the trainable parameter; a blocked entry starts
+    at 0 there and is 0 in the map ``forward`` uses:
 
+    >>> [name for name, _ in layer.named_parameters()]
+    ['weight']
     >>> bool(layer.weight[1, 0] == 0.0)
     True
-    >>> tuple(layer.parametrizations.weight.original.shape)
-    (2, 2)
+    >>> bool(layer.effective_weight()[1, 0] == 0.0)
+    True
 
     ``constraint`` is applied before the mask, so blocked
-    entries stay zero:
+    entries stay zero even though ``softplus(0) > 0``:
 
     >>> layer = kpnn2.MaskedLinear(
     ...     mask,
     ...     bias=False,
     ...     constraint=torch.nn.Softplus(),
     ... )
-    >>> bool(layer.weight[1, 0] == 0.0)
+    >>> bool(layer.effective_weight()[1, 0] == 0.0)
     True
     """
 
-    weight: torch.Tensor
+    weight: nn.Parameter
     bias: nn.Parameter | None
     identity: str | None
+    constraint: nn.Module | None
+    mask: torch.Tensor
 
     def __init__(
         self,
@@ -423,68 +300,63 @@ class MaskedLinear(nn.Module):
                 "bias",
                 None,
             )
-
-        parametrize.register_parametrization(
-            self,
-            "weight",
-            _MaskParametrization(as_mask_tensor(mask)),
+        self.register_buffer(
+            "mask",
+            as_mask_tensor(mask),
+            persistent=False,
         )
-        self._weight_parametrizations().__class__ = _MaskedParametrizationList
         if constraint is not None:
             check_constraint_shape(
                 constraint,
-                self._original_weight,
+                self.weight,
             )
-            parametrize.register_parametrization(
-                self,
-                "weight",
-                _ConstraintParametrization(constraint),
-            )
+        self.constraint = constraint
         self.reset_parameters(generator)
 
-    def _weight_parametrizations(self) -> parametrize.ParametrizationList:
-        holders = cast(
-            nn.ModuleDict,
-            self.parametrizations,
+    def _trainable_weight(self) -> torch.Tensor:
+        """
+        Return the stored tensor behind ``weight``.
+
+        ``weight`` itself, or the ``original`` of a
+        parametrization the caller registered on it.
+        """
+        if parametrize.is_parametrized(
+            self,
+            "weight",
+        ):
+            holders = cast(
+                nn.ModuleDict,
+                self.parametrizations,
+            )
+            return cast(
+                parametrize.ParametrizationList,
+                holders["weight"],
+            ).original
+        return self.weight
+
+    def effective_weight(self) -> torch.Tensor:
+        """
+        Return the ``(out_features, in_features)`` map ``forward`` uses.
+
+        ``constraint(weight)`` when ``constraint`` is set (else
+        ``weight``), times the mask cast to that tensor's dtype
+        and device. Recomputed on every call and differentiable,
+        so it is the tensor to read, export, or penalize as the
+        layer's live edge weights. ``PackedLinear`` has the same
+        method.
+
+        Returns
+        -------
+        torch.Tensor
+            The effective weight. Blocked entries are 0.
+        """
+        weight = self.weight
+        if self.constraint is not None:
+            weight = self.constraint(weight)
+        return weight * self.mask.to(
+            dtype=weight.dtype,
+            device=weight.device,
         )
-        return cast(
-            parametrize.ParametrizationList,
-            holders["weight"],
-        )
-
-    def _mask_module(self) -> _MaskParametrization:
-        return cast(
-            _MaskParametrization,
-            self._weight_parametrizations()[0],
-        )
-
-    @property
-    def mask(self) -> torch.Tensor:
-        """
-        The float32 connectivity buffer, read-only by contract.
-        """
-        return self._mask_module().mask
-
-    @mask.setter
-    def mask(self, value: torch.Tensor) -> None:
-        self._mask_module().mask = value
-
-    @property
-    def constraint(self) -> nn.Module | None:
-        """
-        The constructor ``constraint`` module, or ``None``.
-        """
-        holder = self._weight_parametrizations()
-        if len(holder) < 2:
-            return None
-        extra = holder[1]
-        if not isinstance(extra, _ConstraintParametrization):
-            return None
-        return extra.constraint
-
-    @property
-    def _original_weight(self) -> torch.Tensor:
-        return self._weight_parametrizations().original
 
     def reset_parameters(
         self,
@@ -496,15 +368,15 @@ class MaskedLinear(nn.Module):
         This is the difference from
         ``torch.nn.Linear.reset_parameters``. For output row
         ``j``, ``fan_in`` is the number of ones in ``mask[j]``.
-        That row of ``parametrizations.weight.original`` (and
-        ``bias[j]``, if present) is drawn uniformly from
-        ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``. If
-        ``fan_in == 0``, the row and bias entry stay 0.
+        The live entries of that row of ``weight`` (and
+        ``bias[j]``, if present) are drawn uniformly from
+        ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]``. Masked-out
+        entries are 0. If ``fan_in == 0``, the row and bias
+        entry stay 0.
 
-        Degrees are counted in one pass over ``mask``, so no
-        per-row device synchronization happens here. Rows are
-        then drawn one at a time, which writes straight into
-        the trainable tensor without a full-size temporary.
+        Rows are drawn one at a time, each as a full row that is
+        then masked, so the draws match earlier releases and no
+        full-size temporary is allocated.
 
         Parameters
         ----------
@@ -513,9 +385,9 @@ class MaskedLinear(nn.Module):
             default torch generator. Not stored on the module.
         """
         generator = as_generator(generator)
-        original = self._original_weight
+        weight = self._trainable_weight()
         with torch.no_grad():
-            original.zero_()
+            weight.zero_()
             if self.bias is not None:
                 self.bias.zero_()
             degrees = self.mask.sum(dim=1).trunc().tolist()
@@ -524,7 +396,7 @@ class MaskedLinear(nn.Module):
                     continue
                 bound = 1.0 / math.sqrt(degree)
                 nn.init.uniform_(
-                    original[row],
+                    weight[row],
                     -bound,
                     bound,
                     generator=generator,
@@ -536,6 +408,26 @@ class MaskedLinear(nn.Module):
                         bound,
                         generator=generator,
                     )
+            weight.masked_fill_(
+                self.mask == 0,
+                0.0,
+            )
+
+    def _apply(
+        self,
+        fn: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> "MaskedLinear":
+        out = super()._apply(
+            fn,
+            *args,
+            **kwargs,
+        )
+        stored = self._buffers.get("mask")
+        if stored is not None and stored.dtype != torch.float32:
+            self._buffers["mask"] = stored.to(dtype=torch.float32)
+        return out
 
     def extra_repr(self) -> str:
         """
@@ -591,6 +483,17 @@ class MaskedLinear(nn.Module):
                 raise Kpnn2Error(
                     "The checkpoint mask does not match this layer."
                 )
+        legacy = prefix + _LEGACY_WEIGHT_KEY
+        migrated = (
+            legacy in state_dict
+            and prefix + "weight" not in state_dict
+            and not parametrize.is_parametrized(
+                self,
+                "weight",
+            )
+        )
+        if migrated:
+            state_dict[prefix + "weight"] = state_dict.pop(legacy)
         super()._load_from_state_dict(
             state_dict,
             prefix,
@@ -600,25 +503,29 @@ class MaskedLinear(nn.Module):
             unexpected_keys,
             error_msgs,
         )
+        if migrated:
+            with torch.no_grad():
+                self.weight.masked_fill_(
+                    self.mask == 0,
+                    0.0,
+                )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        ``F.linear`` of ``x`` with the effective ``weight``.
+        ``F.linear`` of ``x`` with ``effective_weight()``.
 
-        ``self.weight`` is the effective tensor: constructor
-        ``constraint`` (if any), then any later parametrizations,
-        then a ``mask`` cast to the trainable tensor's dtype and
-        device. The stored ``mask`` remains float32, so
+        The constraint (if any) and then the mask are applied to
+        ``weight`` here, on every call. The stored ``mask``
+        remains float32 and is cast to the parameter dtype, so
         ``.half()``, bfloat16, and ``.double()`` match
-        ``nn.Linear``. ``torch.autocast`` is unsupported:
-        this path disables it and casts ``x`` to the parameter
-        dtype.
+        ``nn.Linear``. ``torch.autocast`` is unsupported: this
+        path disables it and casts ``x`` to the parameter dtype.
         """
         with torch.autocast(
             device_type=x.device.type,
             enabled=False,
         ):
-            weight = self.weight
+            weight = self.effective_weight()
             x = x.to(dtype=weight.dtype)
             return F.linear(
                 x,

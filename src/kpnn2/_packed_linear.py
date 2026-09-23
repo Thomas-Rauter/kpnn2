@@ -244,11 +244,11 @@ class PackedLinear(nn.Module):
     weight : nn.Parameter
         Trainable packed weights of shape ``(nnz,)``. One scalar
         per live edge, in the same order as the index buffers.
-        This is an ordinary parameter; there is no
-        ``parametrize`` and no dense ``(out, in)`` tensor.
-        When ``constraint`` is set, this tensor is
-        unconstrained; ``forward`` uses
-        ``constraint(weight)``.
+        This is an ordinary parameter; there is no dense
+        ``(out, in)`` tensor. When ``constraint`` is set, this
+        tensor is unconstrained. Read ``effective_weight()`` for
+        the map ``forward`` uses. ``MaskedLinear.weight`` is
+        stored the same way.
     source_index : torch.Tensor
         Int64 buffer of input columns, length ``nnz``.
         **Treat it as read-only:** like any PyTorch buffer it can
@@ -302,16 +302,16 @@ class PackedLinear(nn.Module):
     Notes
     -----
     Forward gathers ``x[..., source_index]``, multiplies by
-    ``constraint(weight)`` when ``constraint`` is set (else
-    ``weight``), and ``index_add``s into zeros of shape
-    ``(..., out_features)``, adding ``bias`` when present. ``x``
-    is an ordinary dense activation tensor whose last dimension
-    must be ``in_features``, as for ``nn.Linear``. The gather
-    reads columns by position, so a wider tensor would be read
-    without complaint; ``forward`` raises instead. A stale
-    ``align_inputs`` index of the same width after a reparse
-    still cannot be detected here: recompute the index on the
-    new spec. Nothing scatters into
+    ``effective_weight()`` (``constraint(weight)`` when
+    ``constraint`` is set, else ``weight``), and ``index_add``s
+    into zeros of shape ``(..., out_features)``, adding ``bias``
+    when present. ``x`` is an ordinary dense activation tensor
+    whose last dimension must be ``in_features``, as for
+    ``nn.Linear``. The gather reads columns by position, so a
+    wider tensor would be read without complaint; ``forward``
+    raises instead. A stale ``align_inputs`` index of the same
+    width after a reparse still cannot be detected here:
+    recompute the index on the new spec. Nothing scatters into
     a dense ``(out, in)`` matrix, nothing imports
     ``torch.sparse``, and no tensor subclass is involved, so
     ``torch.compile(layer, fullgraph=True)`` traces it. Index
@@ -558,6 +558,26 @@ class PackedLinear(nn.Module):
                         generator=generator,
                     )
 
+    def effective_weight(self) -> torch.Tensor:
+        """
+        Return the ``(nnz,)`` packed weights ``forward`` uses.
+
+        ``constraint(weight)`` when ``constraint`` is set, else
+        ``weight`` itself. Recomputed on every call and
+        differentiable, so it is the tensor to read, export, or
+        penalize as the layer's live edge weights; index it with
+        ``edge_location`` slots. ``MaskedLinear`` has the same
+        method on its dense rectangle.
+
+        Returns
+        -------
+        torch.Tensor
+            The effective packed weights, one per live edge.
+        """
+        if self.constraint is None:
+            return self.weight
+        return self.constraint(self.weight)
+
     def transpose(
         self,
         bias: bool = True,
@@ -779,11 +799,9 @@ class PackedLinear(nn.Module):
         """
         Gather live inputs, scale by packed weights, ``index_add``.
 
-        ``contrib = x[..., source_index] * live_weight``, then
-        ``index_add`` into zeros of shape
-        ``(..., out_features)``. ``live_weight`` is
-        ``constraint(weight)`` when ``constraint`` is set,
-        otherwise ``weight``. Adds ``bias`` when present.
+        ``contrib = x[..., source_index] * effective_weight()``,
+        then ``index_add`` into zeros of shape
+        ``(..., out_features)``. Adds ``bias`` when present.
         Packed 1-D weights, one per live edge; not
         ``torch.sparse``; forward is ``index_add``.
         ``torch.autocast`` is unsupported: this path
@@ -800,9 +818,7 @@ class PackedLinear(nn.Module):
             device_type=x.device.type,
             enabled=False,
         ):
-            weight = self.weight
-            if self.constraint is not None:
-                weight = self.constraint(weight)
+            weight = self.effective_weight()
             x = x.to(dtype=weight.dtype)
             contrib = x[..., self.source_index] * weight
             y = torch.zeros(
