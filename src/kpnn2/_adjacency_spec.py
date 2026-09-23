@@ -224,6 +224,11 @@ class AdjacencySpec:
         ``PackedLinear`` built on this spec and the side of
         ``to_mask()``. It equals ``len(nodes)`` when every node
         has width 1.
+
+        Returns
+        -------
+        int
+            Number of units in the state vector.
         """
         return sum(self.node_widths)
 
