@@ -174,9 +174,8 @@ Two parallel integer lists, `source_index` and `target_index`,
 with one entry per live unit pair: pair `i` says that column
 `source_index[i]` feeds row `target_index[i]`.
 
-At width 1 that is one entry per named edge. An `AdjacencySpec`
-has no widths, so it stays that way too.
-`parse_layered(..., widths=)` expands a named edge `A -> B` into
+At width 1 that is one entry per named edge.
+`widths=` on either parser expands a named edge `A -> B` into
 every unit pair of the block, `k_B` by `k_A`.
 
 This is how both specs hold connectivity. The dense alternative is
