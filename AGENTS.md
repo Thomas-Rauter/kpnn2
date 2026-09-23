@@ -172,6 +172,17 @@ global `ruff` on `PATH`; it can disagree with CI. Exact
 pin: `pyproject.toml`. The full local checklist is
 `dev/check_code_locally.txt`.
 
+**Scientific acceptance.** A green pytest, mypy, and ruff
+run means those checks passed. It does not accept a
+change to a formula, a numerical default, a reduction, or
+a tie-break. When one of those moves, stop. Name the old
+result and the new result. Do not update a test
+expectation or a stored notebook output to follow the new
+code. The message in the current chat is what accepts the
+new result. A bugfix whose existing test already states
+the contract still finishes after a green suite. So does
+work that does not change a number.
+
 Execute tutorial notebooks with:
 
 ```
@@ -184,12 +195,15 @@ stay). Use `--fix-only` to clear without re-running.
 Use the venv kernel, not
 `ipykernel install --user --name python3`. `mkdocs serve`
 repairs missing stream `name` fields on pre-build.
-Literature notebooks under `docs/literature/` are frozen:
-repair them, do not execute them in CI. Re-run with
-`python dev/docs_notebooks.py --literature` after
-downloading files into gitignored `.literature-data/`
-(see `docs/literature/README.md`). Do not add bulk omics
-matrices to git.
+Literature notebooks under `docs/literature/` are frozen.
+Repair means notebook format only: valid nbformat, and
+stream outputs with `name`. Stored outputs stay as
+published. Do not edit those outputs so a new run matches
+the code. Do not execute them in CI. Re-run with
+`python dev/docs_notebooks.py --literature` only when the
+current chat asks, after downloading files into gitignored
+`.literature-data/` (see `docs/literature/README.md`).
+Do not add bulk omics matrices to git.
 
 `tests/manual/` is Colab GPU/TPU smoke, not pytest and not
 docs. Do not execute it in CI or with
