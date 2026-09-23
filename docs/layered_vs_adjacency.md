@@ -37,7 +37,7 @@ The toy is `A -> H -> C` plus the [skip](concepts.md#skip-edge)
 | H      | C      |
 | A      | C      |
 
-<img class="figure-full" src="../figures/layered_vs_adjacency.svg" alt="Layered versus adjacency">
+<img class="figure-full" src="../figures/layered_vs_adjacency.svg" alt="Left: parse_layered puts A, H and C in layers 0 to 2, and the skip A to C becomes a second column of hops[1]. Right: parse_adjacency puts A, C and H in one state vector, and all three edges, the skip included, are ones in a 3 by 3 mask.">
 
 **Figure 1.** The same DAG parsed two ways. Layered ranks nodes
 and puts every incoming edge in one packed hop (the skip is a
@@ -68,7 +68,7 @@ on both specs (`A`, `H`, and `C`).
 
 ## How you compute
 
-<img class="figure-full" src="../figures/layered_vs_adjacency_forward.svg" alt="Layered versus adjacency forward pass">
+<img class="figure-full" src="../figures/layered_vs_adjacency_forward.svg" alt="Top: the layered forward pass applies hops[0], holds A, gathers it with H, and applies hops[1] once. Bottom: the adjacency forward pass scatters x into the state vector and applies the to_mask() layer for n steps in a loop.">
 
 **Figure 2.** How you compute on that toy. Layered is one
 sweep: hold `A`, gather it with `H`, then `hops[1]`. Adjacency
@@ -169,18 +169,16 @@ walkthrough is the
 
 ## Changing the prior
 
-Specs are frozen after parse. Prune during training with a
-keep-mask inside `constraint=` on that spec. To grow the
-prior, or to remove edges and retrain a smaller model, edit
-the edgelist, parse again, and copy surviving tensors **by
-name** with `edge_location`. A whole-`weight` `copy_` or
-`load_state_dict` onto a different prior can put a slot's
-value on a different named edge. Reparse recomputes
-`input_nodes` / `output_nodes`; `parse_layered` also
-recomputes depths, hops, and skips.
-`optimizer.load_state_dict` is accepted when the parameter
-shapes still match, and then applies moments by position.
-The recipes are
-[Pruning during training](packed_linear.md#pruning-during-training)
-and
-[Changing the prior (reparse)](packed_linear.md#changing-the-prior-reparse).
+Specs are frozen after parse, on both layouts.
+
+- To drop edges while training continues, keep the spec and
+  put a keep-mask in `constraint=`. See
+  [Pruning during training](packed_linear.md#pruning-during-training).
+- To grow the prior, or to remove edges and retrain a smaller
+  model, edit the edgelist, parse it again, and copy the
+  surviving weights **by name**. See
+  [Changing the prior (reparse)](packed_linear.md#changing-the-prior-reparse).
+
+Do not `copy_` a whole `weight` or call `load_state_dict`
+across two priors: both copy by position, so a value can
+land on a different named edge.

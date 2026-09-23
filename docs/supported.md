@@ -7,12 +7,12 @@ can build that way.
 
 | Type | Supported | What to use |
 | --- |-----------| --- |
-| Feedforward | Yes       | `parse_layered` (optional `widths=` for DCell-style nodes), `PackedLinear`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
+| Feedforward | Yes       | `parse_layered` (optional `widths=` to give a node several units), `PackedLinear`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
 | Cyclic | Yes       | `parse_adjacency`, `PackedLinear` or `MaskedLinear(spec.to_mask())`, loop you own → [Cyclic graph example](cyclic-graph-example.ipynb) |
 | Transformer | Yes       | `parse_adjacency` + `PackedMultiheadAttention`; encoder / FFN / head are yours → [Transformer example](transformer-example.ipynb) |
-| Sequence RNN / GRU / LSTM | Yes*      | `parse_adjacency` + `MaskedLinear` / `PackedLinear` as the maps; you write the time loop (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) → [Time-series example](time-series-example.ipynb) |
+| Sequence RNN / GRU / LSTM | Yes, see [Sequence models](#sequence-models) | `parse_adjacency` + `MaskedLinear` / `PackedLinear` as the maps; you write the time loop (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) → [Time-series example](time-series-example.ipynb) |
 | Graph NN | No        | Knowledge-primed GNNs are a natural edgelist model in [PyG](https://pyg.org/); we will not build or maintain `kpnn-pyg`. |
-| Convolutional NN | No        | Currently no sparsely connected support. Build yourself in PyTorch (`nn.Conv1d` / `nn.Conv2d` / `nn.Conv3d`) |
+| Convolutional NN | No        | No sparsely connected support. Build it yourself in PyTorch (`nn.Conv1d` / `nn.Conv2d` / `nn.Conv3d`) |
 
 ## Sequence models
 

@@ -211,7 +211,7 @@ single alphabetical vector, `spec.nodes` — one unit unless
 it.
 
 There are no layers, so a cycle or a self-loop is nothing special —
-it is just another pair. One update maps the vector to itself, and
+it is another pair. One update maps the vector to itself, and
 how many times you apply it is yours to decide. Input nodes have no
 incoming edges, so writing the inputs into the state at each step
 is the caller's job, not the package's.

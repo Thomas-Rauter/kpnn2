@@ -75,37 +75,22 @@ as one GEMM.
 
 ## Construction
 
-From a hop:
+The two constructor calls at the top of this page are the whole
+setup. On a hop, `layer` from the first call reads the
+concatenated source axis that `gather_hop_inputs()` builds, and
+returns the pre-activation tensor:
 
 ```python
-core = kpnn2.PackedLinear(
-    hop.source_index,
-    hop.target_index,
-    hop.out_features,
-    hop.in_features,
-)
 x = kpnn2.gather_hop_inputs(saved, hop)
-hidden = self.acts[index](core(x))
+hidden = self.acts[index](layer(x))
 ```
 
 `self.acts` is `nn.ModuleList([nn.ReLU() for _ in spec.hops])`.
-The hop returns the pre-activation tensor.
 
-From an `AdjacencySpec`:
-
-```python
-core = kpnn2.PackedLinear(
-    spec.source_index,
-    spec.target_index,
-    spec.state_dim,
-    spec.state_dim,
-)
-```
-
-An adjacency layer maps the state vector onto itself, so the
-aligned inputs must be scattered into it. Input nodes have
-in-degree 0, so no packed edge ever reaches them: writing them
-in each step is required, not cosmetic. The
+On an `AdjacencySpec`, `core` from the second call maps the state
+vector onto itself, so the aligned inputs must be scattered into
+it. Input nodes have in-degree 0, so no packed edge ever reaches
+them: writing them in each step is required, not cosmetic. The
 [Cyclic graph example](cyclic-graph-example.ipynb) does the same
 scatter inside a full loop:
 
@@ -379,64 +364,46 @@ the original spec expects it.
 
 ## Changing the prior (reparse)
 
-Specs are frozen after parse. Pruning during training stays
-on that spec: a keep-mask, above. Reparse is how you grow
-the prior, and how you remove edges and then retrain a
-smaller model. Edit the edgelist, parse again, build
-**new** layers from the new spec, and copy surviving
-tensors **by name**.
+To grow the prior, or to remove edges and retrain a smaller
+model, reparse: edit the edgelist, parse it again, build
+**new** layers from the new spec, and copy the surviving
+tensors **by name**. To drop edges while training continues,
+keep the spec and use a [keep-mask](#pruning-during-training)
+instead.
 
-Copy edge by edge. Look up each surviving named edge on **both**
-specs with `edge_location` and copy those packed slots.
-A surviving edge can sit on a different hop with a different
-packed index.
+A reparse rebuilds the layout; it is not "the same graph minus
+a row." Both parsers recompute `input_nodes` and
+`output_nodes`. `parse_layered()` also recomputes longest-path
+depths (unless you pass the same `ranks=`), hop membership, the
+concatenated source axes, and `skips`. Pass the same `widths=`
+and `ranks=` as the original parse.
 
-Bulk shortcuts do not work. Do not `Tensor.copy_` a whole
-`weight`, and do not `load_state_dict` across different priors.
-`PackedLinear.weight` is 1-D of length `nnz`. If you drop
-one named edge and add another, `nnz` is unchanged and
-slot `i` is a different named edge. `index_digest` /
-`mask_digest` hash numeric indices (or the mask) and
-shapes, not names, so a rename that leaves the index pattern
-unchanged passes them. Always pass `identity=spec.fingerprint`
-on the new `PackedLinear` or `MaskedLinear`.
+After the new parse:
 
-Reparse rebuilds the blueprint; it is not "the same graph minus
-a row." Both parsers recompute `input_nodes` / `output_nodes`.
-`parse_layered` also recomputes longest-path depths (unless you
-pass the same `ranks=`), hop membership, concat source axes, and
-`skips`. Pass the same `widths=` / `ranks=` as the original
-parse.
+1. **Build new layers.** Pass `identity=spec.fingerprint` on
+   every new `PackedLinear` or `MaskedLinear`.
+2. **Copy weights edge by edge.** Look up each surviving named
+   edge on **both** specs with `edge_location()` and copy those
+   packed slots. A surviving edge can sit on a different hop,
+   at a different packed index.
+3. **Copy bias node by node.** Bias is `(out_features,)`, one
+   value per output unit, so it moves by named node, not by
+   packed slot. On an `AdjacencySpec`, index `spec.nodes` by
+   name. On a `LayeredSpec`, `node_units()` gives a node's
+   layer and unit slice; copy only when the node still exists
+   and its layer and width still match.
+4. **Recompute `align_inputs()`** on the new spec. Dropping an
+   input's last edge removes that input, so an index kept from
+   the old spec is one column too wide; `PackedLinear` raises
+   on it rather than reading the columns by position. An index
+   of the same width, with one input swapped for another,
+   cannot be caught by any layer.
+5. **Build a new optimizer.** Adam moments are keyed by
+   `Parameter` identity on the old module: construct a new
+   optimizer on the new parameters, or accept losing them.
 
-Recompute `align_inputs` on the new spec. Dropping an input's
-last edge removes that input, so an index kept from the old spec
-is one column too wide; `PackedLinear` raises on it rather than
-reading the columns by position. An index of the same width (one
-input swapped for another) cannot be caught by any layer.
-
-Bias moves by node, not by edge: it is `(out_features,)`, one
-value per output unit. Copy it by named node → unit slice, not
-by packed slot. On a `LayeredSpec`, `node_units` indexes the
-hop's output axis; copy only when the node still exists and its
-width and layer still match. On an `AdjacencySpec`, index
-`spec.nodes` by name.
-
-Optimizer state does not follow. Adam moments are keyed by
-`Parameter` identity on the old module: construct a new
-optimizer on the new parameters, or accept losing them.
-
-`optimizer.load_state_dict` across that reparse is accepted
-silently when each parameter shape still matches. On
-`PackedLinear`, `weight` has length `nnz` and `bias` has
-length `out_features`. On `MaskedLinear`, `weight` is the
-`(out_features, in_features)` rectangle. Dropping one named
-edge and adding another can leave those shapes unchanged.
-The moments are then applied by position, so slot `i` can
-be a different named edge. The load reads shapes only.
-`index_digest` and `identity` are checked by the layer's
-own `load_state_dict`: with `identity=spec.fingerprint`, a
-different prior raises `Kpnn2Error`. A successful optimizer
-load means the shapes matched.
+The example below does steps 1, 2, 3, and 5 on an
+`AdjacencySpec`:
 
 ```python
 old_spec = kpnn2.parse_adjacency(old_edgelist)
@@ -500,10 +467,10 @@ with torch.no_grad():
 optimizer = torch.optim.Adam(new_core.parameters())
 ```
 
-That example is adjacency. On a `LayeredSpec`, `edge_location`
-returns `(hop_index, packed_indices)`; copy into
-`layers[hop_index]` on each spec. Copy bias with `node_units`
-only when layer and width still match:
+On a `LayeredSpec`, `edge_location()` returns
+`(hop_index, packed_indices)`; copy into `layers[hop_index]` on
+each spec. Copy bias with `node_units()` only when layer and
+width still match:
 
 ```python
 old_layer, old_units = old_spec.node_units(name)
@@ -521,5 +488,23 @@ new_layers[new_layer - 1].bias[new_units] = (
 
 On `MaskedLinear`, copy the named live cells of `weight`, the
 trainable tensor, as on `PackedLinear`. Do not `copy_` the whole
-`(out, in)` rectangle. `load_state_dict` is still name-blind
-when the mask pattern and `nnz` are unchanged.
+`(out, in)` rectangle.
+
+Bulk shortcuts do not work. `PackedLinear.weight` is 1-D of
+length `nnz`. If you drop one named edge and add another, `nnz`
+is unchanged and slot `i` is a different named edge, so a
+whole-`weight` `Tensor.copy_` or a `load_state_dict` across the
+two priors can put values on the wrong edges. `index_digest` and
+`mask_digest` hash numeric indices (or the mask) and shapes, not
+names, so without `identity=` a layer's `load_state_dict` is
+name-blind whenever that pattern is unchanged. With
+`identity=spec.fingerprint`, a different prior raises
+`Kpnn2Error` instead.
+
+`optimizer.load_state_dict` has no such check. It is accepted
+whenever each parameter shape still matches: on `PackedLinear`,
+`weight` of length `nnz` and `bias` of length `out_features`; on
+`MaskedLinear`, the `(out_features, in_features)` rectangle. The
+moments are then applied by position, so slot `i` can receive
+another edge's moments. A successful optimizer load means only
+that the shapes matched.

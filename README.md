@@ -40,7 +40,7 @@ work in interpretable machine learning therefore builds meaning
 into the architecture itself, so that the internal units of a
 network correspond to entities a scientist already knows by name.
 
-![Knowledge-primed neural networks](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/KPNNs_explained.png)
+![Left: a cell-surface receptor signals through kinases and transcription factors to genes. Right: the same wiring as a sparse neural network, with input nodes at the bottom, named hidden nodes in between, and one output node at the top.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/KPNNs_explained.png)
 
 **Figure 1.** From a biological network (left) to a knowledge-primed
 neural network (right). Every node of the network is a named entity
@@ -61,8 +61,9 @@ wiring becomes a neural network that runs against the direction of
 signaling: gene expression enters at the input nodes, passes
 through transcription factors and kinases in the hidden layers, and
 reaches the receptor at the output node. Because each hidden node
-is a specific protein, an attribution score on that node is a
-statement about that protein rather than about an anonymous unit.
+stands for a specific protein, an attribution score on that node
+says how much the trained model relies on that protein's unit,
+rather than on an anonymous one.
 Related models, also called visible or biologically informed neural
 networks, derive the graph from pathway databases or ontologies,
 such as P-NET, which is built on a hierarchy of Reactome pathways
@@ -91,7 +92,7 @@ the metrics. Because published models have typically been
 implemented with code written for one architecture, each new
 project rebuilds this machinery and meets these pitfalls anew.
 
-![Fully connected versus sparse](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/dense_vs_sparse.png)
+![(a) Every input connects to every hidden unit, and every hidden unit to the output. (b) Only the listed edges exist, and three dashed edges skip a layer.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/dense_vs_sparse.png)
 
 **Figure 2.** (a) Dense adjacent layers, the usual PyTorch case.
 (b) A sparsely connected network with skip edges (dashed), the same
@@ -195,22 +196,21 @@ graph as *data* in the GNN sense (see [Why not a GNN?](#why-not-a-gnn)).
 
 1. Define a model architecture as an edgelist with named `source`
    and `target` [nodes](docs/concepts.md#node).
-2. Parse it with `parse_layered()` to a `LayeredSpec` when the
-   graph is a [directed acyclic graph](docs/concepts.md#dag) (DAG)
-   that should become one packed [hop](docs/concepts.md#hop) per
-   layer — a hop being everything entering one layer.
-   Use `parse_adjacency()` for the packed layout (`AdjacencySpec`):
-   one [state vector](docs/concepts.md#state-vector),
-   [packed indices](docs/concepts.md#packed-indices), cycles
-   allowed. A DAG is valid for both; pick the layout, do not
-   inspect the graph.
-3. Write an `nn.Module` with one `PackedLinear` per
-   `spec.hops`, feeding each one
-   `gather_hop_inputs(saved, hop)`.
+2. Parse it. For a
+   [directed acyclic graph](docs/concepts.md#dag) (DAG) you want
+   as layers, call `parse_layered()`. It returns a `LayeredSpec`
+   with one packed [hop](docs/concepts.md#hop) per layer — a hop
+   being everything entering one layer. For cycles, or for one
+   shared [state vector](docs/concepts.md#state-vector) over all
+   nodes, call `parse_adjacency()`. It returns an `AdjacencySpec`
+   whose edges are [packed indices](docs/concepts.md#packed-indices).
+   A DAG is valid for both, so the layout is your choice.
+3. Write an `nn.Module` with one `PackedLinear` per hop in
+   `spec.hops`, and feed each one `gather_hop_inputs(saved, hop)`.
    [Skip edges](docs/concepts.md#skip-edge), whose endpoints are
-   more than one layer apart, are already packed pairs of those
-   hops, so there is nothing extra to call.
-   `MaskedLinear(hop.to_mask())` is the dense hatch.
+   more than one layer apart, already sit inside those hops, so
+   there is nothing extra to call. `MaskedLinear(hop.to_mask())`
+   is the dense hatch for small graphs.
 4. Align feature names with `align_inputs()`, then index the
    host matrix.
 5. Train with ordinary PyTorch.
@@ -304,7 +304,7 @@ arrive already packed into the hops that read them, and
 the same point in a full example.
 
 <div>
-<img class="figure-full" src="docs/figures/custom_pytorch_pathway.svg" alt="A sparse pathway prior">
+<img class="figure-full" src="docs/figures/custom_pytorch_pathway.svg" alt="Genes feed transcription factors, then kinases, then cellular processes, and finally one phenotype node; three dashed edges skip a layer.">
 </div>
 
 **Figure 3.** A sparse pathway prior: genes feeding transcription
@@ -678,23 +678,8 @@ connected layers you assemble yourself. See
 
 ## API
 
-The documented public names are:
-
-- `parse_layered()`
-- `parse_adjacency()`
-- `LayeredSpec`
-- `Hop`
-- `Skip`
-- `AdjacencySpec`
-- `MaskedLinear`
-- `PackedLinear`
-- `PackedMultiheadAttention`
-- `gather_hop_inputs()`
-- `scatter_hop_outputs()`
-- `align_inputs()`
-- `map_node_attributions()`
-- `aggregate_node_attributions()`
-- `list_aggregation_methods()`
+The [**API reference**](docs/reference/api.md) lists every public
+name with a one-line description and links to its full contract.
 
 `LayeredSpec.hops` holds one `Hop` per layer after the first, and
 a hop's packed indices carry every edge entering that layer, skip
@@ -706,8 +691,7 @@ all `nodes`, plus `input_index` and `output_index` into that
 state vector. `to_mask()` densifies for `MaskedLinear` on small
 graphs.
 
-See the [**API reference**](docs/reference/api.md) for details, and
-[**Skip edges**](docs/skip-edges.ipynb) for a worked example.
+[**Skip edges**](docs/skip-edges.ipynb) is a worked example.
 
 ## Package philosophy
 
