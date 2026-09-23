@@ -13,6 +13,7 @@ from kpnn2 import (
     Kpnn2Error,
     MaskedLinear,
     PackedLinear,
+    align_inputs,
     parse_adjacency,
     parse_layered,
 )
@@ -72,6 +73,141 @@ def test_packed_linear_output_shape():
     )
     y = layer(x)
     assert y.shape == (4, 2)
+
+
+@pytest.mark.parametrize(
+    "width",
+    [2, 4],
+)
+def test_packed_linear_rejects_input_of_wrong_width(width):
+    torch.manual_seed(42)
+    layer = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="in_features=3",
+    ) as caught:
+        layer(torch.randn(4, width))
+
+    assert f"Got last dimension {width}." in str(caught.value)
+
+
+def test_packed_linear_rejects_zero_dim_and_non_tensor_input():
+    layer = PackedLinear(
+        [0],
+        [0],
+        1,
+        1,
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="0-dimensional",
+    ):
+        layer(torch.tensor(1.0))
+    with pytest.raises(
+        Kpnn2Error,
+        match="must be a torch.Tensor",
+    ):
+        layer([[1.0]])
+
+
+def test_packed_linear_accepts_any_leading_batch_dims():
+    torch.manual_seed(42)
+    layer = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+    )
+    x = torch.randn(
+        2,
+        5,
+        3,
+    )
+
+    batched = layer(x)
+    unbatched = layer(x[1, 2])
+
+    assert batched.shape == (2, 5, 2)
+    torch.testing.assert_close(
+        unbatched,
+        batched[1, 2],
+    )
+
+
+def test_packed_linear_rejects_stale_alignment_after_reparse():
+    """
+    Pruning g3's only edge removes g3 from input_nodes.
+
+    An align_inputs index kept from the old spec is one column
+    wider than the new hops[0]. Read by position, U would get
+    g3's value in place of g4's; forward must raise instead.
+    Recomputing the index on the new spec gives U exactly g4.
+    """
+    edgelist = pd.DataFrame(
+        {
+            "source": ["g1", "g2", "g3", "g4"],
+            "target": ["T", "T", "U", "U"],
+        }
+    )
+    features = pd.DataFrame(
+        {
+            "g1": [1.0],
+            "g2": [2.0],
+            "g3": [3.0],
+            "g4": [4.0],
+        }
+    )
+    old = parse_layered(edgelist)
+    stale = align_inputs(
+        features.columns,
+        old,
+    )
+    new = parse_layered(edgelist[edgelist["source"] != "g3"])
+    assert new.input_nodes == ("g1", "g2", "g4")
+    hop = new.hops[0]
+    layer = PackedLinear(
+        hop.source_index,
+        hop.target_index,
+        hop.out_features,
+        hop.in_features,
+        bias=False,
+    )
+    with torch.no_grad():
+        layer.weight.fill_(1.0)
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="Got last dimension 4.",
+    ):
+        layer(
+            torch.as_tensor(
+                features.to_numpy()[:, stale],
+                dtype=torch.float32,
+            )
+        )
+
+    fresh = align_inputs(
+        features.columns,
+        new,
+    )
+    out = layer(
+        torch.as_tensor(
+            features.to_numpy()[:, fresh],
+            dtype=torch.float32,
+        )
+    )
+    _, units = new.node_units("U")
+    torch.testing.assert_close(
+        out[:, units],
+        torch.tensor([[4.0]]),
+    )
 
 
 def test_packed_linear_matches_masked_linear_on_parse_adjacency():

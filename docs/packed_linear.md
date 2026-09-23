@@ -265,6 +265,12 @@ pass the same `ranks=`), hop membership, concat source axes, and
 `skips`. Pass the same `widths=` / `ranks=` as the original
 parse.
 
+Recompute `align_inputs` on the new spec. Dropping an input's
+last edge removes that input, so an index kept from the old spec
+is one column too wide; `PackedLinear` raises on it rather than
+reading the columns by position. An index of the same width (one
+input swapped for another) cannot be caught by any layer.
+
 Bias moves by node, not by edge: it is `(out_features,)`, one
 value per output unit. Copy it by named node → unit slice, not
 by packed slot. On a `LayeredSpec`, `node_units` indexes the

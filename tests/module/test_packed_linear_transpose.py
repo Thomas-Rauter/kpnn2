@@ -55,6 +55,24 @@ def test_transpose_swaps_indices_and_sizes():
     )
 
 
+def test_transpose_enforces_its_own_in_features():
+    torch.manual_seed(42)
+    layer = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+    )
+    mirrored = layer.transpose()
+
+    assert mirrored(torch.randn(4, 2)).shape == (4, 3)
+    with pytest.raises(
+        Kpnn2Error,
+        match="in_features=2",
+    ):
+        mirrored(torch.randn(4, 3))
+
+
 def test_transpose_ties_weight_by_default():
     layer = PackedLinear(
         [0, 1],

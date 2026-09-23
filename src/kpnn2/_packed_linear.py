@@ -127,6 +127,32 @@ def _digest_matches(
     )
 
 
+def _check_input(
+    x: object,
+    in_features: int,
+) -> None:
+    """
+    Raise unless ``x`` is a tensor of shape ``(..., in_features)``.
+
+    The forward gather reads columns by position, so without this
+    check a wider tensor would be accepted and read silently.
+    """
+    if not isinstance(x, torch.Tensor):
+        raise Kpnn2Error("PackedLinear input must be a torch.Tensor.")
+    if x.ndim < 1:
+        raise Kpnn2Error(
+            "PackedLinear input must have shape (..., in_features) "
+            f"with in_features={in_features}. Got a 0-dimensional "
+            "tensor."
+        )
+    if x.shape[-1] != in_features:
+        raise Kpnn2Error(
+            "PackedLinear input must have shape (..., in_features) "
+            f"with in_features={in_features}. Got last dimension "
+            f"{x.shape[-1]}."
+        )
+
+
 def _positive_int(
     value: object,
     name: str,
@@ -249,10 +275,12 @@ class PackedLinear(nn.Module):
         neither a ``str`` nor ``None``; if ``constraint`` is
         neither an ``nn.Module`` nor ``None``, or does not
         preserve the packed weight shape; if ``generator`` is
-        neither a ``torch.Generator`` nor ``None``; and from
+        neither a ``torch.Generator`` nor ``None``; from
         ``load_state_dict`` when the checkpoint carries an index
         digest or identity that does not match this layer, in
-        which case the weights are not loaded.
+        which case the weights are not loaded; and from
+        ``forward`` when ``x`` is not a tensor or its last
+        dimension is not ``in_features``.
 
     See Also
     --------
@@ -277,7 +305,13 @@ class PackedLinear(nn.Module):
     ``constraint(weight)`` when ``constraint`` is set (else
     ``weight``), and ``index_add``s into zeros of shape
     ``(..., out_features)``, adding ``bias`` when present. ``x``
-    is an ordinary dense activation tensor. Nothing scatters into
+    is an ordinary dense activation tensor whose last dimension
+    must be ``in_features``, as for ``nn.Linear``. The gather
+    reads columns by position, so a wider tensor would be read
+    without complaint; ``forward`` raises instead. A stale
+    ``align_inputs`` index of the same width after a reparse
+    still cannot be detected here: recompute the index on the
+    new spec. Nothing scatters into
     a dense ``(out, in)`` matrix, nothing imports
     ``torch.sparse``, and no tensor subclass is involved, so
     ``torch.compile(layer, fullgraph=True)`` traces it. Index
@@ -740,7 +774,14 @@ class PackedLinear(nn.Module):
         ``torch.sparse``; forward is ``index_add``.
         ``torch.autocast`` is unsupported: this path
         disables it and casts ``x`` to the parameter dtype.
+
+        Raises ``Kpnn2Error`` when ``x`` is not a tensor or its
+        last dimension is not ``in_features``.
         """
+        _check_input(
+            x,
+            self.in_features,
+        )
         with torch.autocast(
             device_type=x.device.type,
             enabled=False,

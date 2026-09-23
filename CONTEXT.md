@@ -967,7 +967,11 @@ graph minus a row." Both parsers recompute `input_nodes` /
 also recomputes longest-path depths (unless `ranks=`), hop
 membership, concat source axes, and `skips`. Adding an
 incoming edge to a former input removes it from
-`input_nodes`, so `align_inputs` indices change. Pass the
+`input_nodes`, and dropping an input's last edge removes the
+input, so `align_inputs` indices change: recompute them on
+the new spec. A stale index of a different width raises in
+`PackedLinear.forward`; one of the same width (an input
+swapped for another) cannot be caught. Pass the
 same `widths=` / `ranks=` as the original parse, or the new
 spec will not match.
 
@@ -1355,6 +1359,17 @@ PackedLinear(
   ```
 
   The recipe runs with `torch.autocast` disabled.
+
+  Before the recipe, `forward` raises `Kpnn2Error` unless `x`
+  is a tensor with `x.shape[-1] == in_features` (0-d
+  included), as `nn.Linear` / `MaskedLinear` (through
+  `F.linear`) and `PackedMultiheadAttention` do. The gather
+  reads columns by position, so without the check a wider
+  tensor would be accepted and silently read: for example a
+  stale `align_inputs` index after a reparse that removed an
+  input. Do not drop this check. A stale index of the **same**
+  width cannot be detected here; the reparse hatch says to
+  recompute `align_inputs`.
 
   Never allocate `(out, in)`. Never scatter into a dense
   `(out, in)` matrix in forward. Never import

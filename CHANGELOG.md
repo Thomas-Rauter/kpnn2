@@ -24,6 +24,9 @@ This project follows semantic versioning.
   `source_in_layer` / `target_in_layer`.
 - `PackedLinear` is the large-n path on hops as well as on an
   `AdjacencySpec`.
+- `PackedLinear.forward` raises `Kpnn2Error` when the input's
+  last dimension is not `in_features`. A wider input was read
+  by position without error.
 
 ### Added
 
