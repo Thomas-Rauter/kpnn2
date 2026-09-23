@@ -8,8 +8,8 @@ collect it. Do not execute these notebooks with
 
 Before a release, after the candidate is on **TestPyPI**:
 
-1. Open the notebook from GitHub (link in `dev/colab.txt`).
-   Do not upload a local copy.
+1. Open the notebook from GitHub (link in
+   `dev/version_release_process.txt`). Do not upload a local copy.
 2. **Runtime → Change runtime type → T4 GPU**, run all cells.
 3. **Runtime → Change runtime type → TPU v2**, run all cells
    again (new session).

@@ -224,8 +224,9 @@ Do not add bulk omics matrices to git.
 
 `tests/manual/` is Colab GPU/TPU smoke, not pytest and not
 docs. Do not execute it in CI or with
-`dev/docs_notebooks.py`. Open from GitHub via
-`dev/colab.txt`. Install from TestPyPI with `--no-deps`.
+`dev/docs_notebooks.py`. Open it from GitHub with the link
+in `dev/version_release_process.txt`, which is the whole
+release procedure. Install from TestPyPI with `--no-deps`.
 
 MkDocs output, coverage, and wheels go under gitignored
 `out/` (`out/site`, `out/htmlcov`, `out/coverage.xml`,

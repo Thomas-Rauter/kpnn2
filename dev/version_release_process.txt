@@ -1,17 +1,217 @@
-# Replace x.y.z with the release version, for example 0.2.0.
+RELEASE PROCESS FOR kpnn2
+=========================
 
-# 1. Run the Test-PyPI dry run under /dev (after exporting the twine username and password, then only proceed when the smoke test passes).
-./dev/dry_run_testpypi_release.sh
+This file is the whole procedure: one-time setup, the checklist
+before you start, the TestPyPI dry run, the Colab GPU and TPU
+check, the tag that publishes to PyPI, and the GitHub release.
 
-# 2. Check the dry run release on Test-PyPI. Only proceed if everything looks fine.
+Replace X.Y.Z with the release version (for example 0.2.0) and N
+with the release-candidate number (rc1, rc2, ...). Run every
+command from the repository root.
 
-# 3. Create annotated tag
-git tag -a vx.y.z <sha> -m "Release vx.y.z"
 
-# 4. Push the tag to GitHub
-git push origin vx.y.z
+HOW THE AUTOMATION WORKS (read once)
+------------------------------------
+- CI (.github/workflows/ci.yml) runs on every push to main, not on
+  tags. The commit you tag must already be green on main.
+- Pushing any tag that starts with "v" starts two workflows:
+  - release.yml checks that the tag matches the version in
+    pyproject.toml, builds, runs twine check, and publishes to the
+    real PyPI once you approve the "pypi" environment.
+  - docs.yml executes the notebooks, builds the site with
+    mkdocs build --strict, and deploys it with mike. A final X.Y.Z
+    becomes the "X.Y" and "latest" docs; an rc tag gets its own
+    version only.
+- An rc tag (vX.Y.ZrcN) would also publish to the real PyPI. Never
+  push an rc tag. Release candidates reach TestPyPI through the
+  dry-run script only.
+- TestPyPI and PyPI never accept the same version twice. Every dry
+  run needs a new rcN.
 
-# 5. Wait for CI to finish and give you green light. Then allow the release to PyPI
 
-# 6. Create GitHub release
-gh release create vx.y.z -t "kpnn2 vx.y.z" -F RELEASE_NOTES.md
+0. ONE-TIME SETUP
+-----------------
+Check once per machine or account.
+
+[ ] TestPyPI account with an API token for kpnn2
+    (test.pypi.org -> Account settings -> API tokens).
+[ ] PyPI trusted publisher for kpnn2: repository
+    Thomas-Rauter/kpnn2, workflow release.yml, environment pypi.
+[ ] GitHub environment "pypi" (repository Settings ->
+    Environments) with you as required reviewer.
+[ ] gh CLI logged in:
+      gh auth status
+[ ] Local venv with both extras:
+      python -m venv .venv
+      source .venv/bin/activate
+      pip install -e ".[dev,docs]"
+[ ] System Graphviz for the docs notebooks:
+      sudo apt install graphviz
+[ ] A Google account for Colab.
+
+
+1. CHECKLIST BEFORE YOU START
+-----------------------------
+[ ] main is clean and in sync with GitHub:
+      git switch main
+      git pull
+      git status                  # nothing to commit
+[ ] CI is green on the latest commit of main (every Python
+    version and the docs job):
+      gh run list --branch main --limit 3
+[ ] CHANGELOG.md: the section for this release is complete and
+    its heading carries today's date:
+      ## [X.Y.Z] - D. Month YYYY
+[ ] CITATION.cff:
+      version: "X.Y.Z"
+      date-released: "YYYY-MM-DD"
+[ ] RELEASE_NOTES.md in the repository root is written for X.Y.Z:
+    release date, a few highlights, a link to
+    https://github.com/Thomas-Rauter/kpnn2/blob/vX.Y.Z/CHANGELOG.md,
+    the install command, and the docs link. The file is gitignored,
+    so it lives only on your machine.
+[ ] pyproject.toml: version = "X.Y.ZrcN". Dependencies, classifiers
+    (Python versions match the CI matrix), and URLs are right.
+[ ] src/kpnn2/__init__.py: __version__ = "X.Y.ZrcN", identical to
+    pyproject.toml. The dry run fails otherwise.
+[ ] README.md: every image points to a PNG on main that is already
+    pushed, for example
+    https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/<name>.png
+    PyPI cannot show relative image paths or SVGs.
+[ ] X.Y.ZrcN is not on TestPyPI yet:
+    https://test.pypi.org/project/kpnn2/#history
+[ ] Local checks pass, the same ones CI runs:
+      python -m ruff format --check .
+      python -m ruff check .
+      python -m mypy src
+      numpydoc lint src/kpnn2/*.py
+      python -m pytest
+      python dev/docs_notebooks.py
+      mkdocs build --strict
+    The notebook run rewrites the stored outputs. Review the diff:
+    commit and push real output changes and wait for CI again;
+    discard image-metadata-only changes with
+      git restore docs/*.ipynb
+
+
+2. TESTPYPI DRY RUN (X.Y.ZrcN)
+------------------------------
+1. Activate the venv, so "python" is the project interpreter:
+      source .venv/bin/activate
+2. Put the TestPyPI credentials into this shell only. "read -rs"
+   keeps the token out of your shell history; paste the token
+   (it starts with pypi-) and press Enter:
+      export TWINE_USERNAME="__token__"
+      read -rs TWINE_PASSWORD
+      export TWINE_PASSWORD
+3. Run the dry run:
+      chmod +x ./dev/dry_run_testpypi_release.sh    # once
+      ./dev/dry_run_testpypi_release.sh
+   The script runs ruff, mypy, and the full pytest suite; builds
+   into dist/; runs twine check; checks the wheel version against
+   pyproject.toml; uploads to TestPyPI; installs X.Y.ZrcN into a
+   fresh venv (retrying while TestPyPI catches up); and runs a
+   smoke test outside the repository. Continue only if it ends
+   with "TestPyPI install smoke test passed."
+4. Remove the credentials from the shell:
+      unset TWINE_USERNAME TWINE_PASSWORD
+5. Open https://test.pypi.org/project/kpnn2/X.Y.ZrcN/ and check:
+   [ ] the README renders and every image shows (no broken-image
+       icons)
+   [ ] version, Python versions, license, and project links
+
+If anything fails: fix it, commit, push, wait for green CI, raise N
+in pyproject.toml and src/kpnn2/__init__.py, and repeat section 2.
+
+
+3. COLAB GPU AND TPU CHECK
+--------------------------
+The notebook installs the newest pre-release from TestPyPI with
+--no-deps, so Colab keeps its own CUDA or XLA PyTorch. It is not
+pytest and not CI.
+
+1. Open the committed notebook from GitHub. Never upload a local
+   copy:
+   https://colab.research.google.com/github/Thomas-Rauter/kpnn2/blob/main/tests/manual/kpnn2_colab_gpu_tpu.ipynb#sandboxMode=true
+2. Runtime -> Change runtime type -> T4 GPU, then
+   Runtime -> Run all.
+3. Runtime -> Change runtime type -> TPU v2 (not the deprecated
+   TPU Node runtime), then Runtime -> Run all again in the new
+   session.
+4. Both runs must end with "ALL ACCELERATOR CHECKS PASSED", and the
+   line "kpnn2: X.Y.ZrcN" must name the candidate you uploaded.
+   A printed torch.compile skip on TPU is not a failure.
+
+If a check fails: fix it and go back to section 2 with the next
+rcN.
+
+
+4. SET THE FINAL VERSION
+------------------------
+1. Set the final version in both places:
+      pyproject.toml           version = "X.Y.Z"
+      src/kpnn2/__init__.py    __version__ = "X.Y.Z"
+2. Commit and push:
+      git add pyproject.toml src/kpnn2/__init__.py
+      git commit -m "Release X.Y.Z"
+      git push origin main
+3. Wait until CI is green for this commit:
+      gh run list --branch main --limit 1
+4. Optional: run section 2 once more with the final version, so the
+   exact version string goes through TestPyPI. TestPyPI then holds
+   X.Y.Z and never accepts it again.
+
+
+5. TAG AND PUBLISH TO PYPI
+--------------------------
+1. Find the green release commit:
+      git pull
+      git log -1 --oneline         # the "Release X.Y.Z" commit
+      git rev-parse HEAD           # this is <sha>
+2. Create the annotated tag and push it:
+      git tag -a vX.Y.Z <sha> -m "Release vX.Y.Z"
+      git push origin vX.Y.Z
+3. Approve the upload. In GitHub -> Actions, the "release" run
+   first builds and checks the tag against pyproject.toml. Its
+   "Publish to PyPI" job then waits: Review deployments -> pypi ->
+   Approve and deploy.
+      gh run list --workflow release.yml --limit 1
+4. The "docs" run deploys the site at the same time:
+      gh run list --workflow docs.yml --limit 1
+5. Verify:
+   [ ] https://pypi.org/project/kpnn2/X.Y.Z/ shows the README with
+       every image.
+   [ ] A clean install works:
+         python -m venv /tmp/kpnn2-check
+         /tmp/kpnn2-check/bin/pip install "kpnn2==X.Y.Z"
+         cd /tmp
+         /tmp/kpnn2-check/bin/python -c "import kpnn2; print(kpnn2.__version__)"
+         cd -
+         rm -rf /tmp/kpnn2-check
+   [ ] https://thomas-rauter.github.io/kpnn2/ opens X.Y.Z, and the
+       version selector lists it as "latest".
+
+
+6. GITHUB RELEASE
+-----------------
+Run this only after the tag is on GitHub (section 5). If the tag
+is missing, gh silently creates a new one from the tip of main.
+
+      gh release create vX.Y.Z -t "kpnn2 vX.Y.Z" -F RELEASE_NOTES.md
+
+Open the release page and check that the notes render and the
+changelog link works.
+
+
+IF SOMETHING GOES WRONG AFTER THE TAG
+-------------------------------------
+- The release run failed before publishing (for example a tag and
+  version mismatch or a build error): delete the tag, fix, and go
+  back to section 4 or 5.
+      git push --delete origin vX.Y.Z
+      git tag -d vX.Y.Z
+  The docs run may already have deployed X.Y.Z; the next deploy of
+  the same version overwrites it.
+- A broken X.Y.Z is on PyPI: PyPI never accepts X.Y.Z again. Yank
+  it on pypi.org (Manage -> Releases -> Options -> Yank), fix, and
+  release X.Y.(Z+1) through this whole procedure.
