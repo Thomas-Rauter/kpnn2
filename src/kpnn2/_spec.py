@@ -12,7 +12,6 @@ from ._errors import Kpnn2Error
 from ._layout import (
     build_layout,
     hop_axis_layouts,
-    packed_indices_for_named_edge,
     resolve_edge_names,
 )
 
@@ -656,14 +655,43 @@ class LayeredSpec:
         >>> spec.edge_location("A", "C")
         (1, (0,))
         """
-        known_names: set[str] = set()
-        for layer in self.layer_nodes:
-            known_names.update(layer)
+        locations, known_names = self._edge_locations()
         source_name, target_name = resolve_edge_names(
             source,
             target,
             known_names,
         )
+        located = locations.get(
+            (
+                source_name,
+                target_name,
+            )
+        )
+        if located is None:
+            raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+        return located
+
+    def _edge_locations(
+        self,
+    ) -> tuple[
+        dict[tuple[str, str], tuple[int, tuple[int, ...]]],
+        frozenset[str],
+    ]:
+        """
+        Map each named edge to its hop and packed slots.
+
+        The first call walks every hop once and remembers the
+        node names. Later calls reuse both. Neither is a
+        dataclass field.
+        """
+        cached = getattr(
+            self,
+            "_edge_location_cache",
+            None,
+        )
+        if cached is not None:
+            return cached
+        index: dict[tuple[str, str], tuple[int, tuple[int, ...]]] = {}
         for hop_index, hop in enumerate(self.hops):
             source_layout, target_layout = hop_axis_layouts(
                 self.layer_nodes,
@@ -671,17 +699,41 @@ class LayeredSpec:
                 hop.source_layers,
                 hop.target_layer,
             )
-            packed = packed_indices_for_named_edge(
-                hop.source_index,
-                hop.target_index,
-                source_layout,
-                target_layout,
-                source_name,
-                target_name,
-            )
-            if packed:
-                return hop_index, packed
-        raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+            grouped: dict[tuple[str, str], list[int]] = {}
+            for slot, (source_unit, target_unit) in enumerate(
+                zip(
+                    hop.source_index,
+                    hop.target_index,
+                    strict=True,
+                )
+            ):
+                key = (
+                    source_layout.slot_containing(source_unit).name,
+                    target_layout.slot_containing(target_unit).name,
+                )
+                grouped.setdefault(
+                    key,
+                    [],
+                ).append(slot)
+            for key, slots in grouped.items():
+                if key not in index:
+                    index[key] = (
+                        hop_index,
+                        tuple(slots),
+                    )
+        known_names: set[str] = set()
+        for layer in self.layer_nodes:
+            known_names.update(layer)
+        cached = (
+            index,
+            frozenset(known_names),
+        )
+        object.__setattr__(
+            self,
+            "_edge_location_cache",
+            cached,
+        )
+        return cached
 
     def node_units(
         self,

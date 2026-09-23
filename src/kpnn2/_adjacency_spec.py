@@ -11,7 +11,6 @@ from ._errors import Kpnn2Error
 from ._layout import (
     build_layout,
     dense_mask_from_indices,
-    packed_indices_for_named_edge,
     resolve_edge_names,
 )
 
@@ -343,23 +342,71 @@ class AdjacencySpec:
         >>> spec.edge_location("x", "a")
         (3,)
         """
+        locations, known_names = self._edge_locations()
         source_name, target_name = resolve_edge_names(
             source,
             target,
-            set(self.nodes),
+            known_names,
         )
-        layout = build_layout(self.nodes)
-        packed = packed_indices_for_named_edge(
-            self.source_index,
-            self.target_index,
-            layout,
-            layout,
-            source_name,
-            target_name,
+        packed = locations.get(
+            (
+                source_name,
+                target_name,
+            )
         )
         if not packed:
             raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
         return packed
+
+    def _edge_locations(
+        self,
+    ) -> tuple[
+        dict[tuple[str, str], tuple[int, ...]],
+        frozenset[str],
+    ]:
+        """
+        Map each named edge to its packed slots.
+
+        The first call walks the packed indices once and
+        remembers the node names. Later calls reuse both.
+        Neither is a dataclass field. Names come from
+        ``nodes`` at the stored unit index.
+        """
+        cached = getattr(
+            self,
+            "_edge_location_cache",
+            None,
+        )
+        if cached is not None:
+            return cached
+        nodes = self.nodes
+        grouped: dict[tuple[str, str], list[int]] = {}
+        for slot, (source, target) in enumerate(
+            zip(
+                self.source_index,
+                self.target_index,
+                strict=True,
+            )
+        ):
+            key = (
+                nodes[source],
+                nodes[target],
+            )
+            grouped.setdefault(
+                key,
+                [],
+            ).append(slot)
+        index = {key: tuple(slots) for key, slots in grouped.items()}
+        cached = (
+            index,
+            frozenset(nodes),
+        )
+        object.__setattr__(
+            self,
+            "_edge_location_cache",
+            cached,
+        )
+        return cached
 
     def to_dict(self) -> dict:
         """

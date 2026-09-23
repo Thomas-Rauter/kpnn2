@@ -1,3 +1,5 @@
+import copy
+
 import pandas as pd
 import pytest
 import torch
@@ -242,6 +244,170 @@ def test_missing_pair_and_unknown_name_raise_kpnn2error():
                 target,
             )
         assert "No edge" in str(caught.value)
+
+
+def _named_edges(spec):
+    table = spec.to_edgelist()
+    return list(
+        zip(
+            table["source"].tolist(),
+            table["target"].tolist(),
+            strict=True,
+        )
+    )
+
+
+def test_repeated_layered_lookup_reuses_stored_slots():
+    widths = {
+        "A": 2,
+        "H": 3,
+        "C": 2,
+    }
+    spec = parse_layered(
+        _chain_plus_skip(),
+        widths=widths,
+    )
+    twin = parse_layered(
+        _chain_plus_skip(),
+        widths=widths,
+    )
+    fingerprint = spec.fingerprint
+    pairs = _named_edges(spec)
+    first = [
+        spec.edge_location(
+            source,
+            target,
+        )
+        for source, target in pairs
+    ]
+    second = [
+        spec.edge_location(
+            source,
+            target,
+        )
+        for source, target in pairs
+    ]
+    assert first == second
+    assert all(
+        left is right
+        for left, right in zip(
+            first,
+            second,
+            strict=True,
+        )
+    )
+    hop_index, packed = spec.edge_location(
+        "A",
+        "H",
+    )
+    assert hop_index == 0
+    assert len(packed) == 6
+    assert spec == twin
+    assert spec.fingerprint == fingerprint
+    assert twin.fingerprint == fingerprint
+    copied = copy.deepcopy(spec)
+    assert copied.edge_location(
+        "A",
+        "C",
+    ) == spec.edge_location(
+        "A",
+        "C",
+    )
+
+
+def test_repeated_adjacency_lookup_reuses_stored_slots():
+    spec = parse_adjacency(_cyclic_edgelist())
+    twin = parse_adjacency(_cyclic_edgelist())
+    fingerprint = spec.fingerprint
+    pairs = _named_edges(spec)
+    first = [
+        spec.edge_location(
+            source,
+            target,
+        )
+        for source, target in pairs
+    ]
+    second = [
+        spec.edge_location(
+            source,
+            target,
+        )
+        for source, target in pairs
+    ]
+    assert first == second
+    assert all(
+        left is right
+        for left, right in zip(
+            first,
+            second,
+            strict=True,
+        )
+    )
+    assert first == [(index,) for index in range(len(pairs))]
+    assert spec == twin
+    assert spec.fingerprint == fingerprint
+    copied = copy.deepcopy(spec)
+    assert copied.edge_location(
+        "x",
+        "a",
+    ) == spec.edge_location(
+        "x",
+        "a",
+    )
+
+
+def test_adjacency_self_loop_location_is_stable():
+    spec = parse_adjacency(
+        pd.DataFrame(
+            {
+                "source": ["x", "a", "a"],
+                "target": ["a", "a", "y"],
+            }
+        )
+    )
+    packed = spec.edge_location(
+        "a",
+        "a",
+    )
+    assert packed == (0,)
+    assert (
+        spec.edge_location(
+            "a",
+            "a",
+        )
+        is packed
+    )
+    assert spec.source_index[packed[0]] == spec.nodes.index("a")
+    assert spec.target_index[packed[0]] == spec.nodes.index("a")
+
+
+def test_missing_edge_after_a_hit_still_raises():
+    layered = parse_layered(_chain_plus_skip())
+    adjacency = parse_adjacency(_cyclic_edgelist())
+    layered.edge_location(
+        "A",
+        "H",
+    )
+    adjacency.edge_location(
+        "a",
+        "b",
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"No edge H -> A",
+    ):
+        layered.edge_location(
+            "H",
+            "A",
+        )
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"No edge y -> x",
+    ):
+        adjacency.edge_location(
+            "y",
+            "x",
+        )
 
 
 def test_str_matching_accepts_integer_names():
