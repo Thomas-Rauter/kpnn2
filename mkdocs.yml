@@ -66,9 +66,9 @@ nav:
       - Mapping attributions: map-node-attributions.ipynb
       - PackedLinear: packed_linear.md
   - Reference:
-      - Index: reference/index.md
+      - API: reference/api.md
   - Validation:
-      - How we test: correctness.md
+      - How we test: how_we_test.md
       - Fortelny and Bock 2020: literature/fortelny-bock-2020.ipynb
   - Project:
       - Changelog: changelog.md
@@ -91,6 +91,7 @@ not_in_nav: |
 
 hooks:
   - dev/docs_notebooks.py
+  - dev/docs_readme_figures.py
 
 plugins:
   - search

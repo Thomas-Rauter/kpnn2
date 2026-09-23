@@ -64,7 +64,7 @@ def _reference_filename(name: str) -> str:
 
 def test_each_public_name_has_a_reference_page():
     leftover = {path.name for path in _REFERENCE.glob("*.md")}
-    leftover.discard("index.md")
+    leftover.discard("api.md")
     for name in _PUBLIC_NAMES:
         filename = _reference_filename(name)
         path = _REFERENCE / filename
@@ -87,7 +87,7 @@ def test_aggregation_method_pages_match_registry():
     dispatcher = (_REFERENCE / "aggregate_node_attributions.md").read_text(
         encoding="utf-8",
     )
-    index = (_REFERENCE / "index.md").read_text(encoding="utf-8")
+    index = (_REFERENCE / "api.md").read_text(encoding="utf-8")
     assert "## Methods" in dispatcher
     for name in names:
         leftover.discard(name)

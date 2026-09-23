@@ -1964,7 +1964,7 @@ the Methods table on
 `docs/reference/aggregate_node_attributions.md`. No
 dispatcher code or dispatcher docstring edits. Method
 pages are not public names and do not appear in the
-Reference index Callables table. See `AGENTS.md`.
+Callables table of `docs/reference/api.md`. See `AGENTS.md`.
 
 Do not attach labels inside `map_node_attributions`. Do not
 guess that `step` or a Captum `class` dim is `seed`.
@@ -2266,17 +2266,18 @@ tests/
 
 dev/
   docs_notebooks.py           # tutorials in CI; literature opt-in
+  docs_readme_figures.py      # MkDocs hook; local README figures
 
 AGENTS.md                     # how to work; read first
 CONTEXT.md                    # this file (product contract)
 README.md
 CHANGELOG.md                  # notable API / core only; see below
 docs/
-  reference/                  # index + one page per public name
+  reference/                  # api.md + one page per public name
     aggregation/              # one page per method; not public names
   supported.md                # architecture-family support table
   packed_linear.md            # PackedLinear; tutorials use it on hops
-  correctness.md              # test overview; scientific + technical
+  how_we_test.md              # test overview; scientific + technical
   literature/                 # frozen paper notebooks; not CI-executed
   literature/fortelny-bock-2020.ipynb
   feedforward-example.ipynb   # feedforward DAG; PackedLinear on hops
@@ -2311,7 +2312,7 @@ symbol that `__init__.py` already exports.
 
 `docs/reference/` therefore points mkdocstrings at the façade paths
 (`::: kpnn2.MaskedLinear`), not at module paths. Each public name
-has its own page; `docs/reference/index.md` is the grouped index.
+has its own page; `docs/reference/api.md` is the grouped index.
 Aggregation method pages under `docs/reference/aggregation/`
 render the private method function; they are not public names.
 Tests may import private modules directly to reach internal helpers.

@@ -69,7 +69,7 @@ changes, update **all** of these in the same change:
 - `src/kpnn2/__init__.py` (`__all__` and imports)
 - `CONTEXT.md` (Public API table and related contract text)
 - `docs/reference/` (one mkdocstrings page per public name;
-  `index.md` is the grouped listing; docstrings stay the
+  `api.md` is the grouped listing; docstrings stay the
   source of truth)
 - `tests/api/test_public_api.py` (`_PUBLIC_NAMES` and leftover
   guards)
@@ -113,8 +113,9 @@ Do not change the dispatcher to add a method.
 
 Do not export the method function or the decorator.
 Do not put method pages in `docs/reference/*.md` or in
-the Reference index Callables table. Do not change the
-dispatcher function or its docstring to add a method.
+the Callables table of `docs/reference/api.md`. Do not
+change the dispatcher function or its docstring to add a
+method.
 `list_aggregation_methods()` and the dispatcher pick the
 new name up with no other code changes. Tests may import
 `register_aggregation_method` from
@@ -240,6 +241,12 @@ sprinkle that class through feedforward-example.
 
 Notebooks must be valid nbformat v4. Stream outputs need
 `name` (`stdout` / `stderr`).
+
+`README.md` links raster figures by absolute raw GitHub URL
+on `main`, because PyPI cannot resolve relative paths. Commit
+a 384 dpi PNG next to the SVG. The
+`dev/docs_readme_figures.py` hook serves the local copy in
+MkDocs, so a new figure shows before it is pushed.
 
 Terminology (concepts vs abbreviations vs docstrings): see
 `CONTEXT.md` **Docs terminology**. `docs/concepts.md` owns

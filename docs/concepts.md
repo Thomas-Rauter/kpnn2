@@ -6,7 +6,7 @@ and comes out a **spec**, which you build a module from.
 
 Each term below is a link target, so other pages can point here
 instead of redefining. This page carries the concept; the
-[API reference](reference/index.md) carries the exact contract
+[API reference](reference/api.md) carries the exact contract
 (fields, invariants, what raises).
 
 | Term | In one line |

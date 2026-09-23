@@ -15,7 +15,7 @@ skipping them.
 The snippets read ``pathway_prior.csv``, a file that does not exist in
 the repo: it stands for the reader's own prior. The fixture writes it
 from the edge list in ``docs/fig_gen/custom_pytorch_pathway.py``, so
-the graph under test is the one Figure 2 draws. That generator imports
+the graph under test is the one Figure 3 draws. That generator imports
 graphviz, which is in the ``docs`` extra and not in ``dev``, so the
 edge list is read statically instead of imported.
 """
@@ -138,7 +138,7 @@ def _revised_pairs() -> list[tuple[str, str]]:
     )
     source, new, old = match.groups()
     pairs = _figure_pairs()
-    assert (source, old) in pairs, f"{source} -> {old} is not in Figure 2"
+    assert (source, old) in pairs, f"{source} -> {old} is not in Figure 3"
     assert (source, new) not in pairs, f"{source} -> {new} already exists"
     return [pair for pair in pairs if pair != (source, old)] + [(source, new)]
 
