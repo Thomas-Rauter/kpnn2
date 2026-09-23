@@ -168,6 +168,9 @@ BEFORE FINISHING ANY CHANGE TO src/
 [ ] Tests cover the change, including invariants and
     failure paths, with float tolerances.
 [ ] No existing tests were weakened or removed.
+[ ] If a formula, default, reduction, or tie-break moved,
+    the stop rule in AGENTS.md **Scientific acceptance**
+    was followed.
 
 In your final reply, list any rule you could not follow
 and why.

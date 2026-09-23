@@ -44,14 +44,6 @@ Any other attribution method that yields a tensor of named-layer
 units works the same way. Extra axes (class, step, …) stay as extra
 xarray dimensions.
 
-## AnnData
-
-AnnData input is not a kpnn2 type in v1. `align_inputs()`
-accepts feature names (`adata.var_names`, `df.columns`, a
-list). Apply the returned index on the matrix yourself.
-Tensors are not accepted; a pre-ordered tensor goes straight
-to the model.
-
 ## Development installation
 
 To work on the package locally, clone the repository and install it
