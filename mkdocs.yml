@@ -68,7 +68,7 @@ nav:
   - Reference:
       - Index: reference/index.md
   - Validation:
-      - Correctness: correctness.md
+      - How we test: correctness.md
       - Fortelny and Bock 2020: literature/fortelny-bock-2020.ipynb
   - Project:
       - Changelog: changelog.md

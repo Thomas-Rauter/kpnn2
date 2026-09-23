@@ -94,6 +94,13 @@
   margin-top: 0.4em;
 }
 
+/* API index: the name column stays wide enough for one line. */
+.md-typeset .api-index th:first-child,
+.md-typeset .api-index td:first-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
 /* Grouping headers on the API reference index. */
 .md-typeset h2.api-group {
   font-size: 1.85em;

@@ -12,6 +12,8 @@ and may change between releases.
 
 Names you call or construct.
 
+<div class="api-index" markdown="1">
+
 | Name | Description |
 | --- | --- |
 | [`parse_layered`][kpnn2.parse_layered] | Parse a source/target edgelist into a `LayeredSpec` (DAG only; optional `widths=`, `ranks=`). |
@@ -26,10 +28,14 @@ Names you call or construct.
 | [`aggregate_node_attributions`][kpnn2.aggregate_node_attributions] | Reduce mapped node scores with a registered method (default `rauter_mangano_2026` is not yet implemented). |
 | [`list_aggregation_methods`][kpnn2.list_aggregation_methods] | Table of registered attribution aggregation methods and their status. |
 
+</div>
+
 ## Specs {: .api-group }
 
 Returned by the parsers. Frozen dataclasses; densify with
 `to_mask()` when you need a rectangle.
+
+<div class="api-index" markdown="1">
 
 | Name | Description |
 | --- | --- |
@@ -38,9 +44,15 @@ Returned by the parsers. Frozen dataclasses; densify with
 | [`Skip`][kpnn2.Skip] | Record of an edge that jumps layers; already a packed pair of its hop. |
 | [`AdjacencySpec`][kpnn2.AdjacencySpec] | Every node in one state vector, with packed edges; the general packed layout. |
 
+</div>
+
 ## Errors and version {: .api-group }
+
+<div class="api-index" markdown="1">
 
 | Name | Description |
 | --- | --- |
 | [`Kpnn2Error`][kpnn2.Kpnn2Error] | Error raised by the public API when a call is invalid. |
 | [`__version__`][kpnn2.__version__] | Package version string. |
+
+</div>

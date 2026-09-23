@@ -95,7 +95,7 @@ through a biological example.
 `kpnn2` is a set of (domain-agnostic) primitives, not a graph compiler. There
 is no ready-made model object. Training loops, losses, optimizers,
 activations, and heads stay yours. The
-[**Correctness**](docs/correctness.md) page is an overview of the
+[**How we test**](docs/correctness.md) page is an overview of the
 tests that pin those wiring and interpretation claims. One frozen
 notebook repeats the simulated node-recovery result from
 [Fortelny and Bock, 2020](docs/literature/fortelny-bock-2020.ipynb).
@@ -605,7 +605,7 @@ The other pages are not second examples:
   labeling layer tensors with node names
 - [**PackedLinear**](docs/packed_linear.md) when `n` is large on
   an `AdjacencySpec`
-- [**Correctness**](docs/correctness.md) for the tests that pin
+- [**How we test**](docs/correctness.md) for the tests that pin
   wiring and interpretation claims
 - [**API reference**](docs/reference/index.md) for function- and object-level
   documentation

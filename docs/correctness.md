@@ -1,4 +1,4 @@
-# Correctness
+# How we test
 
 `kpnn2` turns a named edgelist into the wiring of a neural net.
 A bug that drops a [skip edge](concepts.md#skip-edge), lets an
