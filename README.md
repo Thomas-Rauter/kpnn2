@@ -1,12 +1,12 @@
 <div align="center">
   <img
-    src="docs/figures/kpnn2_logo.svg"
+    src="https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_logo.png"
     alt="kpnn2 logo"
     height="72"
     align="middle"
   >
   <img
-    src="docs/figures/kpnn2_wordmark.svg"
+    src="https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_wordmark.png"
     alt="kpnn2"
     height="72"
     align="middle"
@@ -304,7 +304,7 @@ arrive already packed into the hops that read them, and
 the same point in a full example.
 
 <div>
-<img class="figure-full" src="docs/figures/custom_pytorch_pathway.svg" alt="Genes feed transcription factors, then kinases, then cellular processes, and finally one phenotype node; three dashed edges skip a layer.">
+<img class="figure-full" src="https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/custom_pytorch_pathway.png" alt="Genes feed transcription factors, then kinases, then cellular processes, and finally one phenotype node; three dashed edges skip a layer.">
 </div>
 
 **Figure 3.** A sparse pathway prior: genes feeding transcription

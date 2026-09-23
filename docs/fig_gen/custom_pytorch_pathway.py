@@ -1,10 +1,13 @@
 """Generate the Why not custom PyTorch pathway figure.
 
-Writes ``docs/figures/custom_pytorch_pathway.svg``.
+Writes ``docs/figures/custom_pytorch_pathway.svg`` and a matching
+PNG. The PNG is 4× 96 dpi, so it stays sharp on PyPI, which cannot
+show the SVG from a relative path.
 The edge list matches the homepage comparison snippets.
 Dashed edges skip a layer.
 """
 
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 
@@ -12,6 +15,7 @@ from graphviz import Digraph
 
 _DOCS_DIR = Path(__file__).resolve().parents[1]
 _OUT_PATH = _DOCS_DIR / "figures" / "custom_pytorch_pathway.svg"
+_PNG_DPI = 384
 _FONT = "Liberation Sans"
 _FONTSIZE = "6"
 
@@ -140,18 +144,45 @@ def _pathway_graph() -> Digraph:
     return graph
 
 
+def _rasterize_png(
+    svg_path: Path,
+    png_path: Path,
+) -> None:
+    subprocess.run(
+        [
+            "rsvg-convert",
+            "--dpi-x",
+            str(_PNG_DPI),
+            "--dpi-y",
+            str(_PNG_DPI),
+            "--format",
+            "png",
+            "--output",
+            str(png_path),
+            str(svg_path),
+        ],
+        check=True,
+    )
+
+
 def write_figure(out_path: Path | None = None) -> Path:
-    """Render the pathway prior and write the SVG."""
+    """Render the pathway prior and write the SVG and PNG."""
     path = _OUT_PATH if out_path is None else out_path
     path.parent.mkdir(parents=True, exist_ok=True)
     svg = _pathway_graph().pipe().decode("utf-8")
     path.write_text(svg)
+    _rasterize_png(
+        path,
+        path.with_suffix(".png"),
+    )
     return path
 
 
 def main() -> None:
     path = write_figure()
+    png_path = path.with_suffix(".png")
     print(f"Wrote {path}")
+    print(f"Wrote {png_path}")
 
 
 if __name__ == "__main__":

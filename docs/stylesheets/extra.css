@@ -49,13 +49,18 @@
 }
 
 /* README hero logos: Material ignores height="72"
-   and scales the 227px SVG to the content column. */
-.md-typeset img[src*="kpnn2_logo.svg"],
-.md-typeset img[src*="kpnn2_wordmark.svg"] {
+   and scales the large PNG to the content column. */
+.md-typeset img[src*="kpnn2_logo."],
+.md-typeset img[src*="kpnn2_wordmark."] {
   height: 72px;
   width: auto;
   max-width: none;
   vertical-align: middle;
+}
+
+/* The wordmark PNG has dark text; light it up on slate. */
+[data-md-color-scheme="slate"] .md-typeset img[src*="kpnn2_wordmark."] {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 /* README has no H1, so Material would inject "Home".
@@ -80,7 +85,7 @@
 }
 
 /* Homepage pathway prior above the two-column snippets. */
-.md-typeset img[src*="custom_pytorch_pathway.svg"] {
+.md-typeset img[src*="custom_pytorch_pathway."] {
   width: 100%;
   height: auto;
 }
