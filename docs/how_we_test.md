@@ -235,6 +235,14 @@ inputs stay above a floor. Hidden-layer names are checked on a
 synthetic tensor whose values would fail if the axis were
 permuted.
 
+Captum `LayerConductance` also runs on a hop whose input and
+output are both two units wide, so the width check cannot say
+which side a tensor came from. With a hidden node cut off from
+the output, its zero score must land under that node's name via
+`hop_output=`. With an input that feeds nothing, its zero score
+must land under the input's name via `hop_input=` (Captum's
+`attribute_to_layer_input=True`).
+
 Pinned in
 [`tests/controls/test_captum_mapping.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_captum_mapping.py)
 and

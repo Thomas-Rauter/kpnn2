@@ -50,8 +50,10 @@ This project follows semantic versioning.
   locate a named edge's packed weight slots.
 - `LayeredSpec.node_units` / `hop_units`: named node to its
   unit slice on a layer tensor or a hop source axis.
-- `map_node_attributions(..., hop=)`: label a hop's
-  concatenated source axis.
+- `map_node_attributions(..., hop_input=, hop_output=)`: label
+  what a hop's module reads (its concatenated source axis) or
+  what it returns (its target layer). The side is always
+  stated; there is no side-less `hop=`.
 - `parse_layered(ranks=)`: optional user depths so official
   ontology levels need not be longest-path hops.
 - `generator=` on `MaskedLinear`, `PackedLinear`,

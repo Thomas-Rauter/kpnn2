@@ -24,7 +24,8 @@ def map_node_attributions(
     spec: LayeredSpec | AdjacencySpec,
     layer: int | None = None,
     *,
-    hop: Hop | None = None,
+    hop_input: Hop | None = None,
+    hop_output: Hop | None = None,
     dims: Sequence[str] | None = None,
     coords: Mapping[str, Sequence] | None = None,
 ) -> xr.DataArray:
@@ -35,8 +36,9 @@ def map_node_attributions(
     bare positions; the spec knows the name at each one. Reach for
     it after Captum or your own gradients rather than zipping names
     to columns yourself. Which spec you pass decides the contract: a
-    ``LayeredSpec`` needs ``layer`` or ``hop``, an ``AdjacencySpec``
-    forbids both. Values are detached onto CPU and never aggregated.
+    ``LayeredSpec`` needs exactly one of ``layer``, ``hop_input``,
+    or ``hop_output``; an ``AdjacencySpec`` forbids all three.
+    Values are detached onto CPU and never aggregated.
 
     Parameters
     ----------
@@ -45,34 +47,44 @@ def map_node_attributions(
         whatever units it works in; nothing is scaled, summed, or
         made absolute. The node axis must be as long as the named
         units — ``spec.layer_dims[layer]`` when ``layer`` is given,
-        ``hop.in_features`` when ``hop`` is given, ``len(spec.nodes)``
-        for an ``AdjacencySpec`` — and the remaining axes are yours.
-        A non-empty tuple or list of equal-shaped tensors is stacked
-        on a new leading ``step`` axis, one entry per unrolled step
-        or module call. The tensors are read, never modified, and
-        the result holds a detached CPU copy that shares no memory
-        with them.
+        ``hop.in_features`` for ``hop_input=hop``,
+        ``hop.out_features`` for ``hop_output=hop``,
+        ``len(spec.nodes)`` for an ``AdjacencySpec`` — and the
+        remaining axes are yours. A non-empty tuple or list of
+        equal-shaped tensors is stacked on a new leading ``step``
+        axis, one entry per unrolled step or module call. The
+        tensors are read, never modified, and the result holds a
+        detached CPU copy that shares no memory with them.
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist supplying the ``node`` coordinate. A
-        ``LayeredSpec`` names one depth (``layer``) or the
-        concatenated source units of one hop (``hop``); an
-        ``AdjacencySpec`` names the whole state vector at once
-        and has no depth to report.
+        ``LayeredSpec`` names one depth (``layer`` or
+        ``hop_output``) or the concatenated source units of one hop
+        (``hop_input``); an ``AdjacencySpec`` names the whole state
+        vector at once and has no depth to report.
     layer : int, optional
         0-based depth into ``spec.layer_nodes``, index 0 being the
         input layer, whose names label the node axis; the index
         itself is attached as a scalar ``layer`` coordinate.
-        ``LayeredSpec`` only, and mutually exclusive with ``hop``.
-        Pass ``layer=hop.target_layer`` to name a hop module's
-        output.
-    hop : Hop, optional
+        ``LayeredSpec`` only, and mutually exclusive with
+        ``hop_input`` and ``hop_output``.
+    hop_input : Hop, optional
         A ``Hop`` that equals one entry of ``spec.hops``. Labels
-        that hop's concatenated source axis (the input of
-        ``gather_hop_inputs`` / the hop module), length
-        ``hop.in_features``, with unit names: a wide node's name
-        repeats. No ``layer`` coordinate is attached; that axis is
-        not one depth. ``LayeredSpec`` only, and mutually exclusive
-        with ``layer``.
+        what that hop's module reads: the concatenated source axis
+        ``gather_hop_inputs`` returns, length ``hop.in_features``,
+        with unit names (a wide node's name repeats). Captum layer
+        methods score this side only with
+        ``attribute_to_layer_input=True``. No ``layer`` coordinate
+        is attached; that axis is not one depth. ``LayeredSpec``
+        only, and mutually exclusive with ``layer`` and
+        ``hop_output``.
+    hop_output : Hop, optional
+        A ``Hop`` that equals one entry of ``spec.hops``. Labels
+        what that hop's module returns: layer ``hop.target_layer``,
+        length ``hop.out_features``. This is the side Captum layer
+        methods score by default. The result is the same as
+        ``layer=hop.target_layer``, scalar ``layer`` coordinate
+        included. ``LayeredSpec`` only, and mutually exclusive with
+        ``layer`` and ``hop_input``.
     dims : sequence of str, optional
         One name per axis of the tensor after any stacking,
         containing ``node`` exactly once and never ``layer``.
@@ -92,28 +104,28 @@ def map_node_attributions(
         spec's node names as the ``node`` coordinate in spec order
         (a name repeats once per unit when that node is wider
         than 1), and a scalar ``layer`` coordinate when ``layer``
-        was passed. A ``hop`` mapping has no ``layer`` coordinate.
-        ``bfloat16`` scores are stored as ``float32``: NumPy has
-        no bfloat16 dtype, and every bfloat16 value fits in
-        float32, so the scores are unchanged. Other dtypes are
-        kept. Use ``.to_dataframe(name="score").reset_index()``
-        for a long table, or ``.to_pandas()`` for a 2-D wide
-        table.
+        or ``hop_output`` was passed. A ``hop_input`` mapping has
+        no ``layer`` coordinate. ``bfloat16`` scores are stored as
+        ``float32``: NumPy has no bfloat16 dtype, and every
+        bfloat16 value fits in float32, so the scores are
+        unchanged. Other dtypes are kept. Use
+        ``.to_dataframe(name="score").reset_index()`` for a long
+        table, or ``.to_pandas()`` for a 2-D wide table.
 
     Raises
     ------
     Kpnn2Error
         If ``spec`` is neither a ``LayeredSpec`` nor an
-        ``AdjacencySpec``; ``layer`` and ``hop`` are both omitted
-        or both given for a ``LayeredSpec``; either is given for
-        an ``AdjacencySpec``; ``layer`` is not an int in range;
-        ``hop`` is not a ``Hop`` that matches an entry of
-        ``spec.hops``; ``attributions`` is neither a tensor nor a
-        non-empty sequence of equal-shaped tensors; ``dims`` is
-        missing, the wrong length, non-unique, or does not name
-        ``node`` exactly once; the node axis is not as long as the
-        named units; or ``coords`` names an unknown axis or a
-        wrong length.
+        ``AdjacencySpec``; a ``LayeredSpec`` gets none or more
+        than one of ``layer``, ``hop_input``, and ``hop_output``;
+        any of them is given for an ``AdjacencySpec``; ``layer``
+        is not an int in range; ``hop_input`` or ``hop_output`` is
+        not a ``Hop`` that matches an entry of ``spec.hops``;
+        ``attributions`` is neither a tensor nor a non-empty
+        sequence of equal-shaped tensors; ``dims`` is missing, the
+        wrong length, non-unique, or does not name ``node`` exactly
+        once; the node axis is not as long as the named units; or
+        ``coords`` names an unknown axis or a wrong length.
 
     See Also
     --------
@@ -122,27 +134,33 @@ def map_node_attributions(
     align_inputs : Shared ``input_nodes`` order on the way
         in; a column index into the caller's feature names,
         not the full state axis of an ``AdjacencySpec``.
-    gather_hop_inputs : Builds the tensor whose columns ``hop``
-        names.
-    Hop : One hop; pass ``hop=spec.hops[i]`` to name its source
-        axis.
+    gather_hop_inputs : Builds the tensor whose columns
+        ``hop_input`` names.
+    Hop : One hop; pass ``hop_output=spec.hops[i]`` or
+        ``hop_input=spec.hops[i]`` to name either side of it.
     LayeredSpec : Holds ``layer_nodes`` and ``hops``, the names
-        used when ``layer`` or ``hop`` is given.
+        used when ``layer``, ``hop_input``, or ``hop_output`` is
+        given.
     AdjacencySpec : Holds ``nodes``, the state-vector names used
-        when ``layer`` and ``hop`` are omitted.
+        when all three are omitted.
 
     Notes
     -----
     Captum is not imported anywhere in this package; mapping is
-    name alignment only, and any attribution method will do. For
-    the output of ``PackedLinear`` (or ``MaskedLinear``) on
-    ``spec.hops[i]``, pass ``layer=spec.hops[i].target_layer``,
-    that is ``i + 1``: the hop output, not its input. For scores
-    on that hop's input (``gather_hop_inputs``, or Captum
-    LayerConductance on the hop module), pass
-    ``hop=spec.hops[i]``. Only map units that are spec nodes;
-    BatchNorm and other unnamed modules have no node axis to
-    name.
+    name alignment only, and any attribution method will do.
+
+    Name a hop module's scores with the same index ``i`` you use
+    for the module. For what ``PackedLinear`` (or ``MaskedLinear``)
+    on ``spec.hops[i]`` returns, which is what Captum layer methods
+    such as ``LayerConductance`` score by default, pass
+    ``hop_output=spec.hops[i]``. For what it reads (the
+    ``gather_hop_inputs`` tensor, or Captum with
+    ``attribute_to_layer_input=True``), pass
+    ``hop_input=spec.hops[i]``. The side is always stated, never
+    inferred: a hop's input and output often have the same width,
+    so a width check alone cannot catch the wrong side. Only map
+    units that are spec nodes; BatchNorm and other unnamed modules
+    have no node axis to name.
 
     A recurrent net on an ``AdjacencySpec`` has no layer to index,
     and the natural extra axis there is ``step``: pass one tensor
@@ -178,8 +196,43 @@ def map_node_attributions(
     >>> int(da.coords["layer"])
     2
 
-    Name the concatenated source axis of a skip hop (the input of
-    that hop's module, width ``hop.in_features``):
+    Both sides of a hop can have the same width. Here ``hops[0]``
+    reads ``A``, ``B`` and writes ``H1``, ``H2``, so one
+    ``(1, 2)`` tensor fits either side; the keyword decides the
+    names:
+
+    >>> square = pd.DataFrame(
+    ...     {
+    ...         "source": ["A", "B", "A", "B", "H1", "H2"],
+    ...         "target": ["H1", "H1", "H2", "H2", "C", "C"],
+    ...     }
+    ... )
+    >>> square_spec = kpnn2.parse_layered(square)
+    >>> hop = square_spec.hops[0]
+    >>> hop.in_features, hop.out_features
+    (2, 2)
+    >>> hop_scores = torch.tensor([[0.1, 0.2]])
+    >>> out_da = kpnn2.map_node_attributions(
+    ...     attributions=hop_scores,
+    ...     spec=square_spec,
+    ...     hop_output=hop,
+    ... )
+    >>> out_da["node"].values.tolist()
+    ['H1', 'H2']
+    >>> int(out_da.coords["layer"])
+    1
+    >>> in_da = kpnn2.map_node_attributions(
+    ...     attributions=hop_scores,
+    ...     spec=square_spec,
+    ...     hop_input=hop,
+    ... )
+    >>> in_da["node"].values.tolist()
+    ['A', 'B']
+    >>> "layer" in in_da.coords
+    False
+
+    A skip hop reads several layers, so its input axis is those
+    layers concatenated (width ``hop.in_features``):
 
     >>> skip_edges = pd.DataFrame(
     ...     {
@@ -188,27 +241,21 @@ def map_node_attributions(
     ...     }
     ... )
     >>> skip_spec = kpnn2.parse_layered(skip_edges)
-    >>> hop = skip_spec.hops[1]
-    >>> hop.source_layers
+    >>> skip_hop = skip_spec.hops[1]
+    >>> skip_hop.source_layers
     (0, 1)
-    >>> hop.source_nodes
-    ('A', 'H')
-    >>> hop.in_features
-    2
-    >>> hop_scores = torch.tensor([[0.1, 0.2]])
-    >>> hop_da = kpnn2.map_node_attributions(
-    ...     attributions=hop_scores,
+    >>> skip_da = kpnn2.map_node_attributions(
+    ...     attributions=torch.tensor([[0.1, 0.2]]),
     ...     spec=skip_spec,
-    ...     hop=hop,
+    ...     hop_input=skip_hop,
     ... )
-    >>> hop_da["node"].values.tolist()
+    >>> skip_da["node"].values.tolist()
     ['A', 'H']
-    >>> "layer" in hop_da.coords
-    False
 
-    On an ``AdjacencySpec`` there are no layers: omit ``layer`` and
-    ``hop`` and the whole state vector is named. One tensor per
-    unrolled step stacks onto a ``step`` axis:
+    On an ``AdjacencySpec`` there are no layers: omit ``layer``,
+    ``hop_input``, and ``hop_output`` and the whole state vector
+    is named. One tensor per unrolled step stacks onto a ``step``
+    axis:
 
     >>> cyclic = pd.DataFrame(
     ...     {
@@ -234,7 +281,8 @@ def map_node_attributions(
     layout, layer_coord = _resolve_node_layout(
         spec,
         layer,
-        hop,
+        hop_input,
+        hop_output,
     )
     names = layout.unit_names()
     n_units = layout.n_units
@@ -273,31 +321,54 @@ def map_node_attributions(
 def _resolve_node_layout(
     spec: LayeredSpec | AdjacencySpec,
     layer: int | None,
-    hop: Hop | None,
+    hop_input: Hop | None,
+    hop_output: Hop | None,
 ) -> tuple[Layout, int | None]:
     """
     Return the ``node`` axis layout and the ``layer`` coordinate.
 
     The layout supplies both the expected axis length and the
     per-unit names, so a node owning several units would label
-    each of them. The coordinate is the depth when ``layer`` is
-    given, and ``None`` for an ``AdjacencySpec`` or a hop source
-    axis, neither of which is one depth.
+    each of them. The coordinate is the depth when ``layer`` or
+    ``hop_output`` is given, and ``None`` for an
+    ``AdjacencySpec`` or a hop input axis, neither of which is
+    one depth.
     """
     if isinstance(spec, LayeredSpec):
-        if layer is not None and hop is not None:
-            raise Kpnn2Error("Pass 'layer' or 'hop', not both.")
-        if hop is not None:
-            return _layout_for_hop(
-                spec,
-                hop,
-            ), None
-        if layer is None:
-            raise Kpnn2Error(
-                "A LayeredSpec needs 'layer' or 'hop'. Pass the "
-                "0-based index into spec.layer_nodes, or a Hop "
-                "from spec.hops."
+        given = [
+            name
+            for name, value in (
+                ("layer", layer),
+                ("hop_input", hop_input),
+                ("hop_output", hop_output),
             )
+            if value is not None
+        ]
+        if not given:
+            raise Kpnn2Error(
+                "A LayeredSpec needs one of 'layer', 'hop_input', "
+                "or 'hop_output'. Pass the 0-based index into "
+                "spec.layer_nodes, or a Hop from spec.hops as "
+                "hop_output= (what its module returns) or "
+                "hop_input= (what its module reads)."
+            )
+        if len(given) > 1:
+            raise Kpnn2Error(
+                "Pass exactly one of 'layer', 'hop_input', or "
+                f"'hop_output'. Got {', '.join(given)}."
+            )
+        if hop_input is not None:
+            return _layout_for_hop_input(
+                spec,
+                hop_input,
+            ), None
+        if hop_output is not None:
+            _check_hop(
+                spec,
+                hop_output,
+                "hop_output",
+            )
+            layer = hop_output.target_layer
         if not isinstance(layer, int) or isinstance(layer, bool):
             raise Kpnn2Error("'layer' must be an int.")
         n_layers = len(spec.layer_nodes)
@@ -310,28 +381,43 @@ def _resolve_node_layout(
             spec.layer_widths[layer],
         ), layer
     if isinstance(spec, AdjacencySpec):
-        if layer is not None or hop is not None:
+        if layer is not None or hop_input is not None or hop_output is not None:
             raise Kpnn2Error(
-                "'layer' and 'hop' do not apply to an "
-                "AdjacencySpec: every node is one unit of a "
-                "single state vector. Omit both to label the "
-                "node axis with spec.nodes."
+                "'layer', 'hop_input', and 'hop_output' do not apply "
+                "to an AdjacencySpec: every node is one unit of a "
+                "single state vector. Omit them to label the node "
+                "axis with spec.nodes."
             )
         return build_layout(spec.nodes), None
     raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
 
 
-def _layout_for_hop(
+def _check_hop(
+    spec: LayeredSpec,
+    hop: object,
+    name: str,
+) -> None:
+    """
+    Raise unless ``hop`` is a ``Hop`` equal to one of ``spec.hops``.
+    """
+    if not isinstance(hop, Hop):
+        raise Kpnn2Error(f"'{name}' must be a Hop from spec.hops.")
+    if hop not in spec.hops:
+        raise Kpnn2Error(f"'{name}' must match an entry of spec.hops.")
+
+
+def _layout_for_hop_input(
     spec: LayeredSpec,
     hop: Hop,
 ) -> Layout:
     """
     Concatenate source-layer layouts of one hop on the spec.
     """
-    if not isinstance(hop, Hop):
-        raise Kpnn2Error("'hop' must be a Hop from spec.hops.")
-    if hop not in spec.hops:
-        raise Kpnn2Error("'hop' must match an entry of spec.hops.")
+    _check_hop(
+        spec,
+        hop,
+        "hop_input",
+    )
     return concat_layouts(
         [
             build_layout(

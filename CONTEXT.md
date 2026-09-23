@@ -128,8 +128,10 @@ later prompt asks.
    **Locked contrasts**.
 5. **Train:** The user owns loss, optimizer, and the training loop.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
-   at one LayeredSpec layer, or the concatenated source axis of
-   one hop, as an `xarray.DataArray`. Captum is not a library
+   at one LayeredSpec layer (`layer=`, or `hop_output=` for what
+   a hop's module returns), or the concatenated source axis of
+   one hop (`hop_input=`), as an `xarray.DataArray`. The hop
+   side is always stated. Captum is not a library
    dependency; the user runs Captum (or any other method)
    themselves. `xarray` is a core dependency used for that
    mapping and for `aggregate_node_attributions()`.
@@ -1834,31 +1836,45 @@ check.
 
 ---
 
-## `map_node_attributions(attributions, spec, layer=None, *, hop=None, dims=None, coords=None)`
+## `map_node_attributions(attributions, spec, layer=None, *, hop_input=None, hop_output=None, dims=None, coords=None)`
 
 Unopinionated name mapping. No Captum import. Returns
 `xarray.DataArray`. Does not aggregate.
 
 `spec` is a `LayeredSpec` **or** an `AdjacencySpec`. `layer` stays
-positional; `hop` is keyword-only. The six combinations are
-exhaustive:
+positional; `hop_input` and `hop_output` are keyword-only. A
+`LayeredSpec` takes **exactly one** of the three; an
+`AdjacencySpec` takes none:
 
-| Spec | `layer` | `hop` | Result |
-|------|---------|-------|--------|
-| `LayeredSpec` | `int` | omitted | Names from `unit_names` of that layer (a wide node's name repeats); scalar `layer` coordinate attached |
-| `LayeredSpec` | omitted | omitted | `Kpnn2Error`: need `layer` or `hop` |
-| `LayeredSpec` | omitted | `Hop` | Concatenated **source-unit** names of that hop, length `hop.in_features`. **No** `layer` coordinate (this axis is not one depth). |
-| `LayeredSpec` | `int` | `Hop` | `Kpnn2Error`: pass `layer` or `hop`, not both |
-| `AdjacencySpec` | omitted | omitted | Names from `spec.nodes`; **no** `layer` coordinate |
-| `AdjacencySpec` | anything / `hop` set | | `Kpnn2Error`: `layer` and `hop` do not apply |
+| Spec | Given | Result |
+|------|-------|--------|
+| `LayeredSpec` | `layer=int` | Names from `unit_names` of that layer (a wide node's name repeats); scalar `layer` coordinate attached |
+| `LayeredSpec` | `hop_output=Hop` | Same as `layer=hop.target_layer`: the layer that hop's module **writes**, length `hop.out_features`, scalar `layer` coordinate attached |
+| `LayeredSpec` | `hop_input=Hop` | Concatenated **source-unit** names of that hop (what its module **reads**), length `hop.in_features`. **No** `layer` coordinate (this axis is not one depth). |
+| `LayeredSpec` | none | `Kpnn2Error`: need one of `layer`, `hop_input`, `hop_output` |
+| `LayeredSpec` | two or three | `Kpnn2Error`: pass exactly one; the message names what was given |
+| `AdjacencySpec` | none | Names from `spec.nodes`; **no** `layer` coordinate |
+| `AdjacencySpec` | any | `Kpnn2Error`: `layer`, `hop_input`, and `hop_output` do not apply |
+
+**The hop side is always stated, never inferred.** There is no
+side-less `hop=` keyword. A hop's input and output often have the
+same width (for example `A, B -> H1, H2`), so the node-axis
+length check cannot tell them apart; a side-less keyword let
+Captum layer outputs (Captum's default side) be labelled with the
+hop's input names without an error. `hop_output=spec.hops[i]`
+lets the caller name a Captum result on `model.hops[i]` with the
+same `i` as the module, with no `i -> i+1` translation; it
+resolves to `hop.target_layer`, so it is not a second notion of
+target layer. Do not add a side-less `hop=` back, and do not
+infer the side from the tensor width.
 
 An `AdjacencySpec` has no depths, so there is no layer index to
 report and none is invented. Do not fabricate `layer=0` for it.
-`hop` is a `Hop` that must compare equal to one entry of
-`spec.hops` (frozen dataclass equality). Do not also take an int
-hop index.
+`hop_input` / `hop_output` is a `Hop` that must compare equal to
+one entry of `spec.hops` (frozen dataclass equality). Do not also
+take an int hop index.
 
-Names on the hop-source axis are **unit** names, not
+Names on the hop-input axis are **unit** names, not
 `hop.source_nodes`. `source_nodes` is one name per node;
 `in_features` is units. Repeat a wide node's name `k` times,
 same as `Layout.unit_names()` / layer-mode mapping. Build that
@@ -1880,19 +1896,28 @@ concat_layouts(
   equal-shaped tensors (stacked on a new `step` axis).
 - `layer`: `int` index into `spec.layer_nodes` (0-based), stored as
   scalar coordinate `layer`. `LayeredSpec` only, mutually
-  exclusive with `hop`.
-- `hop`: a `Hop` equal to one of `spec.hops`. Labels the
+  exclusive with `hop_input` and `hop_output`.
+- `hop_output`: a `Hop` equal to one of `spec.hops`. Labels the
+  layer that hop's module returns, `hop.target_layer`, length
+  `hop.out_features`, with the scalar `layer` coordinate; the
+  result is identical to `layer=hop.target_layer`. Captum layer
+  methods (`LayerConductance` and the rest) score this side by
+  default. `LayeredSpec` only, mutually exclusive with `layer`
+  and `hop_input`.
+- `hop_input`: a `Hop` equal to one of `spec.hops`. Labels the
   concatenated source axis of that hop (`gather_hop_inputs`
-  output / hop-module input), length `hop.in_features`. No
-  `layer` coordinate. `LayeredSpec` only, mutually exclusive
-  with `layer`.
+  output / hop-module input; Captum with
+  `attribute_to_layer_input=True`), length `hop.in_features`.
+  No `layer` coordinate. `LayeredSpec` only, mutually exclusive
+  with `layer` and `hop_output`.
 - The `node` axis length must equal the number of named units:
   `spec.layer_dims[layer]` when `layer` is given (names from
   `layout.unit_names()`, so a wide node's name repeats `k`
-  times; do not aggregate), `hop.in_features` when `hop` is
-  given (same unit-name rule on the concatenated source
-  layers), `len(spec.nodes)` for an `AdjacencySpec`. That axis
-  gets those names as its coordinate, in order.
+  times; do not aggregate), `hop.out_features` for
+  `hop_output`, `hop.in_features` for `hop_input` (same
+  unit-name rule on the concatenated source layers),
+  `len(spec.nodes)` for an `AdjacencySpec`. That axis gets
+  those names as its coordinate, in order.
 - Default dims: 1-D → `(node,)`; 2-D → `(observation, node)`; a
   stacked sequence of 2-D tensors → `(step, observation, node)`.
   Rank 3+ (except that stacked default) requires `dims=` containing
@@ -1904,8 +1929,8 @@ concat_layouts(
   are kept.
 - Long table: `da.to_dataframe(name="score").reset_index()`.
   Wide 2-D table: `da.to_pandas()`.
-- Invalid `spec`, `layer`, `hop`, shape, `dims`, or `coords`:
-  `Kpnn2Error`.
+- Invalid `spec`, `layer`, `hop_input`, `hop_output`, shape,
+  `dims`, or `coords`: `Kpnn2Error`.
 
 Fold those named scores with `aggregate_node_attributions`
 (does not change this function).
@@ -1914,11 +1939,12 @@ The user obtains `attributions` however they like (Captum
 LayerConductance, IntegratedGradients, custom grads, etc.). This
 function only attaches spec names to the `node` axis. The input
 is already dense scores, not a host feature matrix. For the
-output of a hop module pass
-`layer=spec.hops[i].target_layer`, that is `i+1`. For scores on
-that hop's concatenated source axis pass `hop=spec.hops[i]`.
-Do not invent a second way to name the target layer. Do not
-name-map BatchNorm or other unnamed modules.
+output of the module on `spec.hops[i]` pass
+`hop_output=spec.hops[i]` (equivalently
+`layer=spec.hops[i].target_layer`, that is `i+1`). For scores on
+that hop's concatenated source axis pass
+`hop_input=spec.hops[i]`. Do not name-map BatchNorm or other
+unnamed modules.
 
 For a cyclic net on an `AdjacencySpec` there is no layer to
 index; the natural extra axis is `step`. Pass one tensor per
@@ -2048,7 +2074,8 @@ edge / block start. Do not implement adjacency width.
   does not expand widths and does not call `build_layout`.
 - `map_node_attributions` on a `LayeredSpec` uses
   `build_layout(layer_nodes[layer], layer_widths[layer])` when
-  `layer=` is given. With `hop=`, it concatenates
+  `layer=` is given, and on `hop.target_layer` when
+  `hop_output=` is given. With `hop_input=`, it concatenates
   `build_layout` of each `hop.source_layers` entry via
   `concat_layouts` and labels with `unit_names()` (not
   `hop.source_nodes`). The node axis length is `n_units`; the

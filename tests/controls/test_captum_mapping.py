@@ -11,6 +11,7 @@ from __future__ import annotations
 import random
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -25,10 +26,15 @@ from tests.controls.scoring import (
     SEED,
     aligned_feature_tensor,
     independent_gaussian_features,
+    max_abs_scores,
     median_abs_scores,
     pin_scenario_weights,
 )
-from tests.helpers.layered_net import LayeredNet
+from tests.helpers.layered_net import (
+    LayeredNet,
+    pin_all_weights,
+    pin_edge,
+)
 
 pytest.importorskip("captum")
 
@@ -131,12 +137,10 @@ def test_synthetic_captum_tensor_maps_hidden_layer_names() -> None:
     """
     Captum-shaped (observation, node) scores map at layer i+1.
 
-    IntegratedGradients attributes inputs only. Hidden-layer
-    LayerConductance on MaskedLinear is not required here: hop
-    output scores map with layer= (node axis matches that
-    depth's units). Hop input / gather_hop_inputs scores map
-    with hop= (concatenated source units). Hop 0 output is
-    layer 1.
+    Hop output scores map with layer= (node axis matches that
+    depth's units) or hop_output= on the same hop. Hop 0
+    output is layer 1. Captum runs on real modules in the
+    LayerConductance tests below.
     """
     scenario = _dead_edge_scenario()
     spec = parse_layered(scenario.edgelist)
@@ -165,3 +169,115 @@ def test_synthetic_captum_tensor_maps_hidden_layer_names() -> None:
             table[name].to_numpy(),
             raw[:, column],
         )
+
+
+def _square_hop_spec():
+    """
+    ``hops[0]`` reads A, B and writes H1, H2: equal widths.
+
+    Either side of that hop fits a ``(batch, 2)`` tensor, so the
+    node axis length cannot tell the sides apart.
+    """
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "B", "A", "B", "H1", "H2"],
+            "target": ["H1", "H1", "H2", "H2", "C", "C"],
+        }
+    )
+    return parse_layered(edgelist)
+
+
+def _square_hop_conductance(
+    dead_edges: tuple[tuple[str, str], ...],
+    attribute_to_layer_input: bool,
+):
+    """
+    LayerConductance on ``hops[0]`` with ``dead_edges`` pinned at 0.
+    """
+    _set_seeds()
+    spec = _square_hop_spec()
+    model = LayeredNet(
+        spec,
+        bias=False,
+        relu=False,
+    )
+    pin_all_weights(model)
+    for source, target in dead_edges:
+        pin_edge(
+            model,
+            source,
+            target,
+            0.0,
+        )
+    model.eval()
+    x = torch.randn(16, 2) + 2.0
+
+    from captum.attr import LayerConductance
+
+    conductance = LayerConductance(
+        model,
+        model.layers[0],
+    )
+    attributions = conductance.attribute(
+        x,
+        target=0,
+        attribute_to_layer_input=attribute_to_layer_input,
+    )
+    return spec, attributions
+
+
+def test_layer_conductance_hop_output_names_dead_hidden_node() -> None:
+    """
+    Captum's default layer side is the module output.
+
+    H1 has no path to C (H1 -> C pinned at 0), so its
+    conductance is zero. hop_output=spec.hops[0] must put that
+    zero column under H1, the unit the hop module writes.
+    """
+    spec, attributions = _square_hop_conductance(
+        dead_edges=(("H1", "C"),),
+        attribute_to_layer_input=False,
+    )
+    hop = spec.hops[0]
+
+    mapped = map_node_attributions(
+        attributions=attributions,
+        spec=spec,
+        hop_output=hop,
+    )
+
+    assert mapped["node"].values.tolist() == ["H1", "H2"]
+    assert int(mapped.coords["layer"]) == hop.target_layer
+    table = mapped.to_pandas()
+    assert max_abs_scores(table, ("H1",))["H1"] <= DEAD_TOLERANCE
+    assert median_abs_scores(table, ("H2",))["H2"] > LIVE_FLOOR
+
+
+def test_layer_conductance_hop_input_names_dead_input() -> None:
+    """
+    attribute_to_layer_input=True scores what the module reads.
+
+    A feeds nothing (A -> H1 and A -> H2 pinned at 0), so its
+    conductance at the input of hops[0] is zero.
+    hop_input=spec.hops[0] must put that zero column under A.
+    """
+    spec, attributions = _square_hop_conductance(
+        dead_edges=(
+            ("A", "H1"),
+            ("A", "H2"),
+        ),
+        attribute_to_layer_input=True,
+    )
+    hop = spec.hops[0]
+
+    mapped = map_node_attributions(
+        attributions=attributions,
+        spec=spec,
+        hop_input=hop,
+    )
+
+    assert mapped["node"].values.tolist() == ["A", "B"]
+    assert "layer" not in mapped.coords
+    table = mapped.to_pandas()
+    assert max_abs_scores(table, ("A",))["A"] <= DEAD_TOLERANCE
+    assert median_abs_scores(table, ("B",))["B"] > LIVE_FLOOR
