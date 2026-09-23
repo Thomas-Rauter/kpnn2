@@ -1,0 +1,1916 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself.
+">
+      
+      
+      
+        <link rel="canonical" href="https://thomas-rauter.github.io/kpnn2/0.2.0/packed_linear/">
+      
+      
+        <link rel="prev" href="../map-node-attributions/">
+      
+      
+        <link rel="next" href="../reference/api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../figures/kpnn2_logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>PackedLinear - kpnn2</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#packedlinear" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="kpnn2" class="md-header__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="../figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            kpnn2
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PackedLinear
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="kpnn2" class="md-nav__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="../figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    kpnn2
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../supported/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supported architectures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedforward-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedforward example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Additional examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cyclic-graph-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cyclic graph example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time-series-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time-series example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transformer-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transformer example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How it works
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layered_vs_adjacency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layered vs. Adjacency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skip-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Skip edges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../map-node-attributions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mapping attributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PackedLinear
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PackedLinear
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-ram-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The RAM problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-packedlinear-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What PackedLinear stores
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tied-transpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tied transpose
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constrained-init" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constrained init
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frozen-live-edges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frozen live edges
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pruning-during-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pruning during training
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changing-the-prior-reparse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing the prior (reparse)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../how_we_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How we test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../literature/fortelny-bock-2020/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fortelny and Bock 2020
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../citing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-ram-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The RAM problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-packedlinear-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What PackedLinear stores
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tied-transpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tied transpose
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constrained-init" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constrained init
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frozen-live-edges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frozen live edges
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pruning-during-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pruning during training
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changing-the-prior-reparse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing the prior (reparse)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="packedlinear">PackedLinear<a class="headerlink" href="#packedlinear" title="Permanent link">&para;</a></h1>
+<p><code>PackedLinear</code> stores one trainable scalar per
+<a href="../concepts/#live-edge">live edge</a> — an edge the graph actually
+has. Use it on a <a href="../concepts/#hop"><code>Hop</code></a> — everything entering
+one layer — or on an <code>AdjacencySpec</code> when the dense rectangle
+<code>MaskedLinear(to_mask())</code> would strain RAM.</p>
+<p>On a <code>LayeredSpec</code>, a hop's
+<a href="../concepts/#packed-indices">packed indices</a> — two parallel lists,
+one entry per unit pair — go straight into the constructor:</p>
+<div class="highlight"><pre><span></span><code><span class="n">layer</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Nothing upstream changes: <code>gather_hop_inputs</code> still concatenates
+whole source layers, and <code>PackedLinear</code> reads only the live
+columns. Small graphs may keep <code>MaskedLinear(hop.to_mask())</code> for
+<abbr title="General matrix multiply, the dense BLAS kernel.">GEMM</abbr>.</p>
+<p>On an <code>AdjacencySpec</code> every node shares one
+<a href="../concepts/#state-vector">state vector</a>, a single vector over
+all nodes, so <code>MaskedLinear(spec.to_mask())</code> is an <code>(n, n)</code>
+parameter. The packed form is one scalar per live unit pair (one
+per named edge at width 1):</p>
+<div class="highlight"><pre><span></span><code><span class="n">core</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">state_dim</span><span class="p">,</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">state_dim</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Small cyclic graphs may stay on <code>MaskedLinear(spec.to_mask())</code>.</p>
+<p><a href="../layered_vs_adjacency/">Layered vs. Adjacency</a> is the layout
+split. <a href="../feedforward-example/">Feedforward example</a> uses
+packed hops. <a href="../cyclic-graph-example/">Cyclic graph example</a>
+is the shared-state path.</p>
+<h2 id="the-ram-problem">The RAM problem<a class="headerlink" href="#the-ram-problem" title="Permanent link">&para;</a></h2>
+<p>Dense storage costs memory in proportion to the rectangle, not to
+the live edges in it. A hop that concatenates a 20k-gene input
+layer into a <a href="../concepts/#skip-edge">skip</a>, an edge spanning more
+than one layer, makes <code>MaskedLinear</code> store an <code>(out, ~20k)</code>
+parameter, a dense float32 mask, and Adam state of the same
+shape, even when only a handful of those columns are live edges.
+An <code>AdjacencySpec</code> with a wide input layer has the same problem
+as an <code>(n, n)</code> square. Dataset size and minibatch size are not
+this problem.</p>
+<p>Nothing is lost by dropping the dead entries: masked-out cells
+are multiplied by zero, so they never affected learning. They
+were RAM (and extra <abbr title="General matrix multiply, the dense BLAS kernel.">GEMM</abbr> work), not extra capacity.</p>
+<h2 id="what-packedlinear-stores">What PackedLinear stores<a class="headerlink" href="#what-packedlinear-stores" title="Permanent link">&para;</a></h2>
+<p>The weight is one 1-D dense tensor with an entry per live edge;
+forward accumulates each edge's contribution with <code>index_add</code>
+on ordinary dense tensors. It is not <code>torch.sparse</code> and not
+sparse-tensor acceleration.</p>
+<p>Use <code>PackedLinear</code> when the dense rectangle would hurt.
+Otherwise <code>MaskedLinear</code> is better: its <code>(out, in)</code> weight runs
+as one <abbr title="General matrix multiply, the dense BLAS kernel.">GEMM</abbr>.</p>
+<h2 id="construction">Construction<a class="headerlink" href="#construction" title="Permanent link">&para;</a></h2>
+<p>The two constructor calls at the top of this page are the whole
+setup. On a hop, <code>layer</code> from the first call reads the
+concatenated source axis that <code>gather_hop_inputs()</code> builds, and
+returns the pre-activation tensor:</p>
+<div class="highlight"><pre><span></span><code><span class="n">x</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">gather_hop_inputs</span><span class="p">(</span><span class="n">saved</span><span class="p">,</span> <span class="n">hop</span><span class="p">)</span>
+<span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">acts</span><span class="p">[</span><span class="n">index</span><span class="p">](</span><span class="n">layer</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+</code></pre></div>
+<p><code>self.acts</code> is <code>nn.ModuleList([nn.ReLU() for _ in spec.hops])</code>.</p>
+<p>On an <code>AdjacencySpec</code>, <code>core</code> from the second call maps the state
+vector onto itself, so the aligned inputs must be scattered into
+it. Input nodes have in-degree 0, so no packed edge ever reaches
+them: writing them in each step is required, not cosmetic. The
+<a href="../cyclic-graph-example/">Cyclic graph example</a> does the same
+scatter inside a full loop:</p>
+<div class="highlight"><pre><span></span><code><span class="n">col</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">align_inputs</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[:,</span> <span class="n">col</span><span class="p">],</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">n</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">state_dim</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">n</span><span class="p">)</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">index_copy</span><span class="p">(</span>
+    <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">input_index</span><span class="p">,</span>
+    <span class="n">x</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">act</span><span class="p">(</span><span class="n">core</span><span class="p">(</span><span class="n">state</span><span class="p">))</span>
+</code></pre></div>
+<p><code>self.input_index</code> is a buffer from
+<code>torch.as_tensor(spec.input_index)</code>. <code>self.act</code> is an
+<code>nn.ReLU</code> registered on the module. <code>index_copy</code> returns a
+new tensor. A step that Captum should hook is an
+<code>nn.Identity</code>.</p>
+<p>The same packed indices can feed
+<a href="../reference/PackedMultiheadAttention/"><code>PackedMultiheadAttention</code></a>,
+a different primitive: attention on live pairs, not one scalar
+per edge. That layer's training RAM is pair gathers, not an
+<code>(n, n)</code> weight; pass <code>chunk_size</code> there when <code>nnz</code> is large.
+The <a href="../transformer-example/">Transformer example</a> is that
+walkthrough.</p>
+<h2 id="tied-transpose">Tied transpose<a class="headerlink" href="#tied-transpose" title="Permanent link">&para;</a></h2>
+<p>A tied decoder runs the same edges backwards: it needs the
+transpose. <code>PackedLinear.weight</code> is 1-D, so there is no
+<code>enc.weight.T</code> to take. <code>layer.transpose()</code> is that helper:
+same packed slots, indices swapped, <code>weight</code> shared by default,
+bias never shared. A <code>constraint=</code> module is shared along with
+<code>weight</code>, so the decoder applies the transpose of the encoder's
+live map even when that constraint has state: an edge you prune
+through a <a href="#pruning-during-training">keep-mask</a>, or a gate you
+train, changes both layers. <code>tie=False</code> copies both instead.</p>
+<div class="highlight"><pre><span></span><code><span class="n">enc</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+    <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">dec</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">transpose</span><span class="p">()</span>
+</code></pre></div>
+<p>Do not reparse a reversed edgelist and assign
+<code>dec.weight = enc.weight</code>. Packed order is lexicographic per
+<a href="../concepts/#spec">spec</a>, so those slots will not match.</p>
+<p>On a hop that concatenates several source layers, split the
+transposed output and add the pieces into your decoder <code>saved</code>
+dict; two reversed hops can write the same earlier layer, so add
+rather than overwrite:</p>
+<div class="highlight"><pre><span></span><code><span class="n">concat</span> <span class="o">=</span> <span class="n">dec</span><span class="p">(</span><span class="n">restored</span><span class="p">[</span><span class="n">hop</span><span class="o">.</span><span class="n">target_layer</span><span class="p">])</span>
+<span class="k">for</span> <span class="n">layer</span><span class="p">,</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">scatter_hop_outputs</span><span class="p">(</span>
+    <span class="n">concat</span><span class="p">,</span>
+    <span class="n">hop</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">restored</span><span class="p">:</span>
+        <span class="n">restored</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span> <span class="o">=</span> <span class="n">restored</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span> <span class="o">+</span> <span class="n">piece</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">restored</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span> <span class="o">=</span> <span class="n">piece</span>
+</code></pre></div>
+<p><code>MaskedLinear</code> has a dense rectangle, so
+<code>F.linear(h, enc.effective_weight().T, dec_bias)</code> is its tied
+decoder. There is no autoencoder class; <code>forward()</code> is yours.</p>
+<h2 id="constrained-init">Constrained init<a class="headerlink" href="#constrained-init" title="Permanent link">&para;</a></h2>
+<p><code>constraint=</code> maps <code>weight</code> to the effective weight in
+<code>forward</code>. <code>reset_parameters</code> draws the degree-aware value for
+that effective weight. It reaches <code>weight</code> through the
+constraint's own <code>right_inverse</code>, the same method
+<code>torch.nn.utils.parametrize</code> uses. Without one, <code>weight</code> stores
+the draw and the map is applied on top.</p>
+<p>That matters for <code>nn.Softplus()</code>, which has no <code>right_inverse</code>:
+every edge then starts near <code>softplus(0) = ln 2</code>, whatever its
+fan-in, so a node with thousands of parents starts with a
+pre-activation spread many times larger than the unconstrained
+init. Give the constraint an inverse and the init keeps its
+degree-aware scale:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">PositiveEdges</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weight</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">softplus</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">right_inverse</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weight</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># The draw is uniform in [-bound, bound], possibly 0:</span>
+        <span class="c1"># invert its magnitude, kept away from 0.</span>
+        <span class="n">magnitude</span> <span class="o">=</span> <span class="n">weight</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1e-6</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">magnitude</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">expm1</span><span class="p">(</span><span class="o">-</span><span class="n">magnitude</span><span class="p">))</span>
+
+
+<span class="n">core</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+    <span class="n">constraint</span><span class="o">=</span><span class="n">PositiveEdges</span><span class="p">(),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>A constraint without an inverse can initialize <code>weight</code> itself
+from <code>layer.init_bound()</code>, the per-entry bound
+<code>reset_parameters</code> uses.</p>
+<p>Weight decay acts on <code>weight</code>, the unconstrained tensor. Under
+softplus it pulls edges toward <code>ln 2</code>, not toward 0. Give a
+constrained layer <code>weight_decay=0</code> in its param group and add a
+penalty on <code>layer.effective_weight()</code> to the loss instead.</p>
+<h2 id="frozen-live-edges">Frozen live edges<a class="headerlink" href="#frozen-live-edges" title="Permanent link">&para;</a></h2>
+<p>Some priors fix individual edge values. <code>constraint=</code> is where
+that belongs: one <code>nn.Module</code> over the packed <code>weight</code>.
+A hard freeze is a <code>torch.where</code> inside it that replaces the
+slots <code>edge_location</code> reports: forward overwrites them every
+step, so no optimizer can move the value the layer uses.</p>
+<p>A gradient hook that zeroes a slot is not a freeze: AdamW's
+decoupled weight decay and SGD with momentum still move the
+stored parameter. A loss barrier is a soft prior, not a hold.</p>
+<p>The stored unconstrained slot may still drift. Read
+<code>effective_weight()</code>, the map <code>forward</code> uses, or write the
+constants back after <code>optimizer.step()</code> if a checkpoint must
+match.</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">FreezeSlots</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">,</span>
+        <span class="n">values</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">"mask"</span><span class="p">,</span>
+            <span class="n">mask</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">"values"</span><span class="p">,</span>
+            <span class="n">values</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weight</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
+            <span class="n">weight</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_adjacency</span><span class="p">(</span><span class="n">edgelist</span><span class="p">)</span>
+<span class="n">packed</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">edge_location</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">)</span>
+<span class="n">nnz</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">source_index</span><span class="p">)</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nnz</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<span class="n">mask</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">packed</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nnz</span><span class="p">)</span>
+<span class="n">values</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">packed</span><span class="p">)]</span> <span class="o">=</span> <span class="mf">1.5</span>
+<span class="n">core</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">state_dim</span><span class="p">,</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">state_dim</span><span class="p">,</span>
+    <span class="n">constraint</span><span class="o">=</span><span class="n">FreezeSlots</span><span class="p">(</span>
+        <span class="n">mask</span><span class="p">,</span>
+        <span class="n">values</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The same approach works on <code>MaskedLinear</code>: freeze at
+<code>[target_index, source_index]</code> of the dense rectangle, not at
+packed slots. <code>constraint=</code> still runs before the mask.</p>
+<h2 id="pruning-during-training">Pruning during training<a class="headerlink" href="#pruning-during-training" title="Permanent link">&para;</a></h2>
+<p>Specs stay frozen. To drop edges while training continues,
+keep the spec you parsed and put a keep-mask in
+<code>constraint=</code>. The mask is a persistent buffer, one entry
+per packed slot, multiplied into <code>weight</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">KeepMask</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">nnz</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">"keep"</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">nnz</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weight</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="n">weight</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">keep</span>
+
+
+<span class="n">hop_index</span><span class="p">,</span> <span class="n">packed</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">edge_location</span><span class="p">(</span>
+    <span class="s2">"A"</span><span class="p">,</span>
+    <span class="s2">"H"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">hop</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="n">hop_index</span><span class="p">]</span>
+<span class="n">core</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+    <span class="n">hop</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+    <span class="n">identity</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+    <span class="n">constraint</span><span class="o">=</span><span class="n">KeepMask</span><span class="p">(</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">hop</span><span class="o">.</span><span class="n">source_index</span><span class="p">),</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">core</span><span class="o">.</span><span class="n">constraint</span><span class="o">.</span><span class="n">keep</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">packed</span><span class="p">)]</span> <span class="o">=</span> <span class="mf">0.0</span>
+</code></pre></div>
+<p>A zero on <code>keep</code> drops that slot from the map <code>forward</code>
+uses. <code>effective_weight()</code> is 0 there, whatever scalar is
+stored in <code>weight</code>. Node roles, depths, and <code>align_inputs</code>
+indices stay the ones on this spec. <code>index_digest</code> stays
+the digest of the parsed indices. Adam's moments stay on
+the same <code>weight</code> parameter, in the same slot order, so
+training continues on the optimizer you already have.</p>
+<p>The buffer is in <code>state_dict</code> under <code>constraint.keep</code>. A
+model rebuilt from the same spec, with a <code>KeepMask</code> of the
+same shape, loads that checkpoint and keeps the zeros.
+<code>PackedLinear.transpose()</code> shares the module, so the tied
+decoder applies the same zeros.</p>
+<p><code>torch.nn.utils.prune.custom_from_mask</code> on <code>weight</code> also
+zeroes slots, on <code>PackedLinear</code> and on <code>MaskedLinear</code>. The
+checkpoint keys are then <code>weight_orig</code> and <code>weight_mask</code>.
+The keep-mask checkpoint keeps the key <code>weight</code>.</p>
+<p>On <code>MaskedLinear</code> the buffer has shape
+<code>(out_features, in_features)</code> and multiplies the dense
+weight. <code>constraint=</code> still runs before the connectivity
+mask. Leave <code>layer.mask</code> as the parsed pattern:
+<code>mask_digest</code> is that pattern, and a model rebuilt from
+the original spec expects it.</p>
+<h2 id="changing-the-prior-reparse">Changing the prior (reparse)<a class="headerlink" href="#changing-the-prior-reparse" title="Permanent link">&para;</a></h2>
+<p>To grow the prior, or to remove edges and retrain a smaller
+model, reparse: edit the edgelist, parse it again, build
+<strong>new</strong> layers from the new spec, and copy the surviving
+tensors <strong>by name</strong>. To drop edges while training continues,
+keep the spec and use a <a href="#pruning-during-training">keep-mask</a>
+instead.</p>
+<p>A reparse rebuilds the layout; it is not "the same graph minus
+a row." Both parsers recompute <code>input_nodes</code> and
+<code>output_nodes</code>. <code>parse_layered()</code> also recomputes longest-path
+depths (unless you pass the same <code>ranks=</code>), hop membership, the
+concatenated source axes, and <code>skips</code>. Pass the same <code>widths=</code>
+and <code>ranks=</code> as the original parse.</p>
+<p>After the new parse:</p>
+<ol>
+<li><strong>Build new layers.</strong> Pass <code>identity=spec.fingerprint</code> on
+   every new <code>PackedLinear</code> or <code>MaskedLinear</code>.</li>
+<li><strong>Copy weights edge by edge.</strong> Look up each surviving named
+   edge on <strong>both</strong> specs with <code>edge_location()</code> and copy those
+   packed slots. A surviving edge can sit on a different hop,
+   at a different packed index.</li>
+<li><strong>Copy bias node by node.</strong> Bias is <code>(out_features,)</code>, one
+   value per output unit, so it moves by named node, not by
+   packed slot. On an <code>AdjacencySpec</code>, index <code>spec.nodes</code> by
+   name. On a <code>LayeredSpec</code>, <code>node_units()</code> gives a node's
+   layer and unit slice; copy only when the node still exists
+   and its layer and width still match.</li>
+<li><strong>Recompute <code>align_inputs()</code></strong> on the new spec. Dropping an
+   input's last edge removes that input, so an index kept from
+   the old spec is one column too wide; <code>PackedLinear</code> raises
+   on it rather than reading the columns by position. An index
+   of the same width, with one input swapped for another,
+   cannot be caught by any layer.</li>
+<li><strong>Build a new optimizer.</strong> Adam moments are keyed by
+   <code>Parameter</code> identity on the old module: construct a new
+   optimizer on the new parameters, or accept losing them.</li>
+</ol>
+<p>The example below does steps 1, 2, 3, and 5 on an
+<code>AdjacencySpec</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">old_spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_adjacency</span><span class="p">(</span><span class="n">old_edgelist</span><span class="p">)</span>
+<span class="n">new_spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_adjacency</span><span class="p">(</span><span class="n">new_edgelist</span><span class="p">)</span>
+<span class="n">n_old</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">old_spec</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+<span class="n">n_new</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_spec</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+<span class="n">old_core</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">old_spec</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">old_spec</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">n_old</span><span class="p">,</span>
+    <span class="n">n_old</span><span class="p">,</span>
+    <span class="n">identity</span><span class="o">=</span><span class="n">old_spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">new_core</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+    <span class="n">new_spec</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+    <span class="n">new_spec</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+    <span class="n">n_new</span><span class="p">,</span>
+    <span class="n">n_new</span><span class="p">,</span>
+    <span class="n">identity</span><span class="o">=</span><span class="n">new_spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">old_edges</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+    <span class="nb">zip</span><span class="p">(</span>
+        <span class="n">old_spec</span><span class="o">.</span><span class="n">to_edgelist</span><span class="p">()[</span><span class="s2">"source"</span><span class="p">],</span>
+        <span class="n">old_spec</span><span class="o">.</span><span class="n">to_edgelist</span><span class="p">()[</span><span class="s2">"target"</span><span class="p">],</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">new_table</span> <span class="o">=</span> <span class="n">new_spec</span><span class="o">.</span><span class="n">to_edgelist</span><span class="p">()</span>
+<span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+    <span class="k">for</span> <span class="n">source</span><span class="p">,</span> <span class="n">target</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+        <span class="n">new_table</span><span class="p">[</span><span class="s2">"source"</span><span class="p">],</span>
+        <span class="n">new_table</span><span class="p">[</span><span class="s2">"target"</span><span class="p">],</span>
+    <span class="p">):</span>
+        <span class="n">pair</span> <span class="o">=</span> <span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pair</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">old_edges</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">old_pack</span> <span class="o">=</span> <span class="n">old_spec</span><span class="o">.</span><span class="n">edge_location</span><span class="p">(</span>
+            <span class="n">source</span><span class="p">,</span>
+            <span class="n">target</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">new_pack</span> <span class="o">=</span> <span class="n">new_spec</span><span class="o">.</span><span class="n">edge_location</span><span class="p">(</span>
+            <span class="n">source</span><span class="p">,</span>
+            <span class="n">target</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">new_core</span><span class="o">.</span><span class="n">weight</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">new_pack</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">old_core</span><span class="o">.</span><span class="n">weight</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">old_pack</span><span class="p">)]</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">old_core</span><span class="o">.</span><span class="n">bias</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="n">new_core</span><span class="o">.</span><span class="n">bias</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="n">old_index</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="n">i</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">old_spec</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">new_spec</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">old_index</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">new_core</span><span class="o">.</span><span class="n">bias</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">old_core</span><span class="o">.</span><span class="n">bias</span><span class="p">[</span>
+                <span class="n">old_index</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="p">]</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><span class="n">new_core</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+</code></pre></div>
+<p>On a <code>LayeredSpec</code>, <code>edge_location()</code> returns
+<code>(hop_index, packed_indices)</code>; copy into <code>layers[hop_index]</code> on
+each spec. Copy bias with <code>node_units()</code> only when layer and
+width still match:</p>
+<div class="highlight"><pre><span></span><code><span class="n">old_layer</span><span class="p">,</span> <span class="n">old_units</span> <span class="o">=</span> <span class="n">old_spec</span><span class="o">.</span><span class="n">node_units</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="n">new_layer</span><span class="p">,</span> <span class="n">new_units</span> <span class="o">=</span> <span class="n">new_spec</span><span class="o">.</span><span class="n">node_units</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">old_layer</span> <span class="o">!=</span> <span class="n">new_layer</span><span class="p">:</span>
+    <span class="k">continue</span>
+<span class="n">old_width</span> <span class="o">=</span> <span class="n">old_units</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">old_units</span><span class="o">.</span><span class="n">start</span>
+<span class="n">new_width</span> <span class="o">=</span> <span class="n">new_units</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">new_units</span><span class="o">.</span><span class="n">start</span>
+<span class="k">if</span> <span class="n">old_width</span> <span class="o">!=</span> <span class="n">new_width</span> <span class="ow">or</span> <span class="n">old_layer</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">continue</span>
+<span class="n">new_layers</span><span class="p">[</span><span class="n">new_layer</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">bias</span><span class="p">[</span><span class="n">new_units</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">old_layers</span><span class="p">[</span><span class="n">old_layer</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">bias</span><span class="p">[</span><span class="n">old_units</span><span class="p">]</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>On <code>MaskedLinear</code>, copy the named live cells of <code>weight</code>, the
+trainable tensor, as on <code>PackedLinear</code>. Do not <code>copy_</code> the whole
+<code>(out, in)</code> rectangle.</p>
+<p>Bulk shortcuts do not work. <code>PackedLinear.weight</code> is 1-D of
+length <code>nnz</code>. If you drop one named edge and add another, <code>nnz</code>
+is unchanged and slot <code>i</code> is a different named edge, so a
+whole-<code>weight</code> <code>Tensor.copy_</code> or a <code>load_state_dict</code> across the
+two priors can put values on the wrong edges. <code>index_digest</code> and
+<code>mask_digest</code> hash numeric indices (or the mask) and shapes, not
+names, so without <code>identity=</code> a layer's <code>load_state_dict</code> is
+name-blind whenever that pattern is unchanged. With
+<code>identity=spec.fingerprint</code>, a different prior raises
+<code>Kpnn2Error</code> instead.</p>
+<p><code>optimizer.load_state_dict</code> has no such check. It is accepted
+whenever each parameter shape still matches: on <code>PackedLinear</code>,
+<code>weight</code> of length <code>nnz</code> and <code>bias</code> of length <code>out_features</code>; on
+<code>MaskedLinear</code>, the <code>(out_features, in_features)</code> rectangle. The
+moments are then applied by position, so slot <code>i</code> can receive
+another edge's moments. A successful optimizer load means only
+that the shapes matched.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "content.code.copy", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="108mm" height="64mm"
+     viewBox="0 0 306.142 181.417"
+     font-family="Liberation Sans, sans-serif"
+     font-size="6"
+     fill="none">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="0" refY="5"
+            markerUnits="userSpaceOnUse"
+            markerWidth="3.5" markerHeight="3.5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>
+    </marker>
+  </defs>
+  <line x1="8" y1="80" x2="298.142" y2="80"
+        stroke="#000" stroke-width="0.4"/>
+
+  <text x="8" y="12" text-anchor="start" fill="#000" font-weight="700">(a) parse_layered — one sweep</text>
+  <rect x="10" y="26" width="22" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="21" y="35.2" text-anchor="middle" fill="#000">x</text>
+  <rect x="48" y="26" width="38" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="67" y="35.2" text-anchor="middle" fill="#000">hops[0]</text>
+  <rect x="102" y="26" width="28" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="116" y="35.2" text-anchor="middle" fill="#000">ReLU</text>
+  <rect x="146" y="26" width="38" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="165" y="35.2" text-anchor="middle" fill="#000">gather</text>
+  <rect x="200" y="26" width="38" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="219" y="35.2" text-anchor="middle" fill="#000">hops[1]</text>
+  <rect x="254" y="26" width="22" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="265" y="35.2" text-anchor="middle" fill="#000">y</text>
+  <line x1="32" y1="33" x2="44.5" y2="33" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="86" y1="33" x2="98.5" y2="33" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="130" y1="33" x2="142.5" y2="33" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="184" y1="33" x2="196.5" y2="33" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="238" y1="33" x2="250.5" y2="33" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <path d="M21 40 C21 58, 165 58, 165 43.5"
+        stroke="#000" stroke-width="0.6" stroke-dasharray="2 1.2"
+        fill="none" marker-end="url(#arrow)"/>
+  <text x="21" y="22" text-anchor="middle" fill="#000" font-weight="400">A</text>
+  <text x="67" y="22" text-anchor="middle" fill="#000" font-weight="400">H</text>
+  <text x="165" y="22" text-anchor="middle" fill="#000" font-weight="400">A, H</text>
+  <text x="219" y="22" text-anchor="middle" fill="#000" font-weight="400">C</text>
+  <text x="265" y="22" text-anchor="middle" fill="#000" font-weight="400">C</text>
+  <text x="40" y="66" text-anchor="start" fill="#000" font-weight="400">hold A</text>
+
+  <text x="8" y="94" text-anchor="start" fill="#000" font-weight="700">(b) parse_adjacency — user loop</text>
+  <rect x="10" y="108" width="22" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="21" y="117.2" text-anchor="middle" fill="#000">x</text>
+  <rect x="48" y="108" width="38" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="67" y="117.2" text-anchor="middle" fill="#000">scatter</text>
+  <rect x="102" y="108" width="72" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <line x1="126" y1="108" x2="126" y2="122" stroke="#000" stroke-width="0.6"/>
+  <line x1="150" y1="108" x2="150" y2="122" stroke="#000" stroke-width="0.6"/>
+  <text x="114" y="117.2" text-anchor="middle" fill="#000" font-weight="700">A</text>
+  <text x="138" y="117.2" text-anchor="middle" fill="#000" font-weight="400">C</text>
+  <text x="162" y="117.2" text-anchor="middle" fill="#000" font-weight="400">H</text>
+  <rect x="190" y="108" width="48" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="214" y="117.2" text-anchor="middle" fill="#000">to_mask()</text>
+  <rect x="254" y="108" width="22" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="265" y="117.2" text-anchor="middle" fill="#000">y</text>
+  <line x1="32" y1="115" x2="44.5" y2="115" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="86" y1="115" x2="98.5" y2="115" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="174" y1="115" x2="186.5" y2="115" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <line x1="238" y1="115" x2="250.5" y2="115" stroke="#000" stroke-width="0.6"
+        marker-end="url(#arrow)"/>
+  <path d="M238 122 C238 140, 190 140, 190 125.5"
+        stroke="#000" stroke-width="0.6"
+        fill="none" marker-end="url(#arrow)"/>
+  <text x="21" y="102" text-anchor="middle" fill="#000" font-weight="400">A</text>
+  <text x="214" y="148" text-anchor="middle" fill="#000" font-weight="400">n steps</text>
+  <text x="265" y="102" text-anchor="middle" fill="#000" font-weight="400">C</text>
+</svg>

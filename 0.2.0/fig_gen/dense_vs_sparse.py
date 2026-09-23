@@ -1,0 +1,303 @@
+"""Generate the Home dense-versus-sparse Graphviz figure.
+
+Writes ``docs/figures/dense_vs_sparse.svg`` and a matching PNG.
+The PNG is 4× 96 dpi so it stays sharp on the docs site when the
+figure is stretched to the content column, and on PyPI.
+"""
+
+import subprocess
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
+from graphviz import Digraph
+
+_DOCS_DIR = Path(__file__).resolve().parents[1]
+_OUT_PATH = _DOCS_DIR / "figures" / "dense_vs_sparse.svg"
+_FONT = "Liberation Sans"
+_FONTSIZE = "6"
+_GAP_PT = 20.0
+_PNG_DPI = 384
+
+ET.register_namespace("", "http://www.w3.org/2000/svg")
+ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+
+
+def _panel_graph(label: str) -> Digraph:
+    graph = Digraph(format="svg")
+    graph.attr(
+        rankdir="LR",
+        bgcolor="transparent",
+        fontname=_FONT,
+        fontsize=_FONTSIZE,
+        pad="0.12",
+        nodesep="0.22",
+        ranksep="0.45",
+        label=label,
+        labelloc="t",
+        fontcolor="black",
+        splines="true",
+    )
+    graph.attr(
+        "graph",
+        fontname=_FONT,
+        fontsize=_FONTSIZE,
+        fontcolor="black",
+    )
+    graph.attr(
+        "node",
+        shape="ellipse",
+        fontname=_FONT,
+        fontsize=_FONTSIZE,
+        color="black",
+        fontcolor="black",
+        fillcolor="none",
+        margin="0.04,0.03",
+        height="0.28",
+        width="0.48",
+    )
+    graph.attr(
+        "edge",
+        color="black",
+        arrowsize="0.5",
+        penwidth="0.8",
+    )
+    return graph
+
+
+def _same_rank(graph: Digraph, names: list[str]) -> None:
+    with graph.subgraph() as subgraph:
+        subgraph.attr(rank="same")
+        for name in names:
+            subgraph.node(name)
+        for source, target in zip(
+            names,
+            names[1:],
+        ):
+            subgraph.edge(
+                source,
+                target,
+                style="invis",
+                weight="100",
+            )
+
+
+def _dense_panel() -> Digraph:
+    graph = _panel_graph("(a) Fully connected")
+    _same_rank(
+        graph,
+        ["x1", "x2", "x3"],
+    )
+    _same_rank(
+        graph,
+        ["h1", "h2", "h3"],
+    )
+    _same_rank(
+        graph,
+        ["y"],
+    )
+    for source in ("x1", "x2", "x3"):
+        for target in ("h1", "h2", "h3"):
+            graph.edge(
+                source,
+                target,
+            )
+    for source in ("h1", "h2", "h3"):
+        graph.edge(
+            source,
+            "y",
+        )
+    return graph
+
+
+def _sparse_panel() -> Digraph:
+    graph = _panel_graph("(b) Sparsely connected with skip edges")
+    _same_rank(
+        graph,
+        ["A", "B"],
+    )
+    _same_rank(
+        graph,
+        ["H1"],
+    )
+    _same_rank(
+        graph,
+        ["H2"],
+    )
+    _same_rank(
+        graph,
+        ["C"],
+    )
+    graph.edge(
+        "A",
+        "H1",
+    )
+    graph.edge(
+        "B",
+        "H1",
+    )
+    graph.edge(
+        "H1",
+        "H2",
+    )
+    graph.edge(
+        "H2",
+        "C",
+    )
+    graph.edge(
+        "A",
+        "H2",
+        style="dashed",
+    )
+    graph.edge(
+        "H1",
+        "C",
+        style="dashed",
+    )
+    graph.edge(
+        "A",
+        "C",
+        style="dashed",
+    )
+    return graph
+
+
+def _parse_svg(
+    svg: str,
+    prefix: str,
+) -> tuple[ET.Element, float, float]:
+    root = ET.fromstring(svg)
+    viewbox = root.attrib["viewBox"].split()
+    width = float(viewbox[2])
+    height = float(viewbox[3])
+    for element in root.iter():
+        if "id" in element.attrib:
+            element.attrib["id"] = prefix + element.attrib["id"]
+    return root, width, height
+
+
+def _nest_panel(
+    parent: ET.Element,
+    root: ET.Element,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+) -> None:
+    inner = ET.SubElement(
+        parent,
+        "{http://www.w3.org/2000/svg}svg",
+        {
+            "x": f"{x:.2f}",
+            "y": f"{y:.2f}",
+            "width": f"{width:.2f}",
+            "height": f"{height:.2f}",
+            "viewBox": (f"0.00 0.00 {width:.2f} {height:.2f}"),
+        },
+    )
+    for child in list(root):
+        inner.append(child)
+
+
+def _combine_side_by_side(
+    svg_a: str,
+    svg_b: str,
+) -> str:
+    root_a, width_a, height_a = _parse_svg(
+        svg_a,
+        "a_",
+    )
+    root_b, width_b, height_b = _parse_svg(
+        svg_b,
+        "b_",
+    )
+    total_width = width_a + _GAP_PT + width_b
+    total_height = max(height_a, height_b)
+    combined = ET.Element(
+        "{http://www.w3.org/2000/svg}svg",
+        {
+            "width": f"{total_width:.2f}pt",
+            "height": f"{total_height:.2f}pt",
+            "viewBox": (f"0.00 0.00 {total_width:.2f} {total_height:.2f}"),
+        },
+    )
+    combined.set(
+        "xmlns:xlink",
+        "http://www.w3.org/1999/xlink",
+    )
+    _nest_panel(
+        combined,
+        root_a,
+        0.0,
+        0.0,
+        width_a,
+        height_a,
+    )
+    _nest_panel(
+        combined,
+        root_b,
+        width_a + _GAP_PT,
+        0.0,
+        width_b,
+        height_b,
+    )
+    comment = (
+        " Generated by graphviz version 2.43.0 (0); "
+        "panels combined side by side "
+    )
+    body = ET.tostring(combined, encoding="unicode")
+    return (
+        '<?xml version="1.0" encoding="UTF-8" '
+        'standalone="no"?>\n'
+        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"\n'
+        ' "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n'
+        f"<!--{comment}-->\n"
+        f"{body}\n"
+    )
+
+
+def _rasterize_png(
+    svg_path: Path,
+    png_path: Path,
+) -> None:
+    subprocess.run(
+        [
+            "rsvg-convert",
+            "--dpi-x",
+            str(_PNG_DPI),
+            "--dpi-y",
+            str(_PNG_DPI),
+            "--format",
+            "png",
+            "--output",
+            str(png_path),
+            str(svg_path),
+        ],
+        check=True,
+    )
+
+
+def write_figure(out_path: Path | None = None) -> Path:
+    """Render both panels and write the combined SVG and PNG."""
+    path = _OUT_PATH if out_path is None else out_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    svg = _combine_side_by_side(
+        _dense_panel().pipe().decode("utf-8"),
+        _sparse_panel().pipe().decode("utf-8"),
+    )
+    path.write_text(svg)
+    _rasterize_png(
+        path,
+        path.with_suffix(".png"),
+    )
+    return path
+
+
+def main() -> None:
+    path = write_figure()
+    png_path = path.with_suffix(".png")
+    print(f"Wrote {path}")
+    print(f"Wrote {png_path}")
+
+
+if __name__ == "__main__":
+    main()

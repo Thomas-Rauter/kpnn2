@@ -1,0 +1,1920 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself.
+">
+      
+      
+      
+        <link rel="canonical" href="https://thomas-rauter.github.io/kpnn2/0.2.0/how_we_test/">
+      
+      
+        <link rel="prev" href="../reference/api/">
+      
+      
+        <link rel="next" href="../literature/fortelny-bock-2020/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../figures/kpnn2_logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>How we test - kpnn2</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#how-we-test" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="kpnn2" class="md-header__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="../figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            kpnn2
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              How we test
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="kpnn2" class="md-nav__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="../figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    kpnn2
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../supported/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supported architectures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedforward-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedforward example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Additional examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cyclic-graph-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cyclic graph example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time-series-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time-series example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transformer-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transformer example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How it works
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layered_vs_adjacency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layered vs. Adjacency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skip-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Skip edges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../map-node-attributions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mapping attributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packed_linear/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PackedLinear
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How we test
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How we test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#two-kinds-of-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two kinds of correctness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scientific-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scientific correctness
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scientific correctness">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#live-path-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Live-path labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinned-weight-importance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinned-weight importance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trained-importance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trained importance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#negative-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Negative controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rewired-prior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rewired prior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#edges-that-are-not-in-the-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edges that are not in the graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unrolled-adjacency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unrolled adjacency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#name-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Name mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technical-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Technical correctness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-tests-do-not-prove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the tests do not prove
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-the-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the suite
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../literature/fortelny-bock-2020/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fortelny and Bock 2020
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../citing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#two-kinds-of-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two kinds of correctness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scientific-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scientific correctness
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scientific correctness">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#live-path-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Live-path labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinned-weight-importance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinned-weight importance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trained-importance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trained importance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#negative-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Negative controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rewired-prior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rewired prior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#edges-that-are-not-in-the-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edges that are not in the graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unrolled-adjacency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unrolled adjacency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#name-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Name mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technical-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Technical correctness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-tests-do-not-prove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the tests do not prove
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-the-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the suite
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="how-we-test">How we test<a class="headerlink" href="#how-we-test" title="Permanent link">&para;</a></h1>
+<p><code>kpnn2</code> turns a named edgelist into the wiring of a neural net.
+A bug that drops a <a href="../concepts/#skip-edge">skip edge</a>, lets an
+edge outside the edgelist influence a prediction, or mislabels an
+<a href="../concepts/#attribution">attribution</a> axis is a scientific error,
+not only a software bug. The test suite is
+built around that.</p>
+<p>This page is an overview of <strong>what the tests claim</strong>, not a
+catalog of every <code>test_*</code> function. It has three parts: the
+scientific claims, which ask whether the
+<a href="../concepts/#graph">named graph</a> really constrains the model; the
+technical claims underneath them; and an explicit list of what
+none of it proves. The files live on
+GitHub under
+<a href="https://github.com/Thomas-Rauter/kpnn2/tree/main/tests"><code>tests/</code></a>.</p>
+<p>CI runs the full pytest suite, including the slow controls, on
+every change. That is a process check; the scientific argument
+is the claims below.</p>
+<p>A separate, frozen notebook repeats one published simulation
+with these primitives:
+<a href="../literature/fortelny-bock-2020/">Fortelny and Bock, 2020</a>.
+That page is not part of the test suite.</p>
+<h2 id="two-kinds-of-correctness">Two kinds of correctness<a class="headerlink" href="#two-kinds-of-correctness" title="Permanent link">&para;</a></h2>
+<p><strong>Technical.</strong> The <a href="../concepts/#parser">parsers</a>, masks,
+<a href="../concepts/#packed-indices">packed</a> layers, alignment, and
+checkpoints do what the public contract says. A cycle is
+rejected by <code>parse_layered</code>. A masked-out weight cannot affect
+the output. <code>PackedLinear</code> matches <code>MaskedLinear</code> on the same
+graph.</p>
+<p><strong>Scientific.</strong> The named graph is the architecture. A
+<a href="../concepts/#node">node</a> with no live path to the attributed
+output must not score as important. An edge that is not in the
+edgelist must not influence a prediction. A shuffled or rewired prior must not
+look like a recovery of the true nodes.</p>
+<p>Scientific correctness is the distinctive part of the suite. It
+lives in
+<a href="https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/controls"><code>tests/controls/</code></a>,
+with a few related checks in
+<a href="https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/module"><code>tests/module/</code></a>.</p>
+<h2 id="scientific-correctness">Scientific correctness<a class="headerlink" href="#scientific-correctness" title="Permanent link">&para;</a></h2>
+<p>These checks use small graphs with a known live set: which
+inputs and hidden nodes can affect a chosen output. The tests
+do not ask whether a real biological prior is true. They ask
+whether the primitives respect the prior they were given.</p>
+<p>A control graph needs edges that carry no signal, and an edge
+can be inert in two ways:</p>
+<ul>
+<li><strong>Absent.</strong> The pair is not a row of the edgelist. There is
+  no mask entry and no parameter.</li>
+<li><strong>Dead.</strong> The pair is a row of the edgelist, so node roles
+  stay the same, but tests pin that weight to 0.</li>
+</ul>
+<h3 id="live-path-labels">Live-path labels<a class="headerlink" href="#live-path-labels" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/live_path.svg" alt="A live red path reaches the output; a grey branch stops short"></p>
+<p>Every later check needs to know which names should score as
+important, so the definition comes first. A name is important
+if and only if some path of <a href="../concepts/#live-edge">live edges</a>,
+edges the graph actually has, runs from an input through that
+name to at least one attributed output.</p>
+<p>Each control graph <strong>declares</strong> those labels by hand. An
+independent reachability solver <strong>derives</strong> them from the
+edgelist and the dead pins. The two must match, so a mistake in
+the hand-written labels cannot cancel a mistake in the model.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/ground_truth.py"><code>tests/controls/ground_truth.py</code></a>
+and
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_ground_truth.py"><code>tests/controls/test_ground_truth.py</code></a>.
+Graphs include a disconnected decoy tower, a dead first
+<a href="../concepts/#hop">hop</a> — everything arriving at one layer — a
+skip, multiple outputs, and live units that are not at tensor
+index 0.</p>
+<h3 id="pinned-weight-importance">Pinned-weight importance<a class="headerlink" href="#pinned-weight-importance" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/pinned_weights.svg" alt="Live edges pinned in red; a dead edge dashed and pinned at zero"></p>
+<p>The first check takes training out of the picture, so that
+nothing but the wiring can explain a score. Weights on live
+edges are pinned, dead edges stay at 0, and the net is linear,
+so every live path carries a deterministic nonzero score.</p>
+<p>Feature scores are <code>|input gradient|</code>. Hidden scores are
+<code>|activation × layer gradient|</code> at that node's layer. Dead
+names must sit near zero. Live names must sit above a floor.</p>
+<p>Swapping the important and unimportant labels must fail: the
+assertion is sensitive to the ground truth, not a tautology.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_structural_importance.py"><code>tests/controls/test_structural_importance.py</code></a>.</p>
+<h3 id="trained-importance">Trained importance<a class="headerlink" href="#trained-importance" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/trained_importance.svg" alt="Two matched towers into one prediction node, one red and one grey"></p>
+<p>The next check lets training set the weights. Two structurally
+matched towers are both wired to <code>prediction</code>, but only tower A
+generates the labels. After a learnability gate (held-out
+ROC-AUC high enough that the net actually fit), autograd scores
+must rank the data-generating tower above the decoy.</p>
+<p>The cases are a linear no-bias net, the same graph with ReLU
+and bias, and a ReLU net whose labels are a product of tower-A
+features. Each case uses a block of seeds and a pass-rate
+floor, not a lucky window of five runs.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_trained_importance.py"><code>tests/controls/test_trained_importance.py</code></a>.</p>
+<h3 id="negative-controls">Negative controls<a class="headerlink" href="#negative-controls" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/negative_controls.svg" alt="A glass of water is not a drug bottle"></p>
+<p>These break what trained importance is supposed to detect.</p>
+<ul>
+<li><strong>Shuffled labels.</strong> Training on permuted <code>y</code> must not
+  separate tower A from tower B, and must not fit the permuted
+  task. Same idea as
+  <a href="https://papers.nips.cc/paper/8160-sanity-checks-for-saliency-maps">Adebayo et al., 2018</a>:
+  a saliency method that still “recovers” structure after the
+  labels are destroyed is following topology, not the data.</li>
+<li><strong>Swapped labels.</strong> Take a model that did pass the
+  learnability gate, then swap which tower is called important:
+  the trained criterion must fail.</li>
+</ul>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_negative_controls.py"><code>tests/controls/test_negative_controls.py</code></a>.</p>
+<h3 id="rewired-prior">Rewired prior<a class="headerlink" href="#rewired-prior" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/rewired_prior.svg" alt="A red stack plugged into a grey decoy; the prediction socket is empty"></p>
+<p>A prior only constrains a model if breaking the prior breaks
+the fit. Both graphs here use the same feature names and the
+same simulator, whose labels are linear in tower A. <code>G_true</code>
+gives both towers a path to <code>prediction</code>. <code>G_broken</code> keeps the
+names but ends tower A at <code>decoy_readout</code>, with no live path to
+the task output.</p>
+<p><code>G_true</code> must fit. <code>G_broken</code> must stay at chance. If a model
+can learn the labels without a live path from the causal
+features, the named graph is not actually constraining the
+hypothesis.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_rewired_prior.py"><code>tests/controls/test_rewired_prior.py</code></a>.</p>
+<h3 id="edges-that-are-not-in-the-graph">Edges that are not in the graph<a class="headerlink" href="#edges-that-are-not-in-the-graph" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/absent_edge.svg" alt="A complete red path above a grey path with a missing edge marked by an X"></p>
+<p>An absent edge has no weight to pin, so the claim is about the
+prediction itself. In a graph of two disjoint paths, raising a
+feature that feeds only a decoy output must not change the
+prediction, either in the forward pass or in the input
+gradient.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_absent_edge_influence.py"><code>tests/module/test_absent_edge_influence.py</code></a>.</p>
+<p>Skip edges make the opposite claim: they <strong>are</strong> in the graph,
+as ordinary packed pairs of the target hop, not a second
+module. A skip therefore still drives the target when the
+adjacent chain is ReLU-zeroed. Zeroing only that packed weight
+removes only that term. Gradient reaches the skip source
+directly.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_hop_forward.py"><code>tests/module/test_hop_forward.py</code></a>.
+<a href="../skip-edges/">Skip edges</a> is the design.</p>
+<h3 id="unrolled-adjacency">Unrolled adjacency<a class="headerlink" href="#unrolled-adjacency" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/unrolled_adjacency.svg" alt="A grey first hop around a cycle; a red wrap reaches the output"></p>
+<p>A <code>parse_adjacency</code> graph has no layers: the user applies one
+shared <a href="../concepts/#state-vector">state vector</a>, one unit per
+node, <code>T</code> times, so how far a signal travels
+depends on <code>T</code>. The step count therefore enters the ground
+truth. A walk that needs three hops is dead at <code>T=2</code> and live
+at <code>T=3</code> on the same edgelist, which makes unbounded <abbr title="Directed acyclic graph.">DAG</abbr>
+reachability the wrong labels here. <code>T</code> is chosen in the test,
+not by <code>kpnn2</code>.</p>
+<p>Pinned-weight scores on a linear <code>PackedLinear</code> must match those
+T-bounded labels. Swapping the <code>T=2</code> and <code>T=3</code> labels must fail.
+After several extra steps, a feature that feeds only a decoy
+must still not change the prediction. Dropping the self-loop
+that would carry an early pulse must leave the net at chance.</p>
+<p>Packed attention is the same absent-pair claim in another
+module: a key that is not a live edgelist source must not
+influence a query.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/unroll.py"><code>tests/controls/unroll.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_unroll.py"><code>tests/controls/test_unroll.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_unrolled_importance.py"><code>tests/controls/test_unrolled_importance.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_unrolled_absent_edge.py"><code>tests/controls/test_unrolled_absent_edge.py</code></a>,
+and
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_no_memory_prior.py"><code>tests/controls/test_no_memory_prior.py</code></a>.
+Attention pairs are pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py"><code>tests/module/test_packed_attention_structure.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_kernel.py"><code>tests/module/test_packed_attention_kernel.py</code></a>,
+and
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_chunk_size.py"><code>tests/module/test_packed_attention_chunk_size.py</code></a>.</p>
+<h3 id="name-mapping">Name mapping<a class="headerlink" href="#name-mapping" title="Permanent link">&para;</a></h3>
+<p><img class="correctness-icon" src="../figures/correctness/name_mapping.svg" alt="Anonymous squares with a name tag clipped onto each column"></p>
+<p>An attribution score is only interpretable if it carries the
+right name, and attaching <a href="../concepts/#spec">spec</a> names — the
+frozen structure a parser returns — to a tensor axis is all
+the library does here: <code>kpnn2</code> does not import Captum. The
+tests still run Integrated Gradients in the suite (Captum is a
+dev extra), then pass the resulting tensor to
+<code>map_node_attributions</code>. Dead inputs stay near zero; live
+inputs stay above a floor. Hidden-layer names are checked on a
+synthetic tensor whose values would fail if the axis were
+permuted.</p>
+<p>Captum <code>LayerConductance</code> also runs on a hop whose input and
+output are both two units wide, so the width check cannot say
+which side a tensor came from. With a hidden node cut off from
+the output, its zero score must land under that node's name via
+<code>hop_output=</code>. With an input that feeds nothing, its zero score
+must land under the input's name via <code>hop_input=</code> (Captum's
+<code>attribute_to_layer_input=True</code>). <code>axis="inputs"</code> names an
+input-width tensor (input units on an <code>AdjacencySpec</code>, the
+same result as <code>layer=0</code> on a <code>LayeredSpec</code>) and is never
+inferred from the width.</p>
+<p>Pinned in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_captum_mapping.py"><code>tests/controls/test_captum_mapping.py</code></a>
+and
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_map_node_attributions.py"><code>tests/module/test_map_node_attributions.py</code></a>.
+<a href="../map-node-attributions/">Mapping attributions</a> is the
+workflow.</p>
+<h2 id="technical-correctness">Technical correctness<a class="headerlink" href="#technical-correctness" title="Permanent link">&para;</a></h2>
+<p>Shorter on purpose: these checks pin the contract that every
+scientific claim above rests on.</p>
+<p><strong>Edgelist and layering.</strong> <code>parse_layered</code> enforces a <abbr title="Directed acyclic graph.">DAG</abbr>, no
+self-loops, no duplicate pairs, inferred inputs and outputs.
+<code>parse_adjacency</code> allows cycles and self-loops and never
+allocates an <code>(n, n)</code> tensor until <code>to_mask()</code>. Same <abbr title="Directed acyclic graph.">DAG</abbr>, two
+layouts, two fingerprints.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_ranking.py"><code>tests/module/test_parse_layered_ranking.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_adjacency.py"><code>tests/module/test_parse_adjacency.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_spec_serialize.py"><code>tests/module/test_spec_serialize.py</code></a>.</p>
+<p><strong>Named edges pack as unit pairs.</strong> Each named edge belongs to
+exactly one hop, the hop of its target, skips included. At
+width 1, summing the packed pair counts over all hops equals
+the edgelist length. A wider node expands that edge into a
+<code>k_source * k_target</code> block, and the sum counts those pairs.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py"><code>tests/module/test_parse_layered_hops.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_widths.py"><code>tests/module/test_parse_layered_widths.py</code></a>.</p>
+<p><strong>PackedLinear.</strong> On the same graph, <code>PackedLinear</code> and
+<code>MaskedLinear(spec.to_mask())</code> produce the same forward values.
+Absent edges are not parameters. Construction does not call
+<code>to_mask()</code>.
+<code>transpose()</code> matches dense <code>W.T</code> on the live edges and
+ties <code>weight</code> when <code>tie=True</code>. A <code>constraint=</code> module that
+<code>torch.where</code>-replaces packed slots holds those live-edge
+values under AdamW and SGD with momentum; a gradient hook
+that zeroes <code>grad[i]</code> does not. A keep-mask buffer in that
+module is the in-training prune: a zeroed slot contributes
+nothing, Adam state and <code>index_digest</code> stay, the buffer
+reloads into a layer rebuilt from the same spec, and a tied
+transpose sees the zero. <code>optimizer.load_state_dict</code> across
+a reparse is accepted when the parameter shapes match, which
+a packed layer still has when <code>nnz</code> is unchanged. <code>forward</code>
+disables <code>torch.autocast</code> and casts <code>x</code> to the parameter
+dtype.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear.py"><code>tests/module/test_packed_linear.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_linear_transpose.py"><code>tests/module/test_packed_linear_transpose.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py"><code>tests/module/test_constraint_freeze.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_keep_mask_prune.py"><code>tests/module/test_keep_mask_prune.py</code></a>.</p>
+<p><strong>Hop source axis.</strong> <code>gather_hop_inputs</code> concatenates whole
+source layers; <code>scatter_hop_outputs</code> splits that axis back.
+A missing saved layer raises <code>Kpnn2Error</code> instead of
+silently dropping those edges.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_gather_hop_inputs.py"><code>tests/module/test_gather_hop_inputs.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_scatter_hop_outputs.py"><code>tests/module/test_scatter_hop_outputs.py</code></a>.</p>
+<p><strong>Alignment.</strong> <code>align_inputs</code> maps a sequence of feature names
+to a 1-D <code>int64</code> column index. It does not take the matrix or
+return a data tensor. A DataFrame, tensor, string, bytes,
+mapping, set, AnnData-like object, or a matrix (<code>ndim != 1</code>)
+raises <code>Kpnn2Error</code>. On a <code>LayeredSpec</code> a wide input node
+repeats its index, and so does one on an <code>AdjacencySpec</code>
+built with <code>widths=</code>, where the index is <code>len(input_index)</code>
+long and still needs scatter into the state vector.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_align_inputs.py"><code>tests/module/test_align_inputs.py</code></a>.</p>
+<p><strong>MaskedLinear.</strong> A zero mask entry blocks that source in the
+forward pass, in <code>effective_weight()</code>, and in the gradient,
+even when a parametrization is registered on <code>weight</code>.
+<code>constraint=</code> (an <code>nn.Module</code>, for example <code>nn.Softplus</code>)
+runs on the unconstrained tensor before that mask.
+<code>torch.where</code> inside that module holds a live cell under
+AdamW; a gradient hook that zeroes the slot does not.
+Blocked entries of <code>weight</code> start at 0 and stay 0 under SGD
+with momentum, Adam, and AdamW. <code>weight</code> is a plain parameter,
+as on <code>PackedLinear</code> and <code>nn.Linear</code>, so <code>.weight</code> param-group
+filters, pickling, and <code>torch.nn.utils.prune</code> behave the same,
+and a kpnn2 0.1 checkpoint still loads. Degree-aware
+init uses the row’s live count, not <code>in_features</code>.
+<code>forward</code> disables <code>torch.autocast</code> and casts <code>x</code> to the
+parameter dtype. <code>torch.compile(..., fullgraph=True)</code>
+traces without a graph break.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_masked_linear.py"><code>tests/module/test_masked_linear.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_constraint_freeze.py"><code>tests/module/test_constraint_freeze.py</code></a>.</p>
+<p><strong>Packed attention.</strong> Scores exist only for live
+<code>(source, target)</code> pairs. An absent key does not influence a
+query. Isolated queries stay zeros, not NaN. No <code>(n, n)</code> score
+parameter. <code>chunk_size=None</code> gathers all live pairs at once; a
+positive <code>chunk_size</code> matches that mix and its gradients.
+<code>forward</code> disables <code>torch.autocast</code> and casts query, key, and
+value to the parameter dtype.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_structure.py"><code>tests/module/test_packed_attention_structure.py</code></a>,
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_packed_attention_chunk_size.py"><code>tests/module/test_packed_attention_chunk_size.py</code></a>.</p>
+<p><strong>Checkpoints.</strong> <code>state_dict</code> carries a digest of the live mask
+or packed indices, and an optional <code>identity</code> (typically
+<code>spec.fingerprint</code>). Loading into a rewired layer of the same
+shape raises. Loading into a same-shape rename raises when
+<code>identity</code> was set. Spec interchange is <code>to_dict</code> /
+<code>from_dict</code>, not pickle of the dataclass. The public import
+surface is a frozen list.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/api/test_public_api.py"><code>tests/api/test_public_api.py</code></a>.</p>
+<p><strong>A real table.</strong> One integration test trains on the Breast
+Cancer Wisconsin Diagnostic data through a sparse <abbr title="Directed acyclic graph.">DAG</abbr> built
+from the named features, with ordinary PyTorch training. It
+catches breakage that tiny unit tests still pass.
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/integration/test_real_tabular_task.py"><code>tests/integration/test_real_tabular_task.py</code></a>.</p>
+<h2 id="what-the-tests-do-not-prove">What the tests do not prove<a class="headerlink" href="#what-the-tests-do-not-prove" title="Permanent link">&para;</a></h2>
+<ul>
+<li>That <strong>your</strong> <code>forward()</code>, loss, optimizer, or prior is
+  correct. The package does not ship a model.</li>
+<li>That a knowledge graph from biology or another domain is a
+  true mechanism. The controls use synthetic graphs with a
+  known live set.</li>
+<li>That Captum (or any other attribution method) is a valid
+  estimator. The library only names an axis.</li>
+<li>That trained importance on real data will recover “the true
+  nodes.” The trained checks are matched-tower simulations
+  with a learnability gate.</li>
+<li>That the package picks <code>n_steps</code> or writes your time loop.
+  Unrolled-adjacency checks use tiny graphs and a fixed <code>T</code>.</li>
+<li>That GPU or TPU numerics are covered in CI.
+  <a href="https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/manual"><code>tests/manual/</code></a>
+  is Colab smoke, not pytest.</li>
+</ul>
+<h2 id="running-the-suite">Running the suite<a class="headerlink" href="#running-the-suite" title="Permanent link">&para;</a></h2>
+<p>From a clone with the <code>dev</code> extra:</p>
+<div class="highlight"><pre><span></span><code>pytest
+</code></pre></div>
+<p>That includes the slow scientific controls, which are marked
+<code>integration</code> and <code>slow</code>. <a href="../installation/">Installation</a>
+covers the development extra. CI status is on
+<a href="https://github.com/Thomas-Rauter/kpnn2/actions/workflows/ci.yml">GitHub Actions</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "content.code.copy", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

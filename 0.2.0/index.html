@@ -1,0 +1,2319 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself.
+">
+      
+      
+      
+        <link rel="canonical" href="https://thomas-rauter.github.io/kpnn2/0.2.0/">
+      
+      
+      
+        <link rel="next" href="installation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="figures/kpnn2_logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>kpnn2</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="stylesheets/extra.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#introduction" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="kpnn2" class="md-header__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            kpnn2
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Home
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="kpnn2" class="md-nav__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    kpnn2
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#introduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Introduction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-kpnn2-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What kpnn2 checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-not-custom-pytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why not custom PyTorch?
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why not custom PyTorch?">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-silent-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A silent failure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-not-a-gnn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why not a GNN?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package philosophy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#start-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start here
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#citation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Citation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="supported/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supported architectures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="feedforward-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedforward example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Additional examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cyclic-graph-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cyclic graph example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="time-series-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time-series example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="transformer-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transformer example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How it works
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="layered_vs_adjacency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layered vs. Adjacency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="skip-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Skip edges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="map-node-attributions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mapping attributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="packed_linear/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PackedLinear
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="how_we_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How we test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="literature/fortelny-bock-2020/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fortelny and Bock 2020
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="citing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#introduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Introduction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-kpnn2-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What kpnn2 checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-not-custom-pytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why not custom PyTorch?
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why not custom PyTorch?">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-silent-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A silent failure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-not-a-gnn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why not a GNN?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package philosophy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#start-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start here
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#citation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Citation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 class="homepage-hero-title">kpnn2</h1>
+
+<div align="center">
+  <img
+    src="figures/kpnn2_logo.png"
+    alt="kpnn2 logo"
+    height="72"
+    align="middle"
+  >
+  <img
+    src="figures/kpnn2_wordmark.png"
+    alt="kpnn2"
+    height="72"
+    align="middle"
+  >
+</div>
+
+<hr />
+<p><a href="https://github.com/Thomas-Rauter/kpnn2/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/Thomas-Rauter/kpnn2/ci.yml?branch=main&amp;label=ci&amp;logo=github&amp;labelColor=555" /></a>
+<a href="https://app.codecov.io/gh/Thomas-Rauter/kpnn2"><img alt="codecov" src="https://img.shields.io/codecov/c/github/Thomas-Rauter/kpnn2?logo=codecov&amp;labelColor=555" /></a>
+<a href="https://pypi.org/project/kpnn2/"><img alt="PyPI" src="https://img.shields.io/pypi/v/kpnn2?labelColor=555&amp;logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGZpbGwtcnVsZT0iZXZlbm9kZCIgaGVpZ2h0PSIzNjguNTY4IiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbWl0ZXJsaW1pdD0iMS41IiB2aWV3Qm94PSIxMzguOTk4IDExMi4wNzkgMzE3LjMxMCAzNjguNTY4IiB3aWR0aD0iMzE3LjMxMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3Mi41OSAtNjMuMjA5KSI%2BPHBhdGggZD0ibTY3My40MSAyMzYuMDE2LTY0LjI3MSA4LjI1MnYyODEuMzU3aDY0LjI3NnoiIGZpbGw9IiNmZmNhMWUiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjExIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMzY1IC0uMzcyNzUgLjIyMTE1IC4wODA5MyAtNDIzLjA4NiA0NTcuNDQ4KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIuMzUiIHRyYW5zZm9ybT0ibWF0cml4KDMuOTMzNTkgLTEuNDM4MzcgMCAuNTMwODQgLTIyNjYuNDMgMTA4Ny45NCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iLjYyIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjk2MDQgLS43MTY4NSAuMjIxNiAuMDc5MjcgLTExMTguNTUgNjM5LjMzOSkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMzc3NWE4IiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iMS4xNSIgdHJhbnNmb3JtPSJtYXRyaXgoMS4wMjI4MSAtLjM3NCAwIDEuMDU2OTUgLTQzMC43NzMgMjE0LjE3OCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMS4xNyIgdHJhbnNmb3JtPSJtYXRyaXgoLS45NzQ5OSAtLjM0OTI0IDAgMS4wNTY5NSA3ODYuMTk0IDE5OS4yMDgpIi8%2BPHBhdGggZD0ibTYwOS4xMzkgMjQ0LjI2OGg2NC4yNzZ2MjgxLjM1N2gtNjQuMjc2eiIgZmlsbD0iI2VmZWVlYSIgc3Ryb2tlPSIjZDhkOGQ4IiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTc0OTkgLS4zNTY1MiAwIC4yNjg4NSA3ODYuMTk0IDYxOC4zNTUpIi8%2BPGcgc3Ryb2tlPSIjZDFlM2YyIj48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTY4MzQgLS4zNTQwOSAwIC41MzA3NyA3MTkuNDgzIDQyNy41KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS4yIiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgMS4wNTY5NSAtMzExLjg5MiAxNzAuNDkyKSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS40MyIgdHJhbnNmb3JtPSJtYXRyaXgoLjk3NDIgLS4zNTYyMyAwIC41MzA4NCAtNDYzLjc0NCA0MjguNzYxKSIvPjxwYXRoIGQ9Im02Ny41NzUgMzkzLjE2MSA2Mi4xMjEgMjIuNDY1IDE4OC43MDgtNjguMjk5bS0xMjUuMTY1LTI5LjE0MSAxMjQuNzMyLTQ1LjYwMiIgZmlsbD0ibm9uZSIvPjwvZz48cGF0aCBkPSJtMzE4LjQwNCAzNDcuMzI3IDYzLjkzOS0yMy4yMDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2Q3YzViMiIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMyZjY0OTAiIHN0cm9rZT0iI2QxZTNmMiIgc3Ryb2tlLXdpZHRoPSIxLjE2IiB0cmFuc2Zvcm09Im1hdHJpeCguOTY3ODggLS4zNTI0NCAuMjIxMTUgLjA4MDkzIC01NzYuMTY4IDUxMy41ODMpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZmYiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzgyNiAtLjQwMjQgLjA1NDk0IC44NjE0IC0yOTUuMzYzIDMwNC45MzQpIi8%2BPHBhdGggZD0ibTE5NS43ODYgMTk4LjEyNSA2MS42OTYgMjIuMTI2IiBmaWxsPSJub25lIiBzdHJva2U9IiNkMWUzZjIiLz48cGF0aCBkPSJtNjczLjQxNSAyNDQuMjY4aC02NC4yNzZsLjAxOCAyODIuNDA1IDY0LjI1OC0xLjA0OHoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjM3IiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMjgxIC0uMzc0IDAgLjUyODQzIC00MzAuNzczIDQ5MS45ODMpIi8%2BPHBhdGggZD0ibTY3My40MTUgMjQ0LjI2OGgtNjQuMjc2bC4wMDEgMjgxLjc1OCA2NC4yNzUtLjQwMXoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjQ4IiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgLjUyNzQzIC0zMTEuODkyIDQ0OC44MjIpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZWZkZmQiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzcwNzQgLS4zOTYzIC4wNTE1NiAuODA4MzIgLTIwNS45MTYgNTA5LjQxMSkiLz48cGF0aCBkPSJtMTkyLjQxMiA0NjguMDU5IDEyNi4wMjgtNDUuOTc3IiBmaWxsPSJub25lIiBzdHJva2U9IiNkN2M1YjIiLz48L2c%2BPC9zdmc%2B" /></a>
+<a href="https://pypi.org/project/kpnn2/"><img alt="pypi since" src="https://img.shields.io/badge/pypi-since%20September%202026-blue?labelColor=555&amp;logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGZpbGwtcnVsZT0iZXZlbm9kZCIgaGVpZ2h0PSIzNjguNTY4IiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbWl0ZXJsaW1pdD0iMS41IiB2aWV3Qm94PSIxMzguOTk4IDExMi4wNzkgMzE3LjMxMCAzNjguNTY4IiB3aWR0aD0iMzE3LjMxMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3Mi41OSAtNjMuMjA5KSI%2BPHBhdGggZD0ibTY3My40MSAyMzYuMDE2LTY0LjI3MSA4LjI1MnYyODEuMzU3aDY0LjI3NnoiIGZpbGw9IiNmZmNhMWUiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjExIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMzY1IC0uMzcyNzUgLjIyMTE1IC4wODA5MyAtNDIzLjA4NiA0NTcuNDQ4KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIuMzUiIHRyYW5zZm9ybT0ibWF0cml4KDMuOTMzNTkgLTEuNDM4MzcgMCAuNTMwODQgLTIyNjYuNDMgMTA4Ny45NCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iLjYyIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjk2MDQgLS43MTY4NSAuMjIxNiAuMDc5MjcgLTExMTguNTUgNjM5LjMzOSkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMzc3NWE4IiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iMS4xNSIgdHJhbnNmb3JtPSJtYXRyaXgoMS4wMjI4MSAtLjM3NCAwIDEuMDU2OTUgLTQzMC43NzMgMjE0LjE3OCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMS4xNyIgdHJhbnNmb3JtPSJtYXRyaXgoLS45NzQ5OSAtLjM0OTI0IDAgMS4wNTY5NSA3ODYuMTk0IDE5OS4yMDgpIi8%2BPHBhdGggZD0ibTYwOS4xMzkgMjQ0LjI2OGg2NC4yNzZ2MjgxLjM1N2gtNjQuMjc2eiIgZmlsbD0iI2VmZWVlYSIgc3Ryb2tlPSIjZDhkOGQ4IiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTc0OTkgLS4zNTY1MiAwIC4yNjg4NSA3ODYuMTk0IDYxOC4zNTUpIi8%2BPGcgc3Ryb2tlPSIjZDFlM2YyIj48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTY4MzQgLS4zNTQwOSAwIC41MzA3NyA3MTkuNDgzIDQyNy41KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS4yIiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgMS4wNTY5NSAtMzExLjg5MiAxNzAuNDkyKSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS40MyIgdHJhbnNmb3JtPSJtYXRyaXgoLjk3NDIgLS4zNTYyMyAwIC41MzA4NCAtNDYzLjc0NCA0MjguNzYxKSIvPjxwYXRoIGQ9Im02Ny41NzUgMzkzLjE2MSA2Mi4xMjEgMjIuNDY1IDE4OC43MDgtNjguMjk5bS0xMjUuMTY1LTI5LjE0MSAxMjQuNzMyLTQ1LjYwMiIgZmlsbD0ibm9uZSIvPjwvZz48cGF0aCBkPSJtMzE4LjQwNCAzNDcuMzI3IDYzLjkzOS0yMy4yMDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2Q3YzViMiIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMyZjY0OTAiIHN0cm9rZT0iI2QxZTNmMiIgc3Ryb2tlLXdpZHRoPSIxLjE2IiB0cmFuc2Zvcm09Im1hdHJpeCguOTY3ODggLS4zNTI0NCAuMjIxMTUgLjA4MDkzIC01NzYuMTY4IDUxMy41ODMpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZmYiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzgyNiAtLjQwMjQgLjA1NDk0IC44NjE0IC0yOTUuMzYzIDMwNC45MzQpIi8%2BPHBhdGggZD0ibTE5NS43ODYgMTk4LjEyNSA2MS42OTYgMjIuMTI2IiBmaWxsPSJub25lIiBzdHJva2U9IiNkMWUzZjIiLz48cGF0aCBkPSJtNjczLjQxNSAyNDQuMjY4aC02NC4yNzZsLjAxOCAyODIuNDA1IDY0LjI1OC0xLjA0OHoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjM3IiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMjgxIC0uMzc0IDAgLjUyODQzIC00MzAuNzczIDQ5MS45ODMpIi8%2BPHBhdGggZD0ibTY3My40MTUgMjQ0LjI2OGgtNjQuMjc2bC4wMDEgMjgxLjc1OCA2NC4yNzUtLjQwMXoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjQ4IiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgLjUyNzQzIC0zMTEuODkyIDQ0OC44MjIpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZWZkZmQiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzcwNzQgLS4zOTYzIC4wNTE1NiAuODA4MzIgLTIwNS45MTYgNTA5LjQxMSkiLz48cGF0aCBkPSJtMTkyLjQxMiA0NjguMDU5IDEyNi4wMjgtNDUuOTc3IiBmaWxsPSJub25lIiBzdHJva2U9IiNkN2M1YjIiLz48L2c%2BPC9zdmc%2B" /></a>
+<a href="https://pypi.org/project/kpnn2/"><img alt="Python" src="https://img.shields.io/badge/python-3.10--3.14-blue?labelColor=555&amp;logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPjxzdmcgdmVyc2lvbj0iMS4xIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOmNjPSJodHRwOi8vd2ViLnJlc291cmNlLm9yZy9jYy8iIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyIgeG1sbnM6c3ZnPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeD0iMHB4IiB5PSIwcHgiIHdpZHRoPSIxMTBweCIgaGVpZ2h0PSIxMTBweCIgdmlld0JveD0iMC4yMSAtMC4wNzcgMTEwIDExMCIgZW5hYmxlLWJhY2tncm91bmQ9Im5ldyAwLjIxIC0wLjA3NyAxMTAgMTEwIiB4bWw6c3BhY2U9InByZXNlcnZlIj48bGluZWFyR3JhZGllbnQgaWQ9IlNWR0lEXzFfIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjYzLjgxNTkiIHkxPSI1Ni42ODI5IiB4Mj0iMTE4LjQ5MzQiIHkyPSIxLjgyMjUiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoMSAwIDAgLTEgLTUzLjI5NzQgNjYuNDMyMSkiPiA8c3RvcCBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiMzODdFQjgiLz4gPHN0b3Agb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojMzY2OTk0Ii8%2BPC9saW5lYXJHcmFkaWVudD48cGF0aCBmaWxsPSJ1cmwoI1NWR0lEXzFfKSIgZD0iTTU1LjAyMy0wLjA3N2MtMjUuOTcxLDAtMjYuMjUsMTAuMDgxLTI2LjI1LDEyLjE1NmMwLDMuMTQ4LDAsMTIuNTk0LDAsMTIuNTk0aDI2Ljc1djMuNzgxIGMwLDAtMjcuODUyLDAtMzcuMzc1LDBjLTcuOTQ5LDAtMTcuOTM4LDQuODMzLTE3LjkzOCwyNi4yNWMwLDE5LjY3Myw3Ljc5MiwyNy4yODEsMTUuNjU2LDI3LjI4MWMyLjMzNSwwLDkuMzQ0LDAsOS4zNDQsMCBzMC05Ljc2NSwwLTEzLjEyNWMwLTUuNDkxLDIuNzIxLTE1LjY1NiwxNS40MDYtMTUuNjU2YzE1LjkxLDAsMTkuOTcxLDAsMjYuNTMxLDBjMy45MDIsMCwxNC45MDYtMS42OTYsMTQuOTA2LTE0LjQwNiBjMC0xMy40NTIsMC0xNy44OSwwLTI0LjIxOUM4Mi4wNTQsMTEuNDI2LDgxLjUxNS0wLjA3Nyw1NS4wMjMtMC4wNzd6IE00MC4yNzMsOC4zOTJjMi42NjIsMCw0LjgxMywyLjE1LDQuODEzLDQuODEzIGMwLDIuNjYxLTIuMTUxLDQuODEzLTQuODEzLDQuODEzcy00LjgxMy0yLjE1MS00LjgxMy00LjgxM0MzNS40NiwxMC41NDIsMzcuNjExLDguMzkyLDQwLjI3Myw4LjM5MnoiLz48bGluZWFyR3JhZGllbnQgaWQ9IlNWR0lEXzJfIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9Ijk3LjA0NDQiIHkxPSIyMS42MzIxIiB4Mj0iMTU1LjY2NjUiIHkyPSItMzQuNTMwOCIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxIDAgMCAtMSAtNTMuMjk3NCA2Ni40MzIxKSI%2BIDxzdG9wIG9mZnNldD0iMCIgc3R5bGU9InN0b3AtY29sb3I6I0ZGRTA1MiIvPiA8c3RvcCBvZmZzZXQ9IjEiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkMzMzEiLz48L2xpbmVhckdyYWRpZW50PjxwYXRoIGZpbGw9InVybCgjU1ZHSURfMl8pIiBkPSJNNTUuMzk3LDEwOS45MjNjMjUuOTU5LDAsMjYuMjgyLTEwLjI3MSwyNi4yODItMTIuMTU2YzAtMy4xNDgsMC0xMi41OTQsMC0xMi41OTRINTQuODk3di0zLjc4MSBjMCwwLDI4LjAzMiwwLDM3LjM3NSwwYzguMDA5LDAsMTcuOTM4LTQuOTU0LDE3LjkzOC0yNi4yNWMwLTIzLjMyMi0xMC41MzgtMjcuMjgxLTE1LjY1Ni0yNy4yODFjLTIuMzM2LDAtOS4zNDQsMC05LjM0NCwwIHMwLDEwLjIxNiwwLDEzLjEyNWMwLDUuNDkxLTIuNjMxLDE1LjY1Ni0xNS40MDYsMTUuNjU2Yy0xNS45MSwwLTE5LjQ3NiwwLTI2LjUzMiwwYy0zLjg5MiwwLTE0LjkwNiwxLjg5Ni0xNC45MDYsMTQuNDA2IGMwLDE0LjQ3NSwwLDE4LjI2NSwwLDI0LjIxOUMyOC4zNjYsMTAwLjQ5NywzMS41NjIsMTA5LjkyMyw1NS4zOTcsMTA5LjkyM3ogTTcwLjE0OCwxMDEuNDU0Yy0yLjY2MiwwLTQuODEzLTIuMTUxLTQuODEzLTQuODEzIHMyLjE1LTQuODEzLDQuODEzLTQuODEzYzIuNjYxLDAsNC44MTMsMi4xNTEsNC44MTMsNC44MTNTNzIuODA5LDEwMS40NTQsNzAuMTQ4LDEwMS40NTR6Ii8%2BPC9zdmc%2B" /></a>
+<a href="https://pytorch.org/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-%3E%3D2.1-blue?logo=pytorch&amp;logoColor=white" /></a>
+<a href="https://pypi.org/project/kpnn2/"><img alt="PyPI - License" src="https://img.shields.io/pypi/l/kpnn2?labelColor=555" /></a>
+<a href="https://pypi.org/project/kpnn2/"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/dm/kpnn2?labelColor=555&amp;logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGZpbGwtcnVsZT0iZXZlbm9kZCIgaGVpZ2h0PSIzNjguNTY4IiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbWl0ZXJsaW1pdD0iMS41IiB2aWV3Qm94PSIxMzguOTk4IDExMi4wNzkgMzE3LjMxMCAzNjguNTY4IiB3aWR0aD0iMzE3LjMxMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3Mi41OSAtNjMuMjA5KSI%2BPHBhdGggZD0ibTY3My40MSAyMzYuMDE2LTY0LjI3MSA4LjI1MnYyODEuMzU3aDY0LjI3NnoiIGZpbGw9IiNmZmNhMWUiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjExIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMzY1IC0uMzcyNzUgLjIyMTE1IC4wODA5MyAtNDIzLjA4NiA0NTcuNDQ4KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIuMzUiIHRyYW5zZm9ybT0ibWF0cml4KDMuOTMzNTkgLTEuNDM4MzcgMCAuNTMwODQgLTIyNjYuNDMgMTA4Ny45NCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iLjYyIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjk2MDQgLS43MTY4NSAuMjIxNiAuMDc5MjcgLTExMTguNTUgNjM5LjMzOSkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMzc3NWE4IiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iMS4xNSIgdHJhbnNmb3JtPSJtYXRyaXgoMS4wMjI4MSAtLjM3NCAwIDEuMDU2OTUgLTQzMC43NzMgMjE0LjE3OCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMS4xNyIgdHJhbnNmb3JtPSJtYXRyaXgoLS45NzQ5OSAtLjM0OTI0IDAgMS4wNTY5NSA3ODYuMTk0IDE5OS4yMDgpIi8%2BPHBhdGggZD0ibTYwOS4xMzkgMjQ0LjI2OGg2NC4yNzZ2MjgxLjM1N2gtNjQuMjc2eiIgZmlsbD0iI2VmZWVlYSIgc3Ryb2tlPSIjZDhkOGQ4IiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTc0OTkgLS4zNTY1MiAwIC4yNjg4NSA3ODYuMTk0IDYxOC4zNTUpIi8%2BPGcgc3Ryb2tlPSIjZDFlM2YyIj48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTY4MzQgLS4zNTQwOSAwIC41MzA3NyA3MTkuNDgzIDQyNy41KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS4yIiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgMS4wNTY5NSAtMzExLjg5MiAxNzAuNDkyKSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS40MyIgdHJhbnNmb3JtPSJtYXRyaXgoLjk3NDIgLS4zNTYyMyAwIC41MzA4NCAtNDYzLjc0NCA0MjguNzYxKSIvPjxwYXRoIGQ9Im02Ny41NzUgMzkzLjE2MSA2Mi4xMjEgMjIuNDY1IDE4OC43MDgtNjguMjk5bS0xMjUuMTY1LTI5LjE0MSAxMjQuNzMyLTQ1LjYwMiIgZmlsbD0ibm9uZSIvPjwvZz48cGF0aCBkPSJtMzE4LjQwNCAzNDcuMzI3IDYzLjkzOS0yMy4yMDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2Q3YzViMiIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMyZjY0OTAiIHN0cm9rZT0iI2QxZTNmMiIgc3Ryb2tlLXdpZHRoPSIxLjE2IiB0cmFuc2Zvcm09Im1hdHJpeCguOTY3ODggLS4zNTI0NCAuMjIxMTUgLjA4MDkzIC01NzYuMTY4IDUxMy41ODMpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZmYiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzgyNiAtLjQwMjQgLjA1NDk0IC44NjE0IC0yOTUuMzYzIDMwNC45MzQpIi8%2BPHBhdGggZD0ibTE5NS43ODYgMTk4LjEyNSA2MS42OTYgMjIuMTI2IiBmaWxsPSJub25lIiBzdHJva2U9IiNkMWUzZjIiLz48cGF0aCBkPSJtNjczLjQxNSAyNDQuMjY4aC02NC4yNzZsLjAxOCAyODIuNDA1IDY0LjI1OC0xLjA0OHoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjM3IiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMjgxIC0uMzc0IDAgLjUyODQzIC00MzAuNzczIDQ5MS45ODMpIi8%2BPHBhdGggZD0ibTY3My40MTUgMjQ0LjI2OGgtNjQuMjc2bC4wMDEgMjgxLjc1OCA2NC4yNzUtLjQwMXoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjQ4IiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgLjUyNzQzIC0zMTEuODkyIDQ0OC44MjIpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZWZkZmQiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzcwNzQgLS4zOTYzIC4wNTE1NiAuODA4MzIgLTIwNS45MTYgNTA5LjQxMSkiLz48cGF0aCBkPSJtMTkyLjQxMiA0NjguMDU5IDEyNi4wMjgtNDUuOTc3IiBmaWxsPSJub25lIiBzdHJva2U9IiNkN2M1YjIiLz48L2c%2BPC9zdmc%2B" /></a></p>
+<p>Turn a named edgelist into sparsely connected PyTorch layers
+you assemble yourself.</p>
+<h2 id="introduction">Introduction<a class="headerlink" href="#introduction" title="Permanent link">&para;</a></h2>
+<p>Deep neural networks are accurate predictors but opaque ones. Their
+hidden units carry no names: a unit deep inside a trained network
+has no meaning outside the model, so attribution methods, which
+score how much each input or unit contributes to a prediction, can
+say which units matter but not what they are. For scientific use
+this is a serious limitation, because a prediction can be checked against
+data, but only a mechanism can be tested by experiment. One line of
+work in interpretable machine learning therefore builds meaning
+into the architecture itself, so that the internal units of a
+network correspond to entities a scientist already knows by name.</p>
+<p><img alt="Left: a cell-surface receptor signals through kinases and transcription factors to genes. Right: the same wiring as a sparse neural network, with input nodes at the bottom, named hidden nodes in between, and one output node at the top." src="figures/KPNNs_explained.png" /></p>
+<p><strong>Figure 1.</strong> From a biological network (left) to a knowledge-primed
+neural network (right). Every node of the network is a named entity
+from the prior; the arrow marks the direction of information flow.</p>
+<p>A <a href="concepts/#kpnn">knowledge-primed neural network</a> (<abbr title="Knowledge-primed neural network.">KPNN</abbr>)
+achieves this by encoding prior knowledge as a graph. Every node of
+the network stands for a named entity, and an edge exists only
+where the prior records a relationship between two entities.
+Connections the prior does not contain are absent rather than
+merely small, so sparsity, which elsewhere in deep learning serves
+speed or memory, here carries the meaning of the model. Figure 1
+shows the entity-based form introduced by
+<a href="https://doi.org/10.1186/s13059-020-02100-5">Fortelny and Bock (2020)</a>.
+On the left, a cell-surface receptor signals through kinases to
+transcription factors, which regulate genes. On the right, the same
+wiring becomes a neural network that runs against the direction of
+signaling: gene expression enters at the input nodes, passes
+through transcription factors and kinases in the hidden layers, and
+reaches the receptor at the output node. Because each hidden node
+stands for a specific protein, an attribution score on that node
+says how much the trained model relies on that protein's unit,
+rather than on an anonymous one.
+Related models, also called visible or biologically informed neural
+networks, derive the graph from pathway databases or ontologies,
+such as P-NET, which is built on a hierarchy of Reactome pathways
+(<a href="https://doi.org/10.1038/s41586-021-03922-4">Elmarakeby et al., 2021</a>).
+Nothing in the construction is specific to biology: any domain whose
+entities have stable names and known relationships can be modeled
+the same way.</p>
+<p>PyTorch can express such networks, but its standard components do
+not. <code>nn.Linear</code> connects every unit of one layer to every unit of
+the next (Figure 2a); a <abbr title="Knowledge-primed neural network.">KPNN</abbr> connects only the pairs its prior
+names, and many of its edges skip layers (Figure 2b). The common
+workaround multiplies each weight matrix by a fixed 0/1 mask.
+Deriving those masks is a parsing problem in its own right: nodes
+must be sorted into layers, edges that skip layers routed to the
+correct inputs, and the column order of every layer fixed; all of
+it must be redone whenever the prior changes. The more serious
+difficulty is less visible. A <abbr title="Knowledge-primed neural network.">KPNN</abbr> reports its results by name, yet
+inside the model a name is only an integer position, and nothing in
+PyTorch checks that the two still agree. When they drift apart,
+after a database update, with a feature table in a different column
+order, or on reloading a checkpoint, the model still trains and the
+loss looks normal, but the score reported for one gene belongs to
+another. Such an error raises no exception and leaves no trace in
+the metrics. Because published models have typically been
+implemented with code written for one architecture, each new
+project rebuilds this machinery and meets these pitfalls anew.</p>
+<p><img alt="(a) Every input connects to every hidden unit, and every hidden unit to the output. (b) Only the listed edges exist, and three dashed edges skip a layer." src="figures/dense_vs_sparse.png" /></p>
+<p><strong>Figure 2.</strong> (a) Dense adjacent layers, the usual PyTorch case.
+(b) A sparsely connected network with skip edges (dashed), the same
+graph as on the <a href="skip-edges/">Skip edges</a> page.</p>
+<p><code>kpnn2</code> resolves this by separating what the prior determines from
+what the modeler decides. The prior determines which connections
+exist and what each node is called, and <code>kpnn2</code> handles exactly
+that part. It derives the connectivity from a named edgelist once,
+keeps every node name attached to its tensor position from parsing
+to attribution, and checks that correspondence wherever names and
+positions meet: when the prior is parsed, when input columns are
+aligned, when a checkpoint is loaded, and when attribution scores
+are labeled. Everything else, including activations, normalization,
+losses, the training loop, and the choice of attribution method,
+stays in an ordinary PyTorch <code>nn.Module</code> that you write. The package
+provides building blocks, not a finished model: there is no model
+compiler and no ready-made network, so the model remains plain
+PyTorch that can be read, changed, and extended like any other.</p>
+<p>In practice, <code>kpnn2</code> provides four kinds of building blocks:</p>
+<ul>
+<li><strong>Parsers.</strong> <code>parse_layered()</code> sorts an acyclic prior into layers
+  and keeps each edge that skips layers in the layer it feeds.
+  <code>parse_adjacency()</code> places all nodes in a single vector, which
+  allows feedback loops and self-loops.</li>
+<li><strong>Sparse layers.</strong> <code>PackedLinear</code> (one trainable weight per
+  edge), <code>MaskedLinear</code> (a masked dense matrix for small graphs),
+  and <code>PackedMultiheadAttention</code> (attention restricted to the
+  prior's edges) take the place of <code>nn.Linear</code> and
+  <code>nn.MultiheadAttention</code>.</li>
+<li><strong>Name alignment.</strong> <code>align_inputs()</code> orders feature columns by
+  name, and <code>map_node_attributions()</code> labels attribution tensors
+  with node names.</li>
+<li><strong>Checks.</strong> Malformed priors, missing input columns, checkpoints
+  from a different prior, and attribution tensors of the wrong
+  width raise <code>Kpnn2Error</code>; <a href="#what-kpnn2-checks">What kpnn2 checks</a>
+  lists each check.</li>
+</ul>
+<p><a href="#core-workflow">Core workflow</a> walks through the steps with a
+minimal model, and <a href="#why-not-custom-pytorch">Why not custom PyTorch?</a>
+sets that model against the same network written by hand, including
+a <a href="#a-silent-failure">silent failure</a> that only the hand-written
+version lets through. <a href="supported/">Supported architectures</a>
+covers feedforward, recurrent, and attention-based designs, and the
+<a href="feedforward-example/">Feedforward example</a> builds and
+interprets a <abbr title="Knowledge-primed neural network.">KPNN</abbr> end to end. <a href="how_we_test/">How we test</a>
+describes tests that pin scientific claims as well as code, and a
+frozen notebook reproduces the simulated node-recovery result of
+<a href="literature/fortelny-bock-2020/">Fortelny and Bock (2020)</a>.</p>
+<h2 id="what-kpnn2-checks">What kpnn2 checks<a class="headerlink" href="#what-kpnn2-checks" title="Permanent link">&para;</a></h2>
+<p>Each check sits where a name meets a tensor position, and each
+catches a mistake that would not show up in the loss.</p>
+<ul>
+<li><strong>Malformed edgelists are rejected.</strong> Both parsers reject missing
+  columns, missing or empty names, and duplicate edges, which would
+  otherwise collapse into one weight. <code>parse_layered()</code> also
+  rejects cycles and self-loops.</li>
+<li><strong>Edges that skip layers stay in the wiring.</strong> Such an edge is
+  part of the layer it feeds, so that layer's input width includes
+  it, and <code>gather_hop_inputs()</code> raises when an earlier layer it
+  reads was never kept.</li>
+<li><strong>Input columns are matched by name.</strong> <code>align_inputs()</code> finds
+  each input node's column in your feature table. A reordered
+  table, or one with extra columns, still lines up. A missing or
+  duplicated name raises.</li>
+<li><strong>Checkpoints refuse a different prior.</strong> Each sparse layer saves
+  a digest of its wiring and, with <code>identity=spec.fingerprint</code>, the
+  fingerprint of the named prior. A mismatch raises instead of
+  loading; <a href="#a-silent-failure">A silent failure</a> shows what the
+  hand-written version does.</li>
+<li><strong>Attribution scores are labeled from the parsed graph.</strong>
+  <code>map_node_attributions()</code> names every position of a layer tensor
+  and raises when the tensor's width does not match that layer.</li>
+</ul>
+<p>The checks stop at that boundary. Your <code>forward()</code>, your prior's
+biology, and your attribution method stay yours to get right.
+<a href="how_we_test/"><strong>How we test</strong></a> lists what the tests pin and
+what they do not prove.</p>
+<h2 id="core-workflow">Core workflow<a class="headerlink" href="#core-workflow" title="Permanent link">&para;</a></h2>
+<p>An <strong>edgelist</strong> is a table of directed connections: each row links
+a <code>source</code> node to a <code>target</code> node. For example:</p>
+<table>
+<thead>
+<tr>
+<th>source</th>
+<th>target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>H</td>
+</tr>
+<tr>
+<td>B</td>
+<td>H</td>
+</tr>
+<tr>
+<td>H</td>
+<td>C</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>graph</strong> is what that table describes: the named nodes, and the
+directed edges between them. Edgelist and graph are the same object in
+two forms — the table you pass in, and the structure it encodes. These
+docs use "graph" in that sense throughout: the prior wiring that becomes
+the architecture. It never means PyTorch's autograd graph, and never a
+graph as <em>data</em> in the <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr> sense (see <a href="#why-not-a-gnn">Why not a <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr>?</a>).
+<a href="concepts/"><strong>Concepts</strong></a> defines the rest of the vocabulary.</p>
+<ol>
+<li>Define a model architecture as an edgelist with named <code>source</code>
+   and <code>target</code> <a href="concepts/#node">nodes</a>.</li>
+<li>Parse it. For a
+   <a href="concepts/#dag">directed acyclic graph</a> (<abbr title="Directed acyclic graph.">DAG</abbr>) you want
+   as layers, call <code>parse_layered()</code>. It returns a <code>LayeredSpec</code>
+   with one packed <a href="concepts/#hop">hop</a> per layer — a hop
+   being everything entering one layer. For cycles, or for one
+   shared <a href="concepts/#state-vector">state vector</a> over all
+   nodes, call <code>parse_adjacency()</code>. It returns an <code>AdjacencySpec</code>
+   whose edges are <a href="concepts/#packed-indices">packed indices</a>.
+   A <abbr title="Directed acyclic graph.">DAG</abbr> is valid for both, so the layout is your choice.</li>
+<li>Write an <code>nn.Module</code> with one <code>PackedLinear</code> per hop in
+   <code>spec.hops</code>, and feed each one <code>gather_hop_inputs(saved, hop)</code>.
+   <a href="concepts/#skip-edge">Skip edges</a>, whose endpoints are
+   more than one layer apart, already sit inside those hops, so
+   there is nothing extra to call. <code>MaskedLinear(hop.to_mask())</code>
+   is the dense hatch for small graphs.</li>
+<li>Align feature names with <code>align_inputs()</code>, then index the
+   host matrix.</li>
+<li>Train with ordinary PyTorch.</li>
+<li>Optionally run Captum (or another method) yourself, then label a
+   layer tensor with <code>map_node_attributions()</code> (returns xarray).</li>
+<li>Optionally fold those scores with <code>aggregate_node_attributions()</code>.</li>
+<li>A checkpoint is <code>spec.to_dict()</code> plus <code>state_dict</code>, not
+   weights alone.</li>
+</ol>
+<p>The snippet below is a minimal run of steps 1–4, using the
+edgelist from the table above. Column order in the input table
+does not matter: <code>align_inputs()</code> matches names and returns a
+column index. Skip edges are
+omitted here; <a href="skip-edges/"><strong>Skip edges</strong></a> works them
+through. <a href="#why-not-custom-pytorch"><strong>Why not custom PyTorch?</strong></a>
+sets this hop loop against the equivalent module written by hand.
+A full walkthrough, including training and attribution, is in
+<a href="feedforward-example/"><strong>Feedforward example</strong></a>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">kpnn2</span>
+
+<span class="n">edgelist</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">,</span> <span class="s2">"H"</span><span class="p">],</span>
+        <span class="s2">"target"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"H"</span><span class="p">,</span> <span class="s2">"H"</span><span class="p">,</span> <span class="s2">"C"</span><span class="p">],</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_layered</span><span class="p">(</span><span class="n">edgelist</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Net</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">LayeredSpec</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin0</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+            <span class="n">identity</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin1</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+            <span class="n">identity</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acts</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">acts</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="bp">self</span><span class="o">.</span><span class="n">lin0</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lin1</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">Net</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<span class="n">features</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"B"</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">],</span> <span class="s2">"A"</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">]})</span>
+<span class="n">col</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">align_inputs</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+    <span class="n">features</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[:,</span> <span class="n">col</span><span class="p">],</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="c1"># Continue training with ordinary PyTorch.</span>
+</code></pre></div>
+<h2 id="why-not-custom-pytorch">Why not custom PyTorch?<a class="headerlink" href="#why-not-custom-pytorch" title="Permanent link">&para;</a></h2>
+<p>A pathway prior is still a feedforward network, so you <em>can</em>
+write one in plain PyTorch: sort the named nodes into layers,
+build a mask for each hop, and pass <code>W * mask</code> to <code>F.linear</code>.
+Written out, that preparation is a
+<a href="concepts/#parser">parser</a> — the code on the left
+below is one. It also has to be rerun by hand: a single edge
+added to the table can move nodes between layers, and the masks,
+the layers each hop reads, and the column order of every
+concatenated input all change with it.</p>
+<p><code>kpnn2</code> replaces that preparation with one call to
+<code>parse_layered()</code> and leaves the <code>nn.Module</code> as a loop over hops.
+The edgelist stays the only description of the graph, skip edges
+arrive already packed into the hops that read them, and
+<code>align_inputs()</code> matches input names rather than positions.
+<a href="skip-edges/"><strong>Skip edges</strong></a> works through
+the same point in a full example.</p>
+<div>
+<img class="figure-full" src="figures/custom_pytorch_pathway.png" alt="Genes feed transcription factors, then kinases, then cellular processes, and finally one phenotype node; three dashed edges skip a layer.">
+</div>
+
+<p><strong>Figure 3.</strong> A sparse pathway prior: genes feeding transcription
+factors, kinases, cellular processes and a phenotype. Solid edges
+connect adjacent layers; dashed edges skip one. Both snippets
+below build this network from the same edgelist.</p>
+<div class="grid code-compare">
+<div>
+<p><strong>Custom PyTorch</strong></p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">deque</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="n">edgelist</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">"pathway_prior.csv"</span><span class="p">)</span>
+
+<span class="n">missing</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">}</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span>
+    <span class="n">edgelist</span><span class="o">.</span><span class="n">columns</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"missing columns: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">)</span>
+<span class="n">pairs</span> <span class="o">=</span> <span class="n">edgelist</span><span class="p">[[</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">]]</span>
+<span class="k">if</span> <span class="n">pairs</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"missing node names"</span><span class="p">)</span>
+<span class="n">pairs</span> <span class="o">=</span> <span class="n">pairs</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">pairs</span> <span class="o">==</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"empty node names"</span><span class="p">)</span>
+<span class="n">loop_nodes</span> <span class="o">=</span> <span class="n">pairs</span><span class="p">[</span><span class="s2">"source"</span><span class="p">][</span>
+    <span class="n">pairs</span><span class="p">[</span><span class="s2">"source"</span><span class="p">]</span> <span class="o">==</span> <span class="n">pairs</span><span class="p">[</span><span class="s2">"target"</span><span class="p">]</span>
+<span class="p">]</span>
+<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">loop_nodes</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"self-loops: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">loop_nodes</span><span class="p">))</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">)</span>
+<span class="k">if</span> <span class="n">pairs</span><span class="o">.</span><span class="n">duplicated</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"duplicate edges"</span><span class="p">)</span>
+
+<span class="n">parents</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
+<span class="n">children</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+<span class="n">nodes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">source</span><span class="p">,</span> <span class="n">target</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+    <span class="n">pairs</span><span class="p">[</span><span class="s2">"source"</span><span class="p">],</span>
+    <span class="n">pairs</span><span class="p">[</span><span class="s2">"target"</span><span class="p">],</span>
+<span class="p">):</span>
+    <span class="n">parents</span><span class="p">[</span><span class="n">target</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">children</span><span class="p">[</span><span class="n">source</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+    <span class="n">nodes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">nodes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+
+<span class="c1"># Kahn's algorithm: recursion would overflow</span>
+<span class="c1"># the stack on a deep graph and never return</span>
+<span class="c1"># on a cyclic one. What it leaves unranked</span>
+<span class="c1"># is the cycle.</span>
+<span class="n">in_degree</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">parents</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">nodes</span>
+<span class="p">}</span>
+<span class="n">ready</span> <span class="o">=</span> <span class="n">deque</span><span class="p">(</span>
+    <span class="n">name</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">in_degree</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+<span class="p">)</span>
+<span class="n">depths</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">while</span> <span class="n">ready</span><span class="p">:</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">ready</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">parents</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span>
+        <span class="n">depths</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="nb">max</span><span class="p">(</span>
+            <span class="n">depths</span><span class="p">[</span><span class="n">parent</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">parent</span> <span class="ow">in</span> <span class="n">parents</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">depths</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">children</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span>
+        <span class="n">in_degree</span><span class="p">[</span><span class="n">child</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">in_degree</span><span class="p">[</span><span class="n">child</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ready</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">depths</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodes</span><span class="p">):</span>
+    <span class="n">unranked</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">nodes</span> <span class="o">-</span> <span class="n">depths</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cycle: </span><span class="si">{</span><span class="n">unranked</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="n">by_layer</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">depth</span> <span class="ow">in</span> <span class="n">depths</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">by_layer</span><span class="p">[</span><span class="n">depth</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">by_layer</span><span class="p">[</span><span class="n">depth</span><span class="p">]))</span>
+    <span class="k">for</span> <span class="n">depth</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">by_layer</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="p">]</span>
+<span class="n">masks</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">depth</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">layers</span><span class="p">)):</span>
+    <span class="n">src_layers</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">src_depth</span><span class="p">,</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+        <span class="n">layers</span><span class="p">[:</span><span class="n">depth</span><span class="p">]</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">source</span> <span class="ow">in</span> <span class="n">parents</span><span class="p">[</span><span class="n">target</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">target</span> <span class="ow">in</span> <span class="n">layers</span><span class="p">[</span><span class="n">depth</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">layer</span>
+        <span class="p">):</span>
+            <span class="n">src_layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">src_depth</span><span class="p">)</span>
+    <span class="n">col_of</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">col</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">src_depth</span> <span class="ow">in</span> <span class="n">src_layers</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">layers</span><span class="p">[</span><span class="n">src_depth</span><span class="p">]:</span>
+            <span class="n">col_of</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">col</span>
+            <span class="n">col</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">layers</span><span class="p">[</span><span class="n">depth</span><span class="p">]),</span>
+        <span class="n">col</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">target</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">layers</span><span class="p">[</span><span class="n">depth</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">parents</span><span class="p">[</span><span class="n">target</span><span class="p">]:</span>
+            <span class="n">mask</span><span class="p">[</span><span class="n">row</span><span class="p">,</span> <span class="n">col_of</span><span class="p">[</span><span class="n">source</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">masks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">src_layers</span><span class="p">,</span> <span class="n">mask</span><span class="p">))</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Net</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">masks</span><span class="p">,</span> <span class="n">n_inputs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_inputs</span> <span class="o">=</span> <span class="n">n_inputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">src_layers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">src</span> <span class="k">for</span> <span class="n">src</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">masks</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lins</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">masks</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ParameterList</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">masks</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lins</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span>
+                    <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                    <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
+                    <span class="n">mask</span><span class="p">,</span>
+                    <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acts</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">lins</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="c1"># Width is checkable, column order is</span>
+        <span class="c1"># not: ordering x to match layers[0]</span>
+        <span class="c1"># stays the caller's job.</span>
+        <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inputs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"expected </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inputs</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"columns, got </span><span class="si">{</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">saved</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="n">x</span><span class="p">}</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">x</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">lin</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lins</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">masks</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">saved</span><span class="p">[</span><span class="n">src</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">src</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">src_layers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="p">]</span>
+            <span class="n">inp</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">parts</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span>
+                <span class="n">inp</span><span class="p">,</span>
+                <span class="n">lin</span><span class="o">.</span><span class="n">weight</span> <span class="o">*</span> <span class="n">mask</span><span class="p">,</span>
+                <span class="n">lin</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lins</span><span class="p">):</span>
+                <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">acts</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">h</span><span class="p">)</span>
+            <span class="n">saved</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">h</span>
+        <span class="k">return</span> <span class="n">h</span>
+
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">Net</span><span class="p">(</span><span class="n">masks</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+</code></pre></div>
+</div>
+<div>
+<p><strong>kpnn2</strong></p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">kpnn2</span>
+
+<span class="n">edgelist</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">"pathway_prior.csv"</span><span class="p">)</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_layered</span><span class="p">(</span><span class="n">edgelist</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Net</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">LayeredSpec</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="n">spec</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lins</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedLinear</span><span class="p">(</span>
+                    <span class="n">hop</span><span class="o">.</span><span class="n">source_index</span><span class="p">,</span>
+                    <span class="n">hop</span><span class="o">.</span><span class="n">target_index</span><span class="p">,</span>
+                    <span class="n">hop</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span>
+                    <span class="n">hop</span><span class="o">.</span><span class="n">in_features</span><span class="p">,</span>
+                    <span class="n">identity</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">hop</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">hops</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acts</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">hops</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">saved</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="n">x</span><span class="p">}</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">x</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">lin</span><span class="p">,</span> <span class="n">hop</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lins</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">hops</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">lin</span><span class="p">(</span><span class="n">kpnn2</span><span class="o">.</span><span class="n">gather_hop_inputs</span><span class="p">(</span><span class="n">saved</span><span class="p">,</span> <span class="n">hop</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lins</span><span class="p">):</span>
+                <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">acts</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">h</span><span class="p">)</span>
+            <span class="n">saved</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">h</span>
+        <span class="k">return</span> <span class="n">h</span>
+
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">Net</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+</code></pre></div>
+</div>
+</div>
+<p>Both columns are correct. They build the same network, and both
+reject the same six malformed edgelists. The left one is several
+times longer, and it covers only the model: aligning input
+columns, saving checkpoints, and naming
+<a href="concepts/#attribution">attributions</a> still lie ahead, each
+with bookkeeping of its own.</p>
+<p>Much of that length is not the model but the checks the masks
+depend on. A missing node name silently adds a node, a duplicated
+edge silently collapses into one weight, and a cycle has no
+layering at all, so the depth pass has to detect it rather than
+recurse forever. The left column holds every check its author
+thought of. The failure below is one they did not.</p>
+<h3 id="a-silent-failure">A silent failure<a class="headerlink" href="#a-silent-failure" title="Permanent link">&para;</a></h3>
+<p>Train the left model and save its <code>state_dict</code>. Months later, a
+new database release revises one interaction in Figure 3:
+<code>gene_n3</code> now regulates <code>tf_stat</code> instead of <code>tf_nfkb</code>. No node
+changes layer, so every tensor keeps its shape. Rerun the left
+column on the new prior and reload the checkpoint:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Before: trained on the old pathway_prior.csv</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">"model.pt"</span><span class="p">)</span>
+
+<span class="c1"># After: the same script on the new pathway_prior.csv</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Net</span><span class="p">(</span><span class="n">masks</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+<span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"model.pt"</span><span class="p">))</span>
+<span class="c1"># &lt;All keys matched successfully&gt;</span>
+</code></pre></div>
+<p>The load succeeds, even with <code>strict=True</code>. The masks are
+<code>nn.Parameter</code>s, so they are saved in the <code>state_dict</code>, and the
+old masks overwrite the new ones. The model runs the old wiring
+while every name in the script comes from the new prior. Loss and
+predictions look normal. Every attribution on <code>gene_n3</code> flows
+through <code>gene_n3 → tf_nfkb</code>, an edge the new prior says does not
+exist.</p>
+<p>The obvious fix moves the failure instead of removing it.
+Register the masks as non-persistent buffers so they stay out of
+the <code>state_dict</code>, and the load still succeeds. Now the new masks
+gate weights trained under the old ones: <code>gene_n3 → tf_stat</code> runs
+on a weight that never trained, and the trained
+<code>gene_n3 → tf_nfkb</code> weight sits behind a zero.</p>
+<p>With <code>kpnn2</code>, the same reload raises:</p>
+<div class="highlight"><pre><span></span><code><span class="n">model</span> <span class="o">=</span> <span class="n">Net</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>  <span class="c1"># the new pathway_prior.csv</span>
+<span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"model.pt"</span><span class="p">))</span>
+<span class="c1"># Kpnn2Error: The checkpoint identity does not match this layer.</span>
+</code></pre></div>
+<p>Each <code>PackedLinear</code> saves a digest of its packed indices and,
+with <code>identity=spec.fingerprint</code>, the fingerprint of the named
+prior. When either differs from the layer being loaded, loading
+stops with <code>Kpnn2Error</code>.</p>
+<p>Each failure like this one is fixable once you have seen it. The
+hard part is seeing all of them in advance: this one needs a
+prior update and a reload to appear, and neither column's code
+hints at it. That is what <code>kpnn2</code> is for. It owns the mapping
+from node names to tensor positions (layers, packed edges, input
+columns, checkpoints, attribution labels), so the checks on that
+mapping are written and tested once, in one place, instead of
+rediscovered by every project that writes its own. It does not
+check your <code>forward()</code>, your prior's biology, or your attribution
+method; <a href="how_we_test/"><strong>How we test</strong></a> lists what the
+tests pin and what they do not prove.</p>
+<h2 id="why-not-a-gnn">Why not a <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr>?<a class="headerlink" href="#why-not-a-gnn" title="Permanent link">&para;</a></h2>
+<p>A graph neural network (<abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr>) is the standard model class for
+learning from graph-structured data, and
+<a href="https://pyg.org/">PyTorch Geometric</a> (PyG) is its canonical
+implementation. Where the prior should become a <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr>, that is the
+right tool.</p>
+<p>An edgelist does not by itself determine the model. A knowledge
+graph (a pathway map, an ontology, a sensor network) states which
+interactions exist; how that prior enters the model is a second
+choice, and each choice encodes a different hypothesis about the
+data-generating process. In <code>kpnn2</code> the graph is the
+<strong>architecture</strong>, not the data.</p>
+<ul>
+<li><strong>Fixed structure, varying state.</strong> A <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr> assumes that the
+  structure itself varies and is informative: a sample is a graph,
+  its nodes carry feature vectors, and the batch is drawn from a
+  distribution over graphs. A <abbr title="Knowledge-primed neural network.">KPNN</abbr> assumes the converse. The graph
+  is known and identical across samples, what varies is the state
+  of its named nodes, and the batch is samples. Where no structure
+  varies, the regularity a <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr> is built to exploit is not present.</li>
+<li><strong>Prior-indexed parameters, not one shared function.</strong> A <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr>
+  applies the same message and update functions at every node and
+  edge. That sharing is what permits generalization to unseen
+  graphs, and it is also what leaves edge-level attribution
+  ill-posed. Here the prior indexes the parameters instead: each
+  named edge carries its own weights, a scalar at unit width and a
+  block once <code>widths=</code> (on either parser) widens its endpoints, so
+  an attribution resolves to a named interaction rather than to a
+  rule shared across all of them. <code>PackedMultiheadAttention</code> places
+  the prior one level up, constraining which pairs may attend at
+  all.</li>
+<li><strong>Directed propagation, not k rounds of neighborhood
+  aggregation.</strong> A pathway or an ontology is a deep directed
+  cascade, and the quantity of interest is what propagates along
+  it. A sparsely connected feedforward network traverses that
+  cascade in one pass with skip edges intact; message passing
+  reaches the same depth only by stacking rounds, mixing
+  neighboring node states as it proceeds.</li>
+</ul>
+<p>A <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr> is the better hypothesis where the structure is the object of
+study: samples that are distinct graphs, nodes or edges unseen at
+training time, or node- and link-level tasks on a single large
+knowledge graph. There are knowledge-primed <abbr title="Graph neural network: each node carries a feature vector and the batch is graphs.">GNN</abbr> papers; this
+project will not wrap or replace PyG for them.</p>
+<p>Same edgelist, different hypothesis about the data-generating
+process. <code>kpnn2</code> is the PyTorch side of that split: sparsely
+connected layers you assemble yourself. See
+<a href="supported/"><strong>Supported architectures</strong></a>.</p>
+<h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h2>
+<p>The <a href="reference/api/"><strong>API reference</strong></a> lists every public
+name with a one-line description and links to its full contract.</p>
+<p><code>LayeredSpec.hops</code> holds one <code>Hop</code> per layer after the first, and
+a hop's packed indices carry every edge entering that layer, skip
+edges included. Densify with <code>Hop.to_mask()</code> when you want
+<code>MaskedLinear</code>. <code>LayeredSpec.skips</code> lists which edges span
+layers, as metadata. An <code>AdjacencySpec</code> has no layers and no
+skips: it carries packed <code>source_index</code> / <code>target_index</code> over
+all <code>nodes</code>, plus <code>input_index</code> and <code>output_index</code> into that
+state vector. <code>to_mask()</code> densifies for <code>MaskedLinear</code> on small
+graphs.</p>
+<p><a href="skip-edges/"><strong>Skip edges</strong></a> is a worked example.</p>
+<h2 id="package-philosophy">Package philosophy<a class="headerlink" href="#package-philosophy" title="Permanent link">&para;</a></h2>
+<p><code>kpnn2</code> is intentionally minimally opinionated.</p>
+<p>It owns edgelist parsing, packed hop and adjacency indices, hop
+input assembly, hop-output split, packed transpose, named input
+alignment, and attribution column names. It does not impose
+broader modeling choices such as:</p>
+<ul>
+<li>activation functions</li>
+<li>output heads</li>
+<li>dropout</li>
+<li>loss functions</li>
+<li>optimizers</li>
+<li>training loops</li>
+</ul>
+<p>Those remain part of the normal PyTorch workflow:</p>
+<ul>
+<li><code>kpnn2</code> turns the edgelist into structure you can execute</li>
+<li>PyTorch handles <code>forward()</code>, training, and customization</li>
+<li>you map trained tensors back to named nodes when you want
+  interpretation</li>
+</ul>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>Requires Python 3.10 or later.</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>kpnn2
+</code></pre></div>
+<h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
+<p>If you are new to the package, start with a tutorial:</p>
+<ul>
+<li><a href="installation/"><strong>Installation</strong></a> for package setup</li>
+<li><a href="supported/"><strong>Supported architectures</strong></a> for which
+  architecture families this package covers</li>
+<li><a href="feedforward-example/"><strong>Feedforward example</strong></a> for a
+  full end-to-end feedforward network</li>
+</ul>
+<h2 id="additional-examples">Additional examples<a class="headerlink" href="#additional-examples" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="cyclic-graph-example/"><strong>Cyclic graph example</strong></a> for
+  a graph with a feedback loop: <code>parse_adjacency()</code>, one shared
+  <code>MaskedLinear</code> over the state vector, train, and interpret
+  named nodes (<code>parse_layered</code> still requires a <abbr title="Directed acyclic graph.">DAG</abbr>)</li>
+<li><a href="time-series-example/"><strong>Time-series example</strong></a> for a
+  sequence <code>x_t</code>: the same shared <code>MaskedLinear</code>, with a new
+  input written at each time, and a self-loop so named nodes
+  carry state (<code>nn.RNN</code> cannot take an edgelist)</li>
+<li><a href="transformer-example/"><strong>Transformer example</strong></a> for
+  <code>PackedMultiheadAttention</code> on those packed indices, as a
+  prior-gated encoder you write yourself</li>
+</ul>
+<p>The other pages are not second examples:</p>
+<ul>
+<li><a href="concepts/"><strong>Concepts</strong></a> for the vocabulary these docs
+  use: graph, edgelist, spec, hop, skip edge, live edge, and the
+  rest, in the order the pipeline uses them</li>
+<li><a href="layered_vs_adjacency/"><strong>Layered vs. Adjacency</strong></a> for
+  how the two parsers differ and when to pick one</li>
+<li><a href="skip-edges/"><strong>Skip edges</strong></a> for edges that jump a
+  layer, and why they need no separate mechanism</li>
+<li><a href="map-node-attributions/"><strong>Mapping attributions</strong></a> for
+  labeling layer tensors with node names</li>
+<li><a href="packed_linear/"><strong>PackedLinear</strong></a> when <code>n</code> is large on
+  an <code>AdjacencySpec</code></li>
+<li><a href="how_we_test/"><strong>How we test</strong></a> for the tests that pin
+  wiring and interpretation claims</li>
+<li><a href="reference/api/"><strong>API reference</strong></a> for function- and object-level
+  documentation</li>
+</ul>
+<h2 id="citation">Citation<a class="headerlink" href="#citation" title="Permanent link">&para;</a></h2>
+<p>If you use <code>kpnn2</code> in research, please cite the software.
+Citation metadata is available in
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/CITATION.cff"><code>CITATION.cff</code></a>.</p>
+<h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
+<p>This project is licensed under the MIT License. See the
+<a href="https://github.com/Thomas-Rauter/kpnn2/blob/main/LICENSE">LICENSE file on GitHub</a>
+for details.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "content.code.copy", "search.suggest", "search.highlight"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
