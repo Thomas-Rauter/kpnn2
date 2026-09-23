@@ -1899,6 +1899,9 @@ concat_layouts(
   `node` exactly once.
 - `coords`: optional labels for axes other than `node` and `layer`.
 - Values: detached CPU copy of the tensor. No abs/sum/mean.
+  `bfloat16` is stored as float32 because NumPy has no
+  bfloat16 dtype; those values are unchanged. Other dtypes
+  are kept.
 - Long table: `da.to_dataframe(name="score").reset_index()`.
   Wide 2-D table: `da.to_pandas()`.
 - Invalid `spec`, `layer`, `hop`, shape, `dims`, or `coords`:

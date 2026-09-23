@@ -66,6 +66,11 @@ This project follows semantic versioning.
   `rauter_mangano_2026` is registered and not yet
   implemented.
 
+### Fixed
+
+- `map_node_attributions` accepts bfloat16 scores and stores
+  them as float32. The values are unchanged.
+
 
 ## [0.1.0] - 1. September 2026
 

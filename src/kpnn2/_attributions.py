@@ -93,8 +93,12 @@ def map_node_attributions(
         (a name repeats once per unit when that node is wider
         than 1), and a scalar ``layer`` coordinate when ``layer``
         was passed. A ``hop`` mapping has no ``layer`` coordinate.
-        Use ``.to_dataframe(name="score").reset_index()`` for a
-        long table, or ``.to_pandas()`` for a 2-D wide table.
+        ``bfloat16`` scores are stored as ``float32``: NumPy has
+        no bfloat16 dtype, and every bfloat16 value fits in
+        float32, so the scores are unchanged. Other dtypes are
+        kept. Use ``.to_dataframe(name="score").reset_index()``
+        for a long table, or ``.to_pandas()`` for a 2-D wide
+        table.
 
     Raises
     ------
@@ -254,7 +258,11 @@ def map_node_attributions(
         layer=layer_coord,
         coords=coords,
     )
-    values = tensor.detach().cpu().numpy().copy()
+    values = tensor.detach().cpu()
+    # NumPy has no bfloat16; every value fits in float32.
+    if values.dtype is torch.bfloat16:
+        values = values.float()
+    values = values.numpy().copy()
     return xr.DataArray(
         data=values,
         dims=dim_names,

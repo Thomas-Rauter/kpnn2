@@ -195,6 +195,40 @@ def test_map_node_attributions_rejects_coords_for_node():
         )
 
 
+def test_map_node_attributions_stores_bfloat16_as_float32():
+    spec = _tiny_spec()
+    attributions = torch.tensor(
+        [
+            [0.1, 0.2],
+            [0.3, 0.4],
+        ],
+        dtype=torch.bfloat16,
+        requires_grad=True,
+    )
+    original = attributions.detach().float()
+    da = map_node_attributions(
+        attributions,
+        spec,
+        1,
+    )
+
+    assert torch.as_tensor(da.values).dtype is torch.float32
+    torch.testing.assert_close(
+        torch.as_tensor(da.values),
+        original,
+        rtol=1e-5,
+        atol=1e-5,
+    )
+    assert attributions.dtype is torch.bfloat16
+    da.values[0, 0] = 9.0
+    torch.testing.assert_close(
+        attributions.detach().float(),
+        original,
+        rtol=1e-5,
+        atol=1e-5,
+    )
+
+
 def test_map_node_attributions_copies_cpu_input():
     spec = _tiny_spec()
     attributions = torch.tensor(
