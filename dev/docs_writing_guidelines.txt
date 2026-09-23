@@ -1,0 +1,267 @@
+AGENT GUIDELINES FOR DOCS
+=========================
+
+Apply these rules when writing or changing narrative
+documentation: `docs/*.md`, the tutorial notebooks
+`docs/*.ipynb`, `README.md`, and the figure scripts under
+`docs/fig_gen/`. They are writing craft, not the product
+contract and not the build process.
+
+`CONTEXT.md` wins on product and terminology, including
+**Docs terminology** (where a term is defined, glosses,
+link forms, abbreviations). `AGENTS.md` wins on process:
+notebook execution, public-API lockstep, README figures,
+the changelog bar, and git. Docstring format lives in
+`dev/llm_dev/prompt_for_docstrings.txt`; this file only
+says how narrative pages use docstrings.
+
+This file does not apply to `docs/literature/` (frozen),
+`tests/manual/`, or `CHANGELOG.md`.
+
+The reader knows PyTorch or knows their scientific
+domain, rarely both. They have never seen `kpnn2` and read
+a page start to finish. A wrong sentence can cost them an
+experiment, so accuracy beats polish. When a rule
+conflicts with the task, do not break it silently: stop
+and explain the conflict.
+
+
+1. SCOPE: EDIT ONLY WHAT WAS ASKED
+----------------------------------
+- Change the page or section you were asked to change.
+  Do not restructure nav, split or merge pages, or
+  rewrite neighbouring pages "while you are there".
+  Propose it in your reply instead.
+- Do not add a page unless asked. Every page is a nav
+  entry, a link target, and text that can go stale.
+- Do not rename a heading unless asked. Headings are
+  anchors; a rename moves every inbound link in the same
+  change (CONTEXT.md **Docs terminology**).
+- Keep accurate existing prose. Rewrite a sentence only
+  when it is wrong, unclear, or breaks a rule here.
+
+
+2. ONE PAGE, ONE JOB
+--------------------
+Every page is one of four kinds (the Diataxis split that
+NumPy adopted). Know which one you are writing and do not
+mix them.
+
+- Tutorial (Getting started, Additional examples): a
+  notebook that takes a newcomer along one path that
+  works, top to bottom. No detours into alternatives,
+  options, or edge cases; link out instead.
+- How-to: a task the reader already has. Starts from the
+  goal, gives the steps, stops. Here a how-to is a `##`
+  section of the explanation page it belongs to ("How to
+  choose a parser", "Pruning during training"), not a
+  page of its own.
+- Explanation (How it works, Validation): why and when.
+  Trade-offs, costs, the alternative, the reasoning. No
+  parameter lists.
+- Reference (`docs/reference/`): rendered from
+  docstrings. Hand-written text there is limited to the
+  one-line descriptions in `api.md` and the Methods table
+  on `aggregate_node_attributions.md`.
+
+If a page needs a second kind, give that kind its own
+section, or propose a second page.
+
+
+3. ONE FACT, ONE HOME
+---------------------
+- The docstring owns the contract: parameters, shapes,
+  dtypes, defaults, raised errors. A narrative page links
+  to it (`[`PackedLinear`][kpnn2.PackedLinear]`) and does
+  not copy parameter lists or default values. A copied
+  default goes stale silently.
+- Concepts, abbreviations, and contracts each have one
+  home (CONTEXT.md **Docs terminology**). Do not define a
+  term on a second page.
+- A measured number in prose (memory, time, size,
+  accuracy) comes from an output on the same page or from
+  a script under `docs/fig_gen/`. Do not type it by hand.
+- Say a thing once per page. If two pages need the same
+  paragraph, one of them links to the other.
+
+
+4. OPEN WITH WHAT, WHEN, AND WHEN NOT
+-------------------------------------
+- The first paragraph says what the thing is, when to
+  reach for it, and what to use otherwise. A reader who
+  stops there must still choose correctly.
+- Show the smallest working call early, then explain it.
+  Code first, prose around it.
+- Intuition before formulas (the scikit-learn user-guide
+  pattern). Maths goes in its own section; every symbol
+  is defined, with its dims or units, where it first
+  appears.
+- A tutorial opens with what the reader will build and
+  what to read first, and ends with where to go next.
+
+Write this (docs/packed_linear.md):
+
+    `PackedLinear` stores one trainable scalar per live
+    edge. Use it on a `Hop` [...] when the dense rectangle
+    `MaskedLinear(to_mask())` would strain RAM.
+    [...]
+    Use `PackedLinear` when the dense rectangle would
+    hurt. Otherwise `MaskedLinear` is better: its
+    `(out, in)` weight runs as one GEMM.
+
+Not this:
+
+    `PackedLinear` is a powerful, memory-efficient sparse
+    layer for knowledge-primed networks.
+
+The second version sells instead of telling the reader
+when to use it, and "sparse" suggests `torch.sparse`,
+which it is not.
+
+
+5. SENTENCES
+------------
+- Address the reader as "you". Present tense, active
+  voice. Imperative for steps: "Parse the edgelist", not
+  "The edgelist is then parsed".
+- Put the goal before the step: "To keep the skip edge,
+  add the row A -> C", not "Add the row A -> C to keep
+  the skip edge".
+- "We" means the maintainers, only where they act ("we
+  test", "we cite"). Never "we" for "you and I": "Now we
+  build the layer" becomes "Build the layer".
+- One idea per sentence. Paragraphs of one to four
+  sentences. Use a list only for items that are parallel.
+- One word per concept, always the Concepts term. No
+  synonyms for variety: a hop is never also a block, a
+  stage, or a connection layer.
+- Banned: simply, just, easily, obviously, basically, of
+  course, powerful, seamless, blazing, cutting-edge,
+  state-of-the-art, "note that", "it is worth noting".
+- Write timeless text. Banned: currently, now, new, soon,
+  recently, "at the moment", "will support". What changed
+  and when lives in `CHANGELOG.md`.
+- Identifiers in backticks. Functions and methods in
+  prose take parentheses (`parse_layered()`,
+  `to_mask()`); classes, attributes, and keyword
+  arguments do not (`PackedLinear`, `hop.source_index`,
+  `widths=`).
+- Headings in sentence case, as nouns or tasks ("Frozen
+  live edges", "How to choose a parser"). A question
+  heading only for a question readers really ask ("Why
+  not a GNN?").
+- Link text names the target: "see
+  [Layered vs. Adjacency](layered_vs_adjacency.md)",
+  never "see [here](...)".
+- No admonition boxes (`!!! note`, `!!! warning`); the
+  docs use none. A warning that matters goes in the
+  sentence where the reader would make the mistake.
+
+
+6. CODE ON THE PAGE
+-------------------
+- In a tutorial, every cell runs top to bottom: imports
+  included, `import kpnn2`, no undefined names, no `...`
+  in a cell meant to run.
+- On an explanation page, a fragment may use a name it
+  does not define (`hop`, `spec`) only if the sentence
+  before it says where that name comes from.
+- Public names only (`kpnn2.parse_layered`); never a
+  private module (AGENTS.md **Code style**).
+- Names say their role: `gene_signal_1`, `tf_noise`,
+  `input_signal`. Never `foo`, `x1`, `test`, `my_node`.
+- Use the smallest graph that shows the point, then make
+  the result visible: print the spec field, shape, or
+  node names the reader is meant to check.
+- Show shapes and a few rows, not whole tensors.
+- Notebooks seed once in the setup cell
+  (`random.seed(42)`, `numpy.random.seed(42)`,
+  `torch.manual_seed(42)`) so reruns keep stored outputs
+  stable.
+- Stored outputs come from `python dev/docs_notebooks.py`.
+  Never hand-edit an output to match the prose; fix the
+  prose or the code.
+- Code in docs follows the repo code style (AGENTS.md
+  **Code style**).
+
+
+7. HONESTY AND SCIENTIFIC CLAIMS
+--------------------------------
+- Put costs and limits next to the feature, not on a page
+  the reader never opens: RAM, speed, what densifies,
+  what raises. Say when the alternative is better.
+- Every claim has evidence on the page or one link away.
+  A performance number names the sizes, dtype, device,
+  and the script that produced it.
+- Attributions describe the model, not the biology.
+  Write "the trained model relies on `tf_signal`", not
+  "`tf_signal` drives the phenotype" or "the network
+  discovered that ...". A prior graph is an assumption,
+  not a finding.
+- Document what exists. A registered method that raises
+  (the default aggregation method, for example) is
+  described as not yet implemented, with no example that
+  pretends it runs. No promises about future releases.
+- Keep limitation sections ("What the tests do not
+  prove"). Saying what the package does not do or prove
+  is part of the docs.
+- Cite only references you can verify: authors, year,
+  venue, DOI. If you cannot, write
+  `TODO(docs): <what is missing>` and say so in your
+  reply. Never invent a DOI.
+
+
+8. FIGURES
+----------
+- A figure is generated by a script under
+  `docs/fig_gen/` that writes into `docs/figures/`.
+  Change the script and rerun it; never hand-edit the
+  SVG.
+- One figure, one question. The sentence that points to
+  the figure states the takeaway; the figure is the
+  evidence.
+- Meaning never rests on colour alone: labels, shapes, or
+  line styles carry it too. Use a colour-blind-safe
+  palette.
+- Alt text states what the reader should see ("the skip
+  edge A -> C adds a column to the second hop"), not
+  "diagram".
+- Axis labels carry units. Numbers on the figure match
+  the numbers in the prose.
+- README raster figures: AGENTS.md **Docs tutorials**.
+
+
+9. NOTEBOOK TUTORIALS
+---------------------
+- Markdown cells carry the story. Each code cell does the
+  one thing the markdown cell above it announced.
+- Keep plotting and styling setup in one early cell, so
+  later cells show only the `kpnn2` steps.
+- The markdown cell after a figure or printed output says
+  what to look at in it.
+- Link forms and gloss rules: CONTEXT.md **Docs
+  terminology**. `abbr` tooltips do not reach notebooks,
+  so spell an acronym out at its first use in each
+  notebook.
+
+
+BEFORE FINISHING ANY DOCS CHANGE
+--------------------------------
+[ ] The page does one job; nothing was restructured,
+    renamed, or added beyond the request.
+[ ] No parameter list, default, or definition was copied
+    from its home; the page links there instead.
+[ ] The first paragraph says what, when, and when not.
+[ ] "You", present tense, active voice; no banned or
+    time-bound words; one term per concept.
+[ ] Every snippet runs in page order with public names
+    only; notebook outputs come from a real run.
+[ ] Every number, citation, and scientific claim has its
+    source on the page or one link away; no attribution
+    is written as a biological finding.
+[ ] A renamed heading had its inbound links updated, and
+    `mkdocs build --strict` passes if a `.md` page changed
+    (`dev/build_website_locally.txt`).
+
+In your final reply, list any rule you could not follow
+and why.

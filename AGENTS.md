@@ -8,9 +8,10 @@ architecture, locked product decisions, public API, and
 primitive specs. It is often the next file to open. It is
 not required for every task.
 
-Do not paste this file, `CONTEXT.md`, or
-`dev/src_guidelines.txt` into replies or into other
-rules.
+Do not paste this file, `CONTEXT.md`,
+`dev/src_guidelines.txt`, or
+`dev/docs_writing_guidelines.txt` into replies or into
+other rules.
 
 ## When to read CONTEXT.md
 
@@ -49,6 +50,21 @@ If it conflicts with `CONTEXT.md` on product or
 architecture, `CONTEXT.md` wins. If it conflicts with
 this file on process (pytest, mypy, seeds in tests,
 ruff, lockstep, git), this file wins.
+
+## When to read `dev/docs_writing_guidelines.txt`
+
+Read `dev/docs_writing_guidelines.txt` before writing
+or changing narrative docs: `docs/*.md`, tutorial
+notebooks `docs/*.ipynb`, `README.md`, and figure
+scripts under `docs/fig_gen/`. It is writing craft, not
+the product contract and not the build process. Skip it
+for `docs/literature/`, `tests/manual/`,
+`CHANGELOG.md`, `src/`, tests, and process.
+
+If it conflicts with `CONTEXT.md` on product or
+terminology, `CONTEXT.md` wins. If it conflicts with
+this file on process (notebook execution, lockstep,
+README figures, changelog, git), this file wins.
 
 ## Do not
 
@@ -279,6 +295,8 @@ tests-only work, or docs that already match the contract.
 Do not copy product locks from `CONTEXT.md` into this file.
 
 Library-craft rules live in `dev/src_guidelines.txt`.
-Update that file when those rules move. Do not copy
-them here. Update this file only if the pointer or
-when-to-read condition changes.
+Writing-craft rules live in
+`dev/docs_writing_guidelines.txt`. Update those files
+when those rules move. Do not copy them here. Update
+this file only if a pointer or when-to-read condition
+changes.
