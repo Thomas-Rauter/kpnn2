@@ -39,7 +39,8 @@ This project follows semantic versioning.
   int softmaxes and mixes in slices of that many edges and
   rematerializes those gathers in backward.
 - `PackedLinear.transpose()`: swapped packed indices, tied or
-  copied `weight`, untied bias. The tied autoencoder path.
+  copied `weight` and `constraint`, untied bias. The tied
+  autoencoder path.
 - `scatter_hop_outputs`: split a hop's concatenated source
   axis back onto source layers (inverse of
   `gather_hop_inputs`).

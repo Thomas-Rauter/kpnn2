@@ -1451,18 +1451,30 @@ and `target_index` swapped, `in_features` and
 still the same edge; the 1-D `weight` is not permuted.
 
 - `tie=True` (default): the returned layer's `weight` is
-  this layer's `weight` `nn.Parameter`. Gradients from both
-  forwards accumulate there.
-- `tie=False`: copy the current values into a new
-  Parameter.
+  this layer's `weight` `nn.Parameter`, and its
+  `constraint` is this layer's `constraint` module itself
+  (one submodule under two parents, like tied embeddings;
+  `named_parameters()` lists it once). The whole live map
+  is tied: gradients from both forwards accumulate on the
+  shared tensors, and a later change to the constraint's
+  state (a pruning buffer written in place, a trained
+  constraint parameter) reaches both layers. The decoder
+  always applies the transpose of the encoder's live map.
+- `tie=False`: copy the current `weight` values into a new
+  Parameter and deepcopy the constraint. The two layers are
+  then independent.
 - Bias is never tied. Default `bias=True` allocates a new
   bias of shape `(in_features,)` (the original input
   width), degree-aware init on the transposed fan-in.
   `bias=False` means no bias. This layer's bias is unused.
-- `constraint` on the result is a deepcopy of this layer's
-  constraint, or `None`. Do not pass the same `nn.Module`
-  into two `PackedLinear` constructors: PyTorch would
-  steal the submodule from the first parent.
+- `constraint` on the result is this layer's module when
+  `tie=True`, a deepcopy when `tie=False`, or `None`. Do
+  not deepcopy it under `tie=True`: a copied stateful
+  constraint silently unties the effective weights (an edge
+  pruned in the encoder would stay live in the decoder).
+  `transpose` does not modify this layer or its constraint;
+  the device/dtype move below applies to the new layer's own
+  tensors only.
 - `identity` defaults to `None`; this layer's identity is
   not copied. The index digest differs because buffers and
   sizes are swapped, so an encoder `state_dict` will not

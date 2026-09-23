@@ -132,7 +132,11 @@ A tied decoder runs the same edges backwards: it needs the
 transpose. `PackedLinear.weight` is 1-D, so there is no
 `enc.weight.T` to take. `layer.transpose()` is that helper:
 same packed slots, indices swapped, `weight` shared by default,
-bias never shared.
+bias never shared. A `constraint=` module is shared along with
+`weight`, so the decoder applies the transpose of the encoder's
+live map even when that constraint has state: an edge you prune
+through a mask buffer, or a gate you train, changes both layers.
+`tie=False` copies both instead.
 
 ```python
 enc = kpnn2.PackedLinear(

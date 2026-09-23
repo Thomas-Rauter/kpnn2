@@ -347,11 +347,11 @@ class PackedLinear(nn.Module):
     ``transpose()`` is the tied-autoencoder helper: it swaps
     the index buffers and the feature sizes so packed slot
     ``i`` is still the same live edge, then shares or copies
-    ``weight``. Bias is never tied. Do not reparse a reversed
-    edgelist and assign ``dec.weight = enc.weight``: that
-    permutes slots. On a hop whose source axis is several
-    layers, split the transposed output with
-    ``scatter_hop_outputs``.
+    ``weight`` and ``constraint`` together. Bias is never tied.
+    Do not reparse a reversed edgelist and assign
+    ``dec.weight = enc.weight``: that permutes slots. On a hop
+    whose source axis is several layers, split the transposed
+    output with ``scatter_hop_outputs``.
 
     Examples
     --------
@@ -573,7 +573,9 @@ class PackedLinear(nn.Module):
         ``weight`` is not permuted. The new layer reads the
         former output axis and writes the former input axis.
         That is the packed analogue of ``enc.weight.T`` for a
-        tied autoencoder. Bias is never shared.
+        tied autoencoder. With ``tie=True`` the whole live map
+        is shared: ``weight`` and the ``constraint`` module.
+        Bias is never shared.
 
         Parameters
         ----------
@@ -585,10 +587,17 @@ class PackedLinear(nn.Module):
             layer's bias is not copied.
         tie : bool, default=True
             If ``True``, the returned layer's ``weight`` is
-            this layer's ``weight`` ``nn.Parameter``. Gradients
-            from both forwards accumulate there. If
-            ``False``, copy the current values into a new
-            Parameter.
+            this layer's ``weight`` ``nn.Parameter``, and its
+            ``constraint`` is this layer's ``constraint``
+            module itself. Gradients from both forwards
+            accumulate on the shared tensors, and a later
+            change to the constraint's state (a pruning
+            buffer written in place, a trained constraint
+            parameter) reaches both layers, so the decoder
+            always applies the transpose of the encoder's live
+            map. If ``False``, copy the current ``weight``
+            values into a new Parameter and deepcopy the
+            constraint; the two layers are then independent.
         identity : str or None, default=None
             Checkpoint identity for the new layer, typically
             ``spec.fingerprint``. This layer's identity is
@@ -606,8 +615,10 @@ class PackedLinear(nn.Module):
         PackedLinear
             New module: ``source_index`` and ``target_index``
             swapped, ``in_features`` and ``out_features``
-            swapped, same ``nnz``. ``constraint`` is a
-            deepcopy of this layer's constraint, or ``None``.
+            swapped, same ``nnz``. ``constraint`` is this
+            layer's constraint module when ``tie=True``, a
+            deepcopy of it when ``tie=False``, or ``None``.
+            This layer and its constraint are not modified.
 
         Raises
         ------
@@ -662,9 +673,9 @@ class PackedLinear(nn.Module):
         """
         if not isinstance(tie, bool):
             raise Kpnn2Error("'tie' must be True or False.")
-        constraint = None
-        if self.constraint is not None:
-            constraint = copy.deepcopy(self.constraint)
+        copied_constraint = None
+        if not tie and self.constraint is not None:
+            copied_constraint = copy.deepcopy(self.constraint)
         mirrored = PackedLinear(
             self.target_index,
             self.source_index,
@@ -672,7 +683,7 @@ class PackedLinear(nn.Module):
             self.out_features,
             bias,
             identity=identity,
-            constraint=constraint,
+            constraint=copied_constraint,
             generator=generator,
         )
         mirrored.to(
@@ -680,7 +691,10 @@ class PackedLinear(nn.Module):
             dtype=self.weight.dtype,
         )
         if tie:
+            # Attached after .to() so this layer's constraint is
+            # shared as is, never cast or moved by the transpose.
             mirrored.weight = self.weight
+            mirrored.constraint = self.constraint
         else:
             with torch.no_grad():
                 mirrored.weight.copy_(self.weight)

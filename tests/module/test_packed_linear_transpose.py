@@ -285,7 +285,60 @@ def test_transpose_state_dict_does_not_load_into_encoder():
         mirrored.load_state_dict(layer.state_dict())
 
 
-def test_transpose_deepcopies_constraint_and_keeps_encoder_child():
+class _KeepMask(nn.Module):
+    """
+    Per-slot keep mask: a pruning constraint with state.
+    """
+
+    def __init__(
+        self,
+        nnz,
+        dtype=torch.float32,
+    ):
+        super().__init__()
+        self.register_buffer(
+            "keep",
+            torch.ones(
+                nnz,
+                dtype=dtype,
+            ),
+        )
+
+    def forward(self, weight):
+        return weight * self.keep.to(dtype=weight.dtype)
+
+
+class _LearnedGate(nn.Module):
+    """
+    Per-slot learnable gate, as in self-pruning BINNs.
+    """
+
+    def __init__(self, nnz):
+        super().__init__()
+        self.gate = nn.Parameter(torch.ones(nnz))
+
+    def forward(self, weight):
+        return weight * torch.sigmoid(self.gate)
+
+
+class _TiedPair(nn.Module):
+    def __init__(self, constraint):
+        super().__init__()
+        self.enc = PackedLinear(
+            [0, 1, 2],
+            [0, 0, 1],
+            2,
+            3,
+            bias=False,
+            constraint=constraint,
+        )
+        self.dec = self.enc.transpose(bias=False)
+
+    def forward(self, x):
+        return self.dec(torch.tanh(self.enc(x)))
+
+
+def test_transpose_tie_shares_constraint_and_keeps_encoder_child():
     torch.manual_seed(42)
     layer = PackedLinear(
         [0, 1],
@@ -297,8 +350,8 @@ def test_transpose_deepcopies_constraint_and_keeps_encoder_child():
     )
     mirrored = layer.transpose(bias=False)
     assert "constraint" in dict(layer.named_children())
-    assert mirrored.constraint is not None
-    assert mirrored.constraint is not layer.constraint
+    assert "constraint" in dict(mirrored.named_children())
+    assert mirrored.constraint is layer.constraint
     dense = _dense_from_packed(layer)
     x = torch.randn(
         2,
@@ -314,25 +367,153 @@ def test_transpose_deepcopies_constraint_and_keeps_encoder_child():
     )
 
 
+def test_transpose_tie_keeps_a_pruned_edge_pruned_in_the_decoder():
+    """
+    Pruning after the transpose must reach the decoder.
+
+    The decoder's live map must stay the transpose of the
+    encoder's live map, so an edge the encoder no longer uses
+    contributes nothing in the decoder either.
+    """
+    torch.manual_seed(42)
+    enc = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+        bias=False,
+        constraint=_KeepMask(3),
+    )
+    dec = enc.transpose(bias=False)
+
+    enc.constraint.keep[1] = 0.0
+
+    enc_dense = _dense_from_packed(enc)
+    assert enc_dense[0, 1].item() == 0.0
+    torch.testing.assert_close(
+        _dense_from_packed(dec),
+        enc_dense.T,
+    )
+    hidden = torch.randn(
+        4,
+        2,
+    )
+    torch.testing.assert_close(
+        dec(hidden),
+        F.linear(
+            hidden,
+            enc_dense.T,
+        ),
+    )
+
+
+def test_transpose_tie_trains_one_constraint_parameter():
+    torch.manual_seed(42)
+    pair = _TiedPair(_LearnedGate(3))
+    names = [name for name, _ in pair.named_parameters()]
+    assert names == [
+        "enc.weight",
+        "enc.constraint.gate",
+    ]
+    optimizer = torch.optim.Adam(
+        pair.parameters(),
+        lr=0.1,
+    )
+    x = torch.randn(
+        8,
+        3,
+    )
+    for _ in range(5):
+        optimizer.zero_grad()
+        loss = F.mse_loss(
+            pair(x),
+            x,
+        )
+        loss.backward()
+        optimizer.step()
+
+    assert not torch.equal(
+        pair.enc.constraint.gate.detach(),
+        torch.ones(3),
+    )
+    torch.testing.assert_close(
+        _dense_from_packed(pair.dec),
+        _dense_from_packed(pair.enc).T,
+    )
+
+
+def test_transpose_tie_false_deepcopies_constraint():
+    torch.manual_seed(42)
+    enc = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+        bias=False,
+        constraint=_KeepMask(3),
+    )
+    dec = enc.transpose(
+        bias=False,
+        tie=False,
+    )
+    assert dec.constraint is not enc.constraint
+    torch.testing.assert_close(
+        _dense_from_packed(dec),
+        _dense_from_packed(enc).T,
+    )
+
+    enc.constraint.keep[1] = 0.0
+
+    assert dec.constraint.keep[1].item() == 1.0
+    assert _dense_from_packed(dec)[1, 0].item() != 0.0
+
+
+def test_transpose_tie_does_not_modify_the_encoder_constraint():
+    torch.manual_seed(42)
+    enc = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+        bias=False,
+        constraint=_KeepMask(
+            3,
+            dtype=torch.float64,
+        ),
+    )
+    keep = enc.constraint.keep
+
+    dec = enc.transpose(bias=False)
+
+    assert enc.constraint.keep is keep
+    assert keep.dtype == torch.float64
+    assert dec.constraint.keep is keep
+
+
+def test_tied_pair_state_dict_roundtrip_keeps_constraint_shared():
+    torch.manual_seed(42)
+    trained = _TiedPair(_KeepMask(3))
+    trained.enc.constraint.keep[1] = 0.0
+
+    restored = _TiedPair(_KeepMask(3))
+    restored.load_state_dict(trained.state_dict())
+
+    assert restored.dec.constraint is restored.enc.constraint
+    assert restored.enc.constraint.keep.tolist() == [1.0, 0.0, 1.0]
+    torch.testing.assert_close(
+        _dense_from_packed(restored.dec),
+        _dense_from_packed(trained.enc).T,
+    )
+
+
 def test_parent_deepcopy_keeps_tied_weights():
     torch.manual_seed(42)
-
-    class Pair(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.enc = PackedLinear(
-                [0, 1],
-                [0, 0],
-                1,
-                2,
-                bias=False,
-            )
-            self.dec = self.enc.transpose(bias=False)
-
-    pair = Pair()
+    pair = _TiedPair(_KeepMask(3))
     cloned = copy.deepcopy(pair)
     assert cloned.enc.weight is cloned.dec.weight
     assert cloned.enc.weight is not pair.enc.weight
+    assert cloned.enc.constraint is cloned.dec.constraint
+    assert cloned.enc.constraint is not pair.enc.constraint
 
 
 def test_transpose_follows_weight_dtype():
