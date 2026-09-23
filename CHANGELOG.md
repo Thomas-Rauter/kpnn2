@@ -65,6 +65,10 @@ This project follows semantic versioning.
   (for example `nn.Softplus`) are unchanged.
 - `parse_layered(widths=)` / `LayeredSpec.layer_widths`: a named
   node can own several units.
+- `parse_adjacency(widths=)`: the same widths on the packed
+  layout. `AdjacencySpec` gains `node_widths`, `state_dim`, and
+  `node_units`; packed indices, `input_index`, and
+  `output_index` are in units. Width 1 is unchanged.
 - `LayeredSpec.edge_location` / `AdjacencySpec.edge_location`:
   locate a named edge's packed weight slots.
 - `LayeredSpec.node_units` / `hop_units`: named node to its

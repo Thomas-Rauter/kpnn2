@@ -386,7 +386,7 @@ class PackedLinear(nn.Module):
     ...     }
     ... )
     >>> spec = kpnn2.parse_adjacency(edgelist)
-    >>> n = len(spec.nodes)
+    >>> n = spec.state_dim
     >>> core = kpnn2.PackedLinear(
     ...     spec.source_index,
     ...     spec.target_index,

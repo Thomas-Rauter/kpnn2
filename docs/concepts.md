@@ -206,9 +206,10 @@ when that matters.
 
 ## State vector
 
-The `AdjacencySpec` layout: every node is one unit of a single
-alphabetical vector, `spec.nodes`, and every edge is an index pair
-over it.
+The `AdjacencySpec` layout: every node owns a block of units of a
+single alphabetical vector, `spec.nodes` — one unit unless
+`widths=` gives it several — and every edge is index pairs over
+it.
 
 There are no layers, so a cycle or a self-loop is nothing special —
 it is just another pair. One update maps the vector to itself, and

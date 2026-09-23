@@ -11,7 +11,7 @@ import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
-from ._layout import hop_axis_layouts
+from ._layout import build_layout, hop_axis_layouts
 from ._spec import LayeredSpec
 
 _SPEC_VERSION = 1
@@ -118,8 +118,9 @@ def spec_to_dict(
     A ``LayeredSpec`` with any node wider than 1 also includes
     ``"widths"``. When compacted layers differ from longest-path
     on the same edges, a ``LayeredSpec`` also includes
-    ``"ranks"`` (every node, compacted 0-based index). Adjacency
-    payloads never include ``"widths"`` or ``"ranks"``.
+    ``"ranks"`` (every node, compacted 0-based index). An
+    ``AdjacencySpec`` with any node wider than 1 also includes
+    ``"widths"``; adjacency payloads never include ``"ranks"``.
 
     Parameters
     ----------
@@ -152,11 +153,23 @@ def spec_to_dict(
         if ranks:
             payload["ranks"] = ranks
         return payload
-    return {
+    adjacency_payload: dict = {
         "kpnn2_spec": _SPEC_VERSION,
         "layout": _LAYOUT_ADJACENCY,
         "edges": edges,
     }
+    adjacency_widths = {
+        name: width
+        for name, width in zip(
+            spec.nodes,
+            spec.node_widths,
+            strict=True,
+        )
+        if width != 1
+    }
+    if adjacency_widths:
+        adjacency_payload["widths"] = adjacency_widths
+    return adjacency_payload
 
 
 def spec_fingerprint(
@@ -239,8 +252,8 @@ def adjacency_spec_from_dict(payload: object) -> AdjacencySpec:
     Rebuild an ``AdjacencySpec`` by parsing ``payload["edges"]``.
 
     Calls ``parse_adjacency`` on a DataFrame built from the
-    tagged dict. Extra keys are ignored, including a stray
-    ``"ranks"`` or ``"widths"``.
+    tagged dict, passing ``payload["widths"]`` when present.
+    Extra keys are ignored, including a stray ``"ranks"``.
 
     Parameters
     ----------
@@ -265,7 +278,10 @@ def adjacency_spec_from_dict(payload: object) -> AdjacencySpec:
         payload,
         expected_layout=_LAYOUT_ADJACENCY,
     )
-    return parse_adjacency(table)
+    return parse_adjacency(
+        table,
+        widths=_widths_from_payload(payload),
+    )
 
 
 def _edgelist_from_payload(
@@ -443,15 +459,20 @@ def _layered_edges(
 def _adjacency_edges(
     spec: AdjacencySpec,
 ) -> tuple[tuple[str, str], ...]:
-    pairs: list[tuple[str, str]] = []
+    layout = build_layout(
+        spec.nodes,
+        spec.node_widths,
+    )
+    pairs: set[tuple[str, str]] = set()
     for source, target in zip(
         spec.source_index,
         spec.target_index,
+        strict=True,
     ):
-        pairs.append(
+        pairs.add(
             (
-                spec.nodes[source],
-                spec.nodes[target],
+                layout.slot_containing(source).name,
+                layout.slot_containing(target).name,
             )
         )
     return tuple(sorted(pairs))

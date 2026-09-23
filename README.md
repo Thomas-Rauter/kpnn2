@@ -639,7 +639,7 @@ data-generating process. In `kpnn2` the graph is the
   graphs, and it is also what leaves edge-level attribution
   ill-posed. Here the prior indexes the parameters instead: each
   named edge carries its own weights, a scalar at unit width and a
-  block once `parse_layered(..., widths=)` widens its endpoints, so
+  block once `widths=` (on either parser) widens its endpoints, so
   an attribution resolves to a named interaction rather than to a
   rule shared across all of them. `PackedMultiheadAttention` places
   the prior one level up, constraining which pairs may attend at

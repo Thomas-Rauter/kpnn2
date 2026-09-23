@@ -5,7 +5,7 @@ call fixes the shape of everything you build afterwards.
 `parse_layered()` ranks [nodes](concepts.md#node) by depth and
 returns a `LayeredSpec`; `parse_adjacency()` puts
 every node in one [state vector](concepts.md#state-vector), a
-single vector with one unit per node, and returns an
+single vector over all nodes, and returns an
 `AdjacencySpec`.
 The same `source` / `target` edgelist goes through either one,
 and a [directed acyclic graph](concepts.md#dag) (DAG) is valid
@@ -103,7 +103,7 @@ source layer was never stored.
 
 On an `AdjacencySpec` there is one square multiply. Aligned
 inputs do not fit the state vector: `align_inputs()` returns
-`len(spec.input_nodes)` positions, not `len(spec.nodes)`, so
+`len(spec.input_index)` positions, not `spec.state_dim`, so
 you gather those columns and scatter them in at
 `spec.input_index`. Input rows of
 `to_mask()` are structurally zero (`fan_in == 0`), so the
@@ -114,7 +114,7 @@ and so is repeating it on every pass if you loop.
 core = kpnn2.MaskedLinear(spec.to_mask())
 state = torch.zeros(
     x.shape[0],
-    len(spec.nodes),
+    spec.state_dim,
 )
 for _ in range(n_steps):
     state[:, spec.input_index] = x

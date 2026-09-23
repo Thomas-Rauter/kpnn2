@@ -342,7 +342,7 @@ def test_widths_and_ranks_together():
 def test_parse_adjacency_has_no_ranks_argument():
     signature = inspect.signature(parse_adjacency)
     assert "ranks" not in signature.parameters
-    assert "widths" not in signature.parameters
+    assert signature.parameters["widths"].kind is inspect.Parameter.KEYWORD_ONLY
     edgelist = _chain_edgelist()
     with pytest.raises(TypeError):
         parse_adjacency(

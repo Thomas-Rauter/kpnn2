@@ -6,6 +6,8 @@ or `load_state_dict` across different priors. See
 ::: kpnn2.AdjacencySpec
     options:
       members:
+        - state_dim
+        - node_units
         - to_edgelist
         - to_mask
         - edge_location

@@ -92,17 +92,18 @@ later prompt asks.
    default. `parse_adjacency()` reads the same table and
    returns an `AdjacencySpec` instead: packed source/target indices
    over every node, cycles and self-loops allowed. It never
-   allocates an `(n, n)` tensor and has no `widths=` or `ranks=`
+   allocates an `(n, n)` tensor. It takes the same optional
+   keyword-only `widths=` as `parse_layered` and has no `ranks=`
    argument. The user picks the layout; a DAG is valid input to both.
 2. **Specify:** `LayeredSpec` holds named nodes by layer, per-node
    widths, and one `Hop` per layer after the first. A hop's packed
    indices are in **unit** space: a named edge `A→B` expands into
    a `(k_B × k_A)` block of live pairs, skips included. There is no
    stored mask; `Hop.to_mask()` allocates. `AdjacencySpec` holds
-   all node names, packed edge indices, and the input/output
+   all node names with their widths, packed unit-pair indices
+   (the same `(k_B × k_A)` blocks), and the input/output unit
    positions in the state vector. Neither constructs an
-   `nn.Module`. Packed adjacency indices remain one pair per
-   named edge.
+   `nn.Module`.
 3. **Build:** The user writes a PyTorch `nn.Module` using one
    `PackedLinear(hop.source_index, hop.target_index,
    hop.out_features, hop.in_features)` per hop,
@@ -115,7 +116,7 @@ later prompt asks.
    `MaskedLinear(hop.to_mask())` densifies and remains valid for
    small graphs. On an `AdjacencySpec` the large-n path is
    `PackedLinear(spec.source_index, spec.target_index, n, n)`
-   with `n = len(spec.nodes)`; that never allocates `(n, n)`.
+   with `n = spec.state_dim`; that never allocates `(n, n)`.
    The same packed indices can feed
    `PackedMultiheadAttention`. `MaskedLinear(spec.to_mask())`
    densifies and remains valid for small graphs. The
@@ -347,7 +348,7 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | Symbol | Role |
 |--------|------|
 | `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only; optional `widths=`, `ranks=`) |
-| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed) |
+| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed; optional `widths=`) |
 | `LayeredSpec` | Frozen structural dataclass (layers, packed hops, skip metadata) |
 | `Hop` | One layer's incoming packed edges; exported because `spec.hops` uses it |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
@@ -532,7 +533,9 @@ and negatives. `Kpnn2Error`.
 `ranks=None` or omitted: longest-path, unchanged. When provided,
 every graph node must have a non-negative int; see **Layering**.
 
-Do **not** add `widths=` or `ranks=` to `parse_adjacency`.
+`parse_adjacency(..., widths=)` takes the same `widths=` with the
+same validation and messages. Do **not** add `ranks=` to
+`parse_adjacency`: there is no depth to rank.
 
 ---
 
@@ -726,8 +729,9 @@ on that axis; this locates one named node.
 
 `name` is matched after `str(...)`, same as parse. Empty
 name or a name that is not a node: `Kpnn2Error`. Do **not**
-export `Layout`. Do **not** add this lookup on
-`AdjacencySpec` (every node is one unit of `spec.nodes`).
+export `Layout`. `AdjacencySpec.node_units(name)` is the same
+lookup on the state vector and returns only the slice (there is
+no layer).
 
 These are identity into the unit axis, not a dropout module
 and not a head helper. After a reparse, copy bias with
@@ -782,12 +786,18 @@ no longer needed to express a skip edge.
 ## `parse_adjacency` and `AdjacencySpec`
 
 ```text
-parse_adjacency(edgelist) -> AdjacencySpec
+parse_adjacency(edgelist, *, widths=None) -> AdjacencySpec
 ```
 
 The second layout. Every node goes into one state vector, sorted
 alphabetically, and every edge goes into packed source/target
-index tuples. Nothing is ranked, so **cycles and self-loops are
+index tuples. `widths=` gives a named node several units, with
+exactly the `parse_layered` contract: a node of width `k` owns a
+contiguous block of `k` state units, and a named edge `A→B`
+expands into its `(k_B × k_A)` block of unit pairs, target-unit
+outer, source-unit inner. Omitted or `None` is width 1, and then
+every index below is one pair per named edge, as before. Nothing
+is ranked, so **cycles and self-loops are
 allowed**. This is the general packed form, not a cyclic-only
 parser: the same spec is what a shared-state loop, a time-series
 cell, and packed attention use. The update itself is user
@@ -807,20 +817,34 @@ stored mask tensor and no densifying `mask` property.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `nodes` | `tuple[str, ...]` | Every node name, alphabetical. Unit order of the state vector, and the row/column order of `to_mask()`. |
+| `nodes` | `tuple[str, ...]` | Every node name, alphabetical. Node order of the state vector, and of the rows/columns of `to_mask()`. |
+| `node_widths` | `tuple[int, ...]` | Units per entry of `nodes`, same order. All 1 unless `widths=` was given. |
 | `input_nodes` | `tuple[str, ...]` | In-degree 0 nodes, alphabetical. Column order for `align_inputs`. |
 | `output_nodes` | `tuple[str, ...]` | Out-degree 0 nodes, alphabetical. |
 | `hidden_nodes` | `tuple[str, ...]` | Neither input nor output, alphabetical. |
-| `source_index` | `tuple[int, ...]` | For each original edge, the column in `nodes` (the source). |
-| `target_index` | `tuple[int, ...]` | For each original edge, the row in `nodes` (the target). |
-| `input_index` | `tuple[int, ...]` | Position of each `input_nodes` name in `nodes`. |
-| `output_index` | `tuple[int, ...]` | Position of each `output_nodes` name in `nodes`. |
+| `source_index` | `tuple[int, ...]` | Source **unit** of each live unit pair. |
+| `target_index` | `tuple[int, ...]` | Target **unit** of each live unit pair. |
+| `input_index` | `tuple[int, ...]` | Every unit of each `input_nodes` name, in that order. |
+| `output_index` | `tuple[int, ...]` | Every unit of each `output_nodes` name, in that order. |
 
-`source_index` and `target_index` have the same length as the
-edge count. They include cycles and self-loops. Order is
-canonical: lexicographic by `(source name, target name)`,
-identical to `to_edgelist()` row order. A dense square would
-still have `1.0` at `[target_index[i], source_index[i]]`.
+`state_dim` is a property, `sum(node_widths)`: the state-vector
+length, the side of `to_mask()`, and the `in_features` /
+`out_features` of a `PackedLinear` on this spec. It equals
+`len(nodes)` at width 1. `node_units(name)` returns a node's
+contiguous unit slice (matched after `str(...)`; empty or
+unknown names raise `Kpnn2Error`).
+
+`source_index` and `target_index` have one entry per live unit
+pair: the sum over named edges of `k_source * k_target`, the
+edge count at width 1. They include cycles and self-loops.
+Named edges are canonical: lexicographic by
+`(source name, target name)`, identical to `to_edgelist()` row
+order; within a named edge, target-unit outer, source-unit
+inner. A dense square would still have `1.0` at
+`[target_index[i], source_index[i]]`. `input_index` has the
+length of `align_inputs(names, spec)`, so
+`state[:, spec.input_index] = x[:, col]` writes each input
+column into every unit of its node.
 
 There is no `mask` field, no `layer_nodes`, no `layer_dims`, no
 `hops` tuple, and no `skips`. Skips are a depth concept and
@@ -843,7 +867,9 @@ columns from the pre-parse DataFrame are not reproduced.
 `parse_adjacency(spec.to_edgelist())` reconstructs the same
 `nodes`, `input_nodes`, `output_nodes`, `hidden_nodes`,
 `source_index`, `target_index`, `input_index`, and
-`output_index`.
+`output_index` **when every node has width 1**. Widths live on
+the spec dict, not the edgelist: round-trip a wide spec with
+`AdjacencySpec.from_dict` or `parse_adjacency(..., widths=)`.
 
 ### `AdjacencySpec.edge_location()`
 
@@ -852,9 +878,10 @@ adjacency_spec.edge_location(source, target) -> tuple[int, ...]
 ```
 
 Packed indices into `spec.source_index` / `spec.target_index`
-(and into `PackedLinear.weight` built from those arrays).
-Adjacency stays one pair per named edge; there are no
-widths. Order agrees with `to_edgelist()` rows.
+(and into `PackedLinear.weight` built from those arrays). At
+width 1 a named edge is one slot; with `widths=` it is the full
+`(k_B × k_A)` block, target-unit outer, source-unit inner, in the
+stored order. Named-edge order agrees with `to_edgelist()` rows.
 
 `source` and `target` are matched after `str(...)`, same as
 parse. Missing pair, empty names, or a name that is not a
@@ -880,7 +907,7 @@ is `PackedLinear` on the packed indices and never allocates
 `(n, n)`.
 
 - Every call allocates a new dense `float32` tensor of shape
-  `(n, n)` with `n` from the node layout (`len(nodes)` at
+  `(n, n)` with `n = spec.state_dim` (`len(nodes)` at
   width 1).
 - The tensor starts at zeros; then `1.0` is written at each
   `[target_index[i], source_index[i]]`.
@@ -910,7 +937,7 @@ on access: that would silently allocate.
 
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
-n = len(spec.nodes)
+n = spec.state_dim
 core = kpnn2.PackedLinear(
     spec.source_index,
     spec.target_index,
@@ -924,7 +951,7 @@ x = torch.as_tensor(
     df.to_numpy()[:, col],
     dtype=torch.float32,
 )
-# x is len(input_nodes) wide
+# x is len(spec.input_index) wide
 state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x        # required, see above
 state = torch.relu(core(state))       # one step; loop as needed
@@ -1030,8 +1057,9 @@ emit:
 
 JSON object, node name → int. Include only nodes whose width is
 not 1 (missing means 1). `json.dumps(..., sort_keys=True)` makes
-this fingerprint-stable. Never emit `"widths"` for an
-`AdjacencySpec`.
+this fingerprint-stable. The same rule holds for an
+`AdjacencySpec` (`node_widths`), so a width-1 adjacency spec
+keeps its three-key payload and fingerprint.
 
 When compacted `layer_nodes` equal longest-path on the same
 edges, do **not** emit `"ranks"` (a `ranks=` that happens to
@@ -1052,19 +1080,20 @@ keeps fingerprints stable. Never emit `"ranks"` for an
 | `kpnn2_spec` | Integer `1` (schema version). |
 | `layout` | `"layered"` for `LayeredSpec`, `"adjacency"` for `AdjacencySpec`. Must not be omitted. |
 | `edges` | List of `[source, target]` lists (JSON-safe, not tuples), same order as `to_edgelist()` rows / `canonical_edges`. One row per **named** edge, not per unit pair. |
-| `widths` | Optional. Layered only. Node name → int for nodes whose width is not 1. |
+| `widths` | Optional, both layouts. Node name → int for nodes whose width is not 1. |
 | `ranks` | Optional. Layered only. Node name → compacted 0-based layer index for **every** node. Present only when that layering differs from longest-path. |
 
 Unknown extra keys on an otherwise valid payload are ignored
-(forward compatible). A stray `"widths"` or `"ranks"` key on an
-adjacency payload is ignored like any extra key.
+(forward compatible). A stray `"ranks"` key on an adjacency
+payload is ignored like any extra key; `"widths"` is read.
 
 `LayeredSpec.from_dict(payload)` calls `parse_layered` on a
 DataFrame built from `payload["edges"]`, passing
 `payload["widths"]` when present and `payload["ranks"]` when
 present. Absent or empty `"widths"` is all 1. Absent `"ranks"`
 is longest-path. Invalid type or values raise `Kpnn2Error`.
-`AdjacencySpec.from_dict` calls `parse_adjacency`. Hops and
+`AdjacencySpec.from_dict` calls `parse_adjacency`, passing
+`payload["widths"]` when present. Hops and
 masks are not hand-rebuilt. A layout mismatch (an adjacency
 dict into `LayeredSpec.from_dict`, or the reverse) raises
 `Kpnn2Error` naming the mismatch.
@@ -1445,8 +1474,8 @@ spec = kpnn2.parse_adjacency(edgelist)
 core = kpnn2.PackedLinear(
     spec.source_index,
     spec.target_index,
-    len(spec.nodes),
-    len(spec.nodes),
+    spec.state_dim,
+    spec.state_dim,
     identity=spec.fingerprint,
 )
 ```
@@ -1743,7 +1772,7 @@ Typical construction:
 
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
-n = len(spec.nodes)
+n = spec.state_dim
 attn = kpnn2.PackedMultiheadAttention(
     spec.source_index,
     spec.target_index,
@@ -1867,11 +1896,13 @@ this result feeds `PackedLinear` on `hops[0]` (or
 `MaskedLinear(spec.hops[0].to_mask())`) directly with no
 gathering. The name list still has one label per input
 **node**; a width greater than 1 repeats that node's index
-across its units. For an `AdjacencySpec` the length is **not**
-the state width: `to_mask()` is `(n, n)` over every node,
-while the index is only `len(input_nodes)` long. Scatter the
-gathered columns into the `n`-wide state vector via
-`spec.input_index` before calling `MaskedLinear(spec.to_mask())`:
+across its units. For an `AdjacencySpec` the same repeat
+applies to wide input nodes, so the length is
+`len(spec.input_index)`, and it is **not** the state width:
+`to_mask()` is `(state_dim, state_dim)` over every node's units.
+Scatter the gathered columns into the `state_dim`-wide state
+vector via `spec.input_index` before calling
+`MaskedLinear(spec.to_mask())`:
 
 ```python
 col = kpnn2.align_inputs(df.columns, spec)
@@ -1879,7 +1910,7 @@ x = torch.as_tensor(
     df.to_numpy()[:, col],
     dtype=torch.float32,
 )
-state = torch.zeros(x.shape[0], len(spec.nodes))
+state = torch.zeros(x.shape[0], spec.state_dim)
 state[:, spec.input_index] = x
 ```
 
@@ -1945,7 +1976,7 @@ positional; `hop_input` and `hop_output` are keyword-only. A
 | `LayeredSpec` | `hop_input=Hop` | Concatenated **source-unit** names of that hop (what its module **reads**), length `hop.in_features`. **No** `layer` coordinate (this axis is not one depth). |
 | `LayeredSpec` | none | `Kpnn2Error`: need one of `layer`, `hop_input`, `hop_output` |
 | `LayeredSpec` | two or three | `Kpnn2Error`: pass exactly one; the message names what was given |
-| `AdjacencySpec` | none | Names from `spec.nodes`; **no** `layer` coordinate |
+| `AdjacencySpec` | none | Unit names from `spec.nodes` and `node_widths` (a wide node's name repeats); **no** `layer` coordinate |
 | `AdjacencySpec` | any | `Kpnn2Error`: `layer`, `hop_input`, and `hop_output` do not apply |
 
 **The hop side is always stated, never inferred.** There is no
@@ -2008,7 +2039,7 @@ concat_layouts(
   times; do not aggregate), `hop.out_features` for
   `hop_output`, `hop.in_features` for `hop_input` (same
   unit-name rule on the concatenated source layers),
-  `len(spec.nodes)` for an `AdjacencySpec`. That axis gets
+  `spec.state_dim` for an `AdjacencySpec`. That axis gets
   those names as its coordinate, in order.
 - Default dims: 1-D → `(node,)`; 2-D → `(observation, node)`; a
   stacked sequence of 2-D tensors → `(step, observation, node)`.
@@ -2120,9 +2151,14 @@ them next to `layer_nodes`. Default `k=1` leaves every existing
 edgelist, fingerprint, hop index tuple, and tutorial numerically
 identical.
 
-**Adjacency width is not.** `parse_adjacency` has no `widths=`
-argument. Packed adjacency indices remain one pair per named
-edge / block start. Do not implement adjacency width.
+**Adjacency width is public too.** `parse_adjacency(..., widths=)`
+uses the same `Layout` machinery on the single state vector:
+`node_widths` next to `nodes`, block-expanded packed pairs, and
+unit-level `input_index` / `output_index`. Before it existed, a
+multi-unit node on this layout needed hand-expanded synthetic
+names (`R#0`, `R#1`, ...), which broke `edge_location`,
+attribution names, and fingerprints at the named-node level.
+Width 1 stays numerically identical.
 
 - A node owns a **contiguous slice** of units (`NodeSlot`).
   Default width is `DEFAULT_NODE_WIDTH == 1`. With `widths=`, a
@@ -2153,8 +2189,9 @@ edge / block start. Do not implement adjacency width.
   the matching lookup for a named node: a contiguous unit
   slice on a layer tensor or a hop source axis. Do not
   export `Layout`.
-- `AdjacencySpec.source_index` / `target_index` store
-  `layout.start_of` (the block start) for each original edge.
+- `AdjacencySpec.source_index` / `target_index` store **every
+  unit pair** of each named edge (`iter_block_pairs`, as on a
+  hop) on the `build_layout(nodes, node_widths)` axis.
   `to_mask()` writes `1.0` at each
   `[target_index[i], source_index[i]]`.
 - `Skip.source_in_layer` and `Skip.target_in_layer` store a
@@ -2162,8 +2199,9 @@ edge / block start. Do not implement adjacency width.
   edge.
 - `align_inputs` builds a `LayeredSpec` layout from
   `input_nodes` plus `layer_widths[0]` and repeats a node's
-  column index across that node's units. An `AdjacencySpec`
-  does not expand widths and does not call `build_layout`.
+  column index across that node's units. On an
+  `AdjacencySpec` it repeats each input node's column by that
+  node's `node_widths` entry, the same rule.
 - `map_node_attributions` on a `LayeredSpec` uses
   `build_layout(layer_nodes[layer], layer_widths[layer])` when
   `layer=` is given, and on `hop.target_layer` when
@@ -2172,7 +2210,7 @@ edge / block start. Do not implement adjacency width.
   `concat_layouts` and labels with `unit_names()` (not
   `hop.source_nodes`). The node axis length is `n_units`; the
   coordinate is `layout.unit_names()`. An `AdjacencySpec`
-  still uses `build_layout(names)` with no widths.
+  uses `build_layout(nodes, node_widths)`.
 
 New code asks a `Layout` for a slot instead of using
 `list.index()` or `enumerate` positions.

@@ -410,6 +410,7 @@ def test_align_inputs_rejects_bytes():
 def test_align_inputs_empty_names_when_no_input_nodes():
     spec = AdjacencySpec(
         nodes=(),
+        node_widths=(),
         input_nodes=(),
         output_nodes=(),
         hidden_nodes=(),

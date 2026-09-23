@@ -49,7 +49,7 @@ def map_node_attributions(
         units — ``spec.layer_dims[layer]`` when ``layer`` is given,
         ``hop.in_features`` for ``hop_input=hop``,
         ``hop.out_features`` for ``hop_output=hop``,
-        ``len(spec.nodes)`` for an ``AdjacencySpec`` — and the
+        ``spec.state_dim`` for an ``AdjacencySpec`` — and the
         remaining axes are yours. A non-empty tuple or list of
         equal-shaped tensors is stacked on a new leading ``step``
         axis, one entry per unrolled step or module call. The
@@ -388,7 +388,10 @@ def _resolve_node_layout(
                 "single state vector. Omit them to label the node "
                 "axis with spec.nodes."
             )
-        return build_layout(spec.nodes), None
+        return build_layout(
+            spec.nodes,
+            spec.node_widths,
+        ), None
     raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
 
 

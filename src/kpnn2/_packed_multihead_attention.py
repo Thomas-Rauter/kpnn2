@@ -1082,7 +1082,7 @@ class PackedMultiheadAttention(nn.Module):
     ...     }
     ... )
     >>> spec = kpnn2.parse_adjacency(edgelist)
-    >>> n = len(spec.nodes)
+    >>> n = spec.state_dim
     >>> attn = kpnn2.PackedMultiheadAttention(
     ...     spec.source_index,
     ...     spec.target_index,

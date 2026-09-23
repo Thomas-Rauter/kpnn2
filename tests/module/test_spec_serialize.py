@@ -392,7 +392,8 @@ def test_from_dict_helpers_call_parsers():
     assert "widths=widths" in layered_src
     assert "ranks=ranks" in layered_src
     assert "from ._parse_adjacency import parse_adjacency" in adjacency_src
-    assert "parse_adjacency(table)" in adjacency_src
+    assert "parse_adjacency(" in adjacency_src
+    assert "widths=_widths_from_payload(payload)" in adjacency_src
     assert "hashlib.sha256" in fingerprint_src
 
 
@@ -492,16 +493,20 @@ def test_from_dict_rejects_invalid_widths():
         LayeredSpec.from_dict(payload)
 
 
-def test_adjacency_from_dict_ignores_stray_widths():
+def test_adjacency_from_dict_reads_widths_and_ignores_ranks():
     spec = parse_adjacency(_cycle_edgelist())
+    assert "widths" not in spec.to_dict()
     payload = spec.to_dict()
     payload["widths"] = {"x": 3}
-    roundtrip = AdjacencySpec.from_dict(payload)
-    _assert_adjacency_structure(
-        spec,
-        roundtrip,
+    payload["ranks"] = {"x": 0}
+    wide = AdjacencySpec.from_dict(payload)
+    expected = parse_adjacency(
+        _cycle_edgelist(),
+        widths={"x": 3},
     )
-    assert "widths" not in spec.to_dict()
+    assert wide == expected
+    assert wide.to_dict()["widths"] == {"x": 3}
+    assert "ranks" not in wide.to_dict()
 
 
 def _unequal_sibling_edgelist():

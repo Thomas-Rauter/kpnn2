@@ -9,6 +9,7 @@ from torch import Tensor
 
 from ._errors import Kpnn2Error
 from ._layout import (
+    Layout,
     build_layout,
     dense_mask_from_indices,
     resolve_edge_names,
@@ -20,9 +21,11 @@ class AdjacencySpec:
     """
     Frozen blueprint from ``parse_adjacency``.
 
-    Packed wiring for one knowledge-primed network: every node is
-    a unit of one alphabetical state vector, and every edge an
-    index pair, so cycles and self-loops are ordinary. Structure
+    Packed wiring for one knowledge-primed network: every node
+    owns a contiguous block of units (one unit unless
+    ``parse_adjacency(widths=)`` says otherwise) of one
+    alphabetical state vector, and every edge is packed unit
+    pairs, so cycles and self-loops are ordinary. Structure
     only — no ``nn.Module``, no parameters, no stored square — and
     the update is yours. Input nodes have no incoming edges, so
     writing the inputs into the state each step is required.
@@ -31,9 +34,14 @@ class AdjacencySpec:
     Parameters
     ----------
     nodes : tuple[str, ...]
-        Every node name, alphabetical. This is the unit order of
-        the state vector and the row and column order of
-        ``to_mask()``.
+        Every node name, alphabetical. This is the node order of
+        the state vector and of the rows and columns of
+        ``to_mask()``; ``node_units(name)`` is each node's unit
+        block.
+    node_widths : tuple[int, ...]
+        Units per entry of ``nodes``, same order. All 1 unless
+        ``parse_adjacency`` was given ``widths``. Their sum is
+        ``state_dim``.
     input_nodes : tuple[str, ...]
         In-degree 0 names, alphabetical. This is the column order
         ``align_inputs`` indexes into, which is
@@ -44,25 +52,29 @@ class AdjacencySpec:
         Names that are neither input nor output, alphabetical.
         Empty when every node is an input or an output.
     source_index : tuple[int, ...]
-        For each original edge, the column in ``nodes`` (the
-        source). Same length as ``target_index`` and as the
-        edge count. Order is canonical: lexicographic by
+        Source unit of each live unit pair. A named edge
+        ``A -> B`` expands into every pair of its ``(k_B, k_A)``
+        block, target-unit outer, source-unit inner; at width 1
+        that is one pair per named edge, the source's position in
+        ``nodes``. Same length as ``target_index``. Named edges
+        are canonical: lexicographic by
         ``(source name, target name)``, identical to
         ``to_edgelist()`` row order. Cycles and self-loops are
-        included. ``edge_location`` returns the packed index of
-        one named pair.
+        included. ``edge_location`` returns the packed indices of
+        one named edge.
     target_index : tuple[int, ...]
-        For each original edge, the row in ``nodes`` (the
-        target). A dense square would have ``1.0`` at
-        ``[target_index[i], source_index[i]]``.
+        Target unit of each live unit pair. A dense square would
+        have ``1.0`` at ``[target_index[i], source_index[i]]``.
     input_index : tuple[int, ...]
-        Position of each ``input_nodes`` name in ``nodes``, same
-        order. Scatter gathered ``align_inputs`` columns into the
-        state vector along these columns.
+        Every unit of each ``input_nodes`` name, in that order,
+        so a wide input contributes each of its units. Same
+        length as ``align_inputs(names, spec)``: scatter the
+        gathered columns into the state vector along these
+        units.
     output_index : tuple[int, ...]
-        Position of each ``output_nodes`` name in ``nodes``, same
-        order. Read the network's outputs from the state vector
-        along these columns.
+        Every unit of each ``output_nodes`` name, in that order.
+        Read the network's outputs from the state vector along
+        these units.
 
     See Also
     --------
@@ -87,9 +99,10 @@ class AdjacencySpec:
     clones the square into a non-persistent buffer, so a layer
     built earlier keeps its own connectivity.
 
-    ``align_inputs`` returns ``len(input_nodes)`` positions, which
-    is not the state width. Scatter the gathered columns into the
-    ``n``-wide state vector with ``input_index``. Input rows of
+    ``align_inputs`` returns ``len(input_index)`` positions (one
+    per input unit), which is not the state width. Scatter the
+    gathered columns into the ``state_dim``-wide state vector
+    with ``input_index``. Input rows of
     ``to_mask()`` are all zeros, so under the degree-aware init
     of ``MaskedLinear`` and ``PackedLinear`` those units stay
     zero: writing the inputs in is required, not cosmetic.
@@ -101,10 +114,11 @@ class AdjacencySpec:
     This is not a one-layer ``LayeredSpec``; the layout is your
     choice, and a DAG is valid input to either parser.
 
-    ``to_edgelist()``, ``to_dict()`` with ``from_dict()``, and
-    ``fingerprint`` are the supported interchange; each
-    round-trips through ``parse_adjacency``, cycle edges and
-    self-loops included. Pickle and ``torch.save`` of the
+    ``to_dict()`` with ``from_dict()`` and ``fingerprint`` are
+    the supported interchange; they round-trip through
+    ``parse_adjacency``, cycle edges, self-loops, and widths
+    included. ``to_edgelist()`` round-trips at width 1. Pickle
+    and ``torch.save`` of the
     dataclass are not. ``edge_location`` finds packed slots of
     a named edge; it is not a constraint. A hard freeze of
     those slots is ``torch.where`` inside ``constraint=``.
@@ -136,6 +150,8 @@ class AdjacencySpec:
     (1, 3, 0, 0)
     >>> spec.edge_location("a", "b")
     (0,)
+    >>> spec.state_dim
+    4
     >>> tuple(spec.to_mask().shape)
     (4, 4)
     >>> spec.to_mask()[0].tolist()
@@ -143,6 +159,7 @@ class AdjacencySpec:
     """
 
     nodes: tuple[str, ...]
+    node_widths: tuple[int, ...]
     input_nodes: tuple[str, ...]
     output_nodes: tuple[str, ...]
     hidden_nodes: tuple[str, ...]
@@ -156,6 +173,11 @@ class AdjacencySpec:
             self,
             "nodes",
             tuple(self.nodes),
+        )
+        object.__setattr__(
+            self,
+            "node_widths",
+            tuple(self.node_widths),
         )
         object.__setattr__(
             self,
@@ -193,12 +215,87 @@ class AdjacencySpec:
             tuple(self.output_index),
         )
 
+    @property
+    def state_dim(self) -> int:
+        """
+        Number of units in the state vector, ``sum(node_widths)``.
+
+        This is the ``in_features`` / ``out_features`` of a
+        ``PackedLinear`` built on this spec and the side of
+        ``to_mask()``. It equals ``len(nodes)`` when every node
+        has width 1.
+        """
+        return sum(self.node_widths)
+
+    def node_units(
+        self,
+        name: object,
+    ) -> slice:
+        """
+        Return the unit slice of one named node in the state vector.
+
+        ``name`` is matched after ``str(...)``, same as parse.
+        Always a slice, including at width 1. Index as
+        ``state[..., units]``. ``LayeredSpec.node_units`` also
+        returns the depth; this layout has none.
+
+        Parameters
+        ----------
+        name : str
+            Node name. Non-strings are converted with
+            ``str(...)``.
+
+        Returns
+        -------
+        slice
+            Contiguous units of that node. Length is its width.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``name`` is empty or is not a node.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_adjacency(
+        ...     edgelist,
+        ...     widths={"b": 3},
+        ... )
+        >>> spec.node_units("b")
+        slice(1, 4, None)
+        >>> spec.node_units("x")
+        slice(4, 5, None)
+        """
+        node_name = str(name)
+        if node_name == "":
+            raise Kpnn2Error("Node name is empty.")
+        if node_name not in self.nodes:
+            raise Kpnn2Error(f"Unknown node name: {node_name}.")
+        return self._layout().slot(node_name).units
+
+    def _layout(self) -> Layout:
+        """
+        Return the unit placement of every node on the state vector.
+        """
+        return build_layout(
+            self.nodes,
+            self.node_widths,
+        )
+
     def to_mask(self) -> Tensor:
         """
         Allocate a dense float32 square from the packed edges.
 
-        Shape is ``(n, n)`` with ``n`` from the node layout
-        (``len(nodes)`` at width 1). The result starts at zeros;
+        Shape is ``(state_dim, state_dim)``. The result starts at
+        zeros;
         each live edge sets ``1.0`` at
         ``[target_index[i], source_index[i]]``. Every call
         returns a fresh tensor. Mutating it does not change this
@@ -226,8 +323,7 @@ class AdjacencySpec:
         >>> mask[0, 1].item(), mask[1, 0].item()
         (1.0, 1.0)
         """
-        layout = build_layout(self.nodes)
-        n_units = layout.n_units
+        n_units = self._layout().n_units
         return dense_mask_from_indices(
             self.source_index,
             self.target_index,
@@ -247,7 +343,10 @@ class AdjacencySpec:
         was parsed are not reproduced.
 
         ``parse_adjacency`` on this table reconstructs the same
-        node lists, packed indices, and input/output indices.
+        node lists, packed indices, and input/output indices
+        when every node has width 1. Widths live on the spec
+        dict, not the edgelist: round-trip a wide spec with
+        ``from_dict`` or ``parse_adjacency(..., widths=)``.
 
         Returns
         -------
@@ -291,8 +390,8 @@ class AdjacencySpec:
         same as parse. Indices address ``source_index`` /
         ``target_index`` and ``PackedLinear.weight`` built from
         those arrays. This is identity into the packed arrays,
-        not a constraint. Adjacency stores one pair per named
-        edge.
+        not a constraint. A named edge ``A -> B`` is the full
+        ``(k_B, k_A)`` block of unit pairs; at width 1 one pair.
 
         Parameters
         ----------
@@ -309,7 +408,9 @@ class AdjacencySpec:
             Packed indices of the named edge, in stored order
             (canonical lexicographic by
             ``(source name, target name)``, same as
-            ``to_edgelist()`` rows). Length is 1.
+            ``to_edgelist()`` rows; within the edge, target-unit
+            outer, source-unit inner). Length is
+            ``k_source * k_target``, 1 at default width.
 
         Raises
         ------
@@ -320,8 +421,9 @@ class AdjacencySpec:
 
         Notes
         -----
-        There is no hop index and no ``widths=``. A named edge
-        is one packed slot. Mixed signs and frozen values are
+        There is no hop index. Width greater than 1 does not
+        change the named edge; it returns one packed index per
+        unit pair of the block. Mixed signs and frozen values are
         caller PyTorch on these slots. A hard freeze is
         ``torch.where`` inside ``constraint=``, not a
         gradient hook.
@@ -369,8 +471,8 @@ class AdjacencySpec:
 
         The first call walks the packed indices once and
         remembers the node names. Later calls reuse both.
-        Neither is a dataclass field. Names come from
-        ``nodes`` at the stored unit index.
+        Neither is a dataclass field. A unit belongs to the node
+        whose block contains it (``Layout.slot_containing``).
         """
         cached = getattr(
             self,
@@ -379,7 +481,7 @@ class AdjacencySpec:
         )
         if cached is not None:
             return cached
-        nodes = self.nodes
+        layout = self._layout()
         grouped: dict[tuple[str, str], list[int]] = {}
         for slot, (source, target) in enumerate(
             zip(
@@ -389,8 +491,8 @@ class AdjacencySpec:
             )
         ):
             key = (
-                nodes[source],
-                nodes[target],
+                layout.slot_containing(source).name,
+                layout.slot_containing(target).name,
             )
             grouped.setdefault(
                 key,
@@ -399,7 +501,7 @@ class AdjacencySpec:
         index = {key: tuple(slots) for key, slots in grouped.items()}
         cached = (
             index,
-            frozenset(nodes),
+            frozenset(self.nodes),
         )
         object.__setattr__(
             self,
@@ -416,7 +518,9 @@ class AdjacencySpec:
         (``"adjacency"``), and ``edges`` (list of
         ``[source, target]`` lists in the same order as
         ``to_edgelist()`` rows, including cycle edges and
-        self-loops). The returned dict is new on every call.
+        self-loops). When any node has width other than 1, a
+        ``"widths"`` object of those names is included; all-1
+        specs omit it. The returned dict is new on every call.
 
         Returns
         -------
@@ -452,8 +556,9 @@ class AdjacencySpec:
         Rebuild an ``AdjacencySpec`` from ``to_dict()`` output.
 
         Calls ``parse_adjacency`` on a DataFrame built from
-        ``payload["edges"]``. Packed indices are not assembled
-        by hand. Extra unknown keys are ignored.
+        ``payload["edges"]``, passing ``payload["widths"]`` when
+        present. Packed indices are not assembled by hand. Extra
+        unknown keys are ignored, including a stray ``"ranks"``.
 
         Parameters
         ----------
@@ -471,8 +576,10 @@ class AdjacencySpec:
         Kpnn2Error
             If ``payload`` is not a dict; ``kpnn2_spec`` is
             missing or not ``1``; ``layout`` is missing, not a
-            known layout, or is ``"layered"``; or ``edges`` is
-            missing or not a sequence of two nonempty names.
+            known layout, or is ``"layered"``; ``edges`` is
+            missing or not a sequence of two nonempty names; or
+            ``"widths"`` is present and not a mapping of positive
+            ints over known nodes.
 
         Examples
         --------

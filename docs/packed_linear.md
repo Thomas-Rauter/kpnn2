@@ -25,17 +25,17 @@ columns. Small graphs may keep `MaskedLinear(hop.to_mask())` for
 GEMM.
 
 On an `AdjacencySpec` every node shares one
-[state vector](concepts.md#state-vector), a single vector with one
-unit per node, so
-`MaskedLinear(spec.to_mask())` is an `(n, n)` parameter. The
-packed form is one scalar per named edge:
+[state vector](concepts.md#state-vector), a single vector over
+all nodes, so `MaskedLinear(spec.to_mask())` is an `(n, n)`
+parameter. The packed form is one scalar per live unit pair (one
+per named edge at width 1):
 
 ```python
 core = kpnn2.PackedLinear(
     spec.source_index,
     spec.target_index,
-    len(spec.nodes),
-    len(spec.nodes),
+    spec.state_dim,
+    spec.state_dim,
 )
 ```
 
@@ -94,8 +94,8 @@ From an `AdjacencySpec`:
 core = kpnn2.PackedLinear(
     spec.source_index,
     spec.target_index,
-    len(spec.nodes),
-    len(spec.nodes),
+    spec.state_dim,
+    spec.state_dim,
 )
 ```
 
@@ -112,7 +112,7 @@ x = torch.as_tensor(
     df.to_numpy()[:, col],
     dtype=torch.float32,
 )
-n = len(spec.nodes)
+n = spec.state_dim
 state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x
 state = torch.relu(core(state))
@@ -281,8 +281,8 @@ values[list(packed)] = 1.5
 core = kpnn2.PackedLinear(
     spec.source_index,
     spec.target_index,
-    len(spec.nodes),
-    len(spec.nodes),
+    spec.state_dim,
+    spec.state_dim,
     constraint=FreezeSlots(
         mask,
         values,

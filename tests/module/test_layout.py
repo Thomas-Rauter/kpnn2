@@ -518,7 +518,12 @@ def test_build_skips_records_the_block_start():
     assert skips[0].target_layer == 2
 
 
-def test_packed_edge_indices_use_slot_starts():
+def test_packed_edge_indices_expand_width_blocks():
+    """
+    ``a`` owns units 0-1 and ``b`` unit 2. ``a -> b`` is the
+    ``(1, 2)`` block, ``b -> b`` a single self-loop pair, in
+    canonical named-edge order, target-unit outer.
+    """
     edgelist = pd.DataFrame(
         {
             "source": ["a", "b"],
@@ -533,16 +538,8 @@ def test_packed_edge_indices_use_slot_starts():
         edgelist,
         layout,
     )
-    assert source_index == (
-        layout.start_of("a"),
-        layout.start_of("b"),
-    )
-    assert target_index == (
-        layout.start_of("b"),
-        layout.start_of("b"),
-    )
-    assert source_index == (0, 2)
-    assert target_index == (2, 2)
+    assert source_index == (0, 1, 2)
+    assert target_index == (2, 2, 2)
 
 
 def test_parsers_still_place_one_unit_per_node():

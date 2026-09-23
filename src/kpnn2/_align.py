@@ -67,7 +67,8 @@ def align_inputs(
     its column index across those units, so the length is
     ``spec.layer_dims[0]``. On CSR/CSC that repeat copies
     those columns and stays sparse; it is not a view. For an
-    ``AdjacencySpec`` the length is ``len(spec.input_nodes)``.
+    ``AdjacencySpec`` the same repeat uses ``node_widths``, so
+    the length is ``len(spec.input_index)``.
     Call it after parsing, once, instead of hand-ordering
     columns. DataFrames, tensors, and matrices are rejected.
 
@@ -87,14 +88,15 @@ def align_inputs(
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
         names and their order. A ``LayeredSpec`` also uses
-        ``layer_widths[0]`` to repeat columns.
+        ``layer_widths[0]``, an ``AdjacencySpec`` its
+        ``node_widths``, to repeat columns.
 
     Returns
     -------
     numpy.ndarray of dtype int64, shape (width,)
         Positions into ``names``. Shape is
         ``(spec.layer_dims[0],)`` for a ``LayeredSpec`` and
-        ``(len(spec.input_nodes),)`` for an ``AdjacencySpec``.
+        ``(len(spec.input_index),)`` for an ``AdjacencySpec``.
         Index the caller's feature axis with it. An empty
         ``names`` sequence is allowed when ``input_nodes`` is
         empty; otherwise missing names raise.
@@ -141,10 +143,12 @@ def align_inputs(
     width 1. ``hops[0]`` reads layer 0 alone, so a row block
     indexed with this result feeds the first hop directly and
     needs no gathering. For an ``AdjacencySpec`` it is **not**
-    the state width: ``to_mask()`` is ``(n, n)`` over every
-    node, while the index is only ``len(input_nodes)`` long.
-    Scatter the gathered columns into the ``len(spec.nodes)``-wide
-    state vector with ``spec.input_index`` before calling
+    the state width: ``to_mask()`` is
+    ``(state_dim, state_dim)`` over every node's units, while
+    the index covers the input units only
+    (``len(spec.input_index)``). Scatter the gathered columns
+    into the ``spec.state_dim``-wide state vector with
+    ``spec.input_index`` before calling
     ``MaskedLinear(spec.to_mask())``.
 
     Examples
@@ -174,7 +178,7 @@ def align_inputs(
     [[0.5], [1.5]]
 
     An ``AdjacencySpec`` works the same way, but the index is
-    ``len(input_nodes)`` long and the gathered columns must be
+    ``len(spec.input_index)`` long and the gathered columns must be
     scattered into the state vector before they reach
     ``MaskedLinear(spec.to_mask())``:
 
@@ -192,7 +196,7 @@ def align_inputs(
     >>> x = torch.tensor([[0.5], [1.5]])[:, col]
     >>> state = torch.zeros(
     ...     2,
-    ...     len(state_spec.nodes),
+    ...     state_spec.state_dim,
     ... )
     >>> state[:, state_spec.input_index] = x
     >>> state.tolist()
@@ -239,16 +243,24 @@ def align_inputs(
         dtype=np.int64,
     )
     if isinstance(spec, LayeredSpec):
-        layout = build_layout(
+        widths = build_layout(
             spec.input_nodes,
             spec.layer_widths[0],
-        )
-        widths = layout.widths()
-        if any(width != DEFAULT_NODE_WIDTH for width in widths):
-            node_index = np.repeat(
-                node_index,
-                widths,
+        ).widths()
+    else:
+        width_of = dict(
+            zip(
+                spec.nodes,
+                spec.node_widths,
+                strict=True,
             )
+        )
+        widths = tuple(width_of[name] for name in spec.input_nodes)
+    if any(width != DEFAULT_NODE_WIDTH for width in widths):
+        node_index = np.repeat(
+            node_index,
+            widths,
+        )
     return node_index
 
 
