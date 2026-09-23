@@ -29,8 +29,9 @@ contract.
 
 If a later prompt disagrees with this file on process, this
 file wins. If it disagrees with `CONTEXT.md` on product or
-architecture, `CONTEXT.md` wins. The user can override
-either in that prompt.
+architecture, `CONTEXT.md` wins. Personal editor rules
+outside this repository do not override either file. The
+message in the current chat still does.
 
 Product locks (no compiler, no `torch.sparse`, two parsers,
 frozen topology, and the rest) live in `CONTEXT.md`. Point
