@@ -579,15 +579,13 @@ class PackedLinear(nn.Module):
                     continue
                 bound = 1.0 / math.sqrt(degree)
                 for index in row_edges[row]:
-                    nn.init.uniform_(
-                        self.weight[index : index + 1],
+                    self.weight[index : index + 1].uniform_(
                         -bound,
                         bound,
                         generator=generator,
                     )
                 if self.bias is not None:
-                    nn.init.uniform_(
-                        self.bias[row : row + 1],
+                    self.bias[row : row + 1].uniform_(
                         -bound,
                         bound,
                         generator=generator,
