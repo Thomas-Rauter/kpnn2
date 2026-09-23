@@ -63,8 +63,8 @@ This project follows semantic versioning.
   `state_dict`, checked on load.
 - `aggregate_node_attributions` / `list_aggregation_methods`:
   fold mapped node scores with a registered method. Default
-  `rauter_mangano_2026` (binary: winner minus loser of the
-  two class means, averaged over seeds).
+  `rauter_mangano_2026` is registered and not yet
+  implemented.
 
 
 ## [0.1.0] - 1. September 2026

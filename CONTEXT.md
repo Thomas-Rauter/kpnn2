@@ -136,8 +136,9 @@ later prompt asks.
 7. **Aggregate attributions (optional):**
    `aggregate_node_attributions()` folds named scores with a
    registered method. The default `rauter_mangano_2026` is
-   binary classification. `list_aggregation_methods()` lists
-   the registry. The mapper still does not aggregate.
+   registered and not yet implemented; calling it raises
+   `Kpnn2Error`. `list_aggregation_methods()` lists the
+   registry. The mapper still does not aggregate.
 
 ### Primary use cases
 
@@ -1969,48 +1970,20 @@ guess that `step` or a Captum `class` dim is `seed`.
 
 ## `rauter_mangano_2026` (default aggregation method)
 
-Binary only. Not a public import; pass
+Registered under this name. Not a public import; pass
 `method="rauter_mangano_2026"`. The private function's
 docstring is the user-facing contract (rendered at
 `docs/reference/aggregation/rauter_mangano_2026.md`).
-State the formulas that the code computes. Do not add
-ranking advice or other claims beyond those formulas.
 
-- Required dims: `observation`, `node`. Optional dim:
-  `seed` (trained replicates). Any other dim: `Kpnn2Error`
-  (reduce or `.rename` first). Repeated `node` names
-  (a node wider than 1, or a hop axis): `Kpnn2Error`;
-  reduce units to one column per node first.
-  Concatenate seeds with
-  `xr.concat(..., dim="seed")`. No `seed` dim is `S = 1`.
-- `labels` required: 1-d array paired in order, or
-  `pandas.Series` reindexed to the observation coordinate.
-  Required kwargs `class_0` and `class_1` (even when labels
-  are already 0/1), each a scalar. More than two classes, a
-  missing class, or labels outside that pair: `Kpnn2Error`.
-  Labels may mix types. One more kwarg: `correct_sign`, a
-  bool, default False.
-- Per seed `s` and node `i`, with class sets `O_0`, `O_1`:
-  `mu_c = mean_{o in O_c} a`. The winner `w` is the class
-  mean with the larger absolute value, the loser `l` the
-  other (tie: class 1 wins). `r_s = w - l`, both with their
-  original signs.
-- Flag `f_s = [mu_1 < mu_0]`, always computed. With
-  `correct_sign=True`, `r_s` becomes `-r_s` wherever `f_s`
-  is True, which gives `eps * |mu_1 - mu_0|`.
-- `score = (1/S) sum_s r_s`. The default
-  (`correct_sign=False`) is winner minus loser, as in the
-  paper.
-- NaN safeguard: a NaN attribution is left out of its class
-  mean. A seed counts for a node only when both class means
-  exist; the seed mean runs over those seeds, and `f_s` is
-  False for the others. No such seed: `score` is NaN.
-- Return: `xarray.Dataset` with `score` on `node` and the
-  boolean flag `mean_class1_below_class0` on
-  `(seed, node)`, or `node` without a `seed` dim. Copy a
-  scalar `layer` coordinate when present. The dispatcher
-  then stamps `method`, `method_params`, and
-  `kpnn2_version`.
+The method is not yet implemented. Calling it raises
+`Kpnn2Error` with that message. Arguments are ignored.
+It stays the default, with status `recommended`, so the
+name is reserved for the method that will replace this
+placeholder. `list_aggregation_methods()` still lists it.
+
+When the method is implemented, state the formulas that
+the code computes on that private docstring. Do not add
+ranking advice or other claims beyond those formulas.
 
 ---
 
@@ -2157,14 +2130,8 @@ da = kpnn2.map_node_attributions(
     layer=len(spec.layer_nodes) - 1,
 )
 # optional: fold observations (and seeds) to one score
-# per node; class_0 / class_1 required for the default
-# binary method
-agg = kpnn2.aggregate_node_attributions(
-    da,
-    labels=[0, 1],
-    class_0=0,
-    class_1=1,
-)
+# per node. The default method rauter_mangano_2026 is
+# not yet implemented and raises Kpnn2Error.
 ```
 
 Every edge, including `A → C` when that row is present, is

@@ -1,9 +1,11 @@
 """Minimal public-API path used by the installed-wheel CI smoke."""
 
 import pandas as pd
+import pytest
 import torch
 
 from kpnn2 import (
+    Kpnn2Error,
     LayeredSpec,
     MaskedLinear,
     aggregate_node_attributions,
@@ -62,14 +64,14 @@ def test_core_smoke():
     assert int(da.sizes["observation"]) == 2
     assert int(da.coords["layer"]) == 1
 
-    agg = aggregate_node_attributions(
-        da,
-        labels=[0, 1],
-        class_0=0,
-        class_1=1,
-    )
-    assert "score" in agg
-    assert int(agg.sizes["node"]) == 1
+    with pytest.raises(
+        Kpnn2Error,
+        match="not yet implemented",
+    ):
+        aggregate_node_attributions(
+            da,
+            labels=[0, 1],
+        )
 
 
 if __name__ == "__main__":

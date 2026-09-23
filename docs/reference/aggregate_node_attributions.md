@@ -9,4 +9,4 @@ returns the same catalog in Python.
 
 | Method | Status | Description |
 | --- | --- | --- |
-| [`rauter_mangano_2026`](aggregation/rauter_mangano_2026.md) | recommended | Binary: class mean with the larger absolute value minus the other class mean, averaged over seeds. |
+| [`rauter_mangano_2026`](aggregation/rauter_mangano_2026.md) | recommended | Not yet implemented. |

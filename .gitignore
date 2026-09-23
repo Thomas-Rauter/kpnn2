@@ -1,7 +1,7 @@
 out/
 build/
 site/
-notes/
+local/
 *.egg-info/
 dist/
 .venv/

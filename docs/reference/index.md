@@ -23,7 +23,7 @@ Names you call or construct.
 | [`scatter_hop_outputs`][kpnn2.scatter_hop_outputs] | Split a hop's concatenated source axis back onto source layers. |
 | [`align_inputs`][kpnn2.align_inputs] | Feature names → column index so the wiring matches. |
 | [`map_node_attributions`][kpnn2.map_node_attributions] | Attach spec node names to an attribution tensor you already computed. |
-| [`aggregate_node_attributions`][kpnn2.aggregate_node_attributions] | Reduce mapped node scores with a registered method (default: Rauter–Mangano 2026). |
+| [`aggregate_node_attributions`][kpnn2.aggregate_node_attributions] | Reduce mapped node scores with a registered method (default `rauter_mangano_2026` is not yet implemented). |
 | [`list_aggregation_methods`][kpnn2.list_aggregation_methods] | Table of registered attribution aggregation methods and their status. |
 
 ## Specs {: .api-group }

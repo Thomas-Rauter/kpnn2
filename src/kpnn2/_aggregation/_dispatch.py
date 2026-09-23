@@ -48,7 +48,8 @@ def aggregate_node_attributions(
         Forwarded to the method. Some methods require it.
     method : str, optional
         Registered method name. Default
-        ``"rauter_mangano_2026"``. See
+        ``"rauter_mangano_2026"``, which is not yet
+        implemented and raises ``Kpnn2Error``. See
         ``list_aggregation_methods()``.
     **method_kwargs
         Forwarded to the method.
@@ -69,10 +70,10 @@ def aggregate_node_attributions(
     ------
     Kpnn2Error
         If ``attributions`` is not a DataArray; ``method`` is
-        unknown (the message lists callable methods) or
-        ``removed``; ``labels`` or method kwargs are invalid
-        for the selected method; or the DataArray dims do not
-        match that method.
+        unknown (the message lists callable methods),
+        ``removed``, or not yet implemented; ``labels`` or
+        method kwargs are invalid for the selected method; or
+        the DataArray dims do not match that method.
 
     Warns
     -----
@@ -93,31 +94,8 @@ def aggregate_node_attributions(
     -----
     Captum is not imported here. Method formulas, required
     dims, and extra kwargs are documented on each method's
-    reference page.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> import xarray as xr
-    >>> import kpnn2
-    >>> da = xr.DataArray(
-    ...     [[1.0, 0.0], [0.0, 2.0]],
-    ...     dims=("observation", "node"),
-    ...     coords={"node": ["A", "B"]},
-    ... )
-    >>> out = kpnn2.aggregate_node_attributions(
-    ...     da,
-    ...     labels=np.array([0, 1]),
-    ...     class_0=0,
-    ...     class_1=1,
-    ... )
-    >>> out["score"].values.tolist()
-    [1.0, 2.0]
-    >>> out.attrs["method"]
-    'rauter_mangano_2026'
-    >>> import json
-    >>> json.loads(out.attrs["method_params"])
-    {'class_0': 0, 'class_1': 1, 'correct_sign': False}
+    reference page. The default method is not yet
+    implemented.
     """
     if not isinstance(attributions, xr.DataArray):
         raise Kpnn2Error("'attributions' must be an xarray.DataArray.")
