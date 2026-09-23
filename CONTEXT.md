@@ -781,7 +781,10 @@ The consequences are the point of this design:
   source enters through the target's own weight matrix.
 
 `kpnn2` owns the packed hop layout and the gather. The user owns
-call order and nonlinearities.
+call order and nonlinearities. The activation is an `nn.ReLU`
+in `self.acts`, one per hop
+(`nn.ModuleList([nn.ReLU() for _ in spec.hops])`). The output
+hop stays linear, so its module is not applied.
 
 ```python
 saved = {0: x}
@@ -789,7 +792,7 @@ for index, hop in enumerate(spec.hops):
     sources = kpnn2.gather_hop_inputs(saved, hop)   # concat, checked
     h = self.hops[index](sources)                # PackedLinear
     if hop.target_layer < len(spec.layer_nodes) - 1:
-        h = torch.relu(h)
+        h = self.acts[index](h)
     saved[hop.target_layer] = h
 ```
 
@@ -970,9 +973,12 @@ x = torch.as_tensor(
 # x is len(spec.input_index) wide
 state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x        # required, see above
-state = torch.relu(core(state))       # one step; loop as needed
+relu = torch.nn.ReLU()
+state = relu(core(state))             # one step; loop as needed
 logits = state[:, spec.output_index]
 ```
+
+Register `relu` on the module you train (`self.act = relu`).
 
 ---
 
@@ -2099,8 +2105,9 @@ concat_layouts(
 - `hop_output`: a `Hop` equal to one of `spec.hops`. Labels the
   layer that hop's module returns, `hop.target_layer`, length
   `hop.out_features`, with the scalar `layer` coordinate; the
-  result is identical to `layer=hop.target_layer`. Captum layer
-  methods (`LayerConductance` and the rest) score this side by
+  result is identical to `layer=hop.target_layer`. That return
+  is the pre-activation tensor. Captum layer methods
+  (`LayerConductance` and the rest) score this side by
   default. `LayeredSpec` only, mutually exclusive with `layer`
   and `hop_input`.
 - `hop_input`: a `Hop` equal to one of `spec.hops`. Labels the
@@ -2144,6 +2151,15 @@ output of the module on `spec.hops[i]` pass
 that hop's concatenated source axis pass
 `hop_input=spec.hops[i]`. Do not name-map BatchNorm or other
 unnamed modules.
+
+DeepLift, DeepLiftShap, and LRP rescale `nn.Module`
+nonlinearities. The activation after a hop is an `nn.ReLU`
+held in `self.acts` (`nn.ModuleList`, one entry per hop) and
+called from `forward`. The hop module returns the
+pre-activation tensor, and `hop_output` names that linear
+map. Post-activation node states are the output of the
+following `nn.ReLU`. `LayerActivation` and
+`LayerGradientXActivation` hook that module.
 
 For a cyclic net on an `AdjacencySpec` there is no layer to
 index; the natural extra axis is `step`. Pass one tensor per
@@ -2307,7 +2323,6 @@ at the public boundary (internal helpers may use them if wrapped).
 import pandas as pd
 import torch
 from torch import nn
-import torch.nn.functional as F
 
 import kpnn2
 
@@ -2337,6 +2352,9 @@ class Net(nn.Module):
                 for hop in spec.hops
             ]
         )
+        self.acts = nn.ModuleList(
+            [nn.ReLU() for _ in spec.hops]
+        )
 
     def forward(self, x):
         saved = {0: x}
@@ -2346,7 +2364,7 @@ class Net(nn.Module):
             sources = kpnn2.gather_hop_inputs(saved, hop)
             hidden = self.hops[index](sources)
             if index < last:
-                hidden = F.relu(hidden)
+                hidden = self.acts[index](hidden)
             saved[hop.target_layer] = hidden
         return hidden
 
@@ -2437,9 +2455,12 @@ PyTorch:
    A tied decoder is `layer.transpose()` plus
    `scatter_hop_outputs` on skip hops; add the pieces into
    the decoder `saved` dict. There is no autoencoder class.
-4. Put ReLU / BatchNorm / Dropout in `forward()` yourself, after
-   the hop that produced the tensor. Store the value you want
-   later hops to read.
+4. Put activations, BatchNorm, and Dropout in `forward()`
+   yourself, after the hop that produced the tensor. Hold
+   `self.acts = nn.ModuleList([nn.ReLU() for _ in spec.hops])`
+   and call `self.acts[index]` on every hop you activate.
+   The output hop stays linear. Store the tensor later hops
+   should read.
 5. `col = kpnn2.align_inputs(names, spec)` then `X[:, col]`
    on the host matrix. Pre-ordered dense tensors skip this.
    Sparse host X is the caller's loop (apply the index, then

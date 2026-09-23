@@ -91,9 +91,12 @@ for index, hop in enumerate(spec.hops):
     )
     hidden = self.hops[index](sources)
     if index < last:
-        hidden = torch.relu(hidden)
+        hidden = self.acts[index](hidden)
     saved[hop.target_layer] = hidden
 ```
+
+`self.acts` is `nn.ModuleList([nn.ReLU() for _ in spec.hops])`.
+The output hop stays linear.
 
 `self.hops[index]` is `PackedLinear` on that hop's packed
 indices. `MaskedLinear(hop.to_mask())` is the dense hatch.
@@ -118,10 +121,11 @@ state = torch.zeros(
 )
 for _ in range(n_steps):
     state[:, spec.input_index] = x
-    state = torch.relu(core(state))
+    state = self.act(core(state))
 y = state[:, spec.output_index]
 ```
 
+`self.act` is an `nn.ReLU` registered on the module.
 `n_steps` is yours; `kpnn2` does not unroll time. With `x` held
 fixed, that loop is the shared-state one
 [Cyclic graph example](cyclic-graph-example.ipynb) trains on a

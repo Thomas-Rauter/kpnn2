@@ -162,6 +162,16 @@ def map_node_attributions(
     units that are spec nodes; BatchNorm and other unnamed modules
     have no node axis to name.
 
+    DeepLift, DeepLiftShap, and LRP rescale ``nn.Module``
+    nonlinearities. The activation after a hop is an
+    ``nn.ReLU`` held in an ``nn.ModuleList``, one entry per
+    hop, and called from ``forward``. The hop module returns
+    the pre-activation tensor: ``hop_output`` names that
+    linear map. Post-activation node states are the output
+    of the ``nn.ReLU`` that follows the hop.
+    ``LayerActivation`` and ``LayerGradientXActivation``
+    hook that module.
+
     A recurrent net on an ``AdjacencySpec`` has no layer to index,
     and the natural extra axis there is ``step``: pass one tensor
     per unrolled step as a sequence and they are stacked for you.

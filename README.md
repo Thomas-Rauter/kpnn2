@@ -233,7 +233,6 @@ A full walkthrough, including training and attribution, is in
 ```python
 import pandas as pd
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 import kpnn2
@@ -264,9 +263,12 @@ class Net(nn.Module):
             spec.hops[1].in_features,
             identity=spec.fingerprint,
         )
+        self.acts = nn.ModuleList(
+            [nn.ReLU() for _ in spec.hops]
+        )
 
     def forward(self, x):
-        h = F.relu(self.lin0(x))
+        h = self.acts[0](self.lin0(x))
         return self.lin1(h)
 
 
@@ -447,6 +449,12 @@ class Net(nn.Module):
                     requires_grad=False,
                 )
             )
+        self.acts = nn.ModuleList(
+            [
+                nn.ReLU()
+                for _ in self.lins
+            ]
+        )
 
     def forward(self, x):
         # Width is checkable, column order is
@@ -477,7 +485,7 @@ class Net(nn.Module):
                 lin.bias,
             )
             if i + 1 < len(self.lins):
-                h = F.relu(h)
+                h = self.acts[i](h)
             saved[i + 1] = h
         return h
 
@@ -493,7 +501,6 @@ model = Net(masks, len(layers[0]))
 
 ```python
 import pandas as pd
-import torch.nn.functional as F
 from torch import nn
 
 import kpnn2
@@ -518,6 +525,12 @@ class Net(nn.Module):
                 for hop in spec.hops
             ]
         )
+        self.acts = nn.ModuleList(
+            [
+                nn.ReLU()
+                for _ in spec.hops
+            ]
+        )
 
     def forward(self, x):
         saved = {0: x}
@@ -527,7 +540,7 @@ class Net(nn.Module):
         ):
             h = lin(kpnn2.gather_hop_inputs(saved, hop))
             if i + 1 < len(self.lins):
-                h = F.relu(h)
+                h = self.acts[i](h)
             saved[i + 1] = h
         return h
 

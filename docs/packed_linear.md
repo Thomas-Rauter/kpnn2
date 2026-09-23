@@ -85,8 +85,11 @@ core = kpnn2.PackedLinear(
     hop.in_features,
 )
 x = kpnn2.gather_hop_inputs(saved, hop)
-hidden = torch.relu(core(x))
+hidden = self.acts[index](core(x))
 ```
+
+`self.acts` is `nn.ModuleList([nn.ReLU() for _ in spec.hops])`.
+The hop returns the pre-activation tensor.
 
 From an `AdjacencySpec`:
 
@@ -115,8 +118,10 @@ x = torch.as_tensor(
 n = spec.state_dim
 state = torch.zeros(x.shape[0], n)
 state[:, spec.input_index] = x
-state = torch.relu(core(state))
+state = self.act(core(state))
 ```
+
+`self.act` is an `nn.ReLU` registered on the module.
 
 The same packed indices can feed
 [`PackedMultiheadAttention`](reference/PackedMultiheadAttention.md),
