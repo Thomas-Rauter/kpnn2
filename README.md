@@ -251,13 +251,6 @@ added to the table can move nodes between layers, and the masks,
 the layers each hop reads, and the column order of every
 concatenated input all change with it.
 
-Much of that column is not the model but the checks the masks
-depend on. A missing node name silently adds a node, a duplicated
-edge silently collapses into one weight, and a cycle has no
-layering at all, so the depth pass has to detect it rather than
-recurse forever. Both columns reject the same six malformed
-edgelists.
-
 `kpnn2` replaces that preparation with one call to
 `parse_layered()` and leaves the `nn.Module` as a loop over hops.
 The edgelist stays the only description of the graph, skip edges
@@ -503,6 +496,77 @@ model = Net(spec)
 </div>
 
 </div>
+
+Both columns are correct. They build the same network, and both
+reject the same six malformed edgelists. The left one is several
+times longer, and it covers only the model: aligning input
+columns, saving checkpoints, and naming attributions still lie
+ahead, each with bookkeeping of its own.
+
+Much of that length is not the model but the checks the masks
+depend on. A missing node name silently adds a node, a duplicated
+edge silently collapses into one weight, and a cycle has no
+layering at all, so the depth pass has to detect it rather than
+recurse forever. The left column holds every check its author
+thought of. The failure below is one they did not.
+
+### A silent failure
+
+Train the left model and save its `state_dict`. Months later, a
+new database release revises one interaction in Figure 2:
+`gene_n3` now regulates `tf_stat` instead of `tf_nfkb`. No node
+changes layer, so every tensor keeps its shape. Rerun the left
+column on the new prior and reload the checkpoint:
+
+```python
+# Before: trained on the old pathway_prior.csv
+torch.save(model.state_dict(), "model.pt")
+
+# After: the same script on the new pathway_prior.csv
+model = Net(masks, len(layers[0]))
+model.load_state_dict(torch.load("model.pt"))
+# <All keys matched successfully>
+```
+
+The load succeeds, even with `strict=True`. The masks are
+`nn.Parameter`s, so they are saved in the `state_dict`, and the
+old masks overwrite the new ones. The model runs the old wiring
+while every name in the script comes from the new prior. Loss and
+predictions look normal. Every attribution on `gene_n3` flows
+through `gene_n3 → tf_nfkb`, an edge the new prior says does not
+exist.
+
+The obvious fix moves the failure instead of removing it.
+Register the masks as non-persistent buffers so they stay out of
+the `state_dict`, and the load still succeeds. Now the new masks
+gate weights trained under the old ones: `gene_n3 → tf_stat` runs
+on a weight that never trained, and the trained
+`gene_n3 → tf_nfkb` weight sits behind a zero.
+
+With `kpnn2`, the same reload raises:
+
+```python
+model = Net(spec)  # the new pathway_prior.csv
+model.load_state_dict(torch.load("model.pt"))
+# Kpnn2Error: The checkpoint identity does not match this layer.
+```
+
+Each `PackedLinear` saves a digest of its packed indices and,
+with `identity=spec.fingerprint`, the fingerprint of the named
+prior. When either differs from the layer being loaded, loading
+stops with `Kpnn2Error`.
+
+Each failure like this one is fixable once you have seen it. The
+hard part is seeing all of them in advance: this one needs a
+prior update and a reload to appear, and neither column's code
+hints at it. That is what `kpnn2` is for. It owns the mapping
+from node names to tensor positions (layers, packed edges, input
+columns, checkpoints, attribution labels), so the checks on that
+mapping are written and tested once, in one place, instead of
+rediscovered by every project that writes its own. It does not
+check your `forward()`, your prior's biology, or your attribution
+method; [**How we test**](docs/correctness.md) lists what the
+tests pin and what they do not prove.
 
 ## API
 

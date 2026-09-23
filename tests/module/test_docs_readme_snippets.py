@@ -4,9 +4,13 @@ Both fenced blocks are lifted out of ``README.md`` and run, so the
 claims the section makes -- that the hand-written module and the
 ``kpnn2`` one build the same network, and that both reject the same
 malformed edgelists -- are checked rather than asserted in prose.
-Editing either block re-runs it here. Renaming or moving the section,
-dropping a column label, or changing the number of fenced blocks fails
-these tests rather than silently skipping them.
+So is the silent failure below them: after the prior update the
+prose names, an old checkpoint loads into the hand-written module
+without complaint and brings the old masks with it, while the
+``kpnn2`` module refuses it. Editing either block re-runs it here.
+Renaming or moving the section, dropping a column label, or changing
+the number of fenced blocks fails these tests rather than silently
+skipping them.
 
 The snippets read ``pathway_prior.csv``, a file that does not exist in
 the repo: it stands for the reader's own prior. The fixture writes it
@@ -51,6 +55,10 @@ _NUMBER_WORDS = {
 }
 
 _GOOD = [("a", "h"), ("b", "h"), ("h", "c")]
+
+# "`gene_n3` now regulates `tf_stat` instead of `tf_nfkb`", read as
+# (source, new target, old target).
+_REVISION = re.compile(r"`(\w+)` now regulates `(\w+)` instead of `(\w+)`")
 
 # Each edge list both columns must refuse. The snippet raises
 # ValueError and parse_layered raises Kpnn2Error; only that both
@@ -115,6 +123,36 @@ def _run(code: str) -> dict[str, Any]:
     return namespace
 
 
+def _flat_section() -> str:
+    """The section with hard wraps flattened, for matching prose."""
+    return re.sub(r"\s+", " ", _section())
+
+
+def _revised_pairs() -> list[tuple[str, str]]:
+    """Apply the prior update that the silent-failure prose names."""
+    match = _REVISION.search(_flat_section())
+    assert match, (
+        "The section no longer names the revised interaction as "
+        "'`source` now regulates `new` instead of `old`'; update "
+        "this test or the prose."
+    )
+    source, new, old = match.groups()
+    pairs = _figure_pairs()
+    assert (source, old) in pairs, f"{source} -> {old} is not in Figure 2"
+    assert (source, new) not in pairs, f"{source} -> {new} already exists"
+    return [pair for pair in pairs if pair != (source, old)] + [(source, new)]
+
+
+def _build(
+    code: str,
+    pairs: list[tuple[str, str]],
+    path: Path,
+) -> dict[str, Any]:
+    pd.DataFrame(pairs, columns=_COLUMNS).to_csv(path, index=False)
+    torch.manual_seed(42)
+    return _run(code)
+
+
 @pytest.fixture
 def prior_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / _CSV_NAME
@@ -163,7 +201,7 @@ def test_both_columns_reject_the_same_edgelists(
 
 def test_prose_names_the_number_of_rejected_edgelists() -> None:
     # The prose is hard-wrapped, so match against flattened text.
-    flat = re.sub(r"\s+", " ", _section())
+    flat = _flat_section()
     match = re.search(r"reject the same (\w+) malformed edgelists", flat)
     assert match, (
         "The section no longer states how many malformed edge lists "
@@ -174,3 +212,52 @@ def test_prose_names_the_number_of_rejected_edgelists() -> None:
         f"README claims {match.group(1)} rejected edge lists, "
         f"but {len(_REJECTED)} are pinned here."
     )
+
+
+def test_revised_prior_moves_no_node(prior_csv: Path) -> None:
+    code = _columns()["kpnn2"]
+    old = _build(code, _figure_pairs(), prior_csv)["spec"]
+    new = _build(code, _revised_pairs(), prior_csv)["spec"]
+    assert new.layer_nodes == old.layer_nodes
+    assert new.fingerprint != old.fingerprint
+
+
+def test_hand_written_model_loads_the_old_masks_silently(
+    prior_csv: Path,
+) -> None:
+    code = _columns()["Custom PyTorch"]
+    old = _build(code, _figure_pairs(), prior_csv)
+    new = _build(code, _revised_pairs(), prior_csv)
+    # The Parameters share storage with the script's masks, so copy
+    # the new wiring before the load overwrites it.
+    new_masks = [mask.clone() for _, mask in new["masks"]]
+
+    result = new["model"].load_state_dict(old["model"].state_dict())
+
+    assert not result.missing_keys
+    assert not result.unexpected_keys
+    assert repr(result) in _section()
+    loaded = list(new["model"].masks)
+    old_masks = [mask for _, mask in old["masks"]]
+    assert all(torch.equal(a, b) for a, b in zip(loaded, old_masks))
+    assert not all(torch.equal(a, b) for a, b in zip(loaded, new_masks))
+
+
+@pytest.mark.parametrize("identity", [True, False])
+def test_kpnn2_model_refuses_the_old_checkpoint(
+    identity: bool,
+    prior_csv: Path,
+) -> None:
+    code = _columns()["kpnn2"]
+    if not identity:
+        # The index digest alone must still catch the rewiring.
+        assert "identity=spec.fingerprint," in code
+        code = code.replace("identity=spec.fingerprint,", "")
+    old = _build(code, _figure_pairs(), prior_csv)
+    new = _build(code, _revised_pairs(), prior_csv)
+
+    with pytest.raises(Kpnn2Error) as info:
+        new["model"].load_state_dict(old["model"].state_dict())
+
+    if identity:
+        assert f"Kpnn2Error: {info.value}" in _flat_section()
