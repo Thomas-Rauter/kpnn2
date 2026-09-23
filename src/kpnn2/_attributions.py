@@ -254,7 +254,7 @@ def map_node_attributions(
         layer=layer_coord,
         coords=coords,
     )
-    values = tensor.detach().cpu().numpy()
+    values = tensor.detach().cpu().numpy().copy()
     return xr.DataArray(
         data=values,
         dims=dim_names,

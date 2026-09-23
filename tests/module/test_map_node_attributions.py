@@ -195,6 +195,30 @@ def test_map_node_attributions_rejects_coords_for_node():
         )
 
 
+def test_map_node_attributions_copies_cpu_input():
+    spec = _tiny_spec()
+    attributions = torch.tensor(
+        [
+            [0.1, 0.2],
+            [0.3, 0.4],
+        ],
+        dtype=torch.float32,
+        requires_grad=True,
+    )
+    da = map_node_attributions(
+        attributions,
+        spec,
+        1,
+    )
+
+    assert torch.from_numpy(da.values).data_ptr() != attributions.data_ptr()
+    da.values[0, 0] = 9.0
+    assert attributions[0, 0].item() == pytest.approx(0.1)
+    with torch.no_grad():
+        attributions[1, 1] = -3.0
+    assert da.values[1, 1] == pytest.approx(0.4)
+
+
 def test_map_node_attributions_labels_1d_tensor():
     spec = _tiny_spec()
     da = map_node_attributions(
