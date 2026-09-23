@@ -506,12 +506,19 @@ def dense_mask_from_indices(
         ),
         dtype=torch.float32,
     )
-    for source, target in zip(
+    source = torch.as_tensor(
         source_index,
+        dtype=torch.int64,
+    )
+    target = torch.as_tensor(
         target_index,
-        strict=True,
-    ):
-        mask[target, source] = 1.0
+        dtype=torch.int64,
+    )
+    if source.shape != target.shape:
+        raise Kpnn2Error(
+            "'source_index' and 'target_index' must have the same length."
+        )
+    mask[target, source] = 1.0
     return mask
 
 
