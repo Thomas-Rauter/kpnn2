@@ -1,105 +1,65 @@
 # Changelog
 
-Notable API and core changes only. Documentation,
-examples, and other small edits are not listed.
-
-This project follows semantic versioning.
+Notable API and core changes only. This project follows
+semantic versioning.
 
 
-## [Unreleased] — 0.2.0
+## [0.2.0] - 23. September 2026
 
 ### Changed
 
-- `align_inputs` maps feature names to a 1-D `int64` column
-  index. It no longer takes a DataFrame or returns a dense
-  `float32` tensor of all rows. Apply the index on host X
-  (`X[:, col]`).
-- `MaskedLinear`, `PackedLinear`, and
-  `PackedMultiheadAttention`: `forward` disables
-  `torch.autocast` and computes in the parameter dtype.
-  Mixed precision is still `.to(dtype=...)` / `.half()`.
-- `Hop` stores packed `source_index` / `target_index`. There is
-  no `mask` field; densify with `Hop.to_mask()`.
-- `Skip.source_index` / `target_index` renamed to
+These can require edits to code written for 0.1.
+
+- `align_inputs` returns a 1-D `int64` column index, not a
+  tensor. Index your data with it: `X[:, col]`.
+- `Hop` stores packed `source_index` / `target_index` instead
+  of a mask, so `PackedLinear` now works on hops. Call
+  `Hop.to_mask()` for the dense mask.
+- `Skip.source_index` / `target_index` are renamed to
   `source_in_layer` / `target_in_layer`.
-- `PackedLinear` is the large-n path on hops as well as on an
-  `AdjacencySpec`.
-- `MaskedLinear.weight` is a plain `nn.Parameter` (state_dict
-  key `weight`, was `parametrizations.weight.original`), as on
-  `PackedLinear` and `nn.Linear`. The mask and `constraint` are
-  applied in `forward`; read `effective_weight()` for the
-  masked map. Blocked entries of `weight` start and stay at 0.
-  0.1 checkpoints still load, and the module now pickles.
+- `MaskedLinear.weight` is a plain parameter (`state_dict` key
+  `weight`, was `parametrizations.weight.original`); read
+  `effective_weight()` for the masked map. 0.1 checkpoints
+  still load.
+- `MaskedLinear`, `PackedLinear`, and
+  `PackedMultiheadAttention` ignore `torch.autocast` and
+  compute in their parameter dtype.
 - `PackedLinear.forward` raises `Kpnn2Error` when the input's
-  last dimension is not `in_features`. A wider input was read
-  by position without error.
+  last dimension is not `in_features`.
 
 ### Added
 
-- `map_node_attributions(..., axis="inputs")` labels an
-  input-width tensor. On an `AdjacencySpec` the names are
-  the input units (`spec.input_index` order; a wide name
-  repeats). On a `LayeredSpec` the result matches `layer=0`.
-  The tensor width is not used to choose the axis.
-- `PackedMultiheadAttention`: scores only live edgelist pairs.
-  `need_weights=True` returns packed per-edge weights aligned
-  with `source_index` / `target_index`, not a dense `(L, S)`
-  matrix. Default `False` still returns `None`.
-- `PackedMultiheadAttention`: optional `chunk_size`. `None`
-  gathers all live pairs at once (the default). A positive
-  int softmaxes and mixes in slices of that many edges and
-  rematerializes those gathers in backward.
-- `PackedLinear.transpose()`: swapped packed indices, tied or
-  copied `weight` and `constraint`, untied bias. The tied
-  autoencoder path.
-- `scatter_hop_outputs`: split a hop's concatenated source
-  axis back onto source layers (inverse of
-  `gather_hop_inputs`).
-- `constraint=` on `MaskedLinear` and `PackedLinear`: optional
-  `nn.Module` applied to live weights before the mask
-  (`MaskedLinear`) or in packed space (`PackedLinear`).
-  The mask is applied last, so a stacked map cannot
-  resurrect a blocked edge.
-- `effective_weight()` on `MaskedLinear` and `PackedLinear`:
-  the map `forward` uses (constraint, then mask).
-- Constrained init: when a `constraint=` module defines
-  `right_inverse`, `reset_parameters` stores
-  `right_inverse(draw)` so the effective weight keeps the
-  degree-aware init. `init_bound()` on both layers returns the
-  per-entry bound. Constraints without `right_inverse`
-  (for example `nn.Softplus`) are unchanged.
-- `parse_layered(widths=)` / `LayeredSpec.layer_widths`: a named
-  node can own several units.
-- `parse_adjacency(widths=)`: the same widths on the packed
-  layout. `AdjacencySpec` gains `node_widths`, `state_dim`, and
-  `node_units`; packed indices, `input_index`, and
-  `output_index` are in units. Width 1 is unchanged.
-- `LayeredSpec.edge_location` / `AdjacencySpec.edge_location`:
-  locate a named edge's packed weight slots.
-- `LayeredSpec.node_units` / `hop_units`: named node to its
-  unit slice on a layer tensor or a hop source axis.
-- `map_node_attributions(..., hop_input=, hop_output=)`: label
-  what a hop's module reads (its concatenated source axis) or
-  what it returns (its target layer). The side is always
-  stated; there is no side-less `hop=`.
-- `parse_layered(ranks=)`: optional user depths so official
-  ontology levels need not be longest-path hops.
-- `generator=` on `MaskedLinear`, `PackedLinear`,
-  `PackedMultiheadAttention`, and `PackedLinear.transpose`:
-  optional `torch.Generator` for isolated parameter init.
-  Default `None` keeps the global stream.
-- `identity=` on `MaskedLinear`, `PackedLinear`, and
-  `PackedMultiheadAttention`: opaque spec fingerprint in
-  `state_dict`, checked on load.
-- `aggregate_node_attributions` / `list_aggregation_methods`:
-  fold mapped node scores with a registered method. Default
-  `rauter_mangano_2026` is registered and not yet
-  implemented.
+- `PackedMultiheadAttention`: attention restricted to the
+  prior's edges, with optional `chunk_size` to bound memory.
+- `aggregate_node_attributions` and `list_aggregation_methods`:
+  fold named node scores with a registered method. The default
+  method, `rauter_mangano_2026`, is not yet implemented.
+- `PackedLinear.transpose()` and `scatter_hop_outputs`, for
+  tied decoders.
+- `widths=` on both parsers, so a node can own several units,
+  and `ranks=` on `parse_layered`, to set depths yourself.
+- `constraint=` on `MaskedLinear` and `PackedLinear` (for
+  example positive or frozen edges), with `effective_weight()`
+  and `init_bound()`.
+- `identity=` on all three layers: a spec fingerprint stored in
+  the checkpoint and checked on load.
+- `generator=` on all three layers, for isolated parameter init.
+- `edge_location()` and `node_units()` on both specs, and
+  `hop_units()` on `LayeredSpec`: find a named edge's weight
+  slots or a node's units.
+- `hop_input=`, `hop_output=`, and `axis="inputs"` on
+  `map_node_attributions`: say which side of a hop, or which
+  input units, a tensor holds.
 
 ### Fixed
 
-- `map_node_attributions` accepts bfloat16 scores and stores
-  them as float32. The values are unchanged.
+- `map_node_attributions` no longer shares memory with the
+  input tensor, and it accepts bfloat16 scores (stored as
+  float32).
+
+### Dependencies
+
+- `xarray>=2024.11`, with no upper bound.
 
 
 ## [0.1.0] - 1. September 2026
