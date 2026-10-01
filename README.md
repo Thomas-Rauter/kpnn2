@@ -27,26 +27,42 @@
 Turn a named edgelist into sparsely connected PyTorch layers
 you assemble yourself.
 
-`kpnn2` turns a graph of named nodes into a PyTorch network. The
-graph's nodes become the network's units, and its edges become the
-only connections, including edges that skip layers. Hidden units
-keep their names, so the attribution scores you compute after
-training are labeled by node: they say how much the trained model
-relies on each named entity.
-
-The main use is the knowledge-primed neural network (KPNN) in
-biology, where genes feed transcription factors and pathways
-([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5)).
-Any domain whose entities have names and known relationships works
-the same way. When each sample is its own graph, use a graph neural
-network instead; see [Why not a GNN?](docs/supported.md#why-not-a-gnn).
+`kpnn2` builds sparsely connected PyTorch networks from a graph of
+named nodes, as Figure 1 shows. Each node of the graph becomes a
+unit of the network, and each edge becomes a connection, including
+edges that skip layers. Pairs of nodes without an edge stay
+unconnected.
 
 ![Left: a six-row edgelist and a data table with one row per gene plus a phenotype row. Middle: the same graph as a network, two signal genes feeding tf_signal and two noise genes feeding tf_noise, both feeding phenotype. Right: the bar for tf_signal is many times longer than the bar for tf_noise.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_overview.png)
 
 **Figure 1.** You provide a graph and data with named features.
 `kpnn2` turns the graph into sparsely connected PyTorch layers, you
 train them, and `kpnn2` labels the attribution scores by node name.
-The quick start below builds this model.
+
+The core of `kpnn2` is keeping node and edge names attached to the
+right tensor positions. Inside PyTorch, a node is only a position
+in a tensor, and nothing checks that the position still belongs to
+the same name after the graph changes, the feature columns are
+reordered, or a checkpoint is reloaded. When names and positions
+drift apart, training still runs and the loss looks normal, but
+scores are reported under the wrong names. `kpnn2` ties every node
+to its units and every edge to its weight, from the edgelist to the
+attribution scores, and raises an error when they no longer match:
+when the graph is parsed, when input columns are aligned, when a
+checkpoint is loaded, and when scores are labeled.
+
+Networks whose nodes are known entities and whose edges are known
+relationships between them are called knowledge-primed neural
+networks (KPNNs). Biology has many, with genes, transcription
+factors, kinases, and pathways as nodes, for example
+[Fortelny and Bock (2020)](https://doi.org/10.1186/s13059-020-02100-5).
+The idea is not specific to biology: any domain whose entities have
+names and known relationships, such as chemistry, works the same
+way. Figure 1 and the quick start use a small gene-regulation
+example, in which four genes feed two transcription factors that
+feed a phenotype. When each sample is its own graph, use a graph
+neural network instead; see
+[Why not a GNN?](docs/supported.md#why-not-a-gnn).
 
 ## Installation
 
@@ -216,7 +232,7 @@ The [Feedforward example](docs/feedforward-example.ipynb) goes
 further, with a held-out test set, input-level attributions, and a
 control that moves the signal to the other branch.
 
-## Why kpnn2
+## Key features
 
 - **Names stay attached.** Every tensor position keeps its node
   name from the edgelist to the attribution scores, and `kpnn2`
@@ -235,10 +251,11 @@ control that moves the signal to the other branch.
   your code. Cyclic, recurrent, and attention models work too; see
   [Supported architectures](docs/supported.md).
 
+[**Why kpnn2**](docs/why_kpnn2.md) makes the full case, with a
+side-by-side against hand-written PyTorch.
+
 ## Next steps
 
-- [**Why kpnn2**](docs/why_kpnn2.md) for knowledge-primed neural
-  networks and a side-by-side with hand-written PyTorch
 - [**Feedforward example**](docs/feedforward-example.ipynb) for a
   full tutorial, from edgelist to node-level interpretation
 - [**Supported architectures**](docs/supported.md) for cyclic,
