@@ -1,8 +1,8 @@
-"""Generate the Home dense-versus-sparse Graphviz figure.
+"""Generate the Why kpnn2 dense-versus-sparse Graphviz figure.
 
 Writes ``docs/figures/dense_vs_sparse.svg`` and a matching PNG.
 The PNG is 4× 96 dpi so it stays sharp on the docs site when the
-figure is stretched to the content column, and on PyPI.
+figure is stretched to the content column.
 """
 
 import subprocess

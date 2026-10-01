@@ -1,8 +1,8 @@
-"""The homepage "Why not custom PyTorch?" comparison, executed.
+"""The Why kpnn2 "Why not custom PyTorch?" comparison, executed.
 
-Both fenced blocks are lifted out of ``README.md`` and run, so the
-claims the section makes -- that the hand-written module and the
-``kpnn2`` one build the same network, and that both reject the same
+Both fenced blocks are lifted out of ``docs/why_kpnn2.md`` and run,
+so the claims the section makes -- that the hand-written module and
+the ``kpnn2`` one build the same network, and that both reject the same
 malformed edgelists -- are checked rather than asserted in prose.
 So is the silent failure below them: after the prior update the
 prose names, an old checkpoint loads into the hand-written module
@@ -32,7 +32,7 @@ import torch
 from kpnn2 import Kpnn2Error, parse_layered
 
 _REPO = Path(__file__).resolve().parents[2]
-_README = _REPO / "README.md"
+_PAGE = _REPO / "docs" / "why_kpnn2.md"
 _FIG_GEN = _REPO / "docs" / "fig_gen" / "custom_pytorch_pathway.py"
 
 _HEADING = "## Why not custom PyTorch?"
@@ -77,10 +77,10 @@ _REJECTED = {
 
 
 def _section() -> str:
-    text = _README.read_text()
+    text = _PAGE.read_text()
     start = text.find(_HEADING)
     assert start != -1, (
-        f"README.md has no {_HEADING!r} heading. If the section was "
+        f"{_PAGE.name} has no {_HEADING!r} heading. If the section was "
         "renamed or removed, update _HEADING or drop this module."
     )
     end = text.find("\n## ", start + len(_HEADING))
@@ -118,8 +118,8 @@ def _figure_pairs() -> list[tuple[str, str]]:
 
 
 def _run(code: str) -> dict[str, Any]:
-    namespace: dict[str, Any] = {"__name__": "readme_snippet"}
-    exec(compile(code, "README.md", "exec"), namespace)  # noqa: S102
+    namespace: dict[str, Any] = {"__name__": "why_kpnn2_snippet"}
+    exec(compile(code, _PAGE.name, "exec"), namespace)  # noqa: S102
     return namespace
 
 
@@ -209,7 +209,7 @@ def test_prose_names_the_number_of_rejected_edgelists() -> None:
     )
     claimed = _NUMBER_WORDS.get(match.group(1))
     assert claimed == len(_REJECTED), (
-        f"README claims {match.group(1)} rejected edge lists, "
+        f"{_PAGE.name} claims {match.group(1)} rejected edge lists, "
         f"but {len(_REJECTED)} are pinned here."
     )
 

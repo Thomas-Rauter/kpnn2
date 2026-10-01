@@ -60,6 +60,7 @@ nav:
       - Time-series example: time-series-example.ipynb
       - Transformer example: transformer-example.ipynb
   - How it works:
+      - Why kpnn2: why_kpnn2.md
       - Concepts: concepts.md
       - Layered vs. Adjacency: layered_vs_adjacency.md
       - Skip edges: skip-edges.ipynb

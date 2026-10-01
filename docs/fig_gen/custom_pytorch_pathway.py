@@ -1,9 +1,8 @@
 """Generate the Why not custom PyTorch pathway figure.
 
 Writes ``docs/figures/custom_pytorch_pathway.svg`` and a matching
-PNG. The PNG is 4× 96 dpi, so it stays sharp on PyPI, which cannot
-show the SVG from a relative path.
-The edge list matches the homepage comparison snippets.
+PNG. The PNG is 4× 96 dpi, so it stays sharp on the docs site.
+The edge list matches the Why kpnn2 comparison snippets.
 Dashed edges skip a layer.
 """
 

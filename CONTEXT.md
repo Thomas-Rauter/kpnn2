@@ -2607,7 +2607,8 @@ CHANGELOG.md                  # notable API / core only; see below
 docs/
   reference/                  # api.md + one page per public name
     aggregation/              # one page per method; not public names
-  supported.md                # architecture-family support table
+  why_kpnn2.md                # KPNNs; vs. custom PyTorch; checks
+  supported.md                # architecture-family support; why not a GNN
   packed_linear.md            # PackedLinear; tutorials use it on hops
   how_we_test.md              # test overview; scientific + technical
   literature/                 # frozen paper notebooks; not CI-executed
@@ -2729,10 +2730,13 @@ anchor; every later mention on that page is bare.** Pages are
 meant to be read start to finish. Do not gloss or link the same
 term twice on one page.
 
-`README.md` is the exception to first-use: its overview
-paragraphs are deliberately pre-terminology, so its links start
-after the **Concepts** pointer that follows the edgelist and
-graph definitions, not at a term's literal first mention.
+`README.md` and `docs/why_kpnn2.md` are the exceptions to
+first-use: their opening paragraphs are deliberately
+pre-terminology, so links start after them, not at a term's
+literal first mention. In `README.md` they start after the
+**Concepts** pointer that follows the edgelist and graph
+definitions; in `docs/why_kpnn2.md`, after the building-blocks
+list.
 
 **A gloss is a handhold, not a definition** — just enough that a
 reader does not stall ("an edge the graph actually has", "one
