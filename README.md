@@ -27,116 +27,26 @@
 Turn a named edgelist into sparsely connected PyTorch layers
 you assemble yourself.
 
-[**Why kpnn2**](docs/why_kpnn2.md) explains what knowledge-primed
-neural networks are and what `kpnn2` adds to plain PyTorch.
+`kpnn2` turns a graph of named nodes into a PyTorch network. The
+graph's nodes become the network's units, and its edges become the
+only connections, including edges that skip layers. Hidden units
+keep their names, so the attribution scores you compute after
+training are labeled by node: they say how much the trained model
+relies on each named entity.
 
-## Core workflow
+The main use is the knowledge-primed neural network (KPNN) in
+biology, where genes feed transcription factors and pathways
+([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5)).
+Any domain whose entities have names and known relationships works
+the same way. When each sample is its own graph, use a graph neural
+network instead; see [Why not a GNN?](docs/supported.md#why-not-a-gnn).
 
-An **edgelist** is a table of directed connections: each row links
-a `source` node to a `target` node. For example:
+![Left: a six-row edgelist and a data table with one row per gene plus a phenotype row. Middle: the same graph as a network, two signal genes feeding tf_signal and two noise genes feeding tf_noise, both feeding phenotype. Right: the bar for tf_signal is many times longer than the bar for tf_noise.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_overview.png)
 
-| source | target |
-|--------|--------|
-| A | H |
-| B | H |
-| H | C |
-
-The **graph** is what that table describes: the named nodes, and the
-directed edges between them. Edgelist and graph are the same object in
-two forms — the table you pass in, and the structure it encodes. These
-docs use "graph" in that sense throughout: the prior wiring that becomes
-the architecture. It never means PyTorch's autograd graph, and never a
-graph as *data* in the GNN sense (see [Why not a GNN?](docs/supported.md#why-not-a-gnn)).
-[**Concepts**](docs/concepts.md) defines the rest of the vocabulary.
-
-1. Define a model architecture as an edgelist with named `source`
-   and `target` [nodes](docs/concepts.md#node).
-2. Parse it. For a
-   [directed acyclic graph](docs/concepts.md#dag) (DAG) you want
-   as layers, call `parse_layered()`. It returns a `LayeredSpec`
-   with one packed [hop](docs/concepts.md#hop) per layer — a hop
-   being everything entering one layer. For cycles, or for one
-   shared [state vector](docs/concepts.md#state-vector) over all
-   nodes, call `parse_adjacency()`. It returns an `AdjacencySpec`
-   whose edges are [packed indices](docs/concepts.md#packed-indices).
-   A DAG is valid for both, so the layout is your choice.
-3. Write an `nn.Module` with one `PackedLinear` per hop in
-   `spec.hops`, and feed each one `gather_hop_inputs(saved, hop)`.
-   [Skip edges](docs/concepts.md#skip-edge), whose endpoints are
-   more than one layer apart, already sit inside those hops, so
-   there is nothing extra to call. `MaskedLinear(hop.to_mask())`
-   is the dense hatch for small graphs.
-4. Align feature names with `align_inputs()`, then index the
-   host matrix.
-5. Train with ordinary PyTorch.
-6. Optionally run Captum (or another method) yourself, then label a
-   layer tensor with `map_node_attributions()` (returns xarray).
-7. Optionally fold those scores with `aggregate_node_attributions()`.
-8. A checkpoint is `spec.to_dict()` plus `state_dict`, not
-   weights alone.
-
-The snippet below is a minimal run of steps 1–4, using the
-edgelist from the table above. Column order in the input table
-does not matter: `align_inputs()` matches names and returns a
-column index. Skip edges are
-omitted here; [**Skip edges**](docs/skip-edges.ipynb) works them
-through. [**Why not custom PyTorch?**](docs/why_kpnn2.md#why-not-custom-pytorch)
-sets this hop loop against the equivalent module written by hand.
-A full walkthrough, including training and attribution, is in
-[**Feedforward example**](docs/feedforward-example.ipynb).
-
-```python
-import pandas as pd
-import torch
-from torch import nn
-
-import kpnn2
-
-edgelist = pd.DataFrame(
-    {
-        "source": ["A", "B", "H"],
-        "target": ["H", "H", "C"],
-    }
-)
-spec = kpnn2.parse_layered(edgelist)
-
-
-class Net(nn.Module):
-    def __init__(self, spec: kpnn2.LayeredSpec):
-        super().__init__()
-        self.lin0 = kpnn2.PackedLinear(
-            spec.hops[0].source_index,
-            spec.hops[0].target_index,
-            spec.hops[0].out_features,
-            spec.hops[0].in_features,
-            identity=spec.fingerprint,
-        )
-        self.lin1 = kpnn2.PackedLinear(
-            spec.hops[1].source_index,
-            spec.hops[1].target_index,
-            spec.hops[1].out_features,
-            spec.hops[1].in_features,
-            identity=spec.fingerprint,
-        )
-        self.acts = nn.ModuleList(
-            [nn.ReLU() for _ in spec.hops]
-        )
-
-    def forward(self, x):
-        h = self.acts[0](self.lin0(x))
-        return self.lin1(h)
-
-
-model = Net(spec)
-features = pd.DataFrame({"B": [0.2, 0.4], "A": [0.1, 0.3]})
-col = kpnn2.align_inputs(features.columns, spec)
-x = torch.as_tensor(
-    features.to_numpy()[:, col],
-    dtype=torch.float32,
-)
-y = model(x)
-# Continue training with ordinary PyTorch.
-```
+**Figure 1.** You provide a graph and data with named features.
+`kpnn2` turns the graph into sparsely connected PyTorch layers, you
+train them, and `kpnn2` labels the attribution scores by node name.
+The quick start below builds this model.
 
 ## Installation
 
@@ -146,50 +56,195 @@ Requires Python 3.10 or later.
 pip install kpnn2
 ```
 
-## Start here
+## Quick start
 
-If you are new to the package, start with a tutorial:
+This example builds the model in Figure 1. The labels depend only
+on `gene_signal_1` and `gene_signal_2`, so a model that learned
+the task should rely on `tf_signal` and not on `tf_noise`. The
+last step uses Captum (`pip install captum`), which `kpnn2` does
+not depend on.
 
-- [**Installation**](docs/installation.md) for package setup
-- [**Supported architectures**](docs/supported.md) for which
-  architecture families this package covers
-- [**Feedforward example**](docs/feedforward-example.ipynb) for a
-  full end-to-end feedforward network
+### 1. Write the graph as an edgelist
 
-## Additional examples
+An [edgelist](docs/concepts.md#edgelist) has one row per edge,
+from `source` to `target`. `parse_layered()` sorts the nodes into
+layers.
 
-- [**Cyclic graph example**](docs/cyclic-graph-example.ipynb) for
-  a graph with a feedback loop: `parse_adjacency()`, one shared
-  `MaskedLinear` over the state vector, train, and interpret
-  named nodes (`parse_layered` still requires a DAG)
-- [**Time-series example**](docs/time-series-example.ipynb) for a
-  sequence `x_t`: the same shared `MaskedLinear`, with a new
-  input written at each time, and a self-loop so named nodes
-  carry state (`nn.RNN` cannot take an edgelist)
-- [**Transformer example**](docs/transformer-example.ipynb) for
-  `PackedMultiheadAttention` on those packed indices, as a
-  prior-gated encoder you write yourself
+```python
+import pandas as pd
+import torch
+from torch import nn
 
-The other pages are not second examples:
+import kpnn2
+
+torch.manual_seed(42)
+
+edgelist = pd.DataFrame(
+    [
+        ("gene_signal_1", "tf_signal"),
+        ("gene_signal_2", "tf_signal"),
+        ("gene_noise_1", "tf_noise"),
+        ("gene_noise_2", "tf_noise"),
+        ("tf_signal", "phenotype"),
+        ("tf_noise", "phenotype"),
+    ],
+    columns=["source", "target"],
+)
+spec = kpnn2.parse_layered(edgelist)
+for layer in spec.layer_nodes:
+    print(layer)
+```
+
+```text
+('gene_noise_1', 'gene_noise_2', 'gene_signal_1', 'gene_signal_2')
+('tf_noise', 'tf_signal')
+('phenotype',)
+```
+
+### 2. Build the model in PyTorch
+
+Each [hop](docs/concepts.md#hop) — the edges entering one layer —
+becomes one `PackedLinear`, which stores one weight per edge.
+Without skip edges, each hop reads only the layer before it, so
+`nn.Sequential` is enough; [Skip edges](docs/skip-edges.ipynb)
+shows the general loop. `identity=spec.fingerprint` makes a
+checkpoint from a different graph refuse to load.
+
+```python
+hop_0, hop_1 = spec.hops
+model = nn.Sequential(
+    kpnn2.PackedLinear(
+        hop_0.source_index,
+        hop_0.target_index,
+        hop_0.out_features,
+        hop_0.in_features,
+        identity=spec.fingerprint,
+    ),
+    nn.Tanh(),
+    kpnn2.PackedLinear(
+        hop_1.source_index,
+        hop_1.target_index,
+        hop_1.out_features,
+        hop_1.in_features,
+        identity=spec.fingerprint,
+    ),
+)
+```
+
+### 3. Train on data matched by name
+
+`align_inputs()` puts your feature columns in the order the model
+expects, by name, so a table in any column order lines up.
+
+```python
+genes = [
+    "gene_signal_1",
+    "gene_signal_2",
+    "gene_noise_1",
+    "gene_noise_2",
+]
+features = pd.DataFrame(
+    torch.randn(
+        200,
+        4,
+    ).numpy(),
+    columns=genes,
+)
+labels = features["gene_signal_1"] + features["gene_signal_2"] > 0
+
+col = kpnn2.align_inputs(
+    features.columns,
+    spec,
+)
+x = torch.as_tensor(
+    features.to_numpy()[:, col],
+    dtype=torch.float32,
+)
+y = torch.as_tensor(
+    labels.to_numpy(),
+    dtype=torch.float32,
+).unsqueeze(1)
+
+optimizer = torch.optim.Adam(
+    model.parameters(),
+    lr=0.05,
+)
+loss_fn = nn.BCEWithLogitsLoss()
+for _ in range(200):
+    optimizer.zero_grad()
+    loss = loss_fn(
+        model(x),
+        y,
+    )
+    loss.backward()
+    optimizer.step()
+```
+
+### 4. Read attributions by node name
+
+Run any attribution method on the trained model, then label its
+output with `map_node_attributions()`. Here Captum's
+`LayerConductance` scores the hidden layer, and the mean absolute
+score per node summarizes it.
+
+```python
+from captum.attr import LayerConductance
+
+conductance = LayerConductance(
+    model,
+    model[0],
+)
+scores = kpnn2.map_node_attributions(
+    conductance.attribute(x),
+    spec,
+    hop_output=hop_0,
+)
+print(abs(scores).mean("observation").to_pandas().round(2))
+```
+
+```text
+node
+tf_noise     0.39
+tf_signal    4.90
+dtype: float32
+```
+
+The trained model relies on `tf_signal`, as the labels require.
+The [Feedforward example](docs/feedforward-example.ipynb) goes
+further, with a held-out test set, input-level attributions, and a
+control that moves the signal to the other branch.
+
+## Why kpnn2
+
+- **Names stay attached.** Every tensor position keeps its node
+  name from the edgelist to the attribution scores, and `kpnn2`
+  checks the match wherever names meet positions; see
+  [What kpnn2 checks](docs/why_kpnn2.md#what-kpnn2-checks).
+- **Mistakes raise instead of running silently.** A reordered
+  feature table is realigned by name, and a checkpoint trained on a
+  different graph refuses to load; see
+  [A silent failure](docs/why_kpnn2.md#a-silent-failure).
+- **One call instead of a hand-written parser.** `parse_layered()`
+  replaces the layer sorting, mask building, and skip-edge
+  bookkeeping; see
+  [Why not custom PyTorch?](docs/why_kpnn2.md#why-not-custom-pytorch)
+- **Plain PyTorch.** There is no compiler and no ready-made model:
+  activations, losses, training, and the attribution method stay
+  your code. Cyclic, recurrent, and attention models work too; see
+  [Supported architectures](docs/supported.md).
+
+## Next steps
 
 - [**Why kpnn2**](docs/why_kpnn2.md) for knowledge-primed neural
-  networks, a side-by-side with hand-written PyTorch, and what
-  `kpnn2` checks
-- [**Concepts**](docs/concepts.md) for the vocabulary these docs
-  use: graph, edgelist, spec, hop, skip edge, live edge, and the
-  rest, in the order the pipeline uses them
-- [**Layered vs. Adjacency**](docs/layered_vs_adjacency.md) for
-  how the two parsers differ and when to pick one
-- [**Skip edges**](docs/skip-edges.ipynb) for edges that jump a
-  layer, and why they need no separate mechanism
-- [**Mapping attributions**](docs/map-node-attributions.ipynb) for
-  labeling layer tensors with node names
-- [**PackedLinear**](docs/packed_linear.md) when `n` is large on
-  an `AdjacencySpec`
+  networks and a side-by-side with hand-written PyTorch
+- [**Feedforward example**](docs/feedforward-example.ipynb) for a
+  full tutorial, from edgelist to node-level interpretation
+- [**Supported architectures**](docs/supported.md) for cyclic,
+  recurrent, and attention-based models
 - [**How we test**](docs/how_we_test.md) for the tests that pin
-  wiring and interpretation claims
-- [**API reference**](docs/reference/api.md) for function- and object-level
-  documentation
+  scientific claims, including a reproduction of
+  [Fortelny and Bock (2020)](docs/literature/fortelny-bock-2020.ipynb)
+- [**API reference**](docs/reference/api.md) for every public name
 
 ## Citation
 

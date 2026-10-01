@@ -84,13 +84,13 @@
   margin: 0.1rem 0 0.75rem;
 }
 
-/* Homepage pathway prior above the two-column snippets. */
+/* Why kpnn2: pathway prior above the two-column snippets. */
 .md-typeset img[src*="custom_pytorch_pathway."] {
   width: 100%;
   height: auto;
 }
 
-/* Side-by-side PyTorch vs kpnn2 snippets on the homepage. */
+/* Side-by-side PyTorch vs kpnn2 snippets on Why kpnn2. */
 .md-typeset .code-compare {
   align-items: start;
 }

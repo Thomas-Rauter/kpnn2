@@ -103,6 +103,36 @@ In practice, `kpnn2` provides four kinds of building blocks:
   width raise `Kpnn2Error`; [What kpnn2 checks](#what-kpnn2-checks)
   lists each check.
 
+## Core workflow
+
+[**Concepts**](concepts.md) defines the terms these steps use.
+
+1. Define a model architecture as an edgelist with named `source`
+   and `target` [nodes](concepts.md#node).
+2. Parse it. For a
+   [directed acyclic graph](concepts.md#dag) (DAG) you want
+   as layers, call `parse_layered()`. It returns a `LayeredSpec`
+   with one packed [hop](concepts.md#hop) per layer — a hop
+   being everything entering one layer. For cycles, or for one
+   shared [state vector](concepts.md#state-vector) over all
+   nodes, call `parse_adjacency()`. It returns an `AdjacencySpec`
+   whose edges are [packed indices](concepts.md#packed-indices).
+   A DAG is valid for both, so the layout is your choice.
+3. Write an `nn.Module` with one `PackedLinear` per hop in
+   `spec.hops`, and feed each one `gather_hop_inputs(saved, hop)`.
+   [Skip edges](concepts.md#skip-edge), whose endpoints are
+   more than one layer apart, already sit inside those hops, so
+   there is nothing extra to call. `MaskedLinear(hop.to_mask())`
+   is the dense hatch for small graphs.
+4. Align feature names with `align_inputs()`, then index the
+   host matrix.
+5. Train with ordinary PyTorch.
+6. Optionally run Captum (or another method) yourself, then label a
+   layer tensor with `map_node_attributions()` (returns xarray).
+7. Optionally fold those scores with `aggregate_node_attributions()`.
+8. A checkpoint is `spec.to_dict()` plus `state_dict`, not
+   weights alone.
+
 ## Why not custom PyTorch?
 
 A pathway prior is still a feedforward network, so you *can*

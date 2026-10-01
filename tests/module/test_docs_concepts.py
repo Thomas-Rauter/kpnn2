@@ -16,9 +16,9 @@ _DOCS = Path(__file__).resolve().parents[2] / "docs"
 _REPO = _DOCS.parent
 _CONCEPTS = _DOCS / "concepts.md"
 
-# Defined on the landing page because it is that central, so nothing
-# needs to link to it. See **Docs terminology** in CONTEXT.md.
-_ALLOWED_ORPHANS = {"edgelist"}
+# Concepts entries that may have no inbound link. See **Docs
+# terminology** in CONTEXT.md.
+_ALLOWED_ORPHANS: set[str] = set()
 
 
 def _anchors() -> set[str]:

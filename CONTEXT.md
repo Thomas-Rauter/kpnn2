@@ -2733,10 +2733,8 @@ term twice on one page.
 `README.md` and `docs/why_kpnn2.md` are the exceptions to
 first-use: their opening paragraphs are deliberately
 pre-terminology, so links start after them, not at a term's
-literal first mention. In `README.md` they start after the
-**Concepts** pointer that follows the edgelist and graph
-definitions; in `docs/why_kpnn2.md`, after the building-blocks
-list.
+literal first mention. In `README.md` they start at the quick
+start; in `docs/why_kpnn2.md`, after the building-blocks list.
 
 **A gloss is a handhold, not a definition** — just enough that a
 reader does not stall ("an edge the graph actually has", "one
@@ -2792,9 +2790,7 @@ add no link on that page and let the tooltip stand alone.
 
 **An unlinked entry is not a dead entry.** The page is read
 start to finish, so the chain must stay complete even where
-nothing points in. `edgelist` is introduced on the landing page
-because it is that central; the entry still carries it, so that is
-a preview, not a fourth home, and it needs no inbound link.
+nothing points in.
 
 **Link form by source:** `concepts.md#anchor` from a `docs/*.md`
 page, `../concepts/#anchor` from a `docs/*.ipynb` notebook,
