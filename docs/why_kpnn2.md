@@ -1,5 +1,10 @@
 # Why kpnn2
 
+This page explains why `kpnn2` exists: the kind of model it is for,
+what goes wrong when you build that model in plain PyTorch, and
+what the package checks for you. To build a first model instead,
+start with the [quick start](index.md#quick-start).
+
 Deep neural networks are accurate predictors but opaque ones. Their
 hidden units carry no names: a unit deep inside a trained network
 has no meaning outside the model, so attribution methods, which
@@ -78,11 +83,12 @@ to attribution, and checks that correspondence wherever names and
 positions meet: when the prior is parsed, when input columns are
 aligned, when a checkpoint is loaded, and when attribution scores
 are labeled. Everything else, including activations, normalization,
-losses, the training loop, and the choice of attribution method,
-stays in an ordinary PyTorch `nn.Module` that you write. The package
-provides building blocks, not a finished model: there is no model
-compiler and no ready-made network, so the model remains plain
-PyTorch that can be read, changed, and extended like any other.
+dropout, output heads, losses, optimizers, the training loop, and
+the choice of attribution method, stays in ordinary PyTorch code
+that you write. The package provides building blocks, not a
+finished model: there is no model compiler and no ready-made
+network, so the model remains plain PyTorch that can be read,
+changed, and extended like any other.
 
 In practice, `kpnn2` provides four kinds of building blocks:
 
@@ -100,7 +106,8 @@ In practice, `kpnn2` provides four kinds of building blocks:
   with node names.
 - **Checks.** Malformed priors, missing input columns, checkpoints
   from a different prior, and attribution tensors of the wrong
-  width raise `Kpnn2Error`; [What kpnn2 checks](#what-kpnn2-checks)
+  width raise `Kpnn2Error`;
+  [Checks where names meet tensor positions](#checks-where-names-meet-tensor-positions)
   lists each check.
 
 ## Core workflow
@@ -416,7 +423,7 @@ layering at all, so the depth pass has to detect it rather than
 recurse forever. The left column holds every check its author
 thought of. The failure below is one they did not.
 
-### A silent failure
+### A checkpoint that loads the wrong wiring
 
 Train the left model and save its `state_dict`. Months later, a
 new database release revises one interaction in Figure 3:
@@ -469,12 +476,9 @@ hints at it. That is what `kpnn2` is for. It owns the mapping
 from node names to tensor positions (layers, packed edges, input
 columns, checkpoints, attribution labels), so the checks on that
 mapping are written and tested once, in one place, instead of
-rediscovered by every project that writes its own. It does not
-check your `forward()`, your prior's biology, or your attribution
-method; [**How we test**](how_we_test.md) lists what the
-tests pin and what they do not prove.
+rediscovered by every project that writes its own.
 
-## What kpnn2 checks
+## Checks where names meet tensor positions
 
 Each check sits where a name meets a tensor position, and each
 catches a mistake that would not show up in the loss.
@@ -494,8 +498,9 @@ catches a mistake that would not show up in the loss.
 - **Checkpoints refuse a different prior.** Each sparse layer saves
   a digest of its wiring and, with `identity=spec.fingerprint`, the
   fingerprint of the named prior. A mismatch raises instead of
-  loading; [A silent failure](#a-silent-failure) shows what the
-  hand-written version does.
+  loading;
+  [A checkpoint that loads the wrong wiring](#a-checkpoint-that-loads-the-wrong-wiring)
+  shows what the hand-written version does.
 - **Attribution scores are labeled from the parsed graph.**
   `map_node_attributions()` names every position of a layer tensor
   and raises when the tensor's width does not match that layer.
@@ -504,26 +509,3 @@ The checks stop at that boundary. Your `forward()`, your prior's
 biology, and your attribution method stay yours to get right.
 [**How we test**](how_we_test.md) lists what the tests pin and
 what they do not prove.
-
-## Package philosophy
-
-`kpnn2` is intentionally minimally opinionated.
-
-It owns edgelist parsing, packed hop and adjacency indices, hop
-input assembly, hop-output split, packed transpose, named input
-alignment, and attribution column names. It does not impose
-broader modeling choices such as:
-
-- activation functions
-- output heads
-- dropout
-- loss functions
-- optimizers
-- training loops
-
-Those remain part of the normal PyTorch workflow:
-
-- `kpnn2` turns the edgelist into structure you can execute
-- PyTorch handles `forward()`, training, and customization
-- you map trained tensors back to named nodes when you want
-  interpretation

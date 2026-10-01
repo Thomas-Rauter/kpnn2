@@ -99,7 +99,8 @@ data-generating process. In `kpnn2` the graph is the
   aggregation.** A pathway or an ontology is a deep directed
   cascade, and the quantity of interest is what propagates along
   it. A sparsely connected feedforward network traverses that
-  cascade in one pass with skip edges intact; message passing
+  cascade in one pass with [skip edges](concepts.md#skip-edge)
+  intact; message passing
   reaches the same depth only by stacking rounds, mixing
   neighboring node states as it proceeds.
 

@@ -105,10 +105,12 @@ for layer in spec.layer_nodes:
 
 Each [hop](docs/concepts.md#hop) — the edges entering one layer —
 becomes one `PackedLinear`, which stores one weight per edge.
-Without skip edges, each hop reads only the layer before it, so
-`nn.Sequential` is enough; [Skip edges](docs/skip-edges.ipynb)
-shows the general loop. `identity=spec.fingerprint` makes a
-checkpoint from a different graph refuse to load.
+Without [skip edges](docs/concepts.md#skip-edge), each hop reads
+only the layer before it, so `nn.Sequential` is enough. With them,
+a hop also reads earlier layers, and `gather_hop_inputs()`
+assembles its input; see [Skip edges](docs/skip-edges.ipynb).
+`identity=spec.fingerprint` makes a checkpoint from a different
+graph refuse to load.
 
 ```python
 hop_0, hop_1 = spec.hops
@@ -218,12 +220,12 @@ control that moves the signal to the other branch.
 
 - **Names stay attached.** Every tensor position keeps its node
   name from the edgelist to the attribution scores, and `kpnn2`
-  checks the match wherever names meet positions; see
-  [What kpnn2 checks](docs/why_kpnn2.md#what-kpnn2-checks).
+  checks the match at every step; see
+  [Checks where names meet tensor positions](docs/why_kpnn2.md#checks-where-names-meet-tensor-positions).
 - **Mistakes raise instead of running silently.** A reordered
   feature table is realigned by name, and a checkpoint trained on a
   different graph refuses to load; see
-  [A silent failure](docs/why_kpnn2.md#a-silent-failure).
+  [A checkpoint that loads the wrong wiring](docs/why_kpnn2.md#a-checkpoint-that-loads-the-wrong-wiring).
 - **One call instead of a hand-written parser.** `parse_layered()`
   replaces the layer sorting, mask building, and skip-edge
   bookkeeping; see
