@@ -584,9 +584,16 @@ class AdjacencySpec:
             If ``payload`` is not a dict; ``kpnn2_spec`` is
             missing or not ``1``; ``layout`` is missing, not a
             known layout, or is ``"layered"``; ``edges`` is
-            missing or not a sequence of two nonempty names; or
+            missing or not a sequence of two nonempty names, or a
+            name is not a ``str``, integer, float, or ``bool``; or
             ``"widths"`` is present and not a mapping of positive
             integers over known nodes.
+
+        Warns
+        -----
+        UserWarning
+            If an edge name is a float or a ``bool``, as in
+            ``parse_adjacency``.
 
         Examples
         --------

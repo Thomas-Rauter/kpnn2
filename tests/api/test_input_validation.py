@@ -267,6 +267,23 @@ _PARSE_LAYERED_CASES = [
     ),
     _Bad(
         "parse_layered",
+        "source_holds_a_list",
+        _TYPE,
+        "must hold node names",
+        lambda: kpnn2.parse_layered(
+            pd.DataFrame(
+                {
+                    "source": pd.Series(
+                        [["A"], "H"],
+                        dtype=object,
+                    ),
+                    "target": ["H", "C"],
+                }
+            )
+        ),
+    ),
+    _Bad(
+        "parse_layered",
         "widths_not_a_mapping",
         _TYPE,
         "'widths'",
@@ -400,6 +417,23 @@ _PARSE_ADJACENCY_CASES = [
         _TYPE,
         "'widths'",
         lambda: _adjacency(widths=2),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "target_holds_a_tensor",
+        _TYPE,
+        "must hold node names",
+        lambda: kpnn2.parse_adjacency(
+            pd.DataFrame(
+                {
+                    "source": ["x", "a"],
+                    "target": pd.Series(
+                        ["a", torch.tensor([1])],
+                        dtype=object,
+                    ),
+                }
+            )
+        ),
     ),
     _Bad(
         "parse_adjacency",
@@ -1528,6 +1562,18 @@ _BAD_CASES = [
 ]
 
 _VALID_CASES = [
+    _Valid(
+        "parse_layered",
+        "integer_and_string_names_mixed",
+        lambda: kpnn2.parse_layered(
+            pd.DataFrame(
+                {
+                    "source": [1, "1", 2],
+                    "target": [2, "3", 3],
+                }
+            )
+        ),
+    ),
     _Valid(
         "parse_layered",
         "numpy_integer_widths_and_ranks",

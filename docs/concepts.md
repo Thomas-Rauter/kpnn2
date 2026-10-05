@@ -54,10 +54,12 @@ of computation.
 | B | H |
 | H | C |
 
-Extra columns are ignored, names are read through `str(...)`, and
-the frame is read and never modified. Edgelist and graph are the
-same object in two forms — the table you pass in, and the
-structure it encodes.
+Extra columns are ignored, and the frame is read and never
+modified. A node name is text: an integer is read through
+`str(...)`, so `1` and `"1"` name the same node. A float or bool
+warns, because `1.0` becomes `"1.0"`, and any other value
+raises. Edgelist and graph are the same object in two forms —
+the table you pass in, and the structure it encodes.
 
 ## Node
 

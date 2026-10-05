@@ -2,9 +2,14 @@
 Edgelist parsing for kpnn2.
 """
 
+import os
+import sys
+import warnings
 from collections import deque
 from collections.abc import Mapping, Sequence
+from types import FrameType
 
+import numpy as np
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
@@ -24,6 +29,15 @@ _SOURCE = "source"
 _TARGET = "target"
 _COLUMN_LIMIT = 10
 _ROW_LIMIT = 5
+# How a source / target value becomes a node name.
+_NAME = "name"
+_CONVERTED = "converted"
+_REJECTED = "rejected"
+# Column types pandas infers when every value is already a name.
+_NAME_COLUMN_TYPES = (
+    "string",
+    "integer",
+)
 
 
 def _capped_list(
@@ -66,12 +80,158 @@ def _flagged_rows(
     return "; ".join(parts)
 
 
+def _name_kind(value: object) -> str:
+    """
+    Classify one ``source`` / ``target`` value as a node name.
+
+    A ``str`` is a name, and so is an integer, whose text is its
+    ID. A float or ``bool`` is converted with ``str``, but that
+    text may not be the one meant (``1.0`` becomes ``'1.0'``).
+    Any other value has no text that names a node.
+    """
+    if isinstance(value, str) or is_integer(value):
+        return _NAME
+    if isinstance(value, (bool, np.bool_, float, np.floating)):
+        return _CONVERTED
+    return _REJECTED
+
+
+def _column_name_kinds(column: pd.Series) -> pd.Series:
+    """
+    Return the ``_name_kind`` of every value in ``column``.
+
+    A column pandas infers as all strings or all integers skips
+    the per-value pass.
+    """
+    inferred = pd.api.types.infer_dtype(
+        column,
+        skipna=False,
+    )
+    if inferred in _NAME_COLUMN_TYPES:
+        return pd.Series(
+            _NAME,
+            index=column.index,
+        )
+    return pd.Series(
+        [_name_kind(value) for value in column.tolist()],
+        index=column.index,
+    )
+
+
+def _first_flagged(
+    edgelist: pd.DataFrame,
+    flags: Mapping[str, pd.Series],
+) -> tuple[str, object, object]:
+    """
+    Return the column, index label, and value of the first flag.
+
+    Columns are searched in the order of ``flags``, rows in table
+    order. At least one flag must be set.
+    """
+    for column, flagged in flags.items():
+        positions = np.flatnonzero(flagged.to_numpy())
+        if len(positions) > 0:
+            position = int(positions[0])
+            return (
+                column,
+                edgelist.index[position],
+                edgelist[column].iloc[position],
+            )
+    raise internal_error("_first_flagged found no flagged row")
+
+
+def _check_name_types(edgelist: pd.DataFrame) -> None:
+    """
+    Reject values that are not node names; warn on float or bool.
+
+    Runs after the missing-value check, so NaN never reaches it.
+
+    Raises
+    ------
+    Kpnn2Error
+        If a value is not a ``str``, an integer, a float, or a
+        ``bool``: a list, a tensor, bytes, or any other object.
+        The message counts the rows per column, names the first
+        few by index label, and describes the first value.
+
+    Warns
+    -----
+    UserWarning
+        If a value is a float or a ``bool``, which ``str`` turns
+        into ``'1.0'`` or ``'True'``.
+    """
+    kinds = {
+        column: _column_name_kinds(edgelist[column])
+        for column in (
+            _SOURCE,
+            _TARGET,
+        )
+    }
+    rejected = {column: kind == _REJECTED for column, kind in kinds.items()}
+    if any(bool(flagged.any()) for flagged in rejected.values()):
+        column, label, value = _first_flagged(
+            edgelist,
+            rejected,
+        )
+        rows_str = _flagged_rows(
+            rejected,
+            edgelist.index,
+        )
+        raise Kpnn2Error(
+            "Edgelist 'source' and 'target' must hold node names: "
+            "strings, or integers that are read through str(). Got "
+            f"{describe(value)} in '{column}' at index {label!r}. "
+            f"{rows_str}. Replace each with the name it stands for."
+        )
+    converted = {column: kind == _CONVERTED for column, kind in kinds.items()}
+    if any(bool(flagged.any()) for flagged in converted.values()):
+        _, _, value = _first_flagged(
+            edgelist,
+            converted,
+        )
+        text = str(value)
+        rows_str = _flagged_rows(
+            converted,
+            edgelist.index,
+        )
+        warnings.warn(
+            "Edgelist holds float or bool values in 'source' or "
+            "'target'; they become node names through str(), so "
+            f"{text} became {text!r}. {rows_str}. Node names are text, "
+            "so 1.0 and 1 name different nodes. To silence this, "
+            "convert the column to the intended strings first, for "
+            "example with .astype(int).astype(str) for float IDs.",
+            UserWarning,
+            stacklevel=_caller_stacklevel(),
+        )
+
+
+def _caller_stacklevel() -> int:
+    """
+    Return the ``stacklevel`` of the first frame outside kpnn2.
+
+    A warning raised here then points at the caller's line, from
+    ``parse_layered`` and ``from_dict`` alike, whatever the depth
+    in between. The count starts at the function that calls
+    ``warnings.warn``.
+    """
+    package = os.path.dirname(os.path.abspath(__file__)) + os.sep
+    # Level 1 is the caller of this helper, which calls warn.
+    frame: FrameType | None = sys._getframe(1)
+    level = 1
+    while frame is not None and frame.f_code.co_filename.startswith(package):
+        frame = frame.f_back
+        level += 1
+    return level
+
+
 def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     """
     Validate a source/target edgelist and return a normalized copy.
 
-    Node names are converted to strings. Only ``source`` and ``target``
-    are kept. Extra columns are ignored.
+    Node names are converted to strings: integers silently, floats
+    and ``bool`` with a warning; any other value raises. Only
+    ``source`` and ``target`` are kept. Extra columns are ignored.
 
     Parameters
     ----------
@@ -88,12 +248,19 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     Kpnn2Error
         If ``edgelist`` is not a DataFrame, required columns are
         missing (message lists the present columns), values are
-        missing or empty (message counts the rows per column and
-        names the first few by index label), the table has no rows,
-        two or more names differ only by leading or trailing
-        whitespace (message names every such group, sorted), or
-        ``(source, target)`` pairs are duplicated (message names
-        the unique pairs, sorted).
+        missing, empty, or not names (a list, a tensor, any value
+        but a ``str``, integer, float, or ``bool``; message counts
+        the rows per column and names the first few by index
+        label), the table has no rows, two or more names differ
+        only by leading or trailing whitespace (message names every
+        such group, sorted), or ``(source, target)`` pairs are
+        duplicated (message names the unique pairs, sorted).
+
+    Warns
+    -----
+    UserWarning
+        If ``source`` or ``target`` holds a float or a ``bool``,
+        which becomes a name such as ``'1.0'`` or ``'True'``.
     """
     if not isinstance(edgelist, pd.DataFrame):
         raise Kpnn2Error(
@@ -135,6 +302,7 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
             "Edgelist contains missing values in 'source' or 'target'. "
             f"{rows_str}."
         )
+    _check_name_types(edgelist)
 
     normalized = pd.DataFrame(
         {
@@ -856,8 +1024,12 @@ def parse_layered(  # numpydoc ignore=PR06
     edgelist : pd.DataFrame
         Edge table with required columns ``source`` and ``target``,
         one row per directed edge in the direction of computation.
-        Names are converted with ``str(...)``; extra columns are
-        ignored. The frame is read, never modified.
+        Node names are text: a ``str`` is kept, and an integer is
+        converted with ``str(...)``, so ``1`` and ``"1"`` name the
+        same node. A float or ``bool`` is converted too but warns,
+        since ``1.0`` becomes ``"1.0"``; any other value raises.
+        Extra columns are ignored. The frame is read, never
+        modified.
     widths : mapping of str to int or numpy integer, optional
         Units per named node. Omitted names, ``None``, and an
         empty mapping are width 1. Keys are matched after
@@ -893,7 +1065,9 @@ def parse_layered(  # numpydoc ignore=PR06
     ------
     Kpnn2Error
         If ``edgelist`` is not a DataFrame; ``source`` or ``target``
-        is absent, missing, or an empty name; the table has no rows;
+        is absent, missing, or an empty name, or holds a value that
+        is not a ``str``, integer, float, or ``bool`` (a list, a
+        tensor, bytes, any other object); the table has no rows;
         two node names differ only by leading or trailing whitespace
         (``'A'`` and ``'A '``); a ``(source, target)`` pair is
         duplicated; any edge is a self-loop; the graph has a cycle;
@@ -904,6 +1078,14 @@ def parse_layered(  # numpydoc ignore=PR06
         places inputs off the minimum rank, places a non-input at
         that minimum, or contains a non-forward edge. Each message
         names the offending pairs or nodes, sorted.
+
+    Warns
+    -----
+    UserWarning
+        If ``source`` or ``target`` holds a float or a ``bool``,
+        converted to a name such as ``"1.0"`` or ``"True"``.
+        Convert the column to the intended strings first to
+        silence it.
 
     See Also
     --------

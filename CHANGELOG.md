@@ -37,6 +37,10 @@ semantic versioning.
 - `parse_layered` and `parse_adjacency` reject node names that
   differ only by leading or trailing whitespace (for example
   `'A'` and `'A '`).
+- Node names are text. `parse_layered`, `parse_adjacency`, and
+  `from_dict` still read integers through `str()`, warn on a
+  float or `bool` (`1.0` becomes `'1.0'`), and reject any other
+  value, such as a list or a tensor.
 
 
 ## [0.2.0] - 23. September 2026

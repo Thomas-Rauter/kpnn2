@@ -1,7 +1,10 @@
 import re
+import warnings
 
+import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from kpnn2 import (
     AdjacencySpec,
@@ -595,6 +598,354 @@ def test_public_entry_points_reject_whitespace_collision(build):
         build(edgelist)
 
     assert "' A', 'A'" in str(exc_info.value)
+    pd.testing.assert_frame_equal(
+        edgelist,
+        expected,
+    )
+
+
+_ENTRY_POINTS = [
+    pytest.param(
+        parse_layered,
+        id="parse_layered",
+    ),
+    pytest.param(
+        parse_adjacency,
+        id="parse_adjacency",
+    ),
+    pytest.param(
+        lambda edgelist: LayeredSpec.from_dict(
+            _layered_payload(edgelist),
+        ),
+        id="LayeredSpec.from_dict",
+    ),
+    pytest.param(
+        lambda edgelist: AdjacencySpec.from_dict(
+            _adjacency_payload(edgelist),
+        ),
+        id="AdjacencySpec.from_dict",
+    ),
+]
+
+_NOT_NAMES = (
+    "Edgelist 'source' and 'target' must hold node names: strings, "
+    "or integers that are read through str(). "
+)
+
+
+class _Node:
+    def __repr__(self):
+        return "_Node()"
+
+
+def _with_target(value):
+    """Edges a -> c and b -> ``value``, rows labelled r1 and r2."""
+    return pd.DataFrame(
+        {
+            "source": ["a", "b"],
+            "target": pd.Series(
+                ["c", value],
+                index=["r1", "r2"],
+                dtype=object,
+            ),
+        },
+        index=["r1", "r2"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            [1, 2],
+            ["1", "2"],
+            id="int",
+        ),
+        pytest.param(
+            np.array(
+                [1, 2],
+                dtype=np.int64,
+            ),
+            ["1", "2"],
+            id="numpy_int64_column",
+        ),
+        pytest.param(
+            [np.int32(1), "b"],
+            ["1", "b"],
+            id="numpy_int32_in_object_column",
+        ),
+        pytest.param(
+            pd.array(
+                ["a", "b"],
+                dtype="string",
+            ),
+            ["a", "b"],
+            id="string_dtype",
+        ),
+        pytest.param(
+            pd.Categorical(["a", "b"]),
+            ["a", "b"],
+            id="categorical",
+        ),
+        pytest.param(
+            np.array(["a", "b"]),
+            ["a", "b"],
+            id="numpy_str",
+        ),
+    ],
+)
+def test_validate_edgelist_reads_strings_and_integers_silently(
+    source,
+    expected,
+):
+    edgelist = pd.DataFrame(
+        {
+            "source": source,
+            "target": ["c", "c"],
+        }
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        normalized = _validate_edgelist(edgelist)
+
+    assert normalized["source"].tolist() == expected
+
+
+def test_integer_and_string_with_the_same_text_are_one_node():
+    edgelist = pd.DataFrame(
+        {
+            "source": [1, "1"],
+            "target": ["b", "c"],
+        }
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        spec = parse_layered(edgelist)
+
+    assert spec.input_nodes == ("1",)
+    assert spec.output_nodes == ("b", "c")
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "example", "rows"),
+    [
+        pytest.param(
+            [1.0, 2.0],
+            ["c", "c"],
+            "1.0 became '1.0'",
+            "'source': 2 row(s) at index 0, 1",
+            id="float",
+        ),
+        pytest.param(
+            ["a", "b"],
+            [True, False],
+            "True became 'True'",
+            "'target': 2 row(s) at index 0, 1",
+            id="bool",
+        ),
+        pytest.param(
+            [np.float32(1.5), "b"],
+            ["c", np.bool_(True)],
+            "1.5 became '1.5'",
+            "'source': 1 row(s) at index 0; 'target': 1 row(s) at index 1",
+            id="numpy_scalars",
+        ),
+    ],
+)
+def test_validate_edgelist_warns_on_float_and_bool_names(
+    source,
+    target,
+    example,
+    rows,
+):
+    edgelist = pd.DataFrame(
+        {
+            "source": source,
+            "target": target,
+        }
+    )
+
+    with pytest.warns(
+        UserWarning,
+        match=re.escape(
+            "Edgelist holds float or bool values in 'source' or "
+            "'target'; they become node names through str(), so "
+            f"{example}. {rows}. Node names are text, so 1.0 and 1 "
+            "name different nodes. To silence this, convert the "
+            "column to the intended strings first, for example with "
+            ".astype(int).astype(str) for float IDs."
+        ),
+    ):
+        normalized = _validate_edgelist(edgelist)
+
+    assert normalized["source"].tolist() == [str(name) for name in source]
+
+
+@pytest.mark.parametrize(
+    "build",
+    _ENTRY_POINTS,
+)
+def test_float_name_warning_points_at_the_caller(build):
+    edgelist = pd.DataFrame(
+        {
+            "source": [1.5],
+            "target": ["b"],
+        }
+    )
+
+    with pytest.warns(UserWarning) as record:
+        build(edgelist)
+
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+
+@pytest.mark.parametrize(
+    ("value", "described"),
+    [
+        pytest.param(
+            ["x", "y"],
+            "['x', 'y'] (list)",
+            id="list",
+        ),
+        pytest.param(
+            ("x",),
+            "('x',) (tuple)",
+            id="tuple",
+        ),
+        pytest.param(
+            {"x": 1},
+            "{'x': 1} (dict)",
+            id="dict",
+        ),
+        pytest.param(
+            b"x",
+            "b'x' (bytes)",
+            id="bytes",
+        ),
+        pytest.param(
+            1 + 2j,
+            "(1+2j) (complex)",
+            id="complex",
+        ),
+        pytest.param(
+            torch.tensor([12345, 67890]),
+            "Tensor of shape (2,), dtype torch.int64",
+            id="tensor",
+        ),
+        pytest.param(
+            np.array(
+                [12345],
+                dtype=np.int64,
+            ),
+            "ndarray of shape (1,), dtype int64",
+            id="array",
+        ),
+        pytest.param(
+            _Node(),
+            "_Node() (_Node)",
+            id="object",
+        ),
+    ],
+)
+def test_validate_edgelist_rejects_values_that_are_not_names(
+    value,
+    described,
+):
+    with pytest.raises(Kpnn2Error) as exc_info:
+        _validate_edgelist(_with_target(value))
+
+    message = str(exc_info.value)
+    assert message == (
+        f"{_NOT_NAMES}Got {described} in 'target' at index 'r2'. "
+        "'target': 1 row(s) at index 'r2'. Replace each with the name "
+        "it stands for."
+    )
+    assert "12345" not in message
+
+
+def test_validate_edgelist_counts_rejected_rows_per_column():
+    edgelist = pd.DataFrame(
+        {
+            "source": pd.Series(
+                ["a", ["x"], ["y"]],
+                dtype=object,
+            ),
+            "target": pd.Series(
+                [b"c", "d", "d"],
+                dtype=object,
+            ),
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"{_NOT_NAMES}Got ['x'] (list) in 'source' at index 1. "
+            "'source': 2 row(s) at index 1, 2; 'target': 1 row(s) at "
+            "index 0."
+        ),
+    ):
+        _validate_edgelist(edgelist)
+
+
+def test_rejected_name_is_raised_before_any_float_warning():
+    edgelist = pd.DataFrame(
+        {
+            "source": pd.Series(
+                [1.5, ["x"]],
+                dtype=object,
+            ),
+            "target": ["c", "c"],
+        }
+    )
+
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        with pytest.raises(
+            Kpnn2Error,
+            match="must hold node names",
+        ):
+            _validate_edgelist(edgelist)
+
+    assert record == []
+
+
+def test_missing_name_is_reported_before_its_float_type():
+    edgelist = pd.DataFrame(
+        {
+            "source": [1.0, np.nan],
+            "target": ["c", "c"],
+        }
+    )
+
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        with pytest.raises(
+            Kpnn2Error,
+            match="missing values",
+        ):
+            _validate_edgelist(edgelist)
+
+    assert record == []
+
+
+@pytest.mark.parametrize(
+    "build",
+    _ENTRY_POINTS,
+)
+def test_public_entry_points_reject_values_that_are_not_names(build):
+    edgelist = _with_target(["x"])
+    expected = edgelist.copy()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(f"{_NOT_NAMES}Got ['x'] (list)"),
+    ):
+        build(edgelist)
+
     pd.testing.assert_frame_equal(
         edgelist,
         expected,

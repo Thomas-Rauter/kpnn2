@@ -1000,11 +1000,18 @@ class LayeredSpec:
             If ``payload`` is not a dict; ``kpnn2_spec`` is
             missing or not ``1``; ``layout`` is missing, not a
             known layout, or is ``"adjacency"``; ``edges``
-            is missing or not a sequence of two nonempty names;
-            ``"widths"`` is present and not a mapping of
-            positive integers; or ``"ranks"`` is present and not
-            a mapping of non-negative integers covering every
-            node.
+            is missing or not a sequence of two nonempty names,
+            or a name is not a ``str``, integer, float, or
+            ``bool``; ``"widths"`` is present and not a mapping
+            of positive integers; or ``"ranks"`` is present and
+            not a mapping of non-negative integers covering
+            every node.
+
+        Warns
+        -----
+        UserWarning
+            If an edge name is a float or a ``bool``, as in
+            ``parse_layered``.
 
         Examples
         --------

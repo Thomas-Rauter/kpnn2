@@ -103,8 +103,12 @@ def parse_adjacency(  # numpydoc ignore=PR06
     edgelist : pd.DataFrame
         Edge table with required columns ``source`` and ``target``,
         one row per directed edge in the direction of computation.
-        Names are converted with ``str(...)``; extra columns are
-        ignored. The frame is read, never modified.
+        Node names are text: a ``str`` is kept, and an integer is
+        converted with ``str(...)``, so ``1`` and ``"1"`` name the
+        same node. A float or ``bool`` is converted too but warns,
+        since ``1.0`` becomes ``"1.0"``; any other value raises.
+        Extra columns are ignored. The frame is read, never
+        modified.
     widths : mapping of str to int or numpy integer, optional
         Units per named node, for a node backed by several
         neurons (DCell-style), exactly as in ``parse_layered``.
@@ -131,7 +135,9 @@ def parse_adjacency(  # numpydoc ignore=PR06
     ------
     Kpnn2Error
         If ``edgelist`` is not a DataFrame; ``source`` or ``target``
-        is absent, missing, or an empty name; the table has no rows;
+        is absent, missing, or an empty name, or holds a value that
+        is not a ``str``, integer, float, or ``bool`` (a list, a
+        tensor, bytes, any other object); the table has no rows;
         two node names differ only by leading or trailing whitespace
         (``'A'`` and ``'A '``); a ``(source, target)`` pair is
         duplicated; there is no in-degree-0 node or no out-degree-0
@@ -139,6 +145,14 @@ def parse_adjacency(  # numpydoc ignore=PR06
         or holds a value that is not a positive integer (``bool``
         included). Each message names the offending pairs or nodes,
         sorted.
+
+    Warns
+    -----
+    UserWarning
+        If ``source`` or ``target`` holds a float or a ``bool``,
+        converted to a name such as ``"1.0"`` or ``"True"``.
+        Convert the column to the intended strings first to
+        silence it.
 
     See Also
     --------

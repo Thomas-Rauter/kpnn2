@@ -433,8 +433,16 @@ are sorted lexicographically by `(source, target)`, not the
 original parse input order. Extra columns from the DataFrame
 that was parsed are not reproduced.
 
-Node names are stored as strings. Non-string values in `source` /
-`target` are converted with `str(...)`.
+Node names are text and are stored as strings. A `str` is kept as
+it is. An integer (numpy integers included) is converted with
+`str(...)` silently: its text is its ID, so `1` and `"1"` name the
+same node. A float or `bool` is converted too, but raises a
+`UserWarning` naming the rows, because its text may not be the
+one meant (`1.0` becomes `"1.0"`, which does not match `1`). Any
+other value (a list, a tensor, bytes, an arbitrary object) raises
+`Kpnn2Error` naming the rows: it has no text that names a node.
+The warning points at the caller's line, from the parsers and
+`from_dict` alike.
 
 ---
 
@@ -447,6 +455,7 @@ Node names are stored as strings. Non-string values in `source` /
 | Input is a `pandas.DataFrame` | `Kpnn2Error` |
 | Columns `source` and `target` exist | `Kpnn2Error` |
 | No missing values in `source` or `target` | `Kpnn2Error` |
+| Every `source` / `target` value is a `str`, integer, float, or `bool` | `Kpnn2Error` naming the rows; a float or `bool` warns |
 | No empty-string node names | `Kpnn2Error` |
 | No two distinct node names equal after `str.strip()` | `Kpnn2Error` naming every group, sorted |
 | At least one edge | `Kpnn2Error` |
@@ -459,11 +468,12 @@ Node names are stored as strings. Non-string values in `source` /
 `parse_adjacency()` enforces **every rule in that table except the
 two structural ones**: self-loops are allowed and cycles are
 allowed. Everything else (DataFrame, columns, missing values,
-empty names, at least one edge, names that differ only by
-surrounding whitespace, duplicate pairs, at least one input, at
-least one output) is identical, and identically worded, because
-both parsers call the same validation helpers. Self-loops
-are the only edgelist rule the two parsers disagree on.
+name types, empty names, at least one edge, names that differ
+only by surrounding whitespace, duplicate pairs, at least one
+input, at least one output) is identical, and identically
+worded, because both parsers call the same validation helpers.
+Self-loops are the only edgelist rule the two parsers disagree
+on.
 
 **Node roles (inferred, not user-declared):**
 
