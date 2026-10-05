@@ -116,6 +116,15 @@ def _align_series(
             f"The {observation_dim!r} coordinate must be unique "
             "to align a pandas Series of labels."
         )
+    if labels.index.has_duplicates:
+        index = labels.index
+        repeated = ", ".join(
+            repr(v) for v in index[index.duplicated()].unique().tolist()
+        )
+        raise Kpnn2Error(
+            "'labels' index must be unique to align it to the "
+            f"{observation_dim!r} coordinate. Repeated: {repeated}."
+        )
     extra = labels.index.difference(obs_index)
     missing = obs_index.difference(labels.index)
     if len(extra) > 0 or len(missing) > 0:
