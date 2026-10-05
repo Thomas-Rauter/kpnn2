@@ -199,8 +199,8 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         ``load_state_dict`` when the checkpoint carries an index
         digest or identity that does not match this layer, in
         which case the weights are not loaded; and from
-        ``forward`` when ``x`` is not a tensor or its last
-        dimension is not ``in_features``.
+        ``forward`` when ``x`` is not a floating-point tensor or
+        its last dimension is not ``in_features``.
 
     See Also
     --------
@@ -238,10 +238,12 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     buffers stay integer after ``.half()`` / bfloat16 /
     ``.double()``; ``weight`` and ``bias`` follow the module
     floating dtype like ``nn.Linear``. ``torch.autocast`` is
-    unsupported: ``forward`` disables it and casts ``x`` to
-    the parameter dtype so AMP cannot mix Half into
-    ``index_add``. Cast the module with ``.to(dtype=...)``
-    (or ``.half()`` / ``.double()``) instead.
+    unsupported: ``forward`` disables it and casts a floating
+    ``x`` to the parameter dtype so AMP cannot mix Half into
+    ``index_add``; an integer, ``bool``, or complex ``x``
+    raises instead of being cast. Cast the module with
+    ``.to(dtype=...)`` (or ``.half()`` / ``.double()``)
+    instead.
 
     ``weight`` is the unconstrained tensor, so optimizer
     ``weight_decay`` pulls it toward 0. Under ``softplus`` that
@@ -766,8 +768,9 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         ``torch.autocast`` is unsupported: this path
         disables it and casts ``x`` to the parameter dtype.
 
-        Raises ``Kpnn2Error`` when ``x`` is not a tensor or its
-        last dimension is not ``in_features``.
+        Raises ``Kpnn2Error`` when ``x`` is not a floating-point
+        tensor or its last dimension is not ``in_features``. An
+        integer, ``bool``, or complex ``x`` is rejected, not cast.
         """
         check_layer_input(
             x,

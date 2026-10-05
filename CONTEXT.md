@@ -1420,11 +1420,14 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   dtype/device. This is why `.half()` / bfloat16 /
   `.double()` work like `nn.Linear`.
   Before the multiply, `forward` raises `Kpnn2Error` unless
-  `x` is a tensor with `x.shape[-1] == in_features` (0-d
-  included). It is the check `PackedLinear` runs, so a wrong
-  width or a non-tensor does not leak a raw torch error.
+  `x` is a floating-point tensor with
+  `x.shape[-1] == in_features` (0-d included). It is the
+  check `PackedLinear` runs, so a wrong width or a non-tensor
+  does not leak a raw torch error, and an integer, `bool`, or
+  complex `x` is rejected rather than cast (a complex one
+  would lose its imaginary part).
   `torch.autocast` is unsupported: `forward` disables it
-  and casts `x` to the parameter dtype. Skip-edge
+  and casts a floating `x` to the parameter dtype. Skip-edge
   `gather_hop_inputs` then still sees one dtype. In the
   common float32 case `mask.to` returns the buffer
   itself, so forward allocates nothing extra for the
@@ -1582,10 +1585,11 @@ PackedLinear(
   The recipe runs with `torch.autocast` disabled.
 
   Before the recipe, `forward` raises `Kpnn2Error` unless `x`
-  is a tensor with `x.shape[-1] == in_features` (0-d
-  included). `MaskedLinear.forward` raises the same
-  `Kpnn2Error`, and `PackedMultiheadAttention` checks its
-  input widths too. The gather
+  is a floating-point tensor with `x.shape[-1] == in_features`
+  (0-d included); an integer, `bool`, or complex `x` is
+  rejected rather than cast. `MaskedLinear.forward` raises the
+  same `Kpnn2Error`, and `PackedMultiheadAttention` checks its
+  input dtypes and widths too. The gather
   reads columns by position, so without the check a wider
   tensor would be accepted and silently read: for example a
   stale `align_inputs` index after a reparse that removed an
@@ -1887,7 +1891,9 @@ PackedMultiheadAttention(
   integer after `.half()` / bfloat16 / `.double()`.
   `torch.autocast` is unsupported, as on `PackedLinear`.
   `forward` disables it and casts query, key, and value
-  to the parameter dtype. Cast the module with
+  to the parameter dtype. They must be floating-point
+  tensors; an integer, `bool`, or complex input raises
+  `Kpnn2Error` rather than being cast. Cast the module with
   `.to(dtype=...)` instead.
 
 ```text

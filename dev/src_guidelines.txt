@@ -113,6 +113,9 @@ and explain the conflict.
   are converted to `int` before they are stored. Arguments
   whose items are matched by position go through
   `_validate.reject_unordered`, so a set or mapping fails.
+  A tensor a layer casts to its parameter dtype goes through
+  `_validate.require_floating` first, so nothing non-floating
+  is cast silently.
 - A check used by more than one entry point is defined once
   and called: argument primitives in `_validate.py`, packed
   indices in `_packed_index.py`, hop checks in `_spec.py`,

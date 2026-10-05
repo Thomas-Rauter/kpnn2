@@ -12,6 +12,7 @@ from kpnn2._validate import (
     describe,
     is_integer,
     reject_unordered,
+    require_floating,
     require_node_mapping,
 )
 
@@ -483,3 +484,52 @@ def test_reject_unordered_rejects_sets_and_mappings(
             "index",
             "a sequence of int",
         )
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.float16,
+        torch.bfloat16,
+        torch.float32,
+        torch.float64,
+    ],
+)
+def test_require_floating_accepts_floating_dtypes(dtype):
+    require_floating(
+        torch.zeros(
+            2,
+            dtype=dtype,
+        ),
+        "Layer input",
+    )
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.int64,
+        torch.uint8,
+        torch.bool,
+        torch.complex128,
+    ],
+)
+def test_require_floating_rejects_and_omits_values(dtype):
+    tensor = torch.full(
+        (2,),
+        12345,
+    ).to(dtype=dtype)
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Layer input must be a floating-point tensor. Got Tensor of "
+            f"shape (2,), dtype {dtype}. Convert it first, for example "
+            "with .float()."
+        ),
+    ) as caught:
+        require_floating(
+            tensor,
+            "Layer input",
+        )
+    assert "12345" not in str(caught.value)

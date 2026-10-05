@@ -90,6 +90,61 @@ def test_masked_linear_rejects_non_tensor_input():
         layer([[1.0, 2.0, 3.0]])
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.int64,
+        torch.int32,
+        torch.uint8,
+        torch.bool,
+        torch.complex64,
+    ],
+)
+def test_masked_linear_rejects_non_floating_input(dtype):
+    layer = _two_by_three_layer()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "MaskedLinear input must be a floating-point tensor. Got "
+            f"Tensor of shape (4, 3), dtype {dtype}. Convert it first, "
+            "for example with .float()."
+        ),
+    ):
+        layer(
+            torch.ones(
+                4,
+                3,
+                dtype=dtype,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.float16,
+        torch.bfloat16,
+        torch.float64,
+    ],
+)
+def test_masked_linear_casts_floating_input_to_parameter_dtype(dtype):
+    layer = _two_by_three_layer()
+    x = torch.ones(
+        4,
+        3,
+        dtype=dtype,
+    )
+
+    y = layer(x)
+
+    assert y.dtype == torch.float32
+    torch.testing.assert_close(
+        y,
+        layer(x.float()),
+    )
+
+
 def test_masked_linear_accepts_extra_leading_batch_dims():
     layer = _two_by_three_layer()
     x = torch.randn(

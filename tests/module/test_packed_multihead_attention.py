@@ -2005,6 +2005,90 @@ def test_input_layout_errors_report_the_received_shape(
         )
 
 
+@pytest.mark.parametrize(
+    ("name", "dtype"),
+    [
+        pytest.param(
+            "query",
+            torch.int64,
+            id="query_int64",
+        ),
+        pytest.param(
+            "key",
+            torch.bool,
+            id="key_bool",
+        ),
+        pytest.param(
+            "value",
+            torch.complex64,
+            id="value_complex64",
+        ),
+    ],
+)
+def test_forward_rejects_non_floating_inputs(
+    name,
+    dtype,
+):
+    layer = _two_by_three_attention()
+    inputs = {
+        "query": torch.ones(
+            2,
+            4,
+        ),
+        "key": torch.ones(
+            3,
+            4,
+        ),
+        "value": torch.ones(
+            3,
+            4,
+        ),
+    }
+    inputs[name] = inputs[name].to(dtype=dtype)
+    shape = tuple(inputs[name].shape)
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"'{name}' must be a floating-point tensor. Got Tensor of "
+            f"shape {shape}, dtype {dtype}. Convert it first, for "
+            "example with .float()."
+        ),
+    ):
+        layer(**inputs)
+
+
+def test_forward_casts_floating_inputs_to_parameter_dtype():
+    torch.manual_seed(42)
+    layer = _two_by_three_attention()
+    query = torch.randn(
+        2,
+        4,
+        dtype=torch.float64,
+    )
+    key = torch.randn(
+        3,
+        4,
+        dtype=torch.float64,
+    )
+
+    output, _ = layer(
+        query,
+        key,
+        key,
+    )
+
+    assert output.dtype == torch.float32
+    torch.testing.assert_close(
+        output,
+        layer(
+            query.float(),
+            key.float(),
+            key.float(),
+        )[0],
+    )
+
+
 def test_input_layout_error_omits_tensor_values():
     layer = _two_by_three_attention()
 

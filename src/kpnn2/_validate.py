@@ -195,13 +195,40 @@ def require_spec(spec: "LayeredSpec | AdjacencySpec") -> None:
         )
 
 
+def require_floating(
+    tensor: torch.Tensor,
+    what: str,
+) -> None:
+    """
+    Raise unless ``tensor`` has a floating-point dtype.
+
+    Layer forwards cast their input to the parameter dtype, so
+    without this check an integer, ``bool``, or complex tensor
+    would be converted silently, and a complex one would lose
+    its imaginary part. ``what`` names the input at the start of
+    the message.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``tensor`` is not floating point. The message gives its
+        shape and dtype, never its values.
+    """
+    if not tensor.is_floating_point():
+        raise Kpnn2Error(
+            f"{what} must be a floating-point tensor. Got "
+            f"{describe(tensor)}. Convert it first, for example with "
+            ".float()."
+        )
+
+
 def check_layer_input(
     x: object,
     in_features: int,
     owner: str,
 ) -> None:
     """
-    Raise unless ``x`` is a tensor of shape ``(..., in_features)``.
+    Raise unless ``x`` is a floating tensor of shape ``(..., in_features)``.
 
     Shared by the forward of both linear layers; ``owner`` is the
     class name the message starts with. Without this check a wider
@@ -211,13 +238,18 @@ def check_layer_input(
     Raises
     ------
     Kpnn2Error
-        If ``x`` is not a ``torch.Tensor``, is 0-dimensional, or
-        its last dimension is not ``in_features``.
+        If ``x`` is not a ``torch.Tensor``, is not floating point,
+        is 0-dimensional, or its last dimension is not
+        ``in_features``.
     """
     if not isinstance(x, torch.Tensor):
         raise Kpnn2Error(
             f"{owner} input must be a torch.Tensor. Got {describe(x)}."
         )
+    require_floating(
+        x,
+        f"{owner} input",
+    )
     if x.ndim < 1:
         raise Kpnn2Error(
             f"{owner} input must have shape (..., in_features) "

@@ -19,7 +19,13 @@ from ._identity import (
     wiring_mismatch,
 )
 from ._packed_index import as_packed_pairs, digest_matches
-from ._validate import as_bool, as_positive_int, describe, is_integer
+from ._validate import (
+    as_bool,
+    as_positive_int,
+    describe,
+    is_integer,
+    require_floating,
+)
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -168,6 +174,10 @@ def _layout_to_batch_first(
         raise Kpnn2Error(
             f"'{name}' must be a torch.Tensor. Got {describe(tensor)}."
         )
+    require_floating(
+        tensor,
+        f"'{name}'",
+    )
     if tensor.ndim < 2:
         raise Kpnn2Error(
             f"'{name}' must be 2-dimensional or higher. Got shape "
@@ -1202,7 +1212,9 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     ``.double()``; projection weights follow the module floating
     dtype like ``nn.Linear``. ``torch.autocast`` is unsupported:
     ``forward`` disables it and casts query, key, and value to
-    the parameter dtype. Cast the module with
+    the parameter dtype. They must be floating-point tensors; an
+    integer, ``bool``, or complex input raises instead of being
+    cast. Cast the module with
     ``.to(dtype=...)`` (or ``.half()`` / ``.double()``)
     instead. ``state_dict`` adds
     ``index_digest``, a 1-D CPU ``uint8`` tensor of length 32:
@@ -1556,7 +1568,10 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
 
         ``query`` last dim is ``embed_dim``; sequence length is
         ``query_features``. ``key`` and ``value`` last dim is
-        ``embed_dim``; sequence length is ``key_features``.
+        ``embed_dim``; sequence length is ``key_features``. All
+        three must be floating-point tensors; an integer,
+        ``bool``, or complex one raises ``Kpnn2Error`` rather
+        than being cast to the parameter dtype.
 
         With ``batch_first=True`` (the default), tensors are
         ``(..., seq, embed_dim)``, including unbatched 2-D

@@ -18,6 +18,10 @@ semantic versioning.
 - `MaskedLinear.forward` raises `Kpnn2Error` (was a raw torch
   error) when the input is not a tensor or its last dimension
   is not `in_features`.
+- `MaskedLinear`, `PackedLinear`, and `PackedMultiheadAttention`
+  reject an integer, `bool`, or complex input in `forward`
+  instead of casting it to the parameter dtype. Convert with
+  `.float()` first.
 - Arguments whose items are matched by position reject a set
   or mapping: `source_index` / `target_index` of
   `PackedLinear` and `PackedMultiheadAttention`, and `dims` and

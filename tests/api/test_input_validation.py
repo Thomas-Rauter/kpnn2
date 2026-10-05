@@ -786,6 +786,13 @@ _MASKED_LINEAR_CASES = [
     ),
     _Bad(
         "MaskedLinear",
+        "forward_input_is_integer",
+        _TYPE,
+        "MaskedLinear input must be a floating-point tensor",
+        lambda: _MASKED(torch.tensor([[1, 1]])),
+    ),
+    _Bad(
+        "MaskedLinear",
         "forward_input_too_wide",
         _SHAPE,
         "in_features=2",
@@ -919,6 +926,13 @@ _PACKED_LINEAR_CASES = [
         _TYPE,
         "PackedLinear input",
         lambda: _PACKED(np.array([[1.0, 1.0]])),
+    ),
+    _Bad(
+        "PackedLinear",
+        "forward_input_is_bool",
+        _TYPE,
+        "PackedLinear input must be a floating-point tensor",
+        lambda: _PACKED(torch.tensor([[True, False]])),
     ),
     _Bad(
         "PackedLinear",
@@ -1101,6 +1115,20 @@ _ATTENTION_CASES = [
         _TYPE,
         "'query'",
         lambda: _attend(query=[[1.0, 1.0, 1.0, 1.0]]),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "forward_query_is_integer",
+        _TYPE,
+        "'query' must be a floating-point tensor",
+        lambda: _attend(query=torch.tensor([[1, 1, 1, 1]])),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "forward_value_is_complex",
+        _TYPE,
+        "'value' must be a floating-point tensor",
+        lambda: _attend(value=torch.ones(2, 4, dtype=torch.complex64)),
     ),
     _Bad(
         "PackedMultiheadAttention",
@@ -1592,6 +1620,11 @@ _VALID_CASES = [
         "PackedLinear",
         "int32_index_tensor",
         lambda: _packed(source_index=_INDEX_INT32),
+    ),
+    _Valid(
+        "PackedLinear",
+        "forward_float64_input_on_a_float32_layer",
+        lambda: _PACKED(torch.tensor([[1.0, 1.0]], dtype=torch.float64)),
     ),
     _Valid(
         "PackedLinear",

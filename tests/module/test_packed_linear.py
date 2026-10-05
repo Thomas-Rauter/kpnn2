@@ -122,6 +122,41 @@ def test_packed_linear_rejects_zero_dim_and_non_tensor_input():
         layer([[1.0]])
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.int64,
+        torch.int32,
+        torch.uint8,
+        torch.bool,
+        torch.complex64,
+    ],
+)
+def test_packed_linear_rejects_non_floating_input(dtype):
+    layer = PackedLinear(
+        [0, 1, 2],
+        [0, 0, 1],
+        2,
+        3,
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "PackedLinear input must be a floating-point tensor. Got "
+            f"Tensor of shape (4, 3), dtype {dtype}. Convert it first, "
+            "for example with .float()."
+        ),
+    ):
+        layer(
+            torch.ones(
+                4,
+                3,
+                dtype=dtype,
+            )
+        )
+
+
 def test_packed_linear_accepts_any_leading_batch_dims():
     torch.manual_seed(42)
     layer = PackedLinear(

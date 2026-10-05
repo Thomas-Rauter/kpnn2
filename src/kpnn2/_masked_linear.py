@@ -228,8 +228,8 @@ class MaskedLinear(nn.Module):
         ``load_state_dict`` when the checkpoint carries a mask
         digest or identity that does not match this layer, in
         which case the weights are not loaded; and from
-        ``forward`` when ``x`` is not a tensor or its last
-        dimension is not ``in_features``.
+        ``forward`` when ``x`` is not a floating-point tensor or
+        its last dimension is not ``in_features``.
 
     See Also
     --------
@@ -253,10 +253,11 @@ class MaskedLinear(nn.Module):
     omitted), and ``M`` the mask cast to ``W``'s dtype and
     device, so ``.half()``, bfloat16, and ``.double()`` work as
     on ``nn.Linear``. ``torch.autocast`` is unsupported:
-    ``forward`` disables it and casts ``x`` to the parameter
-    dtype. The multiply is dense on purpose, and ``X`` is an
-    ordinary dense activation tensor. Nothing in the forward
-    path is a tensor subclass, so
+    ``forward`` disables it and casts a floating ``x`` to the
+    parameter dtype; an integer, ``bool``, or complex ``x``
+    raises instead of being cast. The multiply is dense on
+    purpose, and ``X`` is an ordinary dense activation tensor.
+    Nothing in the forward path is a tensor subclass, so
     ``torch.compile(layer, fullgraph=True)`` traces it.
 
     The mask is always applied last. A map you
@@ -684,8 +685,9 @@ class MaskedLinear(nn.Module):
         ``nn.Linear``. ``torch.autocast`` is unsupported: this
         path disables it and casts ``x`` to the parameter dtype.
 
-        Raises ``Kpnn2Error`` when ``x`` is not a tensor or its
-        last dimension is not ``in_features``.
+        Raises ``Kpnn2Error`` when ``x`` is not a floating-point
+        tensor or its last dimension is not ``in_features``. An
+        integer, ``bool``, or complex ``x`` is rejected, not cast.
         """
         check_layer_input(
             x,
