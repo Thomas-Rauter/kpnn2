@@ -146,6 +146,11 @@ exclude = [
     '\.Hop\.out_features$',
     '\.MaskedLinear\.mask$',
     '\.MaskedLinear\.constraint$',
+    # Internal helpers without a leading underscore. Names are
+    # "<file stem>.<name>", so '\._' above does not catch them.
+    '^_spec\.require_(spec_)?hop$',
+    '^_registry\.((un)?register|lookup)_aggregation_method',
+    '^_registry\.callable_method_names$',
 ]
 exclude_files = [
     '^tests/',
@@ -154,6 +159,9 @@ exclude_files = [
     # Temporary: internal modules, not the public façade.
     '^src/kpnn2/_layout.py$',
     '^src/kpnn2/_mask_tensor.py$',
+    '^src/kpnn2/_packed_index.py$',
+    '^src/kpnn2/_validate.py$',
+    '^src/kpnn2/_aggregation/_bind.py$',
 ]
 
 [tool.mypy]

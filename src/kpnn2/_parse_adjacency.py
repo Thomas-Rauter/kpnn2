@@ -82,7 +82,7 @@ def _units_of(
     return tuple(units)
 
 
-def parse_adjacency(
+def parse_adjacency(  # numpydoc ignore=PR06
     edgelist: pd.DataFrame,
     *,
     widths: Mapping[str, int] | None = None,

@@ -176,6 +176,19 @@ Fix mypy errors from that run. Mypy is configured for
 `docs/` alone do not require mypy unless `src/` also
 changed.
 
+After changing anything under `src/`, also validate
+docstrings before finishing (CI runs this):
+
+```
+python -m numpydoc lint $(find src/kpnn2 -name '*.py')
+```
+
+Fix its findings. Excludes live in
+`[tool.numpydoc_validation]` in `pyproject.toml`. Its
+`'\._'` pattern skips only names that start with `_`.
+Helpers in private modules without that prefix are
+checked like public names.
+
 After Python edits that Ruff covers, format and lint with
 the `dev` extra pin before finishing:
 

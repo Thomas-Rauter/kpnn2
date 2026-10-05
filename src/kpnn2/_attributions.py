@@ -21,7 +21,7 @@ _OBS_DIM = "observation"
 _STEP_DIM = "step"
 
 
-def map_node_attributions(
+def map_node_attributions(  # numpydoc ignore=PR06
     attributions: torch.Tensor | Sequence[torch.Tensor],
     spec: LayeredSpec | AdjacencySpec,
     layer: int | None = None,

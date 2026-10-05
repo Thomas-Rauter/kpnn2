@@ -840,7 +840,7 @@ def _check_edges_conserved(
         )
 
 
-def parse_layered(
+def parse_layered(  # numpydoc ignore=PR06
     edgelist: pd.DataFrame,
     *,
     widths: Mapping[str, int] | None = None,

@@ -71,7 +71,7 @@ def _index_digest(
     )
 
 
-class PackedLinear(nn.Module):
+class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     """
     Affine map with one trainable scalar per live edge.
 

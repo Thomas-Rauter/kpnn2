@@ -994,7 +994,7 @@ def _packed_attention_chunked(
     )
 
 
-class PackedMultiheadAttention(nn.Module):
+class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     """
     Multi-head attention restricted to the live edges of a named edgelist.
 

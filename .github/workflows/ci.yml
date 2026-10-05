@@ -45,7 +45,7 @@ jobs:
 
       - name: Validate NumPy docstrings
         run: |
-          numpydoc lint src/kpnn2/*.py
+          numpydoc lint $(find src/kpnn2 -name '*.py')
 
       - name: Run mypy
         if: matrix.python-version == '3.11'
