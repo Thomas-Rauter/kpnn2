@@ -34,9 +34,9 @@ def gather_hop_inputs(
         ``(..., layer_dims[i])``; the leading dimensions are the
         caller's, typically a batch. Only the layers in
         ``hop.source_layers`` are read, so extra keys are
-        ignored, and those layers must share a dtype and a
-        device. Neither the mapping nor its tensors are copied
-        or modified.
+        ignored, and those layers must share a dtype, a device,
+        and their leading dimensions. Neither the mapping nor
+        its tensors are copied or modified.
     hop : Hop
         The hop about to be applied, one entry of ``spec.hops``.
         Its ``source_layers`` and ``source_dims`` decide which
@@ -63,11 +63,8 @@ def gather_hop_inputs(
         ``Hop``; a layer in ``hop.source_layers`` is absent from
         ``saved`` or is not a tensor; a saved tensor is
         0-dimensional or is the wrong number of units wide; or
-        the source layers disagree on dtype or device.
-    RuntimeError
-        Propagated from ``torch.cat`` when two source layers
-        disagree in a dimension other than the last, such as a
-        batch size.
+        the source layers disagree on dtype, device, or a
+        dimension other than the last, such as the batch size.
 
     See Also
     --------
@@ -190,6 +187,13 @@ def gather_hop_inputs(
                 f"saved[{hop.source_layers[0]}] is on "
                 f"{first.device} and saved[{layer}] is on "
                 f"{tensor.device}."
+            )
+        if tensor.shape[:-1] != first.shape[:-1]:
+            raise Kpnn2Error(
+                "Saved layers must share every dimension but the "
+                f"last. saved[{hop.source_layers[0]}] has shape "
+                f"{tuple(first.shape)} and saved[{layer}] has shape "
+                f"{tuple(tensor.shape)}."
             )
 
     if len(parts) == 1:

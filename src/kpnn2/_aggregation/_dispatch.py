@@ -114,6 +114,7 @@ def aggregate_node_attributions(
         raise Kpnn2Error(_removed_message(entry))
     _emit_status_signal(entry)
     params = _bound_method_params(
+        method,
         entry.func,
         attributions,
         labels,
@@ -175,6 +176,7 @@ def _removed_message(entry: AggregationMethod) -> str:
 
 
 def _bound_method_params(
+    method: str,
     func: Callable[..., Any],
     attributions: xr.DataArray,
     labels: object | None,
@@ -189,7 +191,10 @@ def _bound_method_params(
             **method_kwargs,
         )
     except TypeError as exc:
-        raise Kpnn2Error(str(exc)) from exc
+        raise Kpnn2Error(
+            f"Aggregation method {method!r} cannot be called with these "
+            f"keyword arguments: {exc}. {_keyword_arguments(signature)}"
+        ) from exc
     bound.apply_defaults()
     # The first two parameters receive the data, whatever their names.
     data_names = set(list(signature.parameters)[:2])
@@ -202,6 +207,22 @@ def _bound_method_params(
         params,
         default=_json_value,
     )
+
+
+def _keyword_arguments(signature: inspect.Signature) -> str:
+    """Name the keyword arguments a method takes after the data two."""
+    names = [
+        parameter.name
+        for parameter in list(signature.parameters.values())[2:]
+        if parameter.kind
+        not in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        )
+    ]
+    if not names:
+        return "It takes no keyword arguments."
+    return f"Its keyword arguments are: {', '.join(names)}."
 
 
 def _json_value(value: object) -> object:

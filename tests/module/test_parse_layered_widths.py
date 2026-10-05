@@ -1,3 +1,6 @@
+import re
+
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -112,6 +115,51 @@ def test_widths_rejects_bool_zero_and_negative():
                 _chain_edgelist(),
                 widths={"H": value},
             )
+
+
+@pytest.mark.parametrize(
+    ("value", "got"),
+    [
+        pytest.param(
+            2.0,
+            "2.0 (float)",
+            id="float",
+        ),
+        pytest.param(
+            0,
+            "0 (int)",
+            id="zero",
+        ),
+        pytest.param(
+            np.array(
+                [12345, 67890],
+                dtype=np.int64,
+            ),
+            "ndarray of shape (2,), dtype int64",
+            id="array",
+        ),
+        pytest.param(
+            torch.tensor([12345.0]),
+            "Tensor of shape (1,), dtype torch.float32",
+            id="tensor",
+        ),
+    ],
+)
+def test_widths_message_describes_the_value_without_its_data(
+    value,
+    got,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"Width for node 'H' must be a positive int. Got {got}."
+        ),
+    ) as caught:
+        parse_layered(
+            _chain_edgelist(),
+            widths={"H": value},
+        )
+    assert "12345" not in str(caught.value)
 
 
 def test_widths_rejects_non_mapping():

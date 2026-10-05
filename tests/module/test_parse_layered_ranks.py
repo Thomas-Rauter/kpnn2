@@ -1,5 +1,7 @@
 import inspect
+import re
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -214,6 +216,50 @@ def test_bool_and_non_int_ranks_raise():
                 edgelist,
                 ranks=ranks,
             )
+
+
+@pytest.mark.parametrize(
+    ("value", "got"),
+    [
+        pytest.param(
+            -1,
+            "-1 (int)",
+            id="negative",
+        ),
+        pytest.param(
+            "0",
+            "'0' (str)",
+            id="str",
+        ),
+        pytest.param(
+            np.array(
+                [12345, 67890],
+                dtype=np.int64,
+            ),
+            "ndarray of shape (2,), dtype int64",
+            id="array",
+        ),
+    ],
+)
+def test_ranks_message_describes_the_value_without_its_data(
+    value,
+    got,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"Rank for node 'H' must be a non-negative int. Got {got}."
+        ),
+    ) as caught:
+        parse_layered(
+            _chain_edgelist(),
+            ranks={
+                "A": 0,
+                "H": value,
+                "C": 2,
+            },
+        )
+    assert "12345" not in str(caught.value)
 
 
 def test_ranks_rejects_non_mapping():

@@ -18,6 +18,9 @@ semantic versioning.
 - `MaskedLinear.forward` raises `Kpnn2Error` (was a raw torch
   error) when the input is not a tensor or its last dimension
   is not `in_features`.
+- `gather_hop_inputs` raises `Kpnn2Error` (was a `RuntimeError`
+  from `torch.cat`) when the saved source layers differ in a
+  dimension other than the last, such as the batch size.
 - Flag arguments (`bias`, `tie`, `batch_first`,
   `add_self_loops`, `need_weights`, `average_attn_weights`)
   must be `bool`, and `PackedMultiheadAttention` `dropout`

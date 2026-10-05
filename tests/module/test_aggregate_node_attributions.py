@@ -188,6 +188,69 @@ def test_registered_dummy_is_dispatched_and_listed(register_dummy):
     assert out.attrs["kpnn2_version"] == __version__
 
 
+def _scaled_mean(attributions, labels, *, scale=1.0, seed=None):
+    del labels, seed
+    return xr.Dataset({"score": scale * attributions.mean("observation")})
+
+
+def _required_seed(attributions, labels, *, seed):
+    del labels, seed
+    return xr.Dataset({"score": attributions.mean("observation")})
+
+
+@pytest.mark.parametrize(
+    ("func", "kwargs", "detail", "accepted"),
+    [
+        pytest.param(
+            _scaled_mean,
+            {"sacle": 2.0},
+            "unexpected keyword argument 'sacle'",
+            "Its keyword arguments are: scale, seed.",
+            id="misspelled",
+        ),
+        pytest.param(
+            _mean_dataset,
+            {"scale": 2.0},
+            "unexpected keyword argument 'scale'",
+            "It takes no keyword arguments.",
+            id="none_accepted",
+        ),
+        pytest.param(
+            _required_seed,
+            {},
+            "missing a required",
+            "Its keyword arguments are: seed.",
+            id="missing",
+        ),
+    ],
+)
+def test_method_kwargs_message_names_method_and_its_arguments(
+    register_dummy,
+    func,
+    kwargs,
+    detail,
+    accepted,
+):
+    # The middle of the message is inspect's own text, which varies
+    # across Python versions; pin the parts kpnn2 writes.
+    name = "_dummy_kwargs"
+    register_dummy(name)(func)
+    with pytest.raises(Kpnn2Error) as caught:
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
+            **kwargs,
+        )
+    text = str(caught.value)
+    assert text.startswith(
+        f"Aggregation method {name!r} cannot be called with these "
+        "keyword arguments: "
+    )
+    assert detail in text
+    assert text.endswith(accepted)
+
+
 def test_method_must_return_a_dataset(register_dummy):
     name = "_dummy_array"
 

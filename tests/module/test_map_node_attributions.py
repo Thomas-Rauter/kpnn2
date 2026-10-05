@@ -2,6 +2,7 @@ import inspect
 import re
 from dataclasses import replace
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -1091,6 +1092,13 @@ def _received_value_cases():
         ),
         pytest.param(
             scores,
+            {"axis": np.array(["inputs"])},
+            "'axis' must be 'inputs' or None. Got ndarray of shape (1,), "
+            "dtype <U6.",
+            id="axis_array",
+        ),
+        pytest.param(
+            scores,
             {"layer": 1.0},
             "'layer' must be an int. Got 1.0 (float).",
             id="layer_float",
@@ -1153,6 +1161,37 @@ def _received_value_cases():
             id="dims_item",
         ),
         pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "dims": True,
+            },
+            "'dims' must be a sequence of strings, one per tensor axis. "
+            "Got True (bool).",
+            id="dims_bool",
+        ),
+        pytest.param(
+            torch.zeros(2),
+            {
+                "layer": 1,
+                "dims": "node",
+            },
+            "'dims' must be a sequence of strings, one per tensor axis. "
+            "Got 'node' (str). A single string is one value, not a "
+            "sequence; wrap it in a list.",
+            id="dims_str",
+        ),
+        pytest.param(
+            torch.zeros(2),
+            {
+                "layer": 1,
+                "dims": np.array("node"),
+            },
+            "'dims' must be a sequence of strings, one per tensor axis. "
+            "Got ndarray of shape (), dtype <U4.",
+            id="dims_zero_dim_array",
+        ),
+        pytest.param(
             torch.zeros(1, 1, 1, 2),
             {
                 "layer": 1,
@@ -1196,6 +1235,27 @@ def _received_value_cases():
             },
             "'coords' must be a mapping. Got ['obs'] (list).",
             id="coords",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {"observation": None},
+            },
+            "'coords['observation']' must be a sequence of labels, one "
+            "per position on that axis. Got None.",
+            id="coords_value_none",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {"observation": "s"},
+            },
+            "'coords['observation']' must be a sequence of labels, one "
+            "per position on that axis. Got 's' (str). A single string "
+            "is one value, not a sequence; wrap it in a list.",
+            id="coords_value_str",
         ),
     ]
 

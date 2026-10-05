@@ -221,6 +221,49 @@ def test_gather_rejects_mixed_dtypes():
         )
 
 
+@pytest.mark.parametrize(
+    ("second", "second_shape"),
+    [
+        pytest.param(
+            torch.zeros(
+                3,
+                1,
+            ),
+            "(3, 1)",
+            id="batch_size",
+        ),
+        pytest.param(
+            torch.zeros(1),
+            "(1,)",
+            id="unbatched",
+        ),
+    ],
+)
+def test_gather_rejects_mismatched_leading_dimensions(
+    second,
+    second_shape,
+):
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Saved layers must share every dimension but the last. "
+            f"saved[0] has shape (4, 2) and saved[1] has shape "
+            f"{second_shape}."
+        ),
+    ):
+        gather_hop_inputs(
+            {
+                0: torch.zeros(
+                    4,
+                    2,
+                ),
+                1: second,
+            },
+            spec.hops[1],
+        )
+
+
 def test_gather_accepts_a_shared_non_default_dtype():
     spec = _skip_spec()
     gathered = gather_hop_inputs(

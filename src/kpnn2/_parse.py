@@ -435,15 +435,10 @@ def _layers_from_user_ranks(
     requested: dict[str, int] = {}
     for key, value in ranks.items():
         name = str(key)
-        if not is_integer(value):
+        if not is_integer(value) or value < 0:
             raise Kpnn2Error(
                 f"Rank for node {name!r} must be a non-negative int. "
-                f"Got {value!r}."
-            )
-        if value < 0:
-            raise Kpnn2Error(
-                f"Rank for node {name!r} must be a non-negative int. "
-                f"Got {value!r}."
+                f"Got {describe(value)}."
             )
         requested[name] = int(value)
     unknown = sorted(set(requested) - nodes)
@@ -536,15 +531,10 @@ def _normalize_widths(
     requested: dict[str, int] = {}
     for key, value in widths.items():
         name = str(key)
-        if not is_integer(value):
+        if not is_integer(value) or value < 1:
             raise Kpnn2Error(
                 f"Width for node {name!r} must be a positive int. "
-                f"Got {value!r}."
-            )
-        if value < 1:
-            raise Kpnn2Error(
-                f"Width for node {name!r} must be a positive int. "
-                f"Got {value!r}."
+                f"Got {describe(value)}."
             )
         requested[name] = int(value)
     unknown = sorted(set(requested) - nodes)

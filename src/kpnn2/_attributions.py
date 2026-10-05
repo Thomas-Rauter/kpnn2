@@ -3,7 +3,7 @@ Map attribution tensors onto spec node names.
 """
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -110,14 +110,16 @@ def map_node_attributions(  # numpydoc ignore=PR06
         of the tensor is not used to choose this axis.
     dims : sequence of str, optional
         One name per axis of the tensor after any stacking,
-        containing ``node`` exactly once and never ``layer``.
+        containing ``node`` exactly once and never ``layer``. A
+        single ``str`` is rejected, not split into characters.
         Required at 3 or more axes, unless the tensor is a stacked
         sequence of 1-D or 2-D pieces. The defaults are
         ``("node",)`` for 1-D and ``("observation", "node")`` for
         2-D, with ``step`` prepended when a sequence was stacked.
     coords : mapping of str to sequence, optional
         Labels for axes other than ``node`` and ``layer``, keyed by
-        dim name; each sequence must be as long as its axis. Axes
+        dim name; each sequence must be as long as its axis, and a
+        single ``str`` is rejected, not split into characters. Axes
         left out are labelled with their integer positions.
 
     Returns
@@ -150,10 +152,12 @@ def map_node_attributions(  # numpydoc ignore=PR06
         ``hop_output`` is not a ``Hop`` that matches an entry
         of ``spec.hops``;
         ``attributions`` is neither a tensor nor a non-empty
-        sequence of equal-shaped tensors; ``dims`` is missing, the
-        wrong length, non-unique, or does not name ``node`` exactly
-        once; the node axis is not as long as the named units; or
-        ``coords`` names an unknown axis or a wrong length.
+        sequence of equal-shaped tensors; ``dims`` is missing, not
+        a sequence of strings, the wrong length, non-unique, or
+        does not name ``node`` exactly once; the node axis is not
+        as long as the named units; or ``coords`` is not a
+        mapping, names an unknown axis, or holds a value that is
+        not a sequence of labels or has the wrong length.
 
     See Also
     --------
@@ -387,7 +391,7 @@ def _resolve_node_layout(
     for that axis, so a disagreement inside the spec raises
     ``internal_error`` before the tensor is looked at.
     """
-    if axis is not None and axis != "inputs":
+    if axis is not None and (not isinstance(axis, str) or axis != "inputs"):
         raise Kpnn2Error(
             f"'axis' must be 'inputs' or None. Got {describe(axis)}."
         )
@@ -593,7 +597,13 @@ def _resolve_dims(
             used_default_step=used_default_step,
         )
     else:
-        dim_names = tuple(dims)
+        dim_names = tuple(
+            _sequence_items(
+                dims,
+                "dims",
+                "a sequence of strings, one per tensor axis",
+            )
+        )
         for position, name in enumerate(dim_names):
             if not isinstance(name, str):
                 raise Kpnn2Error(
@@ -696,7 +706,11 @@ def _build_coords(
             coord_map[dim] = names
             continue
         if dim in extra:
-            labels = list(extra[dim])
+            labels = _sequence_items(
+                extra[dim],
+                f"coords[{dim!r}]",
+                "a sequence of labels, one per position on that axis",
+            )
             if len(labels) != size:
                 raise Kpnn2Error(
                     f"'coords[{dim!r}]' length must be {size}, "
@@ -708,3 +722,38 @@ def _build_coords(
     if layer is not None:
         coord_map[_LAYER_COORD] = layer
     return coord_map
+
+
+def _sequence_items(
+    value: object,
+    name: str,
+    expected: str,
+) -> list:
+    """
+    Return the items of ``value``, an argument that holds one per axis.
+
+    A ``str`` or ``bytes`` is one value, not a sequence of them, so
+    it is rejected rather than split into characters. So is
+    anything ``list`` cannot iterate, a 0-dimensional array
+    included.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``value`` is a ``str``, ``bytes``, or not iterable. The
+        message says ``name`` must be ``expected`` and describes
+        ``value``.
+    """
+    if isinstance(value, (str, bytes)):
+        raise Kpnn2Error(
+            f"'{name}' must be {expected}. Got {describe(value)}. A "
+            "single string is one value, not a sequence; wrap it in "
+            "a list."
+        )
+    message = f"'{name}' must be {expected}. Got {describe(value)}."
+    if not isinstance(value, Iterable):
+        raise Kpnn2Error(message)
+    try:
+        return list(value)
+    except TypeError as exc:
+        raise Kpnn2Error(message) from exc

@@ -1201,6 +1201,18 @@ _HOP_AXIS_CASES = [
         ),
     ),
     _Bad(
+        "gather_hop_inputs",
+        "saved_layers_differ_in_batch_size",
+        _SHAPE,
+        "saved[1] has shape (3, 1)",
+        lambda: _gather(
+            {
+                0: torch.tensor([[1.0], [1.0]]),
+                1: torch.tensor([[1.0], [1.0], [1.0]]),
+            }
+        ),
+    ),
+    _Bad(
         "scatter_hop_outputs",
         "tensor_is_an_array",
         _TYPE,
@@ -1312,10 +1324,48 @@ _MAP_CASES = [
     ),
     _Bad(
         "map_node_attributions",
+        "dims_is_a_str",
+        _TYPE,
+        "'dims'",
+        lambda: _map(dims="node"),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "dims_is_a_bool",
+        _TYPE,
+        "'dims'",
+        lambda: _map(dims=True),
+    ),
+    _Bad(
+        "map_node_attributions",
         "coords_not_a_mapping",
         _TYPE,
         "'coords'",
         lambda: _map(coords=[("observation", [0, 1, 2])]),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "coords_value_is_none",
+        _TYPE,
+        "'coords['observation']'",
+        lambda: _map(coords={"observation": None}),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "coords_value_is_a_str",
+        _TYPE,
+        "'coords['observation']'",
+        lambda: _map(coords={"observation": "abc"}),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "axis_is_an_array",
+        _TYPE,
+        "'axis'",
+        lambda: _map(
+            layer=None,
+            axis=np.array(["inputs"]),
+        ),
     ),
     _Bad(
         "map_node_attributions",
@@ -1570,6 +1620,28 @@ _VALID_CASES = [
         "map_node_attributions",
         "numpy_integer_layer",
         lambda: _map(layer=np.int64(0)),
+    ),
+    _Valid(
+        "map_node_attributions",
+        "coords_value_is_a_range_or_array",
+        lambda: _map(
+            attributions=torch.tensor([[[1.0]], [[2.0]], [[3.0]]]),
+            dims=("observation", "step", "node"),
+            coords={
+                "observation": range(3),
+                "step": np.array(["s0"]),
+            },
+        ),
+    ),
+    _Valid(
+        "gather_hop_inputs",
+        "saved_layers_share_a_multi_axis_batch",
+        lambda: _gather(
+            {
+                0: torch.zeros(2, 3, 1),
+                1: torch.zeros(2, 3, 1),
+            }
+        ),
     ),
 ]
 

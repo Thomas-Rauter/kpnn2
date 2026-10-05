@@ -2013,11 +2013,12 @@ gather_hop_inputs(saved, hop) -> torch.Tensor
   the layer and the hop that wanted it.
 - Differentiable into every source: `torch.cat` passes gradient
   back to each part.
-- All parts must share dtype and device; mismatches raise rather
-  than promote silently.
+- All parts must share dtype, device, and every dimension but
+  the last (the caller's batch shape); mismatches raise rather
+  than promote silently or leak a `torch.cat` error.
 - Public failures: `Kpnn2Error` (not a mapping, not a `Hop`,
   missing layer, non-tensor entry, wrong unit count, mixed
-  dtype or device).
+  dtype, device, or leading dimensions).
 
 There is **no** module here on purpose. Anything with parameters
 would reintroduce a second place for edge weights to live.
@@ -2249,7 +2250,9 @@ concat_layouts(
   stacked sequence of 2-D tensors → `(step, observation, node)`.
   Rank 3+ (except that stacked default) requires `dims=` containing
   `node` exactly once.
-- `coords`: optional labels for axes other than `node` and `layer`.
+- `coords`: optional labels for axes other than `node` and `layer`,
+  one sequence per dim. A single `str` as `dims` or as a `coords`
+  value is rejected, not split into characters.
 - Values: detached CPU copy of the tensor. No abs/sum/mean.
   `bfloat16` is stored as float32 because NumPy has no
   bfloat16 dtype; those values are unchanged. Other dtypes
