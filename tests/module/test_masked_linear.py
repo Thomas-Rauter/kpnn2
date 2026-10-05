@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.utils import parametrize, prune
 
-from kpnn2 import Kpnn2Error, MaskedLinear, parse_layered
+from kpnn2 import Kpnn2Error, MaskedLinear, parse_adjacency, parse_layered
 
 
 def _trainable(layer):
@@ -176,6 +176,242 @@ def test_masked_linear_rejects_3d_mask():
         match="2-dimensional",
     ):
         MaskedLinear(mask)
+
+
+@pytest.mark.parametrize(
+    ("mask", "match"),
+    [
+        pytest.param(
+            torch.tensor(
+                [
+                    [0.0, 2.0],
+                    [2.0, 0.0],
+                ]
+            ),
+            r"only 0 and 1\. Got other value\(s\): 2\.0\.",
+            id="two",
+        ),
+        pytest.param(
+            torch.tensor(
+                [
+                    [0.0, 0.5],
+                    [0.5, 0.0],
+                ]
+            ),
+            r"only 0 and 1\. Got other value\(s\): 0\.5\.",
+            id="half",
+        ),
+        pytest.param(
+            torch.tensor(
+                [
+                    [-1.0, 1.0],
+                    [1.0, -1.0],
+                ]
+            ),
+            r"only 0 and 1\. Got other value\(s\): -1\.0\.",
+            id="minus-one",
+        ),
+        pytest.param(
+            torch.tensor(
+                [
+                    [1.0, float("nan")],
+                    [0.0, 1.0],
+                ]
+            ),
+            r"only 0 and 1\. Got other value\(s\): nan\.",
+            id="nan",
+        ),
+        pytest.param(
+            torch.ones(
+                2,
+                2,
+                dtype=torch.complex64,
+            ),
+            r"bool, integer, or floating dtype\. Got torch\.complex64\.",
+            id="complex",
+        ),
+        pytest.param(
+            torch.ones(
+                0,
+                3,
+            ),
+            r"at least one row and one column\. Got shape \(0, 3\)\.",
+            id="no-rows",
+        ),
+        pytest.param(
+            torch.ones(
+                3,
+                0,
+            ),
+            r"at least one row and one column\. Got shape \(3, 0\)\.",
+            id="no-columns",
+        ),
+        pytest.param(
+            torch.zeros(
+                2,
+                3,
+            ),
+            r"no live entry.*Hop\.to_mask\(\) or AdjacencySpec\.to_mask\(\)",
+            id="all-zero",
+        ),
+    ],
+)
+def test_masked_linear_rejects_invalid_mask(
+    mask,
+    match,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=match,
+    ):
+        MaskedLinear(mask)
+
+
+def test_masked_linear_non_binary_error_lists_values_and_fix():
+    mask = torch.tensor(
+        [
+            [2.0, float("nan"), 0.5],
+            [-1.0, 1.0, 2.0],
+        ]
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=(
+            r"Got other value\(s\): -1\.0, 0\.5, 2\.0, nan\. "
+            r"Pass a 0/1 mask .*scaling or signs in the 'constraint'"
+        ),
+    ):
+        MaskedLinear(mask)
+
+
+def test_masked_linear_non_binary_error_lists_at_most_five_values():
+    mask = torch.tensor(
+        [
+            [2.0, 3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0, 1.0],
+        ]
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=(
+            r"Got other value\(s\): 2\.0, 3\.0, 4\.0, 5\.0, 6\.0 "
+            r"\(and 2 more\)\."
+        ),
+    ):
+        MaskedLinear(mask)
+
+
+def test_masked_linear_non_binary_error_names_integer_values():
+    mask = torch.tensor(
+        [
+            [0, 3],
+            [1, 0],
+        ],
+        dtype=torch.int64,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"Got other value\(s\): 3\.",
+    ):
+        MaskedLinear(mask)
+
+
+def test_masked_linear_bool_int_and_float_masks_give_the_same_layer():
+    pattern = [
+        [1, 0, 1],
+        [0, 1, 1],
+    ]
+    layers = []
+    for dtype in (torch.bool, torch.int64, torch.float32):
+        layers.append(
+            MaskedLinear(
+                torch.tensor(
+                    pattern,
+                    dtype=dtype,
+                ),
+                generator=torch.Generator().manual_seed(42),
+            )
+        )
+    reference = layers[0]
+    for layer in layers[1:]:
+        assert torch.equal(
+            layer.mask,
+            reference.mask,
+        )
+        assert layer.mask.dtype == torch.float32
+        torch.testing.assert_close(
+            layer.weight,
+            reference.weight,
+        )
+        torch.testing.assert_close(
+            layer.bias,
+            reference.bias,
+        )
+
+
+def test_masked_linear_accepts_all_zero_row_and_column():
+    mask = torch.tensor(
+        [
+            [1.0, 0.0],
+            [0.0, 0.0],
+        ]
+    )
+    layer = MaskedLinear(mask)
+    assert torch.equal(
+        layer.mask,
+        mask,
+    )
+
+
+def test_masked_linear_accepts_adjacency_spec_mask():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["x", "a", "b", "a"],
+            "target": ["a", "b", "a", "y"],
+        }
+    )
+    spec = parse_adjacency(edgelist)
+    mask = spec.to_mask()
+    for row in spec.input_index:
+        assert not bool(mask[row].any())
+    layer = MaskedLinear(mask)
+    assert torch.equal(
+        layer.mask,
+        mask,
+    )
+
+
+def test_masked_linear_mask_check_leaves_caller_mask_alone():
+    rejected = torch.tensor(
+        [
+            [0.0, 2.0],
+            [float("nan"), 1.0],
+        ]
+    )
+    rejected_before = rejected.clone()
+    with pytest.raises(Kpnn2Error):
+        MaskedLinear(rejected)
+    torch.testing.assert_close(
+        rejected,
+        rejected_before,
+        rtol=0.0,
+        atol=0.0,
+        equal_nan=True,
+    )
+    accepted = torch.tensor(
+        [
+            [1, 0],
+            [0, 1],
+        ],
+        dtype=torch.int64,
+    )
+    accepted_before = accepted.clone()
+    MaskedLinear(accepted)
+    assert accepted.dtype == torch.int64
+    assert torch.equal(
+        accepted,
+        accepted_before,
+    )
 
 
 def _diag_mask():

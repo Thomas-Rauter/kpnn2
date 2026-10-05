@@ -1271,7 +1271,15 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
 
 - `mask`: `torch.Tensor`, shape `(out_features, in_features)`.
   Inferred `in_features` / `out_features` from `mask.shape`.
-  Do not take separate size arguments.
+  Do not take separate size arguments. Every entry is exactly
+  0 or 1 (bool, integer, or floating dtype; complex is
+  rejected, and NaN counts as neither). Both dimensions are
+  at least 1, and at least one entry is 1. All-zero rows and
+  columns stay legal: the input rows of
+  `AdjacencySpec.to_mask()` are all zero by design. A
+  violation raises `Kpnn2Error` at construction. Per-edge
+  scaling and signs go in `constraint=`, not in the mask
+  (see **Package philosophy**).
 - Optional `bias`: shape `(out_features,)`. If `bias=False`,
   no bias parameter.
 - Optional `identity`: opaque `str`, typically

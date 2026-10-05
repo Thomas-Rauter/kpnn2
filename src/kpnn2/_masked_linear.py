@@ -24,6 +24,65 @@ from ._mask_tensor import as_mask_tensor
 _MASK_DIGEST_KEY = "mask_digest"
 # kpnn2 0.1 stored the trainable tensor through torch parametrize.
 _LEGACY_WEIGHT_KEY = "parametrizations.weight.original"
+# Distinct offending values a non-binary mask error lists.
+_OTHER_VALUES_SHOWN = 5
+
+
+def _other_values(mask: torch.Tensor) -> str:
+    """
+    List the distinct entries of ``mask`` that are neither 0 nor 1.
+
+    Sorted, NaN last as ``nan``, at most ``_OTHER_VALUES_SHOWN``
+    of them, then how many more there are.
+    """
+    other = mask[(mask != 0) & (mask != 1)]
+    nan = other.isnan()
+    values = [str(value) for value in torch.unique(other[~nan]).tolist()]
+    if bool(nan.any()):
+        values.append("nan")
+    text = ", ".join(values[:_OTHER_VALUES_SHOWN])
+    hidden = len(values) - _OTHER_VALUES_SHOWN
+    if hidden > 0:
+        text = f"{text} (and {hidden} more)"
+    return text
+
+
+def _check_mask_entries(mask: torch.Tensor) -> None:
+    """
+    Raise unless the 2-D ``mask`` is a non-empty 0/1 tensor with a 1.
+
+    Runs on the mask's own device and leaves it unchanged. The
+    offending values are collected only on failure.
+
+    Raises
+    ------
+    Kpnn2Error
+        If a dimension is 0, the dtype is complex, an entry is
+        neither 0 nor 1 (NaN included), or no entry is 1.
+    """
+    if mask.shape[0] == 0 or mask.shape[1] == 0:
+        raise Kpnn2Error(
+            "'mask' must have at least one row and one column. "
+            f"Got shape {tuple(mask.shape)}."
+        )
+    if mask.is_complex():
+        raise Kpnn2Error(
+            "'mask' must have a bool, integer, or floating dtype. "
+            f"Got {mask.dtype}."
+        )
+    is_one = mask == 1
+    if not bool((is_one | (mask == 0)).all()):
+        raise Kpnn2Error(
+            "'mask' must contain only 0 and 1. Got other value(s): "
+            f"{_other_values(mask)}. Pass a 0/1 mask and put per-edge "
+            "scaling or signs in the 'constraint' module."
+        )
+    if not bool(is_one.any()):
+        raise Kpnn2Error(
+            "'mask' has no live entry: every value is 0, so the layer "
+            "would output only its bias. Build it with Hop.to_mask() "
+            "or AdjacencySpec.to_mask()."
+        )
 
 
 def _mask_digest(mask: torch.Tensor) -> torch.Tensor:
@@ -72,13 +131,16 @@ class MaskedLinear(nn.Module):
     ----------
     mask : torch.Tensor
         Connectivity of shape ``(out_features, in_features)``,
-        usually ``spec.hops[i].to_mask()`` or ``spec.to_mask()``. A
-        nonzero entry ``[j, k]`` lets input column ``k`` reach
-        output row ``j``; a zero blocks it for the life of the
-        layer. Stored as an independent float32 copy, so later
-        writes to the tensor passed in do not reach this layer.
-        Non-finite values are not special-cased: the stored
-        tensor is multiplied with the weight as it is.
+        usually ``spec.hops[i].to_mask()`` or ``spec.to_mask()``.
+        Every entry is 0 or 1: a 1 at ``[j, k]`` lets input column
+        ``k`` reach output row ``j``; a 0 blocks it for the life
+        of the layer. Bool, integer, and floating dtypes are
+        accepted. Both dimensions must be at least 1, and at
+        least one entry must be 1; all-zero rows and columns are
+        allowed. Per-edge scaling or signs belong in
+        ``constraint``, not in the mask. Stored as an independent
+        float32 copy, so later writes to the tensor passed in do
+        not reach this layer.
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
         If ``False``, there is no bias.
@@ -149,14 +211,16 @@ class MaskedLinear(nn.Module):
     ------
     Kpnn2Error
         If ``mask`` is not a ``torch.Tensor`` or is not 2-D; if
-        ``identity`` is neither a ``str`` nor ``None``; if
-        ``constraint`` is neither an ``nn.Module`` nor
-        ``None``, or does not preserve the weight shape; if
-        ``generator`` is neither a ``torch.Generator`` nor
-        ``None``; and from ``load_state_dict`` when the
-        checkpoint carries a mask digest or identity that
-        does not match this layer; the weights are then not
-        loaded.
+        ``mask`` has a dimension of size 0, has a complex dtype,
+        holds a value other than 0 and 1 (NaN included), or has
+        no entry equal to 1; if ``identity`` is neither a ``str``
+        nor ``None``; if ``constraint`` is neither an
+        ``nn.Module`` nor ``None``, or does not preserve the
+        weight shape; if ``generator`` is neither a
+        ``torch.Generator`` nor ``None``; and from
+        ``load_state_dict`` when the checkpoint carries a mask
+        digest or identity that does not match this layer; the
+        weights are then not loaded.
 
     See Also
     --------
@@ -298,6 +362,7 @@ class MaskedLinear(nn.Module):
                 "'mask' must be a 2-dimensional tensor of shape "
                 "(out_features, in_features)."
             )
+        _check_mask_entries(mask)
         constraint = as_constraint(constraint)
 
         out_features, in_features = mask.shape

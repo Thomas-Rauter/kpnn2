@@ -12,6 +12,9 @@ semantic versioning.
   checks on every call that each query's softmax sums to 1
   and its gradient to 0, and waits for the device once per
   forward and once per backward.
+- `MaskedLinear` rejects a mask with a value other than 0
+  and 1, an empty dimension, or no live entry. Put per-edge
+  scaling or signs in `constraint=`.
 
 
 ## [0.2.0] - 23. September 2026
