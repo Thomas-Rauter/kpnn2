@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 import pytest
 import torch
@@ -263,3 +265,47 @@ def test_gather_concatenates_wide_source_layers():
     assert gathered.tolist() == [[1.0, 2.0, 3.0, 4.0, 5.0]]
     assert gathered.shape[-1] == hop.in_features
     assert gathered.shape[-1] == spec.layer_dims[0] + spec.layer_dims[1]
+
+
+def test_gather_non_mapping_message_reports_the_received_type():
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'saved' must be a mapping of layer index to tensor. "
+            "Got list of length 1."
+        ),
+    ) as caught:
+        gather_hop_inputs(
+            [torch.tensor([[123.0, 456.0]])],
+            spec.hops[0],
+        )
+    assert "123" not in str(caught.value)
+
+
+def test_gather_non_tensor_entry_message_reports_the_received_value():
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "saved[0] must be a torch.Tensor. Got [[1.0, 2.0]] (list)."
+        ),
+    ):
+        gather_hop_inputs(
+            {
+                0: [[1.0, 2.0]],
+                1: torch.zeros(1, 1),
+            },
+            spec.hops[1],
+        )
+
+
+def test_gather_non_hop_message_reports_the_received_value():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'hop' must be a Hop from spec.hops. Got 0 (int)."),
+    ):
+        gather_hop_inputs(
+            {0: torch.zeros(1, 2)},
+            0,
+        )

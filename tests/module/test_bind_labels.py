@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -80,3 +82,42 @@ def test_series_with_missing_or_extra_index_raises(
         "'labels' index does not match the 'observation' "
         f"coordinate. Missing: {missing}. Extra: {extra}."
     )
+
+
+def test_missing_labels_message_names_the_argument_to_pass():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'labels' is required for this aggregation method. Pass "
+            "labels= with one label per observation."
+        ),
+    ):
+        bind_labels(
+            _attributions(),
+            None,
+        )
+
+
+def test_two_dimensional_labels_message_reports_the_shape():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'labels' must be 1-dimensional. Got shape (3, 1)."),
+    ):
+        bind_labels(
+            _attributions(),
+            np.zeros((3, 1)),
+        )
+
+
+def test_missing_observation_dim_message_reports_the_dims():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Attribution DataArray must have an 'observation' dim. "
+            "Got dims ('sample', 'node')."
+        ),
+    ):
+        bind_labels(
+            _attributions().rename(observation="sample"),
+            [0, 1, 2],
+        )

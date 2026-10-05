@@ -15,6 +15,7 @@ from ._layout import (
     resolve_edge_names,
     resolve_node_name,
 )
+from ._validate import describe
 
 
 def _layered_node_layer(
@@ -30,6 +31,7 @@ def _layered_node_layer(
     node_name = resolve_node_name(
         name,
         layer_of,
+        "spec.layer_nodes",
     )
     return layer_of[node_name], node_name
 
@@ -269,7 +271,9 @@ def require_hop(
     Raise unless ``hop`` is a ``Hop``; ``name`` is its argument.
     """
     if not isinstance(hop, Hop):
-        raise Kpnn2Error(f"'{name}' must be a Hop from spec.hops.")
+        raise Kpnn2Error(
+            f"'{name}' must be a Hop from spec.hops. Got {describe(hop)}."
+        )
 
 
 def require_spec_hop(
@@ -287,7 +291,11 @@ def require_spec_hop(
         name,
     )
     if hop not in hops:
-        raise Kpnn2Error(f"'{name}' must match an entry of spec.hops.")
+        raise Kpnn2Error(
+            f"'{name}' must match an entry of spec.hops. Got a Hop "
+            "that equals none of them. Take it from this spec's "
+            "hops; a Hop from another spec does not match."
+        )
 
 
 @dataclass(frozen=True)
@@ -691,6 +699,7 @@ class LayeredSpec:
             source,
             target,
             known_names,
+            "spec.layer_nodes",
         )
         located = locations.get(
             (
@@ -897,7 +906,7 @@ class LayeredSpec:
             self.hops,
             "hop",
         )
-        _, node_name = _layered_node_layer(
+        node_layer, node_name = _layered_node_layer(
             self.layer_nodes,
             name,
         )
@@ -909,7 +918,9 @@ class LayeredSpec:
         )
         if node_name not in source_layout.names:
             raise Kpnn2Error(
-                f"Node {node_name} is not on this hop's source axis."
+                f"Node {node_name} is not on this hop's source axis. "
+                f"It is in layer {node_layer}, and the hop reads "
+                f"layers {list(hop.source_layers)}."
             )
         return source_layout.slot(node_name).units
 

@@ -70,7 +70,10 @@ def bind_labels(
     Series is reindexed to the observation coordinate.
     """
     if labels is None:
-        raise Kpnn2Error("'labels' is required for this aggregation method.")
+        raise Kpnn2Error(
+            "'labels' is required for this aggregation method. Pass "
+            "labels= with one label per observation."
+        )
     if isinstance(labels, xr.DataArray):
         raise Kpnn2Error(
             "'labels' must be a 1-d array or pandas Series, not a DataArray."
@@ -81,7 +84,8 @@ def bind_labels(
         )
     if observation_dim not in attributions.dims:
         raise Kpnn2Error(
-            f"Attribution DataArray must have an {observation_dim!r} dim."
+            f"Attribution DataArray must have an {observation_dim!r} "
+            f"dim. Got dims {tuple(attributions.dims)}."
         )
     n_obs = int(attributions.sizes[observation_dim])
     if isinstance(labels, pd.Series):
@@ -93,7 +97,10 @@ def bind_labels(
     else:
         aligned = np.asarray(labels)
         if aligned.ndim != 1:
-            raise Kpnn2Error("'labels' must be 1-dimensional.")
+            raise Kpnn2Error(
+                "'labels' must be 1-dimensional. Got shape "
+                f"{tuple(aligned.shape)}."
+            )
         if int(aligned.shape[0]) != n_obs:
             raise Kpnn2Error(
                 "'labels' length must match the "

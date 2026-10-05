@@ -283,6 +283,7 @@ class AdjacencySpec:
         node_name = resolve_node_name(
             name,
             self.nodes,
+            "spec.nodes",
         )
         return self._layout().slot(node_name).units
 
@@ -454,6 +455,7 @@ class AdjacencySpec:
             source,
             target,
             known_names,
+            "spec.nodes",
         )
         packed = locations.get(
             (

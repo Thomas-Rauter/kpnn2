@@ -2,6 +2,7 @@
 Map attribution tensors onto spec node names.
 """
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
 
 import numpy as np
@@ -12,7 +13,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import Layout, build_layout, concat_layouts
 from ._spec import Hop, LayeredSpec, require_spec_hop
-from ._validate import is_integer, require_spec
+from ._validate import describe, is_integer, require_spec
 
 _NODE_DIM = "node"
 _LAYER_COORD = "layer"
@@ -387,7 +388,9 @@ def _resolve_node_layout(
     ``internal_error`` before the tensor is looked at.
     """
     if axis is not None and axis != "inputs":
-        raise Kpnn2Error("'axis' must be 'inputs' or None.")
+        raise Kpnn2Error(
+            f"'axis' must be 'inputs' or None. Got {describe(axis)}."
+        )
     require_spec(spec)
     if isinstance(spec, LayeredSpec):
         given = [
@@ -432,7 +435,7 @@ def _resolve_node_layout(
                 0,
             ), 0
         if not is_integer(layer):
-            raise Kpnn2Error("'layer' must be an int.")
+            raise Kpnn2Error(f"'layer' must be an int. Got {describe(layer)}.")
         layer = int(layer)
         n_layers = len(spec.layer_nodes)
         if layer < 0 or layer >= n_layers:
@@ -546,21 +549,28 @@ def _as_tensor(
         return attributions, False
     if not isinstance(attributions, (tuple, list)):
         raise Kpnn2Error(
-            "'attributions' must be a torch.Tensor or a sequence of tensors."
+            "'attributions' must be a torch.Tensor or a sequence of "
+            f"tensors. Got {describe(attributions)}."
         )
     if len(attributions) == 0:
         raise Kpnn2Error("'attributions' sequence must not be empty.")
     pieces = list(attributions)
-    for piece in pieces:
+    for position, piece in enumerate(pieces):
         if not isinstance(piece, torch.Tensor):
             raise Kpnn2Error(
-                "Each item in 'attributions' must be a torch.Tensor."
+                "Each item in 'attributions' must be a torch.Tensor. "
+                f"Got {describe(piece)} at position {position}."
             )
     first_shape = tuple(pieces[0].shape)
-    for piece in pieces[1:]:
+    for position, piece in enumerate(
+        pieces[1:],
+        start=1,
+    ):
         if tuple(piece.shape) != first_shape:
             raise Kpnn2Error(
-                "Tensors in 'attributions' must all have the same shape."
+                "Tensors in 'attributions' must all have the same "
+                f"shape. Got shape {first_shape} at position 0 and "
+                f"shape {tuple(piece.shape)} at position {position}."
             )
     stacked = torch.stack(
         pieces,
@@ -584,8 +594,12 @@ def _resolve_dims(
         )
     else:
         dim_names = tuple(dims)
-        if any(not isinstance(name, str) for name in dim_names):
-            raise Kpnn2Error("'dims' must be a sequence of strings.")
+        for position, name in enumerate(dim_names):
+            if not isinstance(name, str):
+                raise Kpnn2Error(
+                    "'dims' must be a sequence of strings. Got "
+                    f"{describe(name)} at position {position}."
+                )
         if len(dim_names) != tensor.ndim:
             raise Kpnn2Error(
                 "'dims' length must match the number of tensor "
@@ -594,11 +608,19 @@ def _resolve_dims(
             )
     if _LAYER_COORD in dim_names:
         raise Kpnn2Error(f"'dims' must not include '{_LAYER_COORD}'.")
-    if len(set(dim_names)) != len(dim_names):
-        raise Kpnn2Error("'dims' names must be unique.")
+    repeated = sorted(
+        name for name, count in Counter(dim_names).items() if count > 1
+    )
+    if repeated:
+        listed = ", ".join(repr(name) for name in repeated)
+        raise Kpnn2Error(
+            f"'dims' names must be unique. Got repeated name(s): {listed}."
+        )
     node_count = dim_names.count(_NODE_DIM)
     if node_count != 1:
-        raise Kpnn2Error(f"'dims' must contain '{_NODE_DIM}' exactly once.")
+        raise Kpnn2Error(
+            f"'dims' must contain '{_NODE_DIM}' exactly once. Got {dim_names}."
+        )
     return dim_names
 
 
@@ -615,14 +637,27 @@ def _default_dims(
             return (_STEP_DIM, _NODE_DIM)
         if piece_ndim == 2:
             return (_STEP_DIM, _OBS_DIM, _NODE_DIM)
+        if piece_ndim == 0:
+            raise Kpnn2Error(
+                "Tensors in 'attributions' need a node axis. Got "
+                "0-dimensional tensors."
+            )
         raise Kpnn2Error(
-            "Pass dims= when stacking tensors with 3 or more axes."
+            "Pass dims= when stacking tensors with 3 or more axes. "
+            f"Got {piece_ndim}-dimensional tensors."
         )
     if ndim == 1:
         return (_NODE_DIM,)
     if ndim == 2:
         return (_OBS_DIM, _NODE_DIM)
-    raise Kpnn2Error("Pass dims= for attribution tensors with 3 or more axes.")
+    if ndim == 0:
+        raise Kpnn2Error(
+            "'attributions' needs a node axis. Got a 0-dimensional tensor."
+        )
+    raise Kpnn2Error(
+        "Pass dims= for attribution tensors with 3 or more axes. "
+        f"Got a {ndim}-dimensional tensor."
+    )
 
 
 def _build_coords(
@@ -642,7 +677,9 @@ def _build_coords(
     extra: dict[str, Sequence] = {}
     if coords is not None:
         if not isinstance(coords, Mapping):
-            raise Kpnn2Error("'coords' must be a mapping.")
+            raise Kpnn2Error(
+                f"'coords' must be a mapping. Got {describe(coords)}."
+            )
         extra = dict(coords)
         if _NODE_DIM in extra or _LAYER_COORD in extra:
             raise Kpnn2Error(

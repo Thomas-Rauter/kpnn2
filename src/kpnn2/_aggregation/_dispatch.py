@@ -12,6 +12,7 @@ import numpy as np
 import xarray as xr
 
 from .._errors import Kpnn2Error, internal_error
+from .._validate import describe
 from ._registry import (
     AggregationMethod,
     lookup_aggregation_method,
@@ -98,9 +99,16 @@ def aggregate_node_attributions(
     implemented.
     """
     if not isinstance(attributions, xr.DataArray):
-        raise Kpnn2Error("'attributions' must be an xarray.DataArray.")
+        raise Kpnn2Error(
+            "'attributions' must be an xarray.DataArray. Got "
+            f"{describe(attributions)}. Name the scores with "
+            "map_node_attributions() first."
+        )
     if not isinstance(method, str):
-        raise Kpnn2Error("'method' must be a str.")
+        raise Kpnn2Error(
+            f"'method' must be a str. Got {describe(method)}. See "
+            "list_aggregation_methods() for the names."
+        )
     entry = lookup_aggregation_method(method)
     if entry.func is None:
         raise Kpnn2Error(_removed_message(entry))

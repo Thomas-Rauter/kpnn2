@@ -1,4 +1,5 @@
 import json
+import re
 
 import numpy as np
 import pytest
@@ -319,4 +320,52 @@ def test_method_name_must_be_a_string():
             _da([[1.0], [2.0]], nodes=["n"]),
             np.array([0, 1]),
             method=None,
+        )
+
+
+def test_non_dataarray_message_reports_the_received_type():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'attributions' must be an xarray.DataArray. Got ndarray "
+            "of shape (2, 1), dtype float64. Name the scores with "
+            "map_node_attributions() first."
+        ),
+    ):
+        aggregate_node_attributions(
+            np.array([[1.0], [0.0]]),
+            np.array([0, 1]),
+        )
+
+
+@pytest.mark.parametrize(
+    ("method", "received"),
+    [
+        pytest.param(
+            None,
+            "None",
+            id="None",
+        ),
+        pytest.param(
+            1,
+            "1 (int)",
+            id="int",
+        ),
+    ],
+)
+def test_method_type_message_reports_the_received_value(
+    method,
+    received,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"'method' must be a str. Got {received}. See "
+            "list_aggregation_methods() for the names."
+        ),
+    ):
+        aggregate_node_attributions(
+            _da([[1.0], [2.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=method,
         )

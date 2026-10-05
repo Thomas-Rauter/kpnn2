@@ -12,7 +12,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
-from ._validate import require_spec
+from ._validate import describe, require_spec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'names' is a tensor; pass the feature names that "
@@ -39,12 +39,13 @@ _ANNDATA_NOT_ACCEPTED_MSG = (
     "and apply the index to .X yourself."
 )
 _NOT_1D_MSG = (
-    "'names' must be one-dimensional; a matrix is not a "
-    "name list. Pass the feature names and index the "
+    "'names' must be one-dimensional. Got {received}. A matrix "
+    "is not a name list; pass the feature names and index the "
     "matrix yourself."
 )
 _UNSUPPORTED_TYPE_MSG = (
-    "Unsupported names type. Expected a sequence of feature names."
+    "Unsupported names type. Expected a sequence of feature "
+    "names. Got {received}."
 )
 
 
@@ -340,7 +341,7 @@ def _labels_from_names(names: object) -> list[str]:
         raise Kpnn2Error(_ANNDATA_NOT_ACCEPTED_MSG)
     ndim = getattr(names, "ndim", None)
     if ndim is not None and ndim != 1:
-        raise Kpnn2Error(_NOT_1D_MSG)
+        raise Kpnn2Error(_NOT_1D_MSG.format(received=describe(names)))
     if not isinstance(names, Iterable):
-        raise Kpnn2Error(_UNSUPPORTED_TYPE_MSG)
+        raise Kpnn2Error(_UNSUPPORTED_TYPE_MSG.format(received=describe(names)))
     return [str(name) for name in names]

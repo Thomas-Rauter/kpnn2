@@ -1,3 +1,6 @@
+import re
+
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -179,4 +182,30 @@ def test_scatter_rejects_a_zero_dimensional_tensor():
         scatter_hop_outputs(
             torch.tensor(1.0),
             spec.hops[0],
+        )
+
+
+def test_scatter_non_tensor_message_reports_the_received_type():
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'tensor' must be a torch.Tensor. Got ndarray of shape "
+            "(1, 3), dtype float64."
+        ),
+    ):
+        scatter_hop_outputs(
+            np.zeros((1, 3)),
+            spec.hops[1],
+        )
+
+
+def test_scatter_non_hop_message_reports_the_received_value():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'hop' must be a Hop from spec.hops. Got 'hop' (str)."),
+    ):
+        scatter_hop_outputs(
+            torch.zeros(1, 2),
+            "hop",
         )

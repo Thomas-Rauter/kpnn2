@@ -8,6 +8,7 @@ import torch
 
 from ._errors import Kpnn2Error
 from ._spec import Hop, require_hop
+from ._validate import describe
 
 
 def gather_hop_inputs(
@@ -138,7 +139,10 @@ def gather_hop_inputs(
         "hop",
     )
     if not isinstance(saved, Mapping):
-        raise Kpnn2Error("'saved' must be a mapping of layer index to tensor.")
+        raise Kpnn2Error(
+            "'saved' must be a mapping of layer index to tensor. Got "
+            f"{describe(saved)}."
+        )
 
     parts: list[torch.Tensor] = []
     for layer, n_units in zip(
@@ -153,7 +157,10 @@ def gather_hop_inputs(
             )
         tensor = saved[layer]
         if not isinstance(tensor, torch.Tensor):
-            raise Kpnn2Error(f"saved[{layer}] must be a torch.Tensor.")
+            raise Kpnn2Error(
+                f"saved[{layer}] must be a torch.Tensor. Got "
+                f"{describe(tensor)}."
+            )
         if tensor.ndim < 1:
             raise Kpnn2Error(
                 f"saved[{layer}] has the wrong number of units. "
@@ -284,7 +291,9 @@ def scatter_hop_outputs(
         "hop",
     )
     if not isinstance(tensor, torch.Tensor):
-        raise Kpnn2Error("'tensor' must be a torch.Tensor.")
+        raise Kpnn2Error(
+            f"'tensor' must be a torch.Tensor. Got {describe(tensor)}."
+        )
     n_units = hop.in_features
     if tensor.ndim < 1:
         raise Kpnn2Error(

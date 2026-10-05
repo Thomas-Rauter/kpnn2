@@ -1,4 +1,5 @@
 import inspect
+import re
 from dataclasses import replace
 
 import pandas as pd
@@ -1061,3 +1062,200 @@ def test_map_node_attributions_has_no_sideless_hop_keyword():
     assert "hop" not in parameters
     assert parameters["hop_input"].kind is inspect.Parameter.KEYWORD_ONLY
     assert parameters["hop_output"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def _received_value_cases():
+    spec = _tiny_spec()
+    other = replace(
+        spec.hops[1],
+        source_index=spec.hops[1].source_index + (0,),
+        target_index=spec.hops[1].target_index + (0,),
+    )
+    scores = torch.zeros(1, 2)
+    return [
+        pytest.param(
+            scores,
+            {
+                "spec": "spec",
+                "layer": 1,
+            },
+            "'spec' must be a LayeredSpec or an AdjacencySpec. Got "
+            "'spec' (str).",
+            id="spec",
+        ),
+        pytest.param(
+            scores,
+            {"axis": "state"},
+            "'axis' must be 'inputs' or None. Got 'state' (str).",
+            id="axis",
+        ),
+        pytest.param(
+            scores,
+            {"layer": 1.0},
+            "'layer' must be an int. Got 1.0 (float).",
+            id="layer_float",
+        ),
+        pytest.param(
+            scores,
+            {"layer": True},
+            "'layer' must be an int. Got True (bool).",
+            id="layer_bool",
+        ),
+        pytest.param(
+            torch.zeros(2),
+            {"hop_input": 1},
+            "'hop_input' must be a Hop from spec.hops. Got 1 (int).",
+            id="hop_input_not_hop",
+        ),
+        pytest.param(
+            torch.zeros(2),
+            {"hop_output": other},
+            "'hop_output' must match an entry of spec.hops. Got a Hop "
+            "that equals none of them.",
+            id="hop_output_not_in_spec",
+        ),
+        pytest.param(
+            torch.zeros(1, 2).numpy(),
+            {"layer": 1},
+            "'attributions' must be a torch.Tensor or a sequence of "
+            "tensors. Got ndarray of shape (1, 2), dtype float32.",
+            id="attributions_array",
+        ),
+        pytest.param(
+            [
+                scores,
+                1.0,
+            ],
+            {"layer": 1},
+            "Each item in 'attributions' must be a torch.Tensor. Got "
+            "1.0 (float) at position 1.",
+            id="attributions_item",
+        ),
+        pytest.param(
+            (
+                scores,
+                scores,
+                torch.zeros(2, 2),
+            ),
+            {"layer": 1},
+            "Tensors in 'attributions' must all have the same shape. "
+            "Got shape (1, 2) at position 0 and shape (2, 2) at "
+            "position 2.",
+            id="attributions_shapes",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "dims": ("observation", 0),
+            },
+            "'dims' must be a sequence of strings. Got 0 (int) at position 1.",
+            id="dims_item",
+        ),
+        pytest.param(
+            torch.zeros(1, 1, 1, 2),
+            {
+                "layer": 1,
+                "dims": ("b", "a", "b", "a"),
+            },
+            "'dims' names must be unique. Got repeated name(s): 'a', 'b'.",
+            id="dims_repeated",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "dims": ("observation", "class"),
+            },
+            "'dims' must contain 'node' exactly once. Got "
+            "('observation', 'class').",
+            id="dims_without_node",
+        ),
+        pytest.param(
+            torch.zeros(1, 1, 2),
+            {"layer": 1},
+            "Pass dims= for attribution tensors with 3 or more axes. "
+            "Got a 3-dimensional tensor.",
+            id="dims_required",
+        ),
+        pytest.param(
+            (
+                torch.zeros(1, 1, 2),
+                torch.zeros(1, 1, 2),
+            ),
+            {"layer": 1},
+            "Pass dims= when stacking tensors with 3 or more axes. "
+            "Got 3-dimensional tensors.",
+            id="dims_required_stacked",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": ["obs"],
+            },
+            "'coords' must be a mapping. Got ['obs'] (list).",
+            id="coords",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("attributions", "kwargs", "message"),
+    _received_value_cases(),
+)
+def test_map_node_attributions_messages_report_the_received_value(
+    attributions,
+    kwargs,
+    message,
+):
+    arguments = {"spec": _tiny_spec()}
+    arguments.update(kwargs)
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(message),
+    ):
+        map_node_attributions(
+            attributions,
+            **arguments,
+        )
+
+
+def test_map_node_attributions_tensor_mapping_is_not_printed():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("Got dict of length 1."),
+    ) as caught:
+        map_node_attributions(
+            {"scores": torch.tensor([[123.0, 456.0]])},
+            _tiny_spec(),
+            1,
+        )
+    assert "123" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "attributions",
+    [
+        pytest.param(
+            torch.tensor(1.0),
+            id="tensor",
+        ),
+        pytest.param(
+            [torch.tensor(1.0)],
+            id="stacked",
+        ),
+    ],
+)
+def test_map_node_attributions_rejects_a_zero_dimensional_tensor(
+    attributions,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"need(s)? a node axis\. Got (a )?0-dimensional tensor",
+    ):
+        map_node_attributions(
+            attributions,
+            _tiny_spec(),
+            1,
+        )

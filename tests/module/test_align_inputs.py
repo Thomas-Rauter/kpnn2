@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -633,3 +635,54 @@ def test_align_inputs_spec_error_names_both_spec_types():
     message = str(caught.value)
     assert "LayeredSpec" in message
     assert "AdjacencySpec" in message
+
+
+def test_align_inputs_matrix_message_reports_the_received_shape():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'names' must be one-dimensional. Got ndarray of shape "
+            "(1, 2), dtype float64."
+        ),
+    ):
+        align_inputs(
+            np.array([[1.0, 2.0]]),
+            spec,
+        )
+
+
+def test_align_inputs_unsupported_type_message_reports_the_received_value():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Unsupported names type. Expected a sequence of feature "
+            "names. Got 5 (int)."
+        ),
+    ):
+        align_inputs(
+            5,
+            spec,
+        )
+
+
+def test_align_inputs_spec_message_reports_the_received_type():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "B"],
+            "target": ["H", "H"],
+        }
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'spec' must be a LayeredSpec or an AdjacencySpec. Got "
+            "DataFrame of shape (2, 2). Build one with parse_layered() "
+            "or parse_adjacency()."
+        ),
+    ):
+        align_inputs(
+            ["A", "B"],
+            edgelist,
+        )

@@ -1,10 +1,11 @@
+import re
 from dataclasses import replace
 
 import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import Kpnn2Error, parse_layered
+from kpnn2 import Kpnn2Error, parse_adjacency, parse_layered
 
 
 def _chain_edgelist():
@@ -256,6 +257,100 @@ def test_hop_units_rejects_non_hop_and_foreign_hop():
     with pytest.raises(
         Kpnn2Error,
         match="must match an entry of spec.hops",
+    ):
+        spec.hop_units(
+            foreign,
+            "A",
+        )
+
+
+def test_unknown_name_message_points_to_the_valid_names():
+    layered = parse_layered(_chain_edgelist())
+    adjacency = parse_adjacency(_chain_edgelist())
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Unknown node name: Z. Valid names are in spec.layer_nodes."
+        ),
+    ):
+        layered.node_units("Z")
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Unknown node name: Z. Valid names are in spec.layer_nodes."
+        ),
+    ):
+        layered.hop_units(
+            layered.hops[0],
+            "Z",
+        )
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("Unknown node name: Z. Valid names are in spec.nodes."),
+    ):
+        adjacency.node_units("Z")
+
+
+@pytest.mark.parametrize(
+    ("hop_index", "name", "message"),
+    [
+        pytest.param(
+            0,
+            "C",
+            "Node C is not on this hop's source axis. It is in layer "
+            "2, and the hop reads layers [0].",
+            id="target_of_a_later_hop",
+        ),
+        pytest.param(
+            1,
+            "C",
+            "Node C is not on this hop's source axis. It is in layer "
+            "2, and the hop reads layers [0, 1].",
+            id="own_target",
+        ),
+        pytest.param(
+            0,
+            "H",
+            "Node H is not on this hop's source axis. It is in layer "
+            "1, and the hop reads layers [0].",
+            id="own_target_hidden",
+        ),
+    ],
+)
+def test_off_axis_message_reports_the_node_layer_and_hop_sources(
+    hop_index,
+    name,
+    message,
+):
+    spec = parse_layered(_chain_plus_skip())
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(message),
+    ):
+        spec.hop_units(
+            spec.hops[hop_index],
+            name,
+        )
+
+
+def test_hop_messages_report_the_received_value():
+    spec = parse_layered(_chain_plus_skip())
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'hop' must be a Hop from spec.hops. Got 1 (int)."),
+    ):
+        spec.hop_units(
+            1,
+            "A",
+        )
+    foreign = parse_layered(_chain_edgelist()).hops[1]
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'hop' must match an entry of spec.hops. Got a Hop that "
+            "equals none of them. Take it from this spec's hops; a "
+            "Hop from another spec does not match."
+        ),
     ):
         spec.hop_units(
             foreign,

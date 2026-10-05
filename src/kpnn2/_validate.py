@@ -84,10 +84,13 @@ def describe(value: object) -> str:
 
     A value with a tuple ``shape`` (tensor, array, frame, series)
     is described by type name, shape, and ``dtype`` when it has
-    one, never by its values. Anything else is its ``repr``, cut
-    at the first line break and at about 60 characters, followed
-    by its type name: ``'no' (str)``, ``1.5 (float)``. ``None``
-    is ``None``.
+    one, never by its values. A list, tuple, or dict that holds
+    such a value is described by type name and length, so its
+    ``repr`` cannot print those values either:
+    ``list of length 2``. Anything else is its ``repr``, cut at
+    the first line break and at about 60 characters, followed by
+    its type name: ``'no' (str)``, ``1.5 (float)``. ``None`` is
+    ``None``.
     """
     if value is None:
         return "None"
@@ -98,6 +101,12 @@ def describe(value: object) -> str:
         if dtype is not None:
             text = f"{text}, dtype {dtype}"
         return text
+    if isinstance(value, (list, tuple, dict)):
+        items = value.values() if isinstance(value, dict) else value
+        if any(
+            isinstance(getattr(item, "shape", None), tuple) for item in items
+        ):
+            return f"{type(value).__name__} of length {len(value)}"
     full = repr(value)
     text = full.partition("\n")[0]
     if text != full or len(text) > _DESCRIBE_LIMIT:
@@ -121,7 +130,11 @@ def require_spec(spec: "LayeredSpec | AdjacencySpec") -> None:
         spec,
         (LayeredSpec, AdjacencySpec),
     ):
-        raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
+        raise Kpnn2Error(
+            "'spec' must be a LayeredSpec or an AdjacencySpec. Got "
+            f"{describe(spec)}. Build one with parse_layered() or "
+            "parse_adjacency()."
+        )
 
 
 def check_layer_input(

@@ -285,3 +285,41 @@ def test_describe_short_values(
     expected,
 ):
     assert describe(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            [
+                torch.tensor([12345.0]),
+                torch.tensor([67890.0]),
+            ],
+            "list of length 2",
+            id="list_of_tensors",
+        ),
+        pytest.param(
+            (np.array([12345.0]),),
+            "tuple of length 1",
+            id="tuple_of_arrays",
+        ),
+        pytest.param(
+            {"scores": torch.tensor([12345.0])},
+            "dict of length 1",
+            id="dict_of_tensors",
+        ),
+    ],
+)
+def test_describe_container_of_data_by_length_not_values(
+    value,
+    expected,
+):
+    text = describe(value)
+
+    assert text == expected
+    assert "12345" not in text
+    assert "67890" not in text
+
+
+def test_describe_container_without_data_keeps_its_repr():
+    assert describe([0.0, 1.0]) == "[0.0, 1.0] (list)"

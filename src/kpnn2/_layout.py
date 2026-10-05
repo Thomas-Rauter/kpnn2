@@ -426,13 +426,15 @@ def resolve_edge_names(
     source: object,
     target: object,
     known_names: Container[str],
+    listed_in: str,
 ) -> tuple[str, str]:
     """
     Match an edge pair the way parse matches node names.
 
     Converts with ``str(...)``. Empty names and names that are
     not in ``known_names`` raise ``Kpnn2Error`` naming the pair
-    as ``{source} -> {target}``.
+    as ``{source} -> {target}``, followed by the reason
+    ``resolve_node_name`` gives for the first bad name.
 
     Parameters
     ----------
@@ -442,6 +444,9 @@ def resolve_edge_names(
         Target node name, or a value converted with ``str``.
     known_names
         Node names that exist on the spec.
+    listed_in
+        The spec field a caller reads for the valid names, such
+        as ``"spec.nodes"``, quoted in the message.
 
     Returns
     -------
@@ -455,19 +460,23 @@ def resolve_edge_names(
     """
     source_name = str(source)
     target_name = str(target)
-    if (
-        source_name == ""
-        or target_name == ""
-        or source_name not in known_names
-        or target_name not in known_names
-    ):
-        raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+    for node_name in (source_name, target_name):
+        problem = _node_name_problem(
+            node_name,
+            known_names,
+            listed_in,
+        )
+        if problem is not None:
+            raise Kpnn2Error(
+                f"No edge {source_name} -> {target_name}. {problem}"
+            )
     return source_name, target_name
 
 
 def resolve_node_name(
     name: object,
     known_names: Container[str],
+    listed_in: str,
 ) -> str:
     """
     Match a node name the way parse matches node names.
@@ -481,6 +490,9 @@ def resolve_node_name(
         Node name, or a value converted with ``str``.
     known_names
         Node names that exist on the spec.
+    listed_in
+        The spec field a caller reads for the valid names, such
+        as ``"spec.nodes"``, quoted in the message.
 
     Returns
     -------
@@ -493,11 +505,34 @@ def resolve_node_name(
         If the name is empty or is not in ``known_names``.
     """
     node_name = str(name)
-    if node_name == "":
-        raise Kpnn2Error("Node name is empty.")
-    if node_name not in known_names:
-        raise Kpnn2Error(f"Unknown node name: {node_name}.")
+    problem = _node_name_problem(
+        node_name,
+        known_names,
+        listed_in,
+    )
+    if problem is not None:
+        raise Kpnn2Error(problem)
     return node_name
+
+
+def _node_name_problem(
+    node_name: str,
+    known_names: Container[str],
+    listed_in: str,
+) -> str | None:
+    """
+    Return why ``node_name`` names no node, or ``None`` if it does.
+
+    The valid names are not listed, because a graph may have
+    thousands; the message points at ``listed_in`` instead.
+    """
+    if node_name == "":
+        return "Node name is empty."
+    if node_name not in known_names:
+        return (
+            f"Unknown node name: {node_name}. Valid names are in {listed_in}."
+        )
+    return None
 
 
 def iter_block_pairs(

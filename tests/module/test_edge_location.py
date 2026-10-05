@@ -1,4 +1,5 @@
 import copy
+import re
 
 import pandas as pd
 import pytest
@@ -429,3 +430,64 @@ def test_str_matching_accepts_integer_names():
     assert hop_index == as_strings[0]
     assert packed == as_strings[1]
     assert packed == (0,)
+
+
+def test_bad_name_message_gives_the_reason_after_the_pair():
+    layered = parse_layered(_chain_plus_skip())
+    adjacency = parse_adjacency(_cyclic_edgelist())
+    cases = (
+        (
+            layered,
+            "A",
+            "Z",
+            "No edge A -> Z. Unknown node name: Z. Valid names are in "
+            "spec.layer_nodes.",
+        ),
+        (
+            layered,
+            "Y",
+            "Z",
+            "No edge Y -> Z. Unknown node name: Y. Valid names are in "
+            "spec.layer_nodes.",
+        ),
+        (
+            layered,
+            "A",
+            "",
+            "No edge A -> . Node name is empty.",
+        ),
+        (
+            adjacency,
+            "z",
+            "a",
+            "No edge z -> a. Unknown node name: z. Valid names are in "
+            "spec.nodes.",
+        ),
+        (
+            adjacency,
+            "",
+            "a",
+            "No edge  -> a. Node name is empty.",
+        ),
+    )
+    for spec, source, target, message in cases:
+        with pytest.raises(
+            Kpnn2Error,
+            match=re.escape(message),
+        ):
+            spec.edge_location(
+                source,
+                target,
+            )
+
+
+def test_missing_edge_between_nodes_gives_no_name_reason():
+    layered = parse_layered(_chain_plus_skip())
+    with pytest.raises(
+        Kpnn2Error,
+    ) as caught:
+        layered.edge_location(
+            "H",
+            "A",
+        )
+    assert str(caught.value) == "No edge H -> A."
