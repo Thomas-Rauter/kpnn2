@@ -20,6 +20,7 @@ from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 from ._packed_index import as_packed_pairs, digest_matches
+from ._validate import as_positive_int
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -90,15 +91,6 @@ def _check_input(
             f"with in_features={in_features}. Got last dimension "
             f"{x.shape[-1]}."
         )
-
-
-def _positive_int(
-    value: object,
-    name: str,
-) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise Kpnn2Error(f"'{name}' must be a positive int.")
-    return value
 
 
 class PackedLinear(nn.Module):
@@ -382,11 +374,11 @@ class PackedLinear(nn.Module):
         generator: torch.Generator | None = None,
     ) -> None:
         super().__init__()
-        out_features = _positive_int(
+        out_features = as_positive_int(
             out_features,
             "out_features",
         )
-        in_features = _positive_int(
+        in_features = as_positive_int(
             in_features,
             "in_features",
         )

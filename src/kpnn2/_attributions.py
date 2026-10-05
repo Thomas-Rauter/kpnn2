@@ -11,7 +11,8 @@ import xarray as xr
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import Layout, build_layout, concat_layouts
-from ._spec import Hop, LayeredSpec
+from ._spec import Hop, LayeredSpec, require_spec_hop
+from ._validate import is_integer, require_spec
 
 _NODE_DIM = "node"
 _LAYER_COORD = "layer"
@@ -386,6 +387,7 @@ def _resolve_node_layout(
     """
     if axis is not None and axis != "inputs":
         raise Kpnn2Error("'axis' must be 'inputs' or None.")
+    require_spec(spec)
     if isinstance(spec, LayeredSpec):
         given = [
             name
@@ -417,9 +419,9 @@ def _resolve_node_layout(
                 hop_input,
             ), None
         if hop_output is not None:
-            _check_hop(
-                spec,
+            require_spec_hop(
                 hop_output,
+                spec.hops,
                 "hop_output",
             )
             layer = hop_output.target_layer
@@ -428,7 +430,7 @@ def _resolve_node_layout(
                 spec,
                 0,
             ), 0
-        if not isinstance(layer, int) or isinstance(layer, bool):
+        if not is_integer(layer):
             raise Kpnn2Error("'layer' must be an int.")
         n_layers = len(spec.layer_nodes)
         if layer < 0 or layer >= n_layers:
@@ -439,39 +441,37 @@ def _resolve_node_layout(
             spec,
             layer,
         ), layer
-    if isinstance(spec, AdjacencySpec):
-        if layer is not None or hop_input is not None or hop_output is not None:
-            raise Kpnn2Error(
-                "'layer', 'hop_input', and 'hop_output' do not apply "
-                "to an AdjacencySpec: every node is one unit of a "
-                "single state vector. Omit them to label the node "
-                "axis with spec.nodes, or pass axis='inputs' to "
-                "label the input units."
+    if layer is not None or hop_input is not None or hop_output is not None:
+        raise Kpnn2Error(
+            "'layer', 'hop_input', and 'hop_output' do not apply "
+            "to an AdjacencySpec: every node is one unit of a "
+            "single state vector. Omit them to label the node "
+            "axis with spec.nodes, or pass axis='inputs' to "
+            "label the input units."
+        )
+    if axis == "inputs":
+        width_of = {
+            name: width
+            for name, width in zip(
+                spec.nodes,
+                spec.node_widths,
             )
-        if axis == "inputs":
-            width_of = {
-                name: width
-                for name, width in zip(
-                    spec.nodes,
-                    spec.node_widths,
-                )
-            }
-            layout = build_layout(
-                spec.input_nodes,
-                [width_of[name] for name in spec.input_nodes],
+        }
+        layout = build_layout(
+            spec.input_nodes,
+            [width_of[name] for name in spec.input_nodes],
+        )
+        if layout.n_units != len(spec.input_index):
+            raise internal_error(
+                f"map_node_attributions named {layout.n_units} "
+                "input unit(s), but spec.input_index has "
+                f"{len(spec.input_index)}"
             )
-            if layout.n_units != len(spec.input_index):
-                raise internal_error(
-                    f"map_node_attributions named {layout.n_units} "
-                    "input unit(s), but spec.input_index has "
-                    f"{len(spec.input_index)}"
-                )
-            return layout, None
-        return build_layout(
-            spec.nodes,
-            spec.node_widths,
-        ), None
-    raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
+        return layout, None
+    return build_layout(
+        spec.nodes,
+        spec.node_widths,
+    ), None
 
 
 def _layer_layout(
@@ -494,20 +494,6 @@ def _layer_layout(
     return layout
 
 
-def _check_hop(
-    spec: LayeredSpec,
-    hop: object,
-    name: str,
-) -> None:
-    """
-    Raise unless ``hop`` is a ``Hop`` equal to one of ``spec.hops``.
-    """
-    if not isinstance(hop, Hop):
-        raise Kpnn2Error(f"'{name}' must be a Hop from spec.hops.")
-    if hop not in spec.hops:
-        raise Kpnn2Error(f"'{name}' must match an entry of spec.hops.")
-
-
 def _layout_for_hop_input(
     spec: LayeredSpec,
     hop: Hop,
@@ -518,9 +504,9 @@ def _layout_for_hop_input(
     The result is checked against ``hop.in_features`` and
     ``hop.source_nodes``, which the parser stored separately.
     """
-    _check_hop(
-        spec,
+    require_spec_hop(
         hop,
+        spec.hops,
         "hop_input",
     )
     layout = concat_layouts(

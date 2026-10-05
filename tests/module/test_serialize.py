@@ -2,12 +2,10 @@ import ast
 import inspect
 
 import pandas as pd
-import pytest
 
 import kpnn2
 import kpnn2._serialize as serialize_mod
 from kpnn2 import (
-    Kpnn2Error,
     parse_adjacency,
     parse_layered,
 )
@@ -149,18 +147,6 @@ def test_dag_parsed_both_ways_yields_the_same_tuple():
         ("A", "H"),
         ("H", "C"),
     )
-
-
-def test_non_spec_argument_raises_kpnn2_error():
-    with pytest.raises(
-        Kpnn2Error,
-        match="must be a LayeredSpec or an AdjacencySpec",
-    ) as caught:
-        canonical_edges(object())
-
-    message = str(caught.value)
-    assert "LayeredSpec" in message
-    assert "AdjacencySpec" in message
 
 
 def test_mutating_to_mask_does_not_change_canonical_edges():

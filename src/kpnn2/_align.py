@@ -12,6 +12,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
+from ._validate import require_spec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'names' is a tensor; pass the feature names that "
@@ -216,11 +217,7 @@ def align_inputs(
     ...
     Kpnn2Error: 'names' is a tensor; pass the feature names that ...
     """
-    if not isinstance(
-        spec,
-        (LayeredSpec, AdjacencySpec),
-    ):
-        raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
+    require_spec(spec)
     labels = _labels_from_names(names)
     label_counts: dict[str, int] = {}
     for label in labels:

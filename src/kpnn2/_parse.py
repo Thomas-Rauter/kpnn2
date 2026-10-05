@@ -18,6 +18,7 @@ from ._layout import (
 )
 from ._serialize import canonical_edges
 from ._spec import Hop, LayeredSpec, Skip
+from ._validate import is_integer
 
 _SOURCE = "source"
 _TARGET = "target"
@@ -331,7 +332,7 @@ def _layers_from_user_ranks(
     requested: dict[str, int] = {}
     for key, value in ranks.items():
         name = str(key)
-        if isinstance(value, bool) or not isinstance(value, int):
+        if not is_integer(value):
             raise Kpnn2Error(
                 f"Rank for node {name!r} must be a non-negative int. "
                 f"Got {value!r}."
@@ -429,7 +430,7 @@ def _normalize_widths(
     requested: dict[str, int] = {}
     for key, value in widths.items():
         name = str(key)
-        if isinstance(value, bool) or not isinstance(value, int):
+        if not is_integer(value):
             raise Kpnn2Error(
                 f"Width for node {name!r} must be a positive int. "
                 f"Got {value!r}."

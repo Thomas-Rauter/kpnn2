@@ -15,9 +15,9 @@ Everything this module is handed comes from kpnn2 itself: spec
 fields and values the parsers computed. Public entry points
 validate caller-supplied names before they ask a ``Layout``, so
 an inconsistent layout or a failed lookup here is a kpnn2 bug and
-raises through ``internal_error``. ``resolve_edge_names`` is the
-exception: it checks caller-supplied edge names and raises
-``Kpnn2Error``.
+raises through ``internal_error``. ``resolve_edge_names`` and
+``resolve_node_name`` are the exception: they check
+caller-supplied names and raise ``Kpnn2Error``.
 """
 
 from collections.abc import Container, Iterator, Sequence
@@ -463,6 +463,41 @@ def resolve_edge_names(
     ):
         raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
     return source_name, target_name
+
+
+def resolve_node_name(
+    name: object,
+    known_names: Container[str],
+) -> str:
+    """
+    Match a node name the way parse matches node names.
+
+    Converts with ``str(...)``. An empty name and a name that is
+    not in ``known_names`` raise ``Kpnn2Error``, in that order.
+
+    Parameters
+    ----------
+    name
+        Node name, or a value converted with ``str``.
+    known_names
+        Node names that exist on the spec.
+
+    Returns
+    -------
+    str
+        The node name after ``str(...)``.
+
+    Raises
+    ------
+    Kpnn2Error
+        If the name is empty or is not in ``known_names``.
+    """
+    node_name = str(name)
+    if node_name == "":
+        raise Kpnn2Error("Node name is empty.")
+    if node_name not in known_names:
+        raise Kpnn2Error(f"Unknown node name: {node_name}.")
+    return node_name
 
 
 def iter_block_pairs(

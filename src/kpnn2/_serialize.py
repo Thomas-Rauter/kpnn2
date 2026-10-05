@@ -60,15 +60,19 @@ def canonical_edges(
 
     Raises
     ------
-    Kpnn2Error
-        If ``spec`` is neither a ``LayeredSpec`` nor an
-        ``AdjacencySpec``.
+    AssertionError
+        From ``internal_error``, if ``spec`` is neither a
+        ``LayeredSpec`` nor an ``AdjacencySpec``. Every caller
+        passes a spec kpnn2 built.
     """
     if isinstance(spec, LayeredSpec):
         return _layered_edges(spec)
     if isinstance(spec, AdjacencySpec):
         return _adjacency_edges(spec)
-    raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
+    raise internal_error(
+        f"canonical_edges received type {type(spec).__name__}, "
+        "not a LayeredSpec or an AdjacencySpec"
+    )
 
 
 def spec_to_edgelist(
@@ -95,9 +99,9 @@ def spec_to_edgelist(
 
     Raises
     ------
-    Kpnn2Error
-        If ``spec`` is neither a ``LayeredSpec`` nor an
-        ``AdjacencySpec``.
+    AssertionError
+        From ``internal_error``, if ``spec`` is neither a
+        ``LayeredSpec`` nor an ``AdjacencySpec``.
     """
     edges = canonical_edges(spec)
     return pd.DataFrame(
@@ -134,9 +138,9 @@ def spec_to_dict(
 
     Raises
     ------
-    Kpnn2Error
-        If ``spec`` is neither a ``LayeredSpec`` nor an
-        ``AdjacencySpec``.
+    AssertionError
+        From ``internal_error``, if ``spec`` is neither a
+        ``LayeredSpec`` nor an ``AdjacencySpec``.
     """
     edges = [list(pair) for pair in canonical_edges(spec)]
     if isinstance(spec, LayeredSpec):
@@ -194,9 +198,9 @@ def spec_fingerprint(
 
     Raises
     ------
-    Kpnn2Error
-        If ``spec`` is neither a ``LayeredSpec`` nor an
-        ``AdjacencySpec``.
+    AssertionError
+        From ``internal_error``, if ``spec`` is neither a
+        ``LayeredSpec`` nor an ``AdjacencySpec``.
     """
     payload = json.dumps(
         spec_to_dict(spec),

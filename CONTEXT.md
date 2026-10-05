@@ -2619,6 +2619,7 @@ src/kpnn2/
     _bind.py                  # labels onto observation
     _methods/                 # one module per method
   _errors.py                  # Kpnn2Error, internal_error
+  _validate.py                # argument checks shared across entry points
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis
   _identity.py                # opaque checkpoint identity

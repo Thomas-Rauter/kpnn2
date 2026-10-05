@@ -14,17 +14,9 @@ from ._errors import Kpnn2Error, internal_error
 from ._generator import as_generator, run_preserving_default_rng
 from ._identity import as_identity, check_identity, save_identity
 from ._packed_index import as_packed_pairs, digest_matches
+from ._validate import as_positive_int, is_integer
 
 _INDEX_DIGEST_KEY = "index_digest"
-
-
-def _positive_int(
-    value: object,
-    name: str,
-) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise Kpnn2Error(f"'{name}' must be a positive int.")
-    return value
 
 
 def _index_digest(
@@ -332,7 +324,7 @@ def _packed_attention(
 def _optional_chunk_size(value: object) -> int | None:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    if not is_integer(value) or value < 1:
         raise Kpnn2Error("'chunk_size' must be None or a positive int.")
     return value
 
@@ -1184,19 +1176,19 @@ class PackedMultiheadAttention(nn.Module):
         chunk_size: int | None = None,
     ) -> None:
         super().__init__()
-        query_features = _positive_int(
+        query_features = as_positive_int(
             query_features,
             "query_features",
         )
-        key_features = _positive_int(
+        key_features = as_positive_int(
             key_features,
             "key_features",
         )
-        embed_dim = _positive_int(
+        embed_dim = as_positive_int(
             embed_dim,
             "embed_dim",
         )
-        num_heads = _positive_int(
+        num_heads = as_positive_int(
             num_heads,
             "num_heads",
         )

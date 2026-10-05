@@ -13,6 +13,7 @@ from ._layout import (
     build_layout,
     dense_mask_from_indices,
     resolve_edge_names,
+    resolve_node_name,
 )
 
 
@@ -279,11 +280,10 @@ class AdjacencySpec:
         >>> spec.node_units("x")
         slice(4, 5, None)
         """
-        node_name = str(name)
-        if node_name == "":
-            raise Kpnn2Error("Node name is empty.")
-        if node_name not in self.nodes:
-            raise Kpnn2Error(f"Unknown node name: {node_name}.")
+        node_name = resolve_node_name(
+            name,
+            self.nodes,
+        )
         return self._layout().slot(node_name).units
 
     def _layout(self) -> Layout:

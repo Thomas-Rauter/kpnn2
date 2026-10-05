@@ -7,7 +7,7 @@ from collections.abc import Mapping
 import torch
 
 from ._errors import Kpnn2Error
-from ._spec import Hop
+from ._spec import Hop, require_hop
 
 
 def gather_hop_inputs(
@@ -133,8 +133,10 @@ def gather_hop_inputs(
     ...
     Kpnn2Error: saved is missing layer 0. ...
     """
-    if not isinstance(hop, Hop):
-        raise Kpnn2Error("'hop' must be a Hop from spec.hops.")
+    require_hop(
+        hop,
+        "hop",
+    )
     if not isinstance(saved, Mapping):
         raise Kpnn2Error("'saved' must be a mapping of layer index to tensor.")
 
@@ -277,8 +279,10 @@ def scatter_hop_outputs(
     >>> parts[0].tolist(), parts[1].tolist()
     ([[2.0]], [[5.0]])
     """
-    if not isinstance(hop, Hop):
-        raise Kpnn2Error("'hop' must be a Hop from spec.hops.")
+    require_hop(
+        hop,
+        "hop",
+    )
     if not isinstance(tensor, torch.Tensor):
         raise Kpnn2Error("'tensor' must be a torch.Tensor.")
     n_units = hop.in_features

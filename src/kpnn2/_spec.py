@@ -13,6 +13,7 @@ from ._layout import (
     build_layout,
     hop_axis_layouts,
     resolve_edge_names,
+    resolve_node_name,
 )
 
 
@@ -23,13 +24,14 @@ def _layered_node_layer(
     """
     Return the depth and string name of one layered node.
     """
-    node_name = str(name)
-    if node_name == "":
-        raise Kpnn2Error("Node name is empty.")
-    for layer, names in enumerate(layer_nodes):
-        if node_name in names:
-            return layer, node_name
-    raise Kpnn2Error(f"Unknown node name: {node_name}.")
+    layer_of = {
+        node: layer for layer, names in enumerate(layer_nodes) for node in names
+    }
+    node_name = resolve_node_name(
+        name,
+        layer_of,
+    )
+    return layer_of[node_name], node_name
 
 
 @dataclass(frozen=True)
@@ -257,6 +259,35 @@ class Hop:
             self.out_features,
             self.in_features,
         )
+
+
+def require_hop(
+    hop: object,
+    name: str,
+) -> None:
+    """
+    Raise unless ``hop`` is a ``Hop``; ``name`` is its argument.
+    """
+    if not isinstance(hop, Hop):
+        raise Kpnn2Error(f"'{name}' must be a Hop from spec.hops.")
+
+
+def require_spec_hop(
+    hop: object,
+    hops: tuple[Hop, ...],
+    name: str,
+) -> None:
+    """
+    Raise unless ``hop`` is a ``Hop`` equal to one of ``hops``.
+
+    ``hops`` is ``spec.hops``; ``name`` is the argument.
+    """
+    require_hop(
+        hop,
+        name,
+    )
+    if hop not in hops:
+        raise Kpnn2Error(f"'{name}' must match an entry of spec.hops.")
 
 
 @dataclass(frozen=True)
@@ -861,10 +892,11 @@ class LayeredSpec:
         >>> spec.hop_units(hop, "H").start
         1
         """
-        if not isinstance(hop, Hop):
-            raise Kpnn2Error("'hop' must be a Hop from spec.hops.")
-        if hop not in self.hops:
-            raise Kpnn2Error("'hop' must match an entry of spec.hops.")
+        require_spec_hop(
+            hop,
+            self.hops,
+            "hop",
+        )
         _, node_name = _layered_node_layer(
             self.layer_nodes,
             name,

@@ -5,6 +5,7 @@ from collections.abc import Iterable
 import torch
 
 from ._errors import Kpnn2Error
+from ._validate import is_integer
 
 
 def copy_index(
@@ -44,7 +45,7 @@ def copy_index(
             "or a sequence of int."
         ) from exc
     for item in items:
-        if isinstance(item, bool) or not isinstance(item, int):
+        if not is_integer(item):
             raise Kpnn2Error(
                 f"'{name}' must be a 1-dimensional integer "
                 "tensor or a sequence of int."

@@ -16,6 +16,7 @@ from kpnn2 import (
     _packed_multihead_attention,
     _parse,
     _parse_adjacency,
+    _serialize,
 )
 from kpnn2._errors import _ISSUES_URL, internal_error
 
@@ -601,6 +602,21 @@ def test_to_dict_re_ranking_failure_fails_an_internal_check(monkeypatch):
         caught.value.__cause__,
         Kpnn2Error,
     )
+
+
+def test_canonical_edges_on_a_non_spec_fails_an_internal_check():
+    """
+    Only spec methods and the parsers call it, with a spec kpnn2
+    built, so a caller cannot reach this branch.
+    """
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "canonical_edges received type object, "
+            "not a LayeredSpec or an AdjacencySpec"
+        ),
+    ):
+        _serialize.canonical_edges(object())
 
 
 @pytest.mark.parametrize(
