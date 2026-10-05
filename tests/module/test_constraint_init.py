@@ -9,6 +9,7 @@ earlier releases.
 """
 
 import math
+import re
 
 import pandas as pd
 import pytest
@@ -288,14 +289,38 @@ def test_non_finite_right_inverse_on_a_live_edge_raises(build):
 @_BUILDERS
 def test_right_inverse_of_wrong_shape_raises(build):
     hop = _fan_in_spec(6).hops[0]
+    shape = tuple(build(hop).weight.shape)
 
     with pytest.raises(
         Kpnn2Error,
-        match="same shape",
+        match=re.escape(
+            "'constraint.right_inverse' must return a tensor of the same "
+            f"shape as the weight. The weight has shape {shape}. Got "
+            "Tensor of shape (1,), dtype torch.float32."
+        ),
     ):
         build(
             hop,
             constraint=_Inverse(lambda weight: weight.reshape(-1)[:1]),
+        )
+
+
+@_BUILDERS
+def test_right_inverse_returning_a_non_tensor_raises(build):
+    hop = _fan_in_spec(6).hops[0]
+    shape = tuple(build(hop).weight.shape)
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'constraint.right_inverse' must return a tensor of the same "
+            f"shape as the weight. The weight has shape {shape}. Got "
+            "None."
+        ),
+    ):
+        build(
+            hop,
+            constraint=_Inverse(lambda weight: None),
         )
 
 

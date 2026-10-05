@@ -10,6 +10,7 @@ from typing import Any
 import torch
 
 from ._errors import Kpnn2Error
+from ._validate import describe
 
 IDENTITY_KEY = "identity"
 
@@ -48,7 +49,10 @@ def as_identity(value: object) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise Kpnn2Error("'identity' must be a str or None.")
+        raise Kpnn2Error(
+            f"'identity' must be a str or None. Got {describe(value)}. "
+            "Pass spec.fingerprint or None."
+        )
     return value
 
 

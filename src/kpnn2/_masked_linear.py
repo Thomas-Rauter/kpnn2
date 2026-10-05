@@ -25,7 +25,7 @@ from ._identity import (
     wiring_mismatch,
 )
 from ._mask_tensor import as_mask_tensor
-from ._validate import as_bool, check_layer_input
+from ._validate import as_bool, check_layer_input, describe
 
 _MASK_DIGEST_KEY = "mask_digest"
 # kpnn2 0.1 stored the trainable tensor through torch parametrize.
@@ -369,11 +369,15 @@ class MaskedLinear(nn.Module):
             "bias",
         )
         if not isinstance(mask, torch.Tensor):
-            raise Kpnn2Error("'mask' must be a torch.Tensor.")
+            raise Kpnn2Error(
+                f"'mask' must be a torch.Tensor. Got {describe(mask)}. "
+                "Build it with Hop.to_mask() or AdjacencySpec.to_mask()."
+            )
         if mask.ndim != 2:
             raise Kpnn2Error(
                 "'mask' must be a 2-dimensional tensor of shape "
-                "(out_features, in_features)."
+                "(out_features, in_features). Got shape "
+                f"{tuple(mask.shape)}."
             )
         _check_mask_entries(mask)
         constraint = as_constraint(constraint)

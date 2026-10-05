@@ -2,7 +2,9 @@ import copy
 import hashlib
 import io
 import math
+import re
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -82,7 +84,8 @@ def test_masked_linear_rejects_non_tensor_input():
 
     with pytest.raises(
         Kpnn2Error,
-        match=r"^MaskedLinear input must be a torch\.Tensor\.",
+        match=r"^MaskedLinear input must be a torch\.Tensor\. "
+        + re.escape("Got [[1.0, 2.0, 3.0]] (list)."),
     ):
         layer([[1.0, 2.0, 3.0]])
 
@@ -235,20 +238,44 @@ def test_masked_linear_mask_is_buffer_not_parameter():
 def test_masked_linear_rejects_non_tensor_mask():
     with pytest.raises(
         Kpnn2Error,
-        match="torch.Tensor",
+        match=re.escape(
+            "'mask' must be a torch.Tensor. Got [[1.0, 0.0]] (list). "
+            "Build it with Hop.to_mask() or AdjacencySpec.to_mask()."
+        ),
     ):
         MaskedLinear(
             [[1.0, 0.0]],
         )
 
 
+def test_masked_linear_non_tensor_mask_error_omits_array_values():
+    with pytest.raises(Kpnn2Error) as caught:
+        MaskedLinear(
+            np.full(
+                (2, 3),
+                918273.0,
+            ),
+        )
+
+    message = str(caught.value)
+    assert "Got ndarray of shape (2, 3), dtype float64." in message
+    assert "918273" not in message
+
+
 def test_masked_linear_rejects_1d_mask():
-    mask = torch.ones(3)
+    mask = torch.full(
+        (3,),
+        918273.0,
+    )
     with pytest.raises(
         Kpnn2Error,
         match="2-dimensional",
-    ):
+    ) as caught:
         MaskedLinear(mask)
+
+    message = str(caught.value)
+    assert message.endswith("Got shape (3,).")
+    assert "918273" not in message
 
 
 def test_masked_linear_rejects_3d_mask():
@@ -259,7 +286,10 @@ def test_masked_linear_rejects_3d_mask():
     )
     with pytest.raises(
         Kpnn2Error,
-        match="2-dimensional",
+        match=re.escape(
+            "'mask' must be a 2-dimensional tensor of shape "
+            "(out_features, in_features). Got shape (2, 3, 1)."
+        ),
     ):
         MaskedLinear(mask)
 
@@ -958,7 +988,10 @@ def test_masked_linear_identity_rejects_non_str():
     )
     with pytest.raises(
         Kpnn2Error,
-        match="identity",
+        match=re.escape(
+            "'identity' must be a str or None. Got b'abc' (bytes). "
+            "Pass spec.fingerprint or None."
+        ),
     ):
         MaskedLinear(
             mask,
@@ -988,7 +1021,10 @@ def test_masked_linear_generator_rejects_non_generator():
     )
     with pytest.raises(
         Kpnn2Error,
-        match="generator",
+        match=re.escape(
+            "'generator' must be a torch.Generator or None. Got 42 (int). "
+            "For a seed, pass torch.Generator().manual_seed(seed)."
+        ),
     ):
         MaskedLinear(
             mask,
@@ -2091,7 +2127,8 @@ def test_constraint_default_is_none():
 def test_constraint_rejects_a_plain_callable():
     with pytest.raises(
         Kpnn2Error,
-        match="nn.Module",
+        match=r"^'constraint' must be a torch\.nn\.Module or None\. "
+        r"Got .*softplus.*\. Pass an instance such as nn\.Softplus\(\)\.$",
     ):
         MaskedLinear(
             _diag_mask(),
@@ -2103,7 +2140,11 @@ def test_constraint_rejects_a_plain_callable():
 def test_constraint_rejects_a_shape_changing_module():
     with pytest.raises(
         Kpnn2Error,
-        match="same shape",
+        match=re.escape(
+            "'constraint' must return a tensor of the same shape as the "
+            "weight. The weight has shape (2, 2). Got Tensor of shape "
+            "(1, 2, 2), dtype torch.float32."
+        ),
     ):
         MaskedLinear(
             _diag_mask(),

@@ -23,6 +23,11 @@ from ._validate import as_bool, as_positive_int, describe, is_integer
 
 _INDEX_DIGEST_KEY = "index_digest"
 
+_PADDING_LAYOUT = (
+    "'key_padding_mask' shape must be (S,) unbatched or (N, S) batched."
+)
+_PADDING_WIDTH = "'key_padding_mask' last dimension must equal key_features."
+
 
 def _index_digest(
     source_index: torch.Tensor,
@@ -82,7 +87,9 @@ def _maybe_self_loops(
         return source, target
     if query_features != key_features:
         raise Kpnn2Error(
-            "'add_self_loops' requires query_features == key_features."
+            "'add_self_loops' requires query_features == key_features. "
+            f"Got query_features={query_features} and "
+            f"key_features={key_features}."
         )
     existing = set(
         zip(
@@ -158,27 +165,63 @@ def _layout_to_batch_first(
     batch_first: bool,
 ) -> tuple[torch.Tensor, bool]:
     if not isinstance(tensor, torch.Tensor):
-        raise Kpnn2Error(f"'{name}' must be a torch.Tensor.")
+        raise Kpnn2Error(
+            f"'{name}' must be a torch.Tensor. Got {describe(tensor)}."
+        )
     if tensor.ndim < 2:
-        raise Kpnn2Error(f"'{name}' must be 2-dimensional or higher.")
+        raise Kpnn2Error(
+            f"'{name}' must be 2-dimensional or higher. Got shape "
+            f"{tuple(tensor.shape)}."
+        )
     if tensor.shape[-1] != embed_dim:
-        raise Kpnn2Error(f"'{name}' last dimension must equal embed_dim.")
+        raise Kpnn2Error(
+            f"'{name}' last dimension must equal embed_dim. Got shape "
+            f"{tuple(tensor.shape)} with embed_dim={embed_dim}."
+        )
     if tensor.ndim == 2:
         if tensor.shape[0] != seq_len:
-            raise Kpnn2Error(f"{name} sequence length must equal {seq_attr}.")
+            raise _sequence_length_error(
+                tensor,
+                name,
+                seq_len,
+                seq_attr,
+            )
         return tensor, False
     if batch_first:
         if tensor.shape[-2] != seq_len:
-            raise Kpnn2Error(f"{name} sequence length must equal {seq_attr}.")
+            raise _sequence_length_error(
+                tensor,
+                name,
+                seq_len,
+                seq_attr,
+            )
         return tensor, False
     if tensor.ndim != 3:
         raise Kpnn2Error(
             "With batch_first=False, inputs must be 2-D "
-            "(seq, embed) or 3-D (seq, batch, embed)."
+            "(seq, embed) or 3-D (seq, batch, embed). Got "
+            f"'{name}' of shape {tuple(tensor.shape)}."
         )
     if tensor.shape[0] != seq_len:
-        raise Kpnn2Error(f"{name} sequence length must equal {seq_attr}.")
+        raise _sequence_length_error(
+            tensor,
+            name,
+            seq_len,
+            seq_attr,
+        )
     return tensor.transpose(0, 1), True
+
+
+def _sequence_length_error(
+    tensor: torch.Tensor,
+    name: str,
+    seq_len: int,
+    seq_attr: str,
+) -> Kpnn2Error:
+    return Kpnn2Error(
+        f"{name} sequence length must equal {seq_attr}. Got shape "
+        f"{tuple(tensor.shape)} with {seq_attr}={seq_len}."
+    )
 
 
 def _padding_participate(
@@ -191,37 +234,57 @@ def _padding_participate(
     if key_padding_mask is None:
         return None
     if not isinstance(key_padding_mask, torch.Tensor):
-        raise Kpnn2Error("'key_padding_mask' must be a boolean tensor.")
+        raise Kpnn2Error(
+            "'key_padding_mask' must be a boolean tensor. Got "
+            f"{describe(key_padding_mask)}."
+        )
     if key_padding_mask.is_floating_point():
         raise Kpnn2Error(
             "Float padding masks are not supported; "
-            "'key_padding_mask' must be boolean."
+            "'key_padding_mask' must be boolean. Got "
+            f"{describe(key_padding_mask)}."
         )
     if key_padding_mask.dtype != torch.bool:
-        raise Kpnn2Error("'key_padding_mask' must be a boolean tensor.")
-    if key_padding_mask.ndim < 1:
         raise Kpnn2Error(
-            "'key_padding_mask' shape must be (S,) unbatched or (N, S) batched."
+            "'key_padding_mask' must be a boolean tensor. Got "
+            f"{describe(key_padding_mask)}."
+        )
+    if key_padding_mask.ndim < 1:
+        raise _padding_shape_error(
+            _PADDING_LAYOUT,
+            key_padding_mask,
+            batch_shape,
+            key_features,
         )
     if key_padding_mask.ndim == 1:
         if batch_shape != ():
-            raise Kpnn2Error(
-                "'key_padding_mask' shape must be (S,) "
-                "unbatched or (N, S) batched."
+            raise _padding_shape_error(
+                _PADDING_LAYOUT,
+                key_padding_mask,
+                batch_shape,
+                key_features,
             )
         if int(key_padding_mask.shape[0]) != key_features:
-            raise Kpnn2Error(
-                "'key_padding_mask' last dimension must equal key_features."
+            raise _padding_shape_error(
+                _PADDING_WIDTH,
+                key_padding_mask,
+                batch_shape,
+                key_features,
             )
     else:
         if int(key_padding_mask.shape[-1]) != key_features:
-            raise Kpnn2Error(
-                "'key_padding_mask' last dimension must equal key_features."
+            raise _padding_shape_error(
+                _PADDING_WIDTH,
+                key_padding_mask,
+                batch_shape,
+                key_features,
             )
         if tuple(key_padding_mask.shape[:-1]) != tuple(batch_shape):
-            raise Kpnn2Error(
-                "'key_padding_mask' shape must be (S,) "
-                "unbatched or (N, S) batched."
+            raise _padding_shape_error(
+                _PADDING_LAYOUT,
+                key_padding_mask,
+                batch_shape,
+                key_features,
             )
     mask = key_padding_mask.to(
         device=device,
@@ -232,6 +295,19 @@ def _padding_participate(
     padded = mask[..., index]
     participate = ~padded
     return participate.unsqueeze(-1)
+
+
+def _padding_shape_error(
+    problem: str,
+    key_padding_mask: torch.Tensor,
+    batch_shape: tuple[int, ...],
+    key_features: int,
+) -> Kpnn2Error:
+    expected = (*batch_shape, key_features)
+    return Kpnn2Error(
+        f"{problem} Expected shape {expected} for this input. Got shape "
+        f"{tuple(key_padding_mask.shape)}."
+    )
 
 
 def _packed_attention(
@@ -340,7 +416,10 @@ def _optional_chunk_size(value: object) -> int | None:
     if value is None:
         return None
     if not is_integer(value) or value < 1:
-        raise Kpnn2Error("'chunk_size' must be None or a positive int.")
+        raise Kpnn2Error(
+            "'chunk_size' must be None or a positive int. Got "
+            f"{describe(value)}."
+        )
     return int(value)
 
 
@@ -1221,7 +1300,10 @@ class PackedMultiheadAttention(nn.Module):
             "num_heads",
         )
         if embed_dim % num_heads != 0:
-            raise Kpnn2Error("'embed_dim' must be divisible by 'num_heads'.")
+            raise Kpnn2Error(
+                "'embed_dim' must be divisible by 'num_heads'. Got "
+                f"embed_dim={embed_dim} and num_heads={num_heads}."
+            )
         dropout = _dropout_value(dropout)
         bias = as_bool(
             bias,
@@ -1230,11 +1312,17 @@ class PackedMultiheadAttention(nn.Module):
         if kdim is not None and not (
             is_integer(kdim) and int(kdim) == embed_dim
         ):
-            raise Kpnn2Error("'kdim' must be None or equal to embed_dim.")
+            raise Kpnn2Error(
+                "'kdim' must be None or equal to embed_dim. Got "
+                f"{describe(kdim)} with embed_dim={embed_dim}."
+            )
         if vdim is not None and not (
             is_integer(vdim) and int(vdim) == embed_dim
         ):
-            raise Kpnn2Error("'vdim' must be None or equal to embed_dim.")
+            raise Kpnn2Error(
+                "'vdim' must be None or equal to embed_dim. Got "
+                f"{describe(vdim)} with embed_dim={embed_dim}."
+            )
         batch_first = as_bool(
             batch_first,
             "batch_first",
@@ -1439,7 +1527,10 @@ class PackedMultiheadAttention(nn.Module):
     ) -> torch.Tensor:
         *leading, seq, embed_dim = projected.shape
         if embed_dim != self.embed_dim:
-            raise Kpnn2Error("Last dimension must equal embed_dim.")
+            raise Kpnn2Error(
+                "Last dimension must equal embed_dim. Got last dimension "
+                f"{embed_dim} with embed_dim={self.embed_dim}."
+            )
         return projected.reshape(
             *leading,
             seq,
@@ -1506,10 +1597,13 @@ class PackedMultiheadAttention(nn.Module):
         )
         if attn_mask is not None:
             raise Kpnn2Error(
-                "'attn_mask' must be None; the edgelist is the structural mask."
+                "'attn_mask' must be None; the edgelist is the structural "
+                f"mask. Got {describe(attn_mask)}."
             )
         if is_causal is not False:
-            raise Kpnn2Error("'is_causal' must be False.")
+            raise Kpnn2Error(
+                f"'is_causal' must be False. Got {describe(is_causal)}."
+            )
         query_bf, transposed = _layout_to_batch_first(
             query,
             "query",
@@ -1539,7 +1633,9 @@ class PackedMultiheadAttention(nn.Module):
             or key_bf.shape[:-2] != value_bf.shape[:-2]
         ):
             raise Kpnn2Error(
-                "query, key, and value batch dimensions must match."
+                "query, key, and value batch dimensions must match. Got "
+                f"shapes {tuple(query.shape)}, {tuple(key.shape)}, and "
+                f"{tuple(value.shape)}."
             )
         dtype = self.q_proj.weight.dtype
         with torch.autocast(

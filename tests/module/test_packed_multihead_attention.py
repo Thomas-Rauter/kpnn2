@@ -6,6 +6,7 @@ import struct
 import pandas as pd
 import pytest
 import torch
+from torch import nn
 
 from kpnn2 import (
     AdjacencySpec,
@@ -259,7 +260,10 @@ def test_rejects_duplicate_indices():
 def test_rejects_embed_dim_not_divisible_by_num_heads():
     with pytest.raises(
         Kpnn2Error,
-        match="divisible",
+        match=re.escape(
+            "'embed_dim' must be divisible by 'num_heads'. Got "
+            "embed_dim=5 and num_heads=2."
+        ),
     ):
         PackedMultiheadAttention(
             [0],
@@ -634,7 +638,10 @@ def test_attn_mask_not_none_raises():
     )
     with pytest.raises(
         Kpnn2Error,
-        match="attn_mask",
+        match=re.escape(
+            "'attn_mask' must be None; the edgelist is the structural "
+            "mask. Got Tensor of shape (2, 2), dtype torch.float32."
+        ),
     ):
         layer(
             x,
@@ -662,7 +669,7 @@ def test_is_causal_true_raises():
     )
     with pytest.raises(
         Kpnn2Error,
-        match="is_causal",
+        match=re.escape("'is_causal' must be False. Got True (bool)."),
     ):
         layer(
             x,
@@ -676,7 +683,10 @@ def test_is_causal_true_raises():
 def test_kdim_or_vdim_not_embed_dim_raises():
     with pytest.raises(
         Kpnn2Error,
-        match="kdim",
+        match=re.escape(
+            "'kdim' must be None or equal to embed_dim. Got 4 (int) "
+            "with embed_dim=8."
+        ),
     ):
         PackedMultiheadAttention(
             [0],
@@ -689,7 +699,10 @@ def test_kdim_or_vdim_not_embed_dim_raises():
         )
     with pytest.raises(
         Kpnn2Error,
-        match="vdim",
+        match=re.escape(
+            "'vdim' must be None or equal to embed_dim. Got 4 (int) "
+            "with embed_dim=8."
+        ),
     ):
         PackedMultiheadAttention(
             [0],
@@ -981,7 +994,11 @@ def test_key_padding_mask_float_raises():
     )
     with pytest.raises(
         Kpnn2Error,
-        match="boolean",
+        match=re.escape(
+            "Float padding masks are not supported; 'key_padding_mask' "
+            "must be boolean. Got Tensor of shape (3, 2), dtype "
+            "torch.float32."
+        ),
     ):
         layer(
             query,
@@ -1807,3 +1824,412 @@ def test_batch_first_false_returns_seq_major_layout():
     assert attn_out.shape == x.shape
     assert weights is None
     assert torch.isfinite(attn_out).all()
+
+
+def _two_by_three_attention(batch_first=True):
+    """
+    Two queries, three keys, embed_dim 4 in two heads.
+    """
+    return PackedMultiheadAttention(
+        [0, 1, 2],
+        [0, 1, 1],
+        2,
+        3,
+        4,
+        2,
+        batch_first=batch_first,
+    )
+
+
+def test_add_self_loops_error_reports_both_sizes():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'add_self_loops' requires query_features == key_features. "
+            "Got query_features=2 and key_features=3."
+        ),
+    ):
+        PackedMultiheadAttention(
+            [0],
+            [0],
+            2,
+            3,
+            4,
+            2,
+            add_self_loops=True,
+        )
+
+
+def test_chunk_size_error_reports_the_value():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'chunk_size' must be None or a positive int. Got 0 (int)."
+        ),
+    ):
+        PackedMultiheadAttention(
+            [0],
+            [0],
+            1,
+            1,
+            4,
+            2,
+            chunk_size=0,
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "batch_first",
+        "query",
+        "key",
+        "message",
+    ),
+    [
+        pytest.param(
+            True,
+            [[0.0] * 4] * 2,
+            torch.zeros(
+                3,
+                4,
+            ),
+            "'query' must be a torch.Tensor. Got [[0.0, 0.0, 0.0, 0.0], "
+            "[0.0, 0.0, 0.0, 0.0]] (list).",
+            id="not_a_tensor",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(4),
+            torch.zeros(
+                3,
+                4,
+            ),
+            "'query' must be 2-dimensional or higher. Got shape (4,).",
+            id="one_dimensional",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(
+                2,
+                4,
+            ),
+            torch.zeros(
+                3,
+                5,
+            ),
+            "'key' last dimension must equal embed_dim. Got shape (3, 5) "
+            "with embed_dim=4.",
+            id="embed_dim",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(
+                5,
+                4,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+            "query sequence length must equal query_features. Got shape "
+            "(5, 4) with query_features=2.",
+            id="unbatched_sequence",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(
+                6,
+                2,
+                4,
+            ),
+            torch.zeros(
+                6,
+                2,
+                4,
+            ),
+            "key sequence length must equal key_features. Got shape "
+            "(6, 2, 4) with key_features=3.",
+            id="batch_first_sequence",
+        ),
+        pytest.param(
+            False,
+            torch.zeros(
+                2,
+                6,
+                4,
+            ),
+            torch.zeros(
+                2,
+                6,
+                4,
+            ),
+            "key sequence length must equal key_features. Got shape "
+            "(2, 6, 4) with key_features=3.",
+            id="seq_first_sequence",
+        ),
+        pytest.param(
+            False,
+            torch.zeros(
+                2,
+                6,
+                1,
+                4,
+            ),
+            torch.zeros(
+                3,
+                6,
+                4,
+            ),
+            "With batch_first=False, inputs must be 2-D (seq, embed) or "
+            "3-D (seq, batch, embed). Got 'query' of shape (2, 6, 1, 4).",
+            id="seq_first_four_dimensional",
+        ),
+    ],
+)
+def test_input_layout_errors_report_the_received_shape(
+    batch_first,
+    query,
+    key,
+    message,
+):
+    layer = _two_by_three_attention(batch_first=batch_first)
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=f"^{re.escape(message)}$",
+    ):
+        layer(
+            query,
+            key,
+            key,
+        )
+
+
+def test_input_layout_error_omits_tensor_values():
+    layer = _two_by_three_attention()
+
+    with pytest.raises(Kpnn2Error) as caught:
+        layer(
+            torch.full(
+                (2, 5),
+                918273.0,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+        )
+
+    assert "918273" not in str(caught.value)
+
+
+def test_batch_dimension_mismatch_reports_the_three_shapes():
+    layer = _two_by_three_attention()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "query, key, and value batch dimensions must match. Got "
+            "shapes (5, 2, 4), (5, 3, 4), and (6, 3, 4)."
+        ),
+    ):
+        layer(
+            torch.zeros(
+                5,
+                2,
+                4,
+            ),
+            torch.zeros(
+                5,
+                3,
+                4,
+            ),
+            torch.zeros(
+                6,
+                3,
+                4,
+            ),
+        )
+
+
+def test_replaced_projection_of_wrong_width_reports_both_sizes():
+    layer = _two_by_three_attention()
+    layer.q_proj = nn.Linear(
+        4,
+        6,
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Last dimension must equal embed_dim. Got last dimension 6 "
+            "with embed_dim=4."
+        ),
+    ):
+        layer(
+            torch.zeros(
+                2,
+                4,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+        )
+
+
+_PADDING_LAYOUT = (
+    "'key_padding_mask' shape must be (S,) unbatched or (N, S) batched."
+)
+_PADDING_WIDTH = "'key_padding_mask' last dimension must equal key_features."
+
+
+@pytest.mark.parametrize(
+    (
+        "batch",
+        "key_padding_mask",
+        "message",
+    ),
+    [
+        pytest.param(
+            (),
+            [True, False, False],
+            "'key_padding_mask' must be a boolean tensor. Got "
+            "[True, False, False] (list).",
+            id="not_a_tensor",
+        ),
+        pytest.param(
+            (),
+            torch.zeros(
+                3,
+                dtype=torch.int64,
+            ),
+            "'key_padding_mask' must be a boolean tensor. Got Tensor of "
+            "shape (3,), dtype torch.int64.",
+            id="integer_dtype",
+        ),
+        pytest.param(
+            (),
+            torch.tensor(True),
+            f"{_PADDING_LAYOUT} Expected shape (3,) for this input. Got "
+            "shape ().",
+            id="zero_dimensional",
+        ),
+        pytest.param(
+            (),
+            torch.zeros(
+                4,
+                dtype=torch.bool,
+            ),
+            f"{_PADDING_WIDTH} Expected shape (3,) for this input. Got "
+            "shape (4,).",
+            id="unbatched_width",
+        ),
+        pytest.param(
+            (5,),
+            torch.zeros(
+                3,
+                dtype=torch.bool,
+            ),
+            f"{_PADDING_LAYOUT} Expected shape (5, 3) for this input. Got "
+            "shape (3,).",
+            id="unbatched_mask_for_batched_input",
+        ),
+        pytest.param(
+            (5,),
+            torch.zeros(
+                5,
+                4,
+                dtype=torch.bool,
+            ),
+            f"{_PADDING_WIDTH} Expected shape (5, 3) for this input. Got "
+            "shape (5, 4).",
+            id="batched_width",
+        ),
+        pytest.param(
+            (5,),
+            torch.zeros(
+                4,
+                3,
+                dtype=torch.bool,
+            ),
+            f"{_PADDING_LAYOUT} Expected shape (5, 3) for this input. Got "
+            "shape (4, 3).",
+            id="batched_batch_size",
+        ),
+        pytest.param(
+            (),
+            torch.zeros(
+                2,
+                3,
+                dtype=torch.bool,
+            ),
+            f"{_PADDING_LAYOUT} Expected shape (3,) for this input. Got "
+            "shape (2, 3).",
+            id="batched_mask_for_unbatched_input",
+        ),
+    ],
+)
+def test_key_padding_mask_errors_report_received_and_expected(
+    batch,
+    key_padding_mask,
+    message,
+):
+    layer = _two_by_three_attention()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=f"^{re.escape(message)}$",
+    ):
+        layer(
+            torch.zeros(
+                *batch,
+                2,
+                4,
+            ),
+            torch.zeros(
+                *batch,
+                3,
+                4,
+            ),
+            torch.zeros(
+                *batch,
+                3,
+                4,
+            ),
+            key_padding_mask=key_padding_mask,
+        )
+
+
+def test_key_padding_mask_error_omits_tensor_values():
+    layer = _two_by_three_attention()
+
+    with pytest.raises(Kpnn2Error) as caught:
+        layer(
+            torch.zeros(
+                2,
+                4,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+            torch.zeros(
+                3,
+                4,
+            ),
+            key_padding_mask=torch.full(
+                (3,),
+                918273.0,
+            ),
+        )
+
+    assert "918273" not in str(caught.value)

@@ -6,6 +6,7 @@ import torch
 from torch import nn
 
 from ._errors import Kpnn2Error
+from ._validate import describe
 
 
 def as_constraint(constraint: object) -> nn.Module | None:
@@ -32,7 +33,11 @@ def as_constraint(constraint: object) -> nn.Module | None:
     if constraint is None:
         return None
     if not isinstance(constraint, nn.Module):
-        raise Kpnn2Error("'constraint' must be a torch.nn.Module or None.")
+        raise Kpnn2Error(
+            "'constraint' must be a torch.nn.Module or None. Got "
+            f"{describe(constraint)}. Pass an instance such as "
+            "nn.Softplus()."
+        )
     return constraint
 
 
@@ -65,14 +70,11 @@ def check_constraint_shape(
                 device=weight.device,
             )
         )
-    if not isinstance(sample, torch.Tensor):
-        raise Kpnn2Error(
-            "'constraint' must return a tensor of the same shape as the weight."
-        )
-    if sample.shape != weight.shape:
-        raise Kpnn2Error(
-            "'constraint' must return a tensor of the same shape as the weight."
-        )
+    _check_weight_shape(
+        sample,
+        weight.shape,
+        "constraint",
+    )
 
 
 def stored_from_effective(
@@ -124,11 +126,11 @@ def stored_from_effective(
     if not callable(right_inverse):
         return sample
     stored = right_inverse(sample.clone())
-    if not isinstance(stored, torch.Tensor) or stored.shape != sample.shape:
-        raise Kpnn2Error(
-            "'constraint.right_inverse' must return a tensor of the "
-            "same shape as the weight."
-        )
+    _check_weight_shape(
+        stored,
+        sample.shape,
+        "constraint.right_inverse",
+    )
     checked = stored if live is None else stored[live]
     if not bool(torch.isfinite(checked).all()):
         raise Kpnn2Error(
@@ -139,3 +141,21 @@ def stored_from_effective(
             "finite stored value."
         )
     return stored
+
+
+def _check_weight_shape(
+    result: object,
+    shape: torch.Size,
+    name: str,
+) -> None:
+    """
+    Raise unless ``result`` is a tensor of the weight's ``shape``.
+
+    ``name`` is the callable that returned ``result``.
+    """
+    if not isinstance(result, torch.Tensor) or result.shape != shape:
+        raise Kpnn2Error(
+            f"'{name}' must return a tensor of the same shape as the "
+            f"weight. The weight has shape {tuple(shape)}. Got "
+            f"{describe(result)}."
+        )

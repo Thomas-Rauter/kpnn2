@@ -6,6 +6,7 @@ from typing import TypeVar
 import torch
 
 from ._errors import Kpnn2Error
+from ._validate import describe
 
 T = TypeVar("T")
 
@@ -34,7 +35,11 @@ def as_generator(generator: object) -> torch.Generator | None:
     if generator is None:
         return None
     if not isinstance(generator, torch.Generator):
-        raise Kpnn2Error("'generator' must be a torch.Generator or None.")
+        raise Kpnn2Error(
+            "'generator' must be a torch.Generator or None. Got "
+            f"{describe(generator)}. For a seed, pass "
+            "torch.Generator().manual_seed(seed)."
+        )
     return generator
 
 

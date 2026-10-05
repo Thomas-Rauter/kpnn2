@@ -1,12 +1,25 @@
 """Packed live-pair indices shared by the packed layers."""
 
+from collections import Counter
 from collections.abc import Iterable
 
 import numpy as np
 import torch
 
 from ._errors import Kpnn2Error
-from ._validate import is_integer
+from ._validate import describe, is_integer
+
+_NOT_INDEX = "must be a 1-dimensional integer tensor or a sequence of int."
+
+# A duplicate-pair message lists at most this many pairs.
+_DUPLICATES_SHOWN = 5
+
+
+def _not_an_index(
+    name: str,
+    received: str,
+) -> Kpnn2Error:
+    return Kpnn2Error(f"'{name}' {_NOT_INDEX} Got {received}.")
 
 
 def copy_index(
@@ -24,14 +37,14 @@ def copy_index(
     """
     if isinstance(value, torch.Tensor):
         if value.ndim != 1:
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
+            raise _not_an_index(
+                name,
+                describe(value),
             )
         if value.is_floating_point() or value.dtype == torch.bool:
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
+            raise _not_an_index(
+                name,
+                describe(value),
             )
         return value.detach().to(dtype=torch.int64).contiguous().clone()
 
@@ -40,9 +53,9 @@ def copy_index(
             value.dtype,
             np.integer,
         ):
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
+            raise _not_an_index(
+                name,
+                describe(value),
             )
         return torch.from_numpy(
             value.astype(
@@ -52,22 +65,22 @@ def copy_index(
         )
 
     if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
-        raise Kpnn2Error(
-            f"'{name}' must be a 1-dimensional integer tensor "
-            "or a sequence of int."
+        raise _not_an_index(
+            name,
+            describe(value),
         )
     try:
         items = tuple(value)
     except TypeError as exc:
-        raise Kpnn2Error(
-            f"'{name}' must be a 1-dimensional integer tensor "
-            "or a sequence of int."
+        raise _not_an_index(
+            name,
+            describe(value),
         ) from exc
-    for item in items:
+    for position, item in enumerate(items):
         if not is_integer(item):
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
+            raise _not_an_index(
+                name,
+                f"{describe(item)} at position {position}",
             )
     return torch.tensor(
         items,
@@ -127,22 +140,25 @@ def as_packed_pairs(
     )
     if source.shape != target.shape:
         raise Kpnn2Error(
-            "'source_index' and 'target_index' must have the same length."
+            "'source_index' and 'target_index' must have the same length. "
+            f"Got {source.numel()} and {target.numel()}."
         )
     if source.numel() == 0:
         raise Kpnn2Error(
             "'source_index' and 'target_index' must contain at least one index."
         )
-    if torch.any(source < 0) or torch.any(source >= source_bound):
-        raise Kpnn2Error(
-            "'source_index' entries must satisfy "
-            f"0 <= source_index < {source_bound_name}."
-        )
-    if torch.any(target < 0) or torch.any(target >= target_bound):
-        raise Kpnn2Error(
-            "'target_index' entries must satisfy "
-            f"0 <= target_index < {target_bound_name}."
-        )
+    _check_in_range(
+        source,
+        "source_index",
+        source_bound,
+        source_bound_name,
+    )
+    _check_in_range(
+        target,
+        "target_index",
+        target_bound,
+        target_bound_name,
+    )
     pairs = list(
         zip(
             source.tolist(),
@@ -151,9 +167,48 @@ def as_packed_pairs(
     )
     if len(set(pairs)) != len(pairs):
         raise Kpnn2Error(
-            f"{owner} indices contain duplicate (source, target) pair(s)."
+            f"{owner} indices contain duplicate (source, target) pair(s). "
+            f"Got {_duplicated_pairs(pairs)}."
         )
     return source, target
+
+
+def _check_in_range(
+    index: torch.Tensor,
+    name: str,
+    bound: int,
+    bound_name: str,
+) -> None:
+    """
+    Raise unless every entry of ``index`` is in ``[0, bound)``.
+
+    The message names the bound and its value, the first entry
+    outside the range and its position, and how many there are.
+    """
+    outside = (index < 0) | (index >= bound)
+    if not bool(outside.any()):
+        return
+    positions = outside.nonzero().flatten()
+    first = int(positions[0])
+    count = int(positions.numel())
+    entries = "entry" if count == 1 else "entries"
+    raise Kpnn2Error(
+        f"'{name}' entries must satisfy 0 <= {name} < {bound_name}. "
+        f"Got {count} {entries} out of range with {bound_name}={bound}; "
+        f"the first is {int(index[first])} at position {first}."
+    )
+
+
+def _duplicated_pairs(pairs: list[tuple[int, int]]) -> str:
+    """Count the pairs that repeat and list the first few, sorted."""
+    counts = Counter(pairs)
+    duplicated = sorted(pair for pair, count in counts.items() if count > 1)
+    text = ", ".join(str(pair) for pair in duplicated[:_DUPLICATES_SHOWN])
+    hidden = len(duplicated) - _DUPLICATES_SHOWN
+    if hidden > 0:
+        text = f"{text} (and {hidden} more)"
+    noun = "pair" if len(duplicated) == 1 else "pairs"
+    return f"{len(duplicated)} duplicated {noun}: {text}"
 
 
 def digest_matches(

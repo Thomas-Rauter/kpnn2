@@ -144,7 +144,9 @@ def check_layer_input(
         its last dimension is not ``in_features``.
     """
     if not isinstance(x, torch.Tensor):
-        raise Kpnn2Error(f"{owner} input must be a torch.Tensor.")
+        raise Kpnn2Error(
+            f"{owner} input must be a torch.Tensor. Got {describe(x)}."
+        )
     if x.ndim < 1:
         raise Kpnn2Error(
             f"{owner} input must have shape (..., in_features) "

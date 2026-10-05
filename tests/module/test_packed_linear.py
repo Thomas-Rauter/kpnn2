@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import math
+import re
 import struct
 
 import pandas as pd
@@ -114,7 +115,9 @@ def test_packed_linear_rejects_zero_dim_and_non_tensor_input():
         layer(torch.tensor(1.0))
     with pytest.raises(
         Kpnn2Error,
-        match="must be a torch.Tensor",
+        match=re.escape(
+            "PackedLinear input must be a torch.Tensor. Got [[1.0]] (list)."
+        ),
     ):
         layer([[1.0]])
 
@@ -781,7 +784,10 @@ def test_packed_linear_generator_is_keyword_only():
 def test_packed_linear_generator_rejects_non_generator():
     with pytest.raises(
         Kpnn2Error,
-        match="generator",
+        match=re.escape(
+            "'generator' must be a torch.Generator or None. Got 42 (int). "
+            "For a seed, pass torch.Generator().manual_seed(seed)."
+        ),
     ):
         PackedLinear(
             [0],
@@ -1311,7 +1317,8 @@ def test_packed_constraint_softplus_on_zero_is_positive():
 def test_packed_constraint_rejects_a_plain_callable():
     with pytest.raises(
         Kpnn2Error,
-        match="nn.Module",
+        match=r"^'constraint' must be a torch\.nn\.Module or None\. "
+        r"Got .*softplus.*\. Pass an instance such as nn\.Softplus\(\)\.$",
     ):
         PackedLinear(
             [0],
@@ -1323,10 +1330,33 @@ def test_packed_constraint_rejects_a_plain_callable():
         )
 
 
+def test_packed_constraint_rejects_a_module_class():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'constraint' must be a torch.nn.Module or None. Got <class "
+            "'torch.nn.modules.activation.Softplus'> (type). Pass an "
+            "instance such as nn.Softplus()."
+        ),
+    ):
+        PackedLinear(
+            [0],
+            [0],
+            1,
+            1,
+            bias=False,
+            constraint=nn.Softplus,
+        )
+
+
 def test_packed_constraint_rejects_a_shape_changing_module():
     with pytest.raises(
         Kpnn2Error,
-        match="same shape",
+        match=re.escape(
+            "'constraint' must return a tensor of the same shape as the "
+            "weight. The weight has shape (1,). Got Tensor of shape "
+            "(1, 1), dtype torch.float32."
+        ),
     ):
         PackedLinear(
             [0],
@@ -1335,6 +1365,49 @@ def test_packed_constraint_rejects_a_shape_changing_module():
             1,
             bias=False,
             constraint=_Widen(),
+        )
+
+
+class _ToList(nn.Module):
+    def forward(
+        self,
+        weight,
+    ):
+        return weight.tolist()
+
+
+def test_packed_constraint_rejects_a_non_tensor_result():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'constraint' must return a tensor of the same shape as the "
+            "weight. The weight has shape (2,). Got [0.0, 0.0] (list)."
+        ),
+    ):
+        PackedLinear(
+            [0, 1],
+            [0, 0],
+            1,
+            2,
+            bias=False,
+            constraint=_ToList(),
+        )
+
+
+def test_packed_identity_rejects_non_str():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'identity' must be a str or None. Got 7 (int). "
+            "Pass spec.fingerprint or None."
+        ),
+    ):
+        PackedLinear(
+            [0],
+            [0],
+            1,
+            1,
+            identity=7,
         )
 
 
