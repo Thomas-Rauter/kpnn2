@@ -3,11 +3,12 @@ Edgelist parsing for kpnn2.
 """
 
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
-from ._errors import Kpnn2Error
+from ._adjacency_spec import AdjacencySpec
+from ._errors import Kpnn2Error, internal_error
 from ._layout import (
     Layout,
     NodeSlot,
@@ -15,6 +16,7 @@ from ._layout import (
     concat_layouts,
     iter_block_pairs,
 )
+from ._serialize import canonical_edges
 from ._spec import Hop, LayeredSpec, Skip
 
 _SOURCE = "source"
@@ -649,6 +651,88 @@ def _build_skips(
     return skips
 
 
+def _check_edges_conserved(
+    spec: LayeredSpec | AdjacencySpec,
+    edgelist: pd.DataFrame,
+    width_of: Mapping[str, int],
+    packed: Sequence[tuple[tuple[int, ...], tuple[int, ...]]],
+) -> None:
+    """
+    Raise unless every named edge owns its full unit block once.
+
+    Three conditions together pin the packed pairs down: the
+    named edges read back from the spec equal the edgelist, no
+    unit pair repeats on one packed axis, and the pair count is
+    the sum of ``k_source * k_target``. A block holds at most
+    ``k_source * k_target`` distinct pairs, so every block is
+    exactly full. Named edges are rebuilt by
+    ``canonical_edges``, independently of the code that packed
+    them.
+
+    Parameters
+    ----------
+    spec
+        Spec the parser is about to return.
+    edgelist
+        Normalized edgelist with string ``source`` and ``target``.
+    width_of
+        Width of every node.
+    packed
+        ``(source_index, target_index)`` per packed axis: one
+        per hop on a ``LayeredSpec``, one on an
+        ``AdjacencySpec``.
+
+    Raises
+    ------
+    AssertionError
+        From ``internal_error``, if any condition fails.
+    """
+    parser = (
+        "parse_layered" if isinstance(spec, LayeredSpec) else "parse_adjacency"
+    )
+    expected = tuple(
+        sorted(
+            zip(
+                edgelist[_SOURCE].tolist(),
+                edgelist[_TARGET].tolist(),
+                strict=True,
+            )
+        )
+    )
+    found = canonical_edges(spec)
+    if found != expected:
+        n_missing = len(set(expected) - set(found))
+        n_unexpected = len(set(found) - set(expected))
+        raise internal_error(
+            f"{parser} packed pairs encode {len(found)} named edges, "
+            f"not the {len(expected)} of the edgelist "
+            f"({n_missing} missing, {n_unexpected} unexpected)"
+        )
+    n_expected = sum(
+        width_of[source] * width_of[target] for source, target in expected
+    )
+    n_pairs = 0
+    for source_index, target_index in packed:
+        unique = set(
+            zip(
+                source_index,
+                target_index,
+                strict=True,
+            )
+        )
+        n_repeats = len(source_index) - len(unique)
+        if n_repeats:
+            raise internal_error(
+                f"{parser} packed {n_repeats} unit pair(s) more than once"
+            )
+        n_pairs += len(unique)
+    if n_pairs != n_expected:
+        raise internal_error(
+            f"{parser} packed {n_pairs} unit pairs, expected "
+            f"{n_expected} from the edgelist and widths"
+        )
+
+
 def parse_layered(
     edgelist: pd.DataFrame,
     *,
@@ -852,7 +936,7 @@ def parse_layered(
         normalized,
         placement,
     )
-    return LayeredSpec(
+    spec = LayeredSpec(
         input_nodes=tuple(input_nodes),
         output_nodes=tuple(output_nodes),
         hidden_nodes=tuple(hidden_nodes),
@@ -862,3 +946,16 @@ def parse_layered(
         hops=tuple(hops),
         skips=tuple(skips),
     )
+    _check_edges_conserved(
+        spec,
+        normalized,
+        width_of,
+        [(hop.source_index, hop.target_index) for hop in spec.hops],
+    )
+    if spec.input_nodes != spec.layer_nodes[0]:
+        raise internal_error(
+            f"parse_layered input_nodes ({len(spec.input_nodes)} "
+            "names) differ from layer_nodes[0] "
+            f"({len(spec.layer_nodes[0])} names) in names or order"
+        )
+    return spec

@@ -12,6 +12,7 @@ from ._parse import (
     _SOURCE,
     _TARGET,
     _build_adjacency,
+    _check_edges_conserved,
     _node_sets,
     _normalize_widths,
     _validate_edgelist,
@@ -231,7 +232,7 @@ def parse_adjacency(
         normalized,
         layout,
     )
-    return AdjacencySpec(
+    spec = AdjacencySpec(
         nodes=tuple(nodes),
         node_widths=layout.widths(),
         input_nodes=tuple(input_nodes),
@@ -248,3 +249,10 @@ def parse_adjacency(
             layout,
         ),
     )
+    _check_edges_conserved(
+        spec,
+        normalized,
+        width_of,
+        [(spec.source_index, spec.target_index)],
+    )
+    return spec
