@@ -10,7 +10,8 @@ semantic versioning.
 
 - `PackedMultiheadAttention` with a positive `chunk_size`
   checks on every call that each query's softmax sums to 1
-  and its gradient to 0, and waits for the device once per
+  (0 only for a query without a finite live score) and its
+  gradient to 0, and waits for the device once per
   forward and once per backward.
 - `MaskedLinear` rejects a mask with a value other than 0
   and 1, an empty dimension, or no live entry. Put per-edge

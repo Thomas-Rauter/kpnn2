@@ -1884,7 +1884,12 @@ PackedMultiheadAttention(
   backward check on every call that each query's packed
   softmax sums to 1 and that its gradient sums to 0, and
   raise `AssertionError` via `internal_error` (a kpnn2
-  bug) if not; each check waits for the device once.
+  bug) if not; each check waits for the device once. A
+  softmax row may sum to 0 only where no live key scores
+  above the dtype minimum (no key, every key padded, or
+  every score `-inf` after overflow); any query with a
+  finite best score must sum to 1, so a bug that zeroes a
+  live query is caught.
   The default unchunked path has no such check, so it
   stays `torch.compile(fullgraph=True)`-traceable.
   A numpy integer is stored as `int`. `bool`,

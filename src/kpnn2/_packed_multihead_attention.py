@@ -493,15 +493,19 @@ def _rounding_eps(dtype: torch.dtype) -> float:
 
 def _check_softmax_rows(
     row_sum: torch.Tensor,
+    no_live_score: torch.Tensor,
     degree: torch.Tensor,
     dtype: torch.dtype,
 ) -> None:
     # n positive terms sum to within (n - 1) * u of the computed sum
     # (u = eps / 2); with the divide and re-sum, |sum - 1| <= ~tol / 2.
     tol = (degree + 2) * _rounding_eps(dtype)
+    # A row may sum to 0 only where no live key scored above the fill:
+    # no key, every key padded, or every score -inf (overflow). A query
+    # with a finite best score always holds a weight of exp(0) / sum.
     ok = (
         ((row_sum - 1.0).abs() <= tol)
-        | (row_sum.abs() <= tol)
+        | (no_live_score & (row_sum.abs() <= tol))
         | ~torch.isfinite(row_sum)
     )
     if not bool(ok.all()):
@@ -689,6 +693,7 @@ class _PackedAttentionChunked(torch.autograd.Function):
             start = end
         _check_softmax_rows(
             row_sum,
+            max_buf == fill,
             _query_degree(
                 target_index,
                 n_query,
@@ -1109,13 +1114,15 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         gathers are slices of that many edges and those
         gathers are rematerialized in backward. With a
         positive int, forward and backward check on every
-        call that each query's packed softmax sums to 1 and
-        that its gradient sums to 0, and raise
-        ``AssertionError`` (a kpnn2 bug) if not; each check
-        waits for the device once. A numpy integer is stored
-        as ``int``. ``bool`` and values other than ``None`` or
-        a positive integer raise ``Kpnn2Error``. Not stored on
-        the module ``state_dict`` or in ``index_digest``.
+        call that each query's packed softmax sums to 1 (to 0
+        only when no live key scores above ``-inf``: none left
+        after padding, or every score overflowed) and that its
+        gradient sums to 0, and raise ``AssertionError`` (a
+        kpnn2 bug) if not; each check waits for the device
+        once. A numpy integer is stored as ``int``. ``bool``
+        and values other than ``None`` or a positive integer
+        raise ``Kpnn2Error``. Not stored on the module
+        ``state_dict`` or in ``index_digest``.
 
     Attributes
     ----------

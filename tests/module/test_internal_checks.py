@@ -795,6 +795,10 @@ def test_softmax_row_check_raises_on_rows_off_one():
     ):
         _packed_multihead_attention._check_softmax_rows(
             row_sum,
+            torch.zeros_like(
+                row_sum,
+                dtype=torch.bool,
+            ),
             degree,
             torch.float32,
         )
@@ -807,6 +811,13 @@ def test_softmax_row_check_passes_one_zero_and_non_finite_rows():
             [float("nan"), float("inf")],
         ]
     )
+    # Only the zero row has no live score above the fill.
+    no_live_score = torch.tensor(
+        [
+            [False, True],
+            [False, False],
+        ]
+    )
     degree = torch.full(
         (2, 1),
         4.0,
@@ -814,8 +825,150 @@ def test_softmax_row_check_passes_one_zero_and_non_finite_rows():
 
     _packed_multihead_attention._check_softmax_rows(
         row_sum,
+        no_live_score,
         degree,
         torch.float32,
+    )
+
+
+def test_softmax_row_check_raises_on_a_zero_row_with_a_live_score():
+    row_sum = torch.tensor(
+        [
+            [1.0, 0.0],
+        ]
+    )
+    degree = torch.full(
+        (1, 1),
+        4.0,
+    )
+
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "packed softmax weights of a query do not sum to 1"
+        ),
+    ):
+        _packed_multihead_attention._check_softmax_rows(
+            row_sum,
+            torch.zeros_like(
+                row_sum,
+                dtype=torch.bool,
+            ),
+            degree,
+            torch.float32,
+        )
+
+
+def test_chunked_attention_catches_a_bug_that_zeroes_live_queries(
+    monkeypatch,
+):
+    # Simulate a bug: the max is formed from the real scores, but every
+    # weight is then zeroed. Each live query sums to 0, not 1.
+    original = _packed_multihead_attention._apply_participate_to_scores
+
+    def zeroing(
+        scores,
+        participate,
+        fill,
+    ):
+        scores_for_max, _ = original(
+            scores,
+            participate,
+            fill,
+        )
+        return scores_for_max, torch.full_like(
+            scores,
+            float("-inf"),
+        )
+
+    monkeypatch.setattr(
+        _packed_multihead_attention,
+        "_apply_participate_to_scores",
+        zeroing,
+    )
+    torch.manual_seed(42)
+    spec = kpnn2.parse_adjacency(_cyclic_edgelist())
+    n = spec.state_dim
+    layer = kpnn2.PackedMultiheadAttention(
+        spec.source_index,
+        spec.target_index,
+        n,
+        n,
+        4,
+        2,
+        chunk_size=2,
+    )
+    x = torch.randn(
+        2,
+        n,
+        4,
+    )
+
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "packed softmax weights of a query do not sum to 1"
+        ),
+    ):
+        layer(
+            x,
+            x,
+            x,
+        )
+
+
+def test_chunked_attention_accepts_a_live_query_whose_scores_overflow():
+    # Query 0 has two live keys, but in float16 every one of its scores
+    # overflows to -inf, so its row sums to 0 from the caller's data.
+    query = torch.tensor(
+        [[[300.0, 300.0]], [[1.0, 1.0]]],
+        dtype=torch.float16,
+    )
+    key = torch.full(
+        (2, 1, 2),
+        -300.0,
+        dtype=torch.float16,
+    )
+    value = torch.ones(
+        2,
+        1,
+        2,
+        dtype=torch.float16,
+    )
+    source = torch.tensor([0, 1, 0])
+    target = torch.tensor([0, 0, 1])
+
+    chunked, chunked_attn = (
+        _packed_multihead_attention._packed_attention_chunked(
+            query,
+            key,
+            value,
+            source,
+            target,
+            0.0,
+            False,
+            2,
+        )
+    )
+    dense, dense_attn = _packed_multihead_attention._packed_attention(
+        query,
+        key,
+        value,
+        source,
+        target,
+        0.0,
+        False,
+        None,
+    )
+
+    assert chunked_attn[..., :2, :].abs().sum() == 0
+    torch.testing.assert_close(
+        chunked,
+        dense,
+    )
+    torch.testing.assert_close(
+        chunked_attn,
+        dense_attn,
     )
 
 
