@@ -84,26 +84,30 @@ class PackedLinear(nn.Module):
 
     Parameters
     ----------
-    source_index : torch.Tensor or sequence of int
-        1-D integer indices of length ``nnz >= 1``. Entry ``i``
-        is the input column of live edge ``i``, and must satisfy
+    source_index : torch.Tensor, numpy.ndarray, or sequence of int
+        1-D integer indices of length ``nnz >= 1``: an integer
+        tensor, an integer numpy array, or a sequence of ``int``
+        or numpy integers. Entry ``i`` is the input column of
+        live edge ``i``, and must satisfy
         ``0 <= source_index < in_features``. Copied to an int64
         buffer, so later writes to the argument do not reach this
         layer.
-    target_index : torch.Tensor or sequence of int
-        1-D integer indices of the same length. Entry ``i`` is
-        the output row of live edge ``i``, and must satisfy
+    target_index : torch.Tensor, numpy.ndarray, or sequence of int
+        1-D integer indices of the same length, in the same forms
+        as ``source_index``. Entry ``i`` is the output row of
+        live edge ``i``, and must satisfy
         ``0 <= target_index < out_features``. The two arrays are
         paired position by position, must not repeat a
         ``(source, target)`` pair, and their shared order is also
         the order of ``weight``.
-    out_features : int
-        Width of the output axis. Must be a positive int. Note
-        the order: ``out_features`` comes before ``in_features``,
-        as in the ``(out, in)`` shape of a dense weight, not in
-        the ``nn.Linear`` argument order.
-    in_features : int
-        Width of the input axis. Must be a positive int.
+    out_features : int or numpy integer
+        Width of the output axis. Must be a positive integer,
+        stored as ``int``. Note the order: ``out_features`` comes
+        before ``in_features``, as in the ``(out, in)`` shape of
+        a dense weight, not in the ``nn.Linear`` argument order.
+    in_features : int or numpy integer
+        Width of the input axis. Must be a positive integer,
+        stored as ``int``.
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
         If ``False``, there is no bias. Must be a ``bool``.
@@ -181,8 +185,8 @@ class PackedLinear(nn.Module):
         If the indices are empty, not 1-D integers, mismatched in
         length, out of range, or duplicated as
         ``(source, target)`` pairs; if ``out_features`` /
-        ``in_features`` are not positive ints; if ``bias`` is not a
-        ``bool``; if ``identity`` is neither a ``str`` nor
+        ``in_features`` are not positive integers; if ``bias`` is
+        not a ``bool``; if ``identity`` is neither a ``str`` nor
         ``None``; if ``constraint`` is
         neither an ``nn.Module`` nor ``None``, or does not
         preserve the packed weight shape; if ``generator`` is

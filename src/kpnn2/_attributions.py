@@ -72,10 +72,11 @@ def map_node_attributions(
         vector at once and has no depth to report, unless
         ``axis="inputs"``, which names ``spec.input_nodes``
         (a wide node's name repeats once per unit).
-    layer : int, optional
+    layer : int or numpy integer, optional
         0-based depth into ``spec.layer_nodes``, index 0 being the
         input layer, whose names label the node axis; the index
-        itself is attached as a scalar ``layer`` coordinate.
+        itself is attached as a scalar ``layer`` coordinate, an
+        ``int`` even when a numpy integer was passed.
         ``LayeredSpec`` only, and mutually exclusive with
         ``hop_input`` and ``hop_output``.
     hop_input : Hop, optional
@@ -144,7 +145,7 @@ def map_node_attributions(
         and ``axis``; ``axis`` is neither ``"inputs"`` nor
         ``None``; any of ``layer``, ``hop_input``, or
         ``hop_output`` is given for an ``AdjacencySpec``;
-        ``layer`` is not an int in range; ``hop_input`` or
+        ``layer`` is not an integer in range; ``hop_input`` or
         ``hop_output`` is not a ``Hop`` that matches an entry
         of ``spec.hops``;
         ``attributions`` is neither a tensor nor a non-empty
@@ -432,6 +433,7 @@ def _resolve_node_layout(
             ), 0
         if not is_integer(layer):
             raise Kpnn2Error("'layer' must be an int.")
+        layer = int(layer)
         n_layers = len(spec.layer_nodes)
         if layer < 0 or layer >= n_layers:
             raise Kpnn2Error(

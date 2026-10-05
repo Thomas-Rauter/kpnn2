@@ -1,5 +1,6 @@
 import re
 
+import numpy as np
 import pytest
 import torch
 
@@ -45,6 +46,36 @@ from kpnn2._validate import (
             False,
             id="None",
         ),
+        pytest.param(
+            np.int64(3),
+            True,
+            id="numpy_int64",
+        ),
+        pytest.param(
+            np.int32(0),
+            True,
+            id="numpy_int32",
+        ),
+        pytest.param(
+            np.uint8(1),
+            True,
+            id="numpy_uint8",
+        ),
+        pytest.param(
+            np.bool_(True),
+            False,
+            id="numpy_bool",
+        ),
+        pytest.param(
+            np.float64(1.0),
+            False,
+            id="numpy_float64",
+        ),
+        pytest.param(
+            np.array(1),
+            False,
+            id="zero_dim_array",
+        ),
     ],
 )
 def test_is_integer(
@@ -62,6 +93,44 @@ def test_as_positive_int_returns_one():
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        np.int64(2),
+        np.int32(2),
+        np.uint16(2),
+    ],
+)
+def test_as_positive_int_returns_python_int_for_numpy(value):
+    result = as_positive_int(
+        value,
+        "n",
+    )
+
+    assert type(result) is int
+    assert result == 2
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        np.int64(0),
+        np.int64(-1),
+        np.bool_(True),
+        np.float64(2.0),
+    ],
+)
+def test_as_positive_int_rejects_numpy_non_positive_or_non_integer(value):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'n' must be a positive int. Got "),
+    ):
+        as_positive_int(
+            value,
+            "n",
+        )
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 
+import numpy as np
 import torch
 
 from ._errors import Kpnn2Error
@@ -15,9 +16,11 @@ def copy_index(
     """
     Copy ``value`` to a 1-D int64 tensor.
 
-    Accepts a 1-D integer ``torch.Tensor`` or a sequence of
-    ``int``. The result is contiguous and independent of
-    ``value``.
+    Accepts a 1-D integer ``torch.Tensor``, a 1-D
+    ``numpy.ndarray`` of an integer dtype, or a sequence of
+    ``int`` or numpy integer scalars. ``bool`` and floating
+    tensors or arrays are rejected. The result is contiguous and
+    independent of ``value``.
     """
     if isinstance(value, torch.Tensor):
         if value.ndim != 1:
@@ -31,6 +34,22 @@ def copy_index(
                 "tensor or a sequence of int."
             )
         return value.detach().to(dtype=torch.int64).contiguous().clone()
+
+    if isinstance(value, np.ndarray):
+        if value.ndim != 1 or not np.issubdtype(
+            value.dtype,
+            np.integer,
+        ):
+            raise Kpnn2Error(
+                f"'{name}' must be a 1-dimensional integer "
+                "tensor or a sequence of int."
+            )
+        return torch.from_numpy(
+            value.astype(
+                np.int64,
+                order="C",
+            )
+        )
 
     if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
         raise Kpnn2Error(
@@ -70,7 +89,8 @@ def as_packed_pairs(
     Copy and check the packed ``(source, target)`` index pair.
 
     Checks run in a fixed order: each index is a 1-D integer
-    tensor or sequence of ``int``, the two have the same length,
+    tensor, a 1-D integer numpy array, or a sequence of ``int``
+    or numpy integer scalars, the two have the same length,
     they hold at least one entry, every entry is in range of its
     bound, and no ``(source, target)`` pair repeats.
 

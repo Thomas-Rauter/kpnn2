@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import torch
 
@@ -74,6 +75,51 @@ _CASES = [
         [0, 1],
         f"'source_index' {_NOT_INDEX}",
         id="two_dimensional",
+    ),
+    pytest.param(
+        np.array([True, False]),
+        [0, 1],
+        f"'source_index' {_NOT_INDEX}",
+        id="numpy_bool_array",
+    ),
+    pytest.param(
+        np.array([0.0, 1.0]),
+        [0, 1],
+        f"'source_index' {_NOT_INDEX}",
+        id="numpy_float_array",
+    ),
+    pytest.param(
+        np.array([[0, 1]]),
+        [0, 1],
+        f"'source_index' {_NOT_INDEX}",
+        id="numpy_two_dimensional",
+    ),
+    pytest.param(
+        np.array(
+            [0, 1],
+            dtype=object,
+        ),
+        [0, 1],
+        f"'source_index' {_NOT_INDEX}",
+        id="numpy_object_array",
+    ),
+    pytest.param(
+        np.array(0),
+        [0],
+        f"'source_index' {_NOT_INDEX}",
+        id="numpy_zero_dim",
+    ),
+    pytest.param(
+        [0, 1],
+        [np.int64(0), np.bool_(True)],
+        f"'target_index' {_NOT_INDEX}",
+        id="numpy_bool_item",
+    ),
+    pytest.param(
+        [0, 1],
+        [np.int64(0), np.float64(1.0)],
+        f"'target_index' {_NOT_INDEX}",
+        id="numpy_float_item",
     ),
     pytest.param(
         [0, 1],

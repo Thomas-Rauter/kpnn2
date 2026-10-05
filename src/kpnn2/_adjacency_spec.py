@@ -584,7 +584,7 @@ class AdjacencySpec:
             known layout, or is ``"layered"``; ``edges`` is
             missing or not a sequence of two nonempty names; or
             ``"widths"`` is present and not a mapping of positive
-            ints over known nodes.
+            integers over known nodes.
 
         Examples
         --------

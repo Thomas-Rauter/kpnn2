@@ -105,15 +105,15 @@ def parse_adjacency(
         one row per directed edge in the direction of computation.
         Names are converted with ``str(...)``; extra columns are
         ignored. The frame is read, never modified.
-    widths : mapping of str to int, optional
+    widths : mapping of str to int or numpy integer, optional
         Units per named node, for a node backed by several
         neurons (DCell-style), exactly as in ``parse_layered``.
         Keys are matched after ``str(...)``; omitted names are
-        width 1, and ``None`` makes every node width 1. A node
-        of width ``k`` owns a contiguous block of ``k`` units of
-        the state vector (``node_units``), and a named edge
-        ``A -> B`` becomes every unit pair of its
-        ``(k_B, k_A)`` block.
+        width 1, and ``None`` makes every node width 1. numpy
+        integers are stored as ``int``. A node of width ``k``
+        owns a contiguous block of ``k`` units of the state
+        vector (``node_units``), and a named edge ``A -> B``
+        becomes every unit pair of its ``(k_B, k_A)`` block.
 
     Returns
     -------
@@ -135,7 +135,7 @@ def parse_adjacency(
         a ``(source, target)`` pair is duplicated; there is no
         in-degree-0 node or no out-degree-0 node; or ``widths`` is
         not a mapping, names an unknown node, or holds a value that
-        is not a positive int (``bool`` included). Each message
+        is not a positive integer (``bool`` included). Each message
         names the offending pairs or nodes, sorted.
 
     See Also

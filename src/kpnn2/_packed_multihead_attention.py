@@ -132,14 +132,16 @@ def _dropout_value(value: object) -> float:
 
     Integers 0 and 1 count; ``bool``, NaN, and infinities do not.
     """
-    if (
-        not (is_integer(value) or isinstance(value, float))
-        or not 0 <= value <= 1
-    ):
+    number: int | float | None = None
+    if is_integer(value):
+        number = int(value)
+    elif isinstance(value, float):
+        number = value
+    if number is None or not 0 <= number <= 1:
         raise Kpnn2Error(
             f"'dropout' must be a float in [0, 1]. Got {describe(value)}."
         )
-    return float(value)
+    return float(number)
 
 
 def _layout_to_batch_first(
@@ -334,7 +336,7 @@ def _optional_chunk_size(value: object) -> int | None:
         return None
     if not is_integer(value) or value < 1:
         raise Kpnn2Error("'chunk_size' must be None or a positive int.")
-    return value
+    return int(value)
 
 
 def _live_pair_scores(
@@ -923,32 +925,38 @@ class PackedMultiheadAttention(nn.Module):
 
     Parameters
     ----------
-    source_index : torch.Tensor or sequence of int
-        1-D integer indices of length ``nnz >= 1``. Entry ``i``
-        is the key / value position of live edge ``i``, and must
-        satisfy ``0 <= source_index < key_features``. Copied to
-        an int64 buffer, so later writes to the argument do not
-        reach this layer.
-    target_index : torch.Tensor or sequence of int
-        1-D integer indices of the same length. Entry ``i`` is
-        the query position of live edge ``i``, and must satisfy
+    source_index : torch.Tensor, numpy.ndarray, or sequence of int
+        1-D integer indices of length ``nnz >= 1``: an integer
+        tensor, an integer numpy array, or a sequence of ``int``
+        or numpy integers. Entry ``i`` is the key / value
+        position of live edge ``i``, and must satisfy
+        ``0 <= source_index < key_features``. Copied to an int64
+        buffer, so later writes to the argument do not reach
+        this layer.
+    target_index : torch.Tensor, numpy.ndarray, or sequence of int
+        1-D integer indices of the same length, in the same forms
+        as ``source_index``. Entry ``i`` is the query position of
+        live edge ``i``, and must satisfy
         ``0 <= target_index < query_features``. The two arrays
         are paired position by position and must not repeat a
         ``(source, target)`` pair.
-    query_features : int
+    query_features : int or numpy integer
         Sequence length of ``query``, that is, how many query
-        positions the packed indices address. Positive int.
-    key_features : int
-        Sequence length of ``key`` / ``value``. Positive int.
-        Equal to ``query_features`` for a self-attention graph
-        over one node set; smaller or larger for a bipartite
-        query/key map.
-    embed_dim : int
+        positions the packed indices address. Positive integer,
+        stored as ``int``.
+    key_features : int or numpy integer
+        Sequence length of ``key`` / ``value``. Positive integer,
+        stored as ``int``. Equal to ``query_features`` for a
+        self-attention graph over one node set; smaller or larger
+        for a bipartite query/key map.
+    embed_dim : int or numpy integer
         Model width of ``query`` / ``key`` / ``value`` and of the
-        output. Positive int, divisible by ``num_heads``.
-    num_heads : int
-        Number of attention heads. Each head attends over the
-        same live pairs with ``embed_dim // num_heads`` channels.
+        output. Positive integer, divisible by ``num_heads``,
+        stored as ``int``.
+    num_heads : int or numpy integer
+        Number of attention heads, a positive integer stored as
+        ``int``. Each head attends over the same live pairs with
+        ``embed_dim // num_heads`` channels.
     dropout : float, default=0.0
         Dropout probability applied to the packed attention
         weights in training mode only; ``0.0`` disables it.
@@ -958,12 +966,13 @@ class PackedMultiheadAttention(nn.Module):
     bias : bool, default=True
         Whether the four projections learn a bias. ``False``
         makes them pure linear maps. Must be a ``bool``.
-    kdim : int or None, default=None
-        Key embed width. Must be ``None`` or an ``int`` equal
-        to ``embed_dim`` (``True`` is rejected even when
-        ``embed_dim`` is 1); kept for ``nn.MultiheadAttention``
-        call-site parity, not to support a differing width.
-    vdim : int or None, default=None
+    kdim : int, numpy integer, or None, default=None
+        Key embed width. Must be ``None`` or an ``int`` or numpy
+        integer equal to ``embed_dim`` (``True`` is rejected even
+        when ``embed_dim`` is 1); kept for
+        ``nn.MultiheadAttention`` call-site parity, not to
+        support a differing width.
+    vdim : int, numpy integer, or None, default=None
         Value embed width, under the same restriction as
         ``kdim``.
     batch_first : bool, default=True
@@ -996,7 +1005,7 @@ class PackedMultiheadAttention(nn.Module):
         advance the global stream. Not stored on the module;
         pass it again to ``reset_parameters`` to replay. Do
         not pass a seed integer.
-    chunk_size : int or None, default=None
+    chunk_size : int, numpy integer, or None, default=None
         How many live edges to gather at once in the packed
         softmax and mix. ``None`` gathers all live pairs at
         once. A positive int uses chunked live pairs: softmax
@@ -1007,10 +1016,10 @@ class PackedMultiheadAttention(nn.Module):
         call that each query's packed softmax sums to 1 and
         that its gradient sums to 0, and raise
         ``AssertionError`` (a kpnn2 bug) if not; each check
-        waits for the device once. ``bool`` and
-        values other than ``None`` or a positive ``int``
-        raise ``Kpnn2Error``. Not stored on the module
-        ``state_dict`` or in ``index_digest``.
+        waits for the device once. A numpy integer is stored
+        as ``int``. ``bool`` and values other than ``None`` or
+        a positive integer raise ``Kpnn2Error``. Not stored on
+        the module ``state_dict`` or in ``index_digest``.
 
     Attributes
     ----------
@@ -1055,18 +1064,18 @@ class PackedMultiheadAttention(nn.Module):
         At construction, if the indices are empty, not 1-D
         integers, mismatched in length, out of range, or
         duplicated as ``(source, target)`` pairs; if the sizes
-        are not positive ints; if ``embed_dim`` is not divisible
+        are not positive integers; if ``embed_dim`` is not divisible
         by ``num_heads``; if ``dropout`` is a ``bool``, not a
         number, NaN, or outside ``[0, 1]``; if ``bias``,
         ``batch_first``, or ``add_self_loops`` is not a
         ``bool``; if ``kdim`` / ``vdim`` are neither ``None``
-        nor an ``int`` equal to ``embed_dim``; if
+        nor an integer equal to ``embed_dim``; if
         ``add_self_loops`` is set when
         ``query_features != key_features``; if ``identity`` is
         neither a ``str`` nor ``None``; if ``generator`` is
         neither a ``torch.Generator`` nor ``None``; or if
         ``chunk_size`` is neither ``None`` nor a positive
-        ``int``. From
+        integer. From
         ``load_state_dict``, when the checkpoint carries an index
         digest or identity that does not match this layer, in
         which case the weights are not loaded. ``forward``
@@ -1213,9 +1222,13 @@ class PackedMultiheadAttention(nn.Module):
             bias,
             "bias",
         )
-        if kdim is not None and not (is_integer(kdim) and kdim == embed_dim):
+        if kdim is not None and not (
+            is_integer(kdim) and int(kdim) == embed_dim
+        ):
             raise Kpnn2Error("'kdim' must be None or equal to embed_dim.")
-        if vdim is not None and not (is_integer(vdim) and vdim == embed_dim):
+        if vdim is not None and not (
+            is_integer(vdim) and int(vdim) == embed_dim
+        ):
             raise Kpnn2Error("'vdim' must be None or equal to embed_dim.")
         batch_first = as_bool(
             batch_first,

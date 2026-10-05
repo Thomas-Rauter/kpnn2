@@ -495,7 +495,8 @@ Optional `parse_layered(..., ranks=)` replaces longest-path with
 user depths. Keys are matched after `str(...)`, same as `widths`.
 Every graph node must be present; unknown names raise
 `Kpnn2Error`; unique names sorted, comma-separated. Values are
-non-negative ints; reject `bool`, negatives, and non-ints.
+non-negative ints or numpy integers, stored as `int`; reject
+`bool`, `numpy.bool_`, floats, negatives, and other non-integers.
 Let `used` be the sorted unique rank values. Node layer index is
 `used.index(rank[node])`, so layers are `0 .. L-1` with **no
 empty layers**. User numbers need not be 0-based or consecutive
@@ -545,11 +546,13 @@ parse_layered(
 `widths=None` or omitted: every node is 1. Missing names in the
 mapping default to 1. Unknown names (after `str(...)`) raise
 `Kpnn2Error`, unique names sorted, comma-separated. Values must
-be positive ints. Reject `bool` (`bool` is an `int`). Reject 0
-and negatives. `Kpnn2Error`.
+be positive ints or numpy integers, stored as `int` so
+`to_dict()` stays JSON-safe. Reject `bool` (`bool` is an `int`),
+`numpy.bool_`, and floats. Reject 0 and negatives. `Kpnn2Error`.
 
 `ranks=None` or omitted: longest-path, unchanged. When provided,
-every graph node must have a non-negative int; see **Layering**.
+every graph node must have a non-negative int or numpy integer;
+see **Layering**.
 
 `parse_adjacency(..., widths=)` takes the same `widths=` with the
 same validation and messages. Do **not** add `ranks=` to
@@ -1233,13 +1236,14 @@ dict into `LayeredSpec.from_dict`, or the reverse) raises
 `Kpnn2Error` naming the mismatch.
 
 `from_dict` also raises `Kpnn2Error` when: `payload` is not a
-dict; `kpnn2_spec` is missing or not `1`; `layout` is missing
+dict; `kpnn2_spec` is missing or not the Python `int` `1` (a
+JSON field; JSON has no numpy integers); `layout` is missing
 or not `"layered"` / `"adjacency"`; `edges` is missing, is not
 a sequence of pairs, or a pair is not two nonempty
 string-convertible names; layered `"widths"` is present and
-not a mapping of positive ints; or layered `"ranks"` is
-present and not a mapping of non-negative ints covering every
-node.
+not a mapping of positive integers (`int` or numpy integer); or
+layered `"ranks"` is present and not a mapping of non-negative
+integers covering every node.
 
 `fingerprint` is a property: the SHA-256 hex digest (64
 lowercase hex characters) of
@@ -1489,13 +1493,16 @@ PackedLinear(
 )
 ```
 
-- `source_index`, `target_index`: 1-D integer tensor or
-  sequence of int, length `nnz >= 1`, copied to int64
-  buffers. `0 <= source_index < in_features` and
+- `source_index`, `target_index`: 1-D integer tensor, 1-D
+  integer-dtype numpy array, or sequence of int or numpy
+  integers, length `nnz >= 1`, copied to int64 buffers.
+  `0 <= source_index < in_features` and
   `0 <= target_index < out_features`. Duplicate
   `(source, target)` pairs, empty indices, bad types /
-  ndim, or length mismatch raise `Kpnn2Error`.
-- `out_features`, `in_features`: positive ints.
+  ndim (`bool`, floating, or object tensors and arrays
+  included), or length mismatch raise `Kpnn2Error`.
+- `out_features`, `in_features`: positive ints or numpy
+  integers, stored as `int`.
 - Optional `bias`: shape `(out_features,)`. If
   `bias=False`, no bias parameter. Must be a `bool`.
 - Optional `identity`: opaque `str`, typically
@@ -1788,25 +1795,30 @@ PackedMultiheadAttention(
 )
 ```
 
-- `source_index`, `target_index`: 1-D integer tensor or
-  sequence of int, length `nnz >= 1`, copied to int64
-  buffers. `0 <= source_index < key_features` and
+- `source_index`, `target_index`: 1-D integer tensor, 1-D
+  integer-dtype numpy array, or sequence of int or numpy
+  integers, length `nnz >= 1`, copied to int64 buffers.
+  `0 <= source_index < key_features` and
   `0 <= target_index < query_features`. Duplicate
   `(source, target)` pairs, empty indices, bad types /
-  ndim, or length mismatch raise `Kpnn2Error`.
-- `query_features`, `key_features`: positive ints.
-  Sequence lengths of `query` and of `key` / `value`.
-- `embed_dim`: positive int, divisible by `num_heads`.
-- `num_heads`: positive int.
+  ndim (`bool`, floating, or object tensors and arrays
+  included), or length mismatch raise `Kpnn2Error`.
+- `query_features`, `key_features`: positive ints or numpy
+  integers, stored as `int`. Sequence lengths of `query` and
+  of `key` / `value`.
+- `embed_dim`: positive int or numpy integer, divisible by
+  `num_heads`, stored as `int`.
+- `num_heads`: positive int or numpy integer, stored as
+  `int`.
 - `dropout`: float in `[0, 1]` on packed attention
   weights, the range torch accepts. Integers `0` and `1`
   are accepted. `bool`, NaN, infinities, negatives, and
   values above 1 raise `Kpnn2Error` at construction.
 - Optional `bias`: on the four `nn.Linear` projections.
   Must be a `bool`.
-- `kdim`, `vdim`: must be `None` or an `int` equal to
-  `embed_dim`. Other values, `True` included, raise
-  `Kpnn2Error`.
+- `kdim`, `vdim`: must be `None` or an `int` or numpy
+  integer equal to `embed_dim`. Other values, `True`
+  included, raise `Kpnn2Error`.
 - `batch_first`: default `True` (kpnn2 sample-major).
   That differs from `nn.MultiheadAttention`, whose
   default is sequence-major. Batched tensors are
@@ -1849,8 +1861,9 @@ PackedMultiheadAttention(
   bug) if not; each check waits for the device once.
   The default unchunked path has no such check, so it
   stays `torch.compile(fullgraph=True)`-traceable.
-  `bool` and other non-`int` values, `0`,
-  and negatives raise `Kpnn2Error`. Not stored in
+  A numpy integer is stored as `int`. `bool`,
+  `numpy.bool_`, floats, other non-integers, `0`, and
+  negatives raise `Kpnn2Error`. Not stored in
   `state_dict` or `index_digest`; a checkpoint loads
   into a layer with a different `chunk_size`.
 - Projections are four separate
@@ -2196,9 +2209,10 @@ concat_layouts(
 
 - `attributions`: `torch.Tensor`, or a non-empty tuple/list of
   equal-shaped tensors (stacked on a new `step` axis).
-- `layer`: `int` index into `spec.layer_nodes` (0-based), stored as
-  scalar coordinate `layer`. `LayeredSpec` only, mutually
-  exclusive with `hop_input` and `hop_output`.
+- `layer`: `int` or numpy integer index into `spec.layer_nodes`
+  (0-based), stored as scalar coordinate `layer` (an `int`, so a
+  numpy `layer` gives the same result). `LayeredSpec` only,
+  mutually exclusive with `hop_input` and `hop_output`.
 - `hop_output`: a `Hop` equal to one of `spec.hops`. Labels the
   layer that hop's module returns, `hop.target_layer`, length
   `hop.out_features`, with the scalar `layer` coordinate; the
@@ -2414,6 +2428,11 @@ New code asks a `Layout` for a slot instead of using
 All user-facing failures from the public API raise `Kpnn2Error`.
 Do not leak raw `ValueError` / `KeyError` for contract violations
 at the public boundary (internal helpers may use them if wrapped).
+
+Integer arguments accept a Python `int` or a numpy integer scalar
+(`numbers.Integral`) and convert it to `int` at the boundary, so
+nothing kpnn2 stores or returns holds a numpy integer; `bool`,
+`numpy.bool_`, and floats (`2.0` included) are rejected.
 
 `Kpnn2Error` is for caller mistakes. A failed internal consistency
 check is a kpnn2 bug: package code raises it explicitly with

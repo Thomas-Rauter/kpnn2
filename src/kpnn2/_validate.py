@@ -5,6 +5,7 @@ At module level this imports nothing from kpnn2 but ``_errors``,
 so the spec and layout modules can import it without a cycle.
 """
 
+from numbers import Integral
 from typing import TYPE_CHECKING, TypeGuard
 
 import torch
@@ -18,14 +19,19 @@ if TYPE_CHECKING:
 _DESCRIBE_LIMIT = 60
 
 
-def is_integer(value: object) -> TypeGuard[int]:
+def is_integer(value: object) -> TypeGuard[Integral]:
     """
     Return whether ``value`` counts as an integer argument.
 
-    An ``int`` that is not a ``bool``. Every integer test on a
-    caller's argument goes through here.
+    A Python ``int`` or a numpy integer scalar (any
+    ``numbers.Integral``) that is not a ``bool``. ``numpy.bool_``
+    and floats such as ``2.0`` are not ``Integral`` and fail. A
+    caller converts an accepted value with ``int(...)`` before
+    keeping, returning, or comparing it, so no numpy integer
+    reaches kpnn2's data. Every integer test on a caller's
+    argument goes through here.
     """
-    return isinstance(value, int) and not isinstance(value, bool)
+    return isinstance(value, Integral) and not isinstance(value, bool)
 
 
 def as_positive_int(
@@ -33,7 +39,7 @@ def as_positive_int(
     name: str,
 ) -> int:
     """
-    Return ``value`` if it is an integer ``>= 1``.
+    Return ``value`` as an ``int`` if it is an integer ``>= 1``.
 
     Raises
     ------
@@ -45,7 +51,7 @@ def as_positive_int(
         raise Kpnn2Error(
             f"'{name}' must be a positive int. Got {describe(value)}."
         )
-    return value
+    return int(value)
 
 
 def as_bool(

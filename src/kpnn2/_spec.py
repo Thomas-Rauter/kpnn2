@@ -991,8 +991,9 @@ class LayeredSpec:
             known layout, or is ``"adjacency"``; ``edges``
             is missing or not a sequence of two nonempty names;
             ``"widths"`` is present and not a mapping of
-            positive ints; or ``"ranks"`` is present and not a
-            mapping of non-negative ints covering every node.
+            positive integers; or ``"ranks"`` is present and not
+            a mapping of non-negative integers covering every
+            node.
 
         Examples
         --------

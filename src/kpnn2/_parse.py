@@ -323,9 +323,10 @@ def _layers_from_user_ranks(
     Compact user ranks into dense layers ``0 .. L-1``.
 
     Every graph node must be present. Unknown names, ``bool``
-    values, negatives, and non-ints raise. Inputs must share
-    the minimum user rank, and no non-input may sit there.
-    Every named edge must be strictly forward after compacting.
+    values, negatives, and non-integers raise; numpy integers
+    are kept as ``int``. Inputs must share the minimum user
+    rank, and no non-input may sit there. Every named edge must
+    be strictly forward after compacting.
     """
     if not isinstance(ranks, Mapping):
         raise Kpnn2Error("'ranks' must be a mapping of node name to int.")
@@ -342,7 +343,7 @@ def _layers_from_user_ranks(
                 f"Rank for node {name!r} must be a non-negative int. "
                 f"Got {value!r}."
             )
-        requested[name] = value
+        requested[name] = int(value)
     unknown = sorted(set(requested) - nodes)
     if unknown:
         names_str = ", ".join(unknown)
@@ -420,8 +421,9 @@ def _normalize_widths(
     Map each graph node to a positive unit count.
 
     ``None`` or omitted keys are width 1. Keys are matched after
-    ``str(...)``. Unknown names and non-positive or non-int
-    values raise ``Kpnn2Error``. ``bool`` is rejected.
+    ``str(...)``. Unknown names and non-positive or non-integer
+    values raise ``Kpnn2Error``. ``bool`` is rejected. numpy
+    integers are kept as ``int``.
     """
     if widths is None:
         return {node: 1 for node in nodes}
@@ -440,7 +442,7 @@ def _normalize_widths(
                 f"Width for node {name!r} must be a positive int. "
                 f"Got {value!r}."
             )
-        requested[name] = value
+        requested[name] = int(value)
     unknown = sorted(set(requested) - nodes)
     if unknown:
         names_str = ", ".join(unknown)
@@ -762,21 +764,23 @@ def parse_layered(
         one row per directed edge in the direction of computation.
         Names are converted with ``str(...)``; extra columns are
         ignored. The frame is read, never modified.
-    widths : mapping of str to int, optional
+    widths : mapping of str to int or numpy integer, optional
         Units per named node. Omitted names, ``None``, and an
         empty mapping are width 1. Keys are matched after
         ``str(...)``. Unknown names raise ``Kpnn2Error``. Values
-        must be positive ints; ``bool``, ``0``, and negatives
-        are rejected.
-    ranks : mapping of str to int, optional
+        must be positive ints or numpy integers, stored as
+        ``int``; ``bool``, ``numpy.bool_``, floats, ``0``, and
+        negatives are rejected.
+    ranks : mapping of str to int or numpy integer, optional
         User depth per named node. ``None`` or omitted is
         longest-path ranking, identical to today's default.
         Keys are matched after ``str(...)``. Every graph node
         must be present; unknown names raise ``Kpnn2Error``.
-        Values are non-negative ints; ``bool`` and non-ints
-        are rejected. Unique values are compacted to layers
-        ``0 .. L-1`` with no empty layers, so numbers need not
-        be 0-based or consecutive. All in-degree-0 nodes must
+        Values are non-negative ints or numpy integers;
+        ``bool``, ``numpy.bool_``, and floats are rejected.
+        Unique values are compacted to layers ``0 .. L-1``
+        with no empty layers, so numbers need not be 0-based
+        or consecutive. All in-degree-0 nodes must
         share the minimum rank, and no non-input may use it.
         Every named edge must be strictly forward after
         compacting; same-rank edges are illegal. A node may
@@ -799,11 +803,11 @@ def parse_layered(
         a ``(source, target)`` pair is duplicated; any edge is a
         self-loop; the graph has a cycle; there is no in-degree-0
         node or no out-degree-0 node; ``widths`` names an unknown
-        node or is not a mapping of positive ints; or ``ranks``
-        is incomplete, names an unknown node, is not a mapping
-        of non-negative ints, places inputs off the minimum
-        rank, places a non-input at that minimum, or contains a
-        non-forward edge. Each message names the offending
+        node or is not a mapping of positive integers; or
+        ``ranks`` is incomplete, names an unknown node, is not a
+        mapping of non-negative integers, places inputs off the
+        minimum rank, places a non-input at that minimum, or
+        contains a non-forward edge. Each message names the offending
         pairs or nodes, sorted.
 
     See Also
