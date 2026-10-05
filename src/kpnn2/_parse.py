@@ -2,18 +2,14 @@
 Edgelist parsing for kpnn2.
 """
 
-import os
-import sys
-import warnings
 from collections import deque
 from collections.abc import Mapping, Sequence
-from types import FrameType
 
 import numpy as np
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error, internal_error
+from ._errors import Kpnn2Error, internal_error, warn_at_caller
 from ._layout import (
     Layout,
     NodeSlot,
@@ -194,7 +190,7 @@ def _check_name_types(edgelist: pd.DataFrame) -> None:
             converted,
             edgelist.index,
         )
-        warnings.warn(
+        warn_at_caller(
             "Edgelist holds float or bool values in 'source' or "
             "'target'; they become node names through str(), so "
             f"{text} became {text!r}. {rows_str}. Node names are text, "
@@ -202,27 +198,7 @@ def _check_name_types(edgelist: pd.DataFrame) -> None:
             "convert the column to the intended strings first, for "
             "example with .astype(int).astype(str) for float IDs.",
             UserWarning,
-            stacklevel=_caller_stacklevel(),
         )
-
-
-def _caller_stacklevel() -> int:
-    """
-    Return the ``stacklevel`` of the first frame outside kpnn2.
-
-    A warning raised here then points at the caller's line, from
-    ``parse_layered`` and ``from_dict`` alike, whatever the depth
-    in between. The count starts at the function that calls
-    ``warnings.warn``.
-    """
-    package = os.path.dirname(os.path.abspath(__file__)) + os.sep
-    # Level 1 is the caller of this helper, which calls warn.
-    frame: FrameType | None = sys._getframe(1)
-    level = 1
-    while frame is not None and frame.f_code.co_filename.startswith(package):
-        frame = frame.f_back
-        level += 1
-    return level
 
 
 def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:

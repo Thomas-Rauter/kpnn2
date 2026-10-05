@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import inspect
 import json
-import warnings
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 import xarray as xr
 
-from .._errors import Kpnn2Error, internal_error
+from .._errors import Kpnn2Error, internal_error, warn_at_caller
 from .._validate import describe
 from ._registry import (
     AggregationMethod,
@@ -141,11 +140,10 @@ def _emit_status_signal(entry: AggregationMethod) -> None:
     """Warn for an experimental or deprecated method."""
     status = entry.status
     if status == "experimental":
-        warnings.warn(
+        warn_at_caller(
             f"Aggregation method {entry.name!r} is "
             "experimental; results may change.",
             UserWarning,
-            stacklevel=3,
         )
         return
     if status == "deprecated":
@@ -159,10 +157,9 @@ def _emit_status_signal(entry: AggregationMethod) -> None:
                 f"deprecated in kpnn2 {version}. Use "
                 f"{replacement!r} instead."
             )
-        warnings.warn(
+        warn_at_caller(
             message,
             FutureWarning,
-            stacklevel=3,
         )
 
 

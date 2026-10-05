@@ -2498,6 +2498,12 @@ private helper that only sees kpnn2-produced data, such as every
 lookup on the internal unit layout (`src/kpnn2/_layout.py`), raises
 an internal error.
 
+A warning to the caller (a float node name, an experimental or
+deprecated aggregation method) goes through `warn_at_caller` from
+`src/kpnn2/_errors.py`. It points at the first frame outside kpnn2,
+the caller's own line, at any call depth, so do not pass a fixed
+`stacklevel`.
+
 `LayeredSpec`, `Hop`, `Skip`, and `AdjacencySpec` are valid only as
 returned by the parsers or `from_dict`. Constructing them directly
 is unsupported, and a hand-built spec that breaks the parsers'
@@ -2705,7 +2711,7 @@ src/kpnn2/
     _dispatch.py              # dispatcher
     _bind.py                  # labels onto observation
     _methods/                 # one module per method
-  _errors.py                  # Kpnn2Error, internal_error
+  _errors.py                  # Kpnn2Error, internal_error, warn_at_caller
   _validate.py                # argument checks shared across entry points
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis

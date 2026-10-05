@@ -9,6 +9,7 @@ from collections.abc import Mapping, Set
 from numbers import Integral
 from typing import TYPE_CHECKING, TypeGuard
 
+import numpy as np
 import torch
 
 from ._errors import Kpnn2Error
@@ -91,28 +92,50 @@ def describe(value: object) -> str:
     either: ``list of length 2``. Anything else is its ``repr``,
     cut at the first line break and at about 60 characters,
     followed by its type name: ``'no' (str)``, ``1.5 (float)``.
-    ``None`` is ``None``.
+    A numpy scalar has shape ``()`` but holds one value, not an
+    array, so it is described by that value in the same way:
+    ``1.5 (float64)``, ``True (bool)``. A 0-dimensional array or
+    tensor still gets the shape form. ``None`` is ``None``.
     """
     if value is None:
         return "None"
-    shape = getattr(value, "shape", None)
-    if isinstance(shape, tuple):
-        text = f"{type(value).__name__} of shape {tuple(shape)}"
-        dtype = getattr(value, "dtype", None)
-        if dtype is not None:
-            text = f"{text}, dtype {dtype}"
-        return text
-    if isinstance(value, (list, tuple, dict, set, frozenset)):
-        items = value.values() if isinstance(value, dict) else value
-        if any(
-            isinstance(getattr(item, "shape", None), tuple) for item in items
-        ):
-            return f"{type(value).__name__} of length {len(value)}"
-    full = repr(value)
+    if isinstance(value, np.generic):
+        full = _numpy_scalar_text(value)
+    else:
+        shape = getattr(value, "shape", None)
+        if isinstance(shape, tuple):
+            text = f"{type(value).__name__} of shape {tuple(shape)}"
+            dtype = getattr(value, "dtype", None)
+            if dtype is not None:
+                text = f"{text}, dtype {dtype}"
+            return text
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            items = value.values() if isinstance(value, dict) else value
+            if any(
+                isinstance(getattr(item, "shape", None), tuple)
+                and not isinstance(item, np.generic)
+                for item in items
+            ):
+                return f"{type(value).__name__} of length {len(value)}"
+        full = repr(value)
     text = full.partition("\n")[0]
     if text != full or len(text) > _DESCRIBE_LIMIT:
         text = f"{text[: _DESCRIBE_LIMIT - 3]}..."
     return f"{text} ({type(value).__name__})"
+
+
+def _numpy_scalar_text(value: np.generic) -> str:
+    """
+    Return the text of one numpy scalar as a message shows it.
+
+    A number or ``bool`` uses numpy's own shortest form, so
+    ``np.float32(0.1)`` reads ``0.1``. Anything else, such as
+    ``np.str_``, shows the ``repr`` of the Python value, quotes
+    included: ``'no'``.
+    """
+    if isinstance(value, (np.number, np.bool_)):
+        return str(value)
+    return repr(value.item())
 
 
 def reject_unordered(

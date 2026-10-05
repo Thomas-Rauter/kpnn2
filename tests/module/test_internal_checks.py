@@ -18,7 +18,7 @@ from kpnn2 import (
     _parse_adjacency,
     _serialize,
 )
-from kpnn2._errors import _ISSUES_URL, internal_error
+from kpnn2._errors import _ISSUES_URL, internal_error, warn_at_caller
 
 _PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
@@ -84,6 +84,20 @@ def test_issues_url_matches_pyproject():
     text = _PYPROJECT.read_text(encoding="utf-8")
 
     assert f'Issues = "{_ISSUES_URL}"' in text
+
+
+def test_warn_at_caller_points_at_the_first_frame_outside_kpnn2():
+    with pytest.warns(
+        FutureWarning,
+        match="^soon$",
+    ) as record:
+        warn_at_caller(
+            "soon",
+            FutureWarning,
+        )
+
+    assert len(record) == 1
+    assert record[0].filename == __file__
 
 
 def test_raised_internal_error_is_caught_as_assertion_error():

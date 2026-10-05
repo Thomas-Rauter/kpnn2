@@ -136,15 +136,13 @@ _CASES = [
     pytest.param(
         [0, 1],
         [np.int64(0), np.bool_(True)],
-        f"'target_index' {_NOT_INDEX} Got {_NUMPY_BOOL} of shape (), "
-        "dtype bool at position 1.",
+        f"'target_index' {_NOT_INDEX} Got True ({_NUMPY_BOOL}) at position 1.",
         id="numpy_bool_item",
     ),
     pytest.param(
         [0, 1],
         [np.int64(0), np.float64(1.0)],
-        f"'target_index' {_NOT_INDEX} Got float64 of shape (), "
-        "dtype float64 at position 1.",
+        f"'target_index' {_NOT_INDEX} Got 1.0 (float64) at position 1.",
         id="numpy_float_item",
     ),
     pytest.param(

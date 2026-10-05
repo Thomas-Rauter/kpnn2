@@ -119,6 +119,50 @@ def test_deprecated_method_emits_future_warning(register_dummy):
         )
 
 
+@pytest.mark.parametrize(
+    ("status", "options", "category"),
+    [
+        pytest.param(
+            "experimental",
+            {},
+            UserWarning,
+            id="experimental",
+        ),
+        pytest.param(
+            "deprecated",
+            {
+                "deprecated_in": "0.2.0",
+                "replacement": "rauter_mangano_2026",
+            },
+            FutureWarning,
+            id="deprecated",
+        ),
+    ],
+)
+def test_status_warning_points_at_the_caller(
+    register_dummy,
+    status,
+    options,
+    category,
+):
+    name = f"_dummy_{status}_location"
+    register_dummy(
+        name,
+        status=status,
+        **options,
+    )(_mean_dataset)
+
+    with pytest.warns(category) as record:
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
+        )
+
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+
 def test_removed_method_raises_and_names_replacement(register_dummy):
     name = "_dummy_removed"
 

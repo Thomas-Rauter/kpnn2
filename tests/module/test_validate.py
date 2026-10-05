@@ -533,3 +533,81 @@ def test_require_floating_rejects_and_omits_values(dtype):
             "Layer input",
         )
     assert "12345" not in str(caught.value)
+
+
+# Type name of a numpy scalar: ``bool`` on numpy 2, ``bool_`` on 1.x.
+_NUMPY_BOOL = type(np.bool_(True)).__name__
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            np.float64(1.5),
+            "1.5 (float64)",
+            id="float64",
+        ),
+        pytest.param(
+            np.float32(0.1),
+            "0.1 (float32)",
+            id="float32_shortest_form",
+        ),
+        pytest.param(
+            np.int64(-3),
+            "-3 (int64)",
+            id="int64",
+        ),
+        pytest.param(
+            np.bool_(True),
+            f"True ({_NUMPY_BOOL})",
+            id="bool",
+        ),
+        pytest.param(
+            np.complex64(1 + 2j),
+            "(1+2j) (complex64)",
+            id="complex64",
+        ),
+        pytest.param(
+            np.str_("no"),
+            "'no' (str_)",
+            id="str_",
+        ),
+    ],
+)
+def test_describe_numpy_scalar_by_its_value(
+    value,
+    expected,
+):
+    assert describe(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(
+            np.array(
+                12345,
+                dtype=np.int64,
+            ),
+            "ndarray of shape (), dtype int64",
+            id="zero_dim_array",
+        ),
+        pytest.param(
+            torch.tensor(12345.0),
+            "Tensor of shape (), dtype torch.float32",
+            id="zero_dim_tensor",
+        ),
+    ],
+)
+def test_describe_zero_dim_array_and_tensor_by_shape_not_value(
+    value,
+    expected,
+):
+    assert describe(value) == expected
+
+
+def test_describe_container_of_numpy_scalars_keeps_its_repr():
+    text = describe([np.int64(1), 2])
+
+    assert text.endswith(" (list)")
+    assert "1" in text
