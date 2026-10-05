@@ -20,7 +20,7 @@ from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 from ._packed_index import as_packed_pairs, digest_matches
-from ._validate import as_positive_int
+from ._validate import as_positive_int, check_layer_input
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -65,32 +65,6 @@ def _index_digest(
         tuple(digest),
         dtype=torch.uint8,
     )
-
-
-def _check_input(
-    x: object,
-    in_features: int,
-) -> None:
-    """
-    Raise unless ``x`` is a tensor of shape ``(..., in_features)``.
-
-    The forward gather reads columns by position, so without this
-    check a wider tensor would be accepted and read silently.
-    """
-    if not isinstance(x, torch.Tensor):
-        raise Kpnn2Error("PackedLinear input must be a torch.Tensor.")
-    if x.ndim < 1:
-        raise Kpnn2Error(
-            "PackedLinear input must have shape (..., in_features) "
-            f"with in_features={in_features}. Got a 0-dimensional "
-            "tensor."
-        )
-    if x.shape[-1] != in_features:
-        raise Kpnn2Error(
-            "PackedLinear input must have shape (..., in_features) "
-            f"with in_features={in_features}. Got last dimension "
-            f"{x.shape[-1]}."
-        )
 
 
 class PackedLinear(nn.Module):
@@ -772,9 +746,10 @@ class PackedLinear(nn.Module):
         Raises ``Kpnn2Error`` when ``x`` is not a tensor or its
         last dimension is not ``in_features``.
         """
-        _check_input(
+        check_layer_input(
             x,
             self.in_features,
+            "PackedLinear",
         )
         with torch.autocast(
             device_type=x.device.type,

@@ -7,6 +7,8 @@ so the spec and layout modules can import it without a cycle.
 
 from typing import TYPE_CHECKING, TypeGuard
 
+import torch
+
 from ._errors import Kpnn2Error
 
 if TYPE_CHECKING:
@@ -90,3 +92,38 @@ def require_spec(spec: "LayeredSpec | AdjacencySpec") -> None:
         (LayeredSpec, AdjacencySpec),
     ):
         raise Kpnn2Error("'spec' must be a LayeredSpec or an AdjacencySpec.")
+
+
+def check_layer_input(
+    x: object,
+    in_features: int,
+    owner: str,
+) -> None:
+    """
+    Raise unless ``x`` is a tensor of shape ``(..., in_features)``.
+
+    Shared by the forward of both linear layers; ``owner`` is the
+    class name the message starts with. Without this check a wider
+    tensor would be read silently by the ``PackedLinear`` gather,
+    and a raw torch error would leak from ``MaskedLinear``.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``x`` is not a ``torch.Tensor``, is 0-dimensional, or
+        its last dimension is not ``in_features``.
+    """
+    if not isinstance(x, torch.Tensor):
+        raise Kpnn2Error(f"{owner} input must be a torch.Tensor.")
+    if x.ndim < 1:
+        raise Kpnn2Error(
+            f"{owner} input must have shape (..., in_features) "
+            f"with in_features={in_features}. Got a 0-dimensional "
+            "tensor."
+        )
+    if x.shape[-1] != in_features:
+        raise Kpnn2Error(
+            f"{owner} input must have shape (..., in_features) "
+            f"with in_features={in_features}. Got last dimension "
+            f"{x.shape[-1]}."
+        )

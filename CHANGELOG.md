@@ -15,6 +15,9 @@ semantic versioning.
 - `MaskedLinear` rejects a mask with a value other than 0
   and 1, an empty dimension, or no live entry. Put per-edge
   scaling or signs in `constraint=`.
+- `MaskedLinear.forward` raises `Kpnn2Error` (was a raw torch
+  error) when the input is not a tensor or its last dimension
+  is not `in_features`.
 
 
 ## [0.2.0] - 23. September 2026

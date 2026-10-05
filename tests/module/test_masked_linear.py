@@ -38,6 +38,72 @@ def test_masked_linear_output_shape():
     assert y.shape == (4, 2)
 
 
+def _two_by_three_layer():
+    torch.manual_seed(42)
+    mask = torch.tensor(
+        [
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    return MaskedLinear(mask)
+
+
+@pytest.mark.parametrize(
+    "width",
+    [2, 4],
+)
+def test_masked_linear_rejects_input_of_wrong_width(width):
+    layer = _two_by_three_layer()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"^MaskedLinear input .*in_features=3\.",
+    ) as caught:
+        layer(torch.randn(4, width))
+
+    assert f"Got last dimension {width}." in str(caught.value)
+
+
+def test_masked_linear_rejects_zero_dim_input():
+    layer = _two_by_three_layer()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"^MaskedLinear input .*in_features=3\. Got a 0-dimensional",
+    ):
+        layer(torch.tensor(1.0))
+
+
+def test_masked_linear_rejects_non_tensor_input():
+    layer = _two_by_three_layer()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=r"^MaskedLinear input must be a torch\.Tensor\.",
+    ):
+        layer([[1.0, 2.0, 3.0]])
+
+
+def test_masked_linear_accepts_extra_leading_batch_dims():
+    layer = _two_by_three_layer()
+    x = torch.randn(
+        2,
+        3,
+        3,
+    )
+
+    y = layer(x)
+
+    assert y.shape == (2, 3, 2)
+    expected = x @ layer.effective_weight().T + layer.bias
+    torch.testing.assert_close(
+        y,
+        expected,
+    )
+
+
 def test_masked_linear_zero_mask_entry_blocks_source():
     mask = torch.tensor(
         [

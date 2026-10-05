@@ -20,6 +20,7 @@ from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 from ._mask_tensor import as_mask_tensor
+from ._validate import check_layer_input
 
 _MASK_DIGEST_KEY = "mask_digest"
 # kpnn2 0.1 stored the trainable tensor through torch parametrize.
@@ -217,10 +218,12 @@ class MaskedLinear(nn.Module):
         nor ``None``; if ``constraint`` is neither an
         ``nn.Module`` nor ``None``, or does not preserve the
         weight shape; if ``generator`` is neither a
-        ``torch.Generator`` nor ``None``; and from
+        ``torch.Generator`` nor ``None``; from
         ``load_state_dict`` when the checkpoint carries a mask
-        digest or identity that does not match this layer; the
-        weights are then not loaded.
+        digest or identity that does not match this layer, in
+        which case the weights are not loaded; and from
+        ``forward`` when ``x`` is not a tensor or its last
+        dimension is not ``in_features``.
 
     See Also
     --------
@@ -665,7 +668,15 @@ class MaskedLinear(nn.Module):
         ``.half()``, bfloat16, and ``.double()`` match
         ``nn.Linear``. ``torch.autocast`` is unsupported: this
         path disables it and casts ``x`` to the parameter dtype.
+
+        Raises ``Kpnn2Error`` when ``x`` is not a tensor or its
+        last dimension is not ``in_features``.
         """
+        check_layer_input(
+            x,
+            self.in_features,
+            "MaskedLinear",
+        )
         with torch.autocast(
             device_type=x.device.type,
             enabled=False,

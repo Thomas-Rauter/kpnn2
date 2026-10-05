@@ -1405,6 +1405,10 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   (identity when omitted), and `M` cast to `W`'s
   dtype/device. This is why `.half()` / bfloat16 /
   `.double()` work like `nn.Linear`.
+  Before the multiply, `forward` raises `Kpnn2Error` unless
+  `x` is a tensor with `x.shape[-1] == in_features` (0-d
+  included). It is the check `PackedLinear` runs, so a wrong
+  width or a non-tensor does not leak a raw torch error.
   `torch.autocast` is unsupported: `forward` disables it
   and casts `x` to the parameter dtype. Skip-edge
   `gather_hop_inputs` then still sees one dtype. In the
@@ -1561,8 +1565,9 @@ PackedLinear(
 
   Before the recipe, `forward` raises `Kpnn2Error` unless `x`
   is a tensor with `x.shape[-1] == in_features` (0-d
-  included), as `nn.Linear` / `MaskedLinear` (through
-  `F.linear`) and `PackedMultiheadAttention` do. The gather
+  included). `MaskedLinear.forward` raises the same
+  `Kpnn2Error`, and `PackedMultiheadAttention` checks its
+  input widths too. The gather
   reads columns by position, so without the check a wider
   tensor would be accepted and silently read: for example a
   stale `align_inputs` index after a reparse that removed an
