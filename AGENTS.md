@@ -242,7 +242,10 @@ at the repo root. `python -m build` needs `-o out/dist`.
   `kpnn2.parse_layered(...)` (same for the other public
   names). Do not introduce `import kpnn2 as k2`. Users
   never import private modules (`kpnn2._masked_linear`).
-- Public failures: `Kpnn2Error` only.
+- Caller mistakes raise `Kpnn2Error` only. Failed internal
+  checks use `raise internal_error(...)` (an
+  `AssertionError`), never the `assert` statement. See
+  `CONTEXT.md` **Errors**.
 - Randomness in tests: `random.seed(42)`,
   `numpy.random.seed(42)`, `torch.manual_seed(42)`.
 

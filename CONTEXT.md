@@ -2390,6 +2390,25 @@ All user-facing failures from the public API raise `Kpnn2Error`.
 Do not leak raw `ValueError` / `KeyError` for contract violations
 at the public boundary (internal helpers may use them if wrapped).
 
+`Kpnn2Error` is for caller mistakes. A failed internal consistency
+check is a kpnn2 bug: package code raises it explicitly with
+`raise internal_error("...")` from `src/kpnn2/_errors.py`, which
+returns an `AssertionError` (not a `Kpnn2Error`) whose message says
+it is a kpnn2 bug and asks for a report at the issue tracker. It
+never warns. `src/` never uses the `assert` statement, because
+`python -O` strips it; `tests/api/test_package_locks.py` enforces
+that. Checks cover invariants whose violation would otherwise go
+unnoticed (normalizations, edge conservation, identifier alignment
+after a reordering). They do not repeat what holds by construction
+or what validation guarantees, they stay cheap, and they never go
+into a forward path that must stay
+`torch.compile(fullgraph=True)`-traceable.
+
+`LayeredSpec`, `Hop`, `Skip`, and `AdjacencySpec` are valid only as
+returned by the parsers or `from_dict`. Constructing them directly
+is unsupported, and a hand-built spec that breaks the parsers'
+invariants may trip an internal check.
+
 ---
 
 ## Typical workflow
@@ -2583,7 +2602,7 @@ src/kpnn2/
     _dispatch.py              # dispatcher
     _bind.py                  # labels onto observation
     _methods/                 # one module per method
-  _errors.py                  # Kpnn2Error
+  _errors.py                  # Kpnn2Error, internal_error
   _mask_tensor.py             # float32 connectivity copies
   _layout.py                  # node name -> units on an axis
   _identity.py                # opaque checkpoint identity

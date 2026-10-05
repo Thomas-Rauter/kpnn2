@@ -80,8 +80,18 @@ and explain the conflict.
 -------------------------------------
 - Validate user-facing arguments (type, shape, bounds,
   semantics) at entry and raise `Kpnn2Error` that says what
-  was wrong and how to fix it. Public failures: `Kpnn2Error`
-  only (see AGENTS.md).
+  was wrong and how to fix it. Caller mistakes raise
+  `Kpnn2Error` only (see AGENTS.md).
+- Wear belt and braces: check the key invariants of a
+  method in code, on every run, where a violation would
+  otherwise go unnoticed (a normalization, a conservation
+  law, identifier alignment after a reordering). Raise
+  with `raise internal_error("...")` from `_errors.py`;
+  never `assert`, never warn. Do not check what holds by
+  construction or what validation already guarantees.
+  Keep checks cheap and out of forward paths that must
+  stay `torch.compile(fullgraph=True)`-traceable. See
+  CONTEXT.md **Errors**.
 - Never write code that silently recovers from invalid
   input: no try/except with a quiet fallback, no automatic
   casting to make input work, no guessing what the user
@@ -161,6 +171,9 @@ BEFORE FINISHING ANY CHANGE TO src/
     changes, or global config changes were added.
 [ ] Caller data is not mutated.
 [ ] No silent fallbacks, casts, or NaN handling were added.
+[ ] Key invariants the change touches are checked with
+    `internal_error`, not `assert`, and caller mistakes
+    still raise `Kpnn2Error`.
 [ ] No numerical defaults or public signatures changed
     without approval.
 [ ] No new dependencies, options, or features beyond the

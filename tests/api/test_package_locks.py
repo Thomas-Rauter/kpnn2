@@ -16,6 +16,7 @@ _LOCKS = (
     "seed",
     "device",
     "dependency",
+    "assert",
 )
 
 # Pinned here. Reading pyproject.toml would let a new
@@ -59,6 +60,7 @@ def demo(x):
     x.to("cuda")
     torch.device("cuda")
     torch.set_default_device("cuda")
+    assert x is not None
     return torch.sparse.sum(x)
 """
 
@@ -167,7 +169,13 @@ def _scan_tree(
         found[lock].append((lineno, detail))
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
+        if isinstance(node, ast.Assert):
+            add(
+                "assert",
+                node.lineno,
+                "assert",
+            )
+        elif isinstance(node, ast.Import):
             for alias in node.names:
                 if not _dependency_allowed(alias.name):
                     add(
@@ -363,6 +371,10 @@ def test_src_imports_only_pinned_dependencies():
     assert _src_findings()["dependency"] == []
 
 
+def test_src_does_not_use_assert():
+    assert _src_findings()["assert"] == []
+
+
 def test_scanner_flags_forbidden_syntax_and_allows_copies():
     bad = _scan_source(
         _FORBIDDEN,
@@ -381,6 +393,7 @@ def test_scanner_flags_forbidden_syntax_and_allows_copies():
     assert any("set_default_device" in hit for hit in bad["device"])
     assert any("captum" in hit for hit in bad["dependency"])
     assert not any("torch" in hit for hit in bad["dependency"])
+    assert any("assert" in hit for hit in bad["assert"])
 
     good = _scan_source(
         _ALLOWED,
