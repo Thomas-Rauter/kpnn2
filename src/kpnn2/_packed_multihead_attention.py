@@ -4,7 +4,6 @@ Packed multi-head attention: scores only on live edgelist pairs.
 
 import hashlib
 import struct
-from collections.abc import Iterable
 from typing import Any
 
 import torch
@@ -14,56 +13,9 @@ from torch import nn
 from ._errors import Kpnn2Error, internal_error
 from ._generator import as_generator, run_preserving_default_rng
 from ._identity import as_identity, check_identity, save_identity
+from ._packed_index import as_packed_pairs, digest_matches
 
 _INDEX_DIGEST_KEY = "index_digest"
-
-
-def _copy_index(
-    value: object,
-    name: str,
-) -> torch.Tensor:
-    """
-    Copy ``value`` to a 1-D int64 tensor.
-
-    Accepts a 1-D integer ``torch.Tensor`` or a sequence of
-    ``int``. The result is contiguous and independent of
-    ``value``.
-    """
-    if isinstance(value, torch.Tensor):
-        if value.ndim != 1:
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
-            )
-        if value.is_floating_point() or value.dtype == torch.bool:
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
-            )
-        return value.detach().to(dtype=torch.int64).contiguous().clone()
-
-    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
-        raise Kpnn2Error(
-            f"'{name}' must be a 1-dimensional integer tensor "
-            "or a sequence of int."
-        )
-    try:
-        items = tuple(value)
-    except TypeError as exc:
-        raise Kpnn2Error(
-            f"'{name}' must be a 1-dimensional integer tensor "
-            "or a sequence of int."
-        ) from exc
-    for item in items:
-        if isinstance(item, bool) or not isinstance(item, int):
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
-            )
-    return torch.tensor(
-        items,
-        dtype=torch.int64,
-    )
 
 
 def _positive_int(
@@ -119,23 +71,6 @@ def _index_digest(
     return torch.tensor(
         tuple(digest),
         dtype=torch.uint8,
-    )
-
-
-def _digest_matches(
-    saved: object,
-    current: torch.Tensor,
-) -> bool:
-    if not isinstance(saved, torch.Tensor):
-        return False
-    saved_flat = saved.detach().cpu().contiguous().reshape(-1)
-    if saved_flat.shape != current.shape or saved_flat.dtype != current.dtype:
-        return False
-    return bool(
-        torch.equal(
-            saved_flat,
-            current,
-        )
     )
 
 
@@ -1272,45 +1207,15 @@ class PackedMultiheadAttention(nn.Module):
             raise Kpnn2Error("'kdim' must be None or equal to embed_dim.")
         if vdim is not None and vdim != embed_dim:
             raise Kpnn2Error("'vdim' must be None or equal to embed_dim.")
-        source = _copy_index(
+        source, target = as_packed_pairs(
             source_index,
-            "source_index",
-        )
-        target = _copy_index(
             target_index,
-            "target_index",
+            source_bound=key_features,
+            target_bound=query_features,
+            source_bound_name="key_features",
+            target_bound_name="query_features",
+            owner="PackedMultiheadAttention",
         )
-        if source.shape != target.shape:
-            raise Kpnn2Error(
-                "'source_index' and 'target_index' must have the same length."
-            )
-        nnz = int(source.numel())
-        if nnz == 0:
-            raise Kpnn2Error(
-                "'source_index' and 'target_index' must contain "
-                "at least one index."
-            )
-        if torch.any(source < 0) or torch.any(source >= key_features):
-            raise Kpnn2Error(
-                "'source_index' entries must satisfy "
-                "0 <= source_index < key_features."
-            )
-        if torch.any(target < 0) or torch.any(target >= query_features):
-            raise Kpnn2Error(
-                "'target_index' entries must satisfy "
-                "0 <= target_index < query_features."
-            )
-        pairs = list(
-            zip(
-                source.tolist(),
-                target.tolist(),
-            )
-        )
-        if len(set(pairs)) != len(pairs):
-            raise Kpnn2Error(
-                "PackedMultiheadAttention indices contain "
-                "duplicate (source, target) pair(s)."
-            )
         source, target = _maybe_self_loops(
             source,
             target,
@@ -1474,7 +1379,7 @@ class PackedMultiheadAttention(nn.Module):
                 self.embed_dim,
                 self.num_heads,
             )
-            if not _digest_matches(
+            if not digest_matches(
                 saved,
                 current,
             ):

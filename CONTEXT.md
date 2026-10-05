@@ -2609,6 +2609,7 @@ src/kpnn2/
   _constraint.py              # constraint= validation for both linears
   _generator.py               # generator= validation; isolate Linear init
   _packed_multihead_attention.py  # PackedMultiheadAttention
+  _packed_index.py            # index checks for both packed layers
   _gather.py                  # gather_hop_inputs, scatter_hop_outputs
   _align.py                   # align_inputs
   _attributions.py            # map_node_attributions

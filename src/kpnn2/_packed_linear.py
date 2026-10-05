@@ -6,7 +6,6 @@ import copy
 import hashlib
 import math
 import struct
-from collections.abc import Iterable
 from typing import Any
 
 import torch
@@ -20,56 +19,9 @@ from ._constraint import (
 from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
+from ._packed_index import as_packed_pairs, digest_matches
 
 _INDEX_DIGEST_KEY = "index_digest"
-
-
-def _copy_index(
-    value: object,
-    name: str,
-) -> torch.Tensor:
-    """
-    Copy ``value`` to a 1-D int64 tensor.
-
-    Accepts a 1-D integer ``torch.Tensor`` or a sequence of
-    ``int``. The result is contiguous and independent of
-    ``value``.
-    """
-    if isinstance(value, torch.Tensor):
-        if value.ndim != 1:
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
-            )
-        if value.is_floating_point() or value.dtype == torch.bool:
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
-            )
-        return value.detach().to(dtype=torch.int64).contiguous().clone()
-
-    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
-        raise Kpnn2Error(
-            f"'{name}' must be a 1-dimensional integer tensor "
-            "or a sequence of int."
-        )
-    try:
-        items = tuple(value)
-    except TypeError as exc:
-        raise Kpnn2Error(
-            f"'{name}' must be a 1-dimensional integer tensor "
-            "or a sequence of int."
-        ) from exc
-    for item in items:
-        if isinstance(item, bool) or not isinstance(item, int):
-            raise Kpnn2Error(
-                f"'{name}' must be a 1-dimensional integer "
-                "tensor or a sequence of int."
-            )
-    return torch.tensor(
-        items,
-        dtype=torch.int64,
-    )
 
 
 def _index_digest(
@@ -111,23 +63,6 @@ def _index_digest(
     return torch.tensor(
         tuple(digest),
         dtype=torch.uint8,
-    )
-
-
-def _digest_matches(
-    saved: object,
-    current: torch.Tensor,
-) -> bool:
-    if not isinstance(saved, torch.Tensor):
-        return False
-    saved_flat = saved.detach().cpu().contiguous().reshape(-1)
-    if saved_flat.shape != current.shape or saved_flat.dtype != current.dtype:
-        return False
-    return bool(
-        torch.equal(
-            saved_flat,
-            current,
-        )
     )
 
 
@@ -455,45 +390,16 @@ class PackedLinear(nn.Module):
             in_features,
             "in_features",
         )
-        source = _copy_index(
+        source, target = as_packed_pairs(
             source_index,
-            "source_index",
-        )
-        target = _copy_index(
             target_index,
-            "target_index",
+            source_bound=in_features,
+            target_bound=out_features,
+            source_bound_name="in_features",
+            target_bound_name="out_features",
+            owner="PackedLinear",
         )
-        if source.shape != target.shape:
-            raise Kpnn2Error(
-                "'source_index' and 'target_index' must have the same length."
-            )
         nnz = int(source.numel())
-        if nnz == 0:
-            raise Kpnn2Error(
-                "'source_index' and 'target_index' must contain "
-                "at least one index."
-            )
-        if torch.any(source < 0) or torch.any(source >= in_features):
-            raise Kpnn2Error(
-                "'source_index' entries must satisfy "
-                "0 <= source_index < in_features."
-            )
-        if torch.any(target < 0) or torch.any(target >= out_features):
-            raise Kpnn2Error(
-                "'target_index' entries must satisfy "
-                "0 <= target_index < out_features."
-            )
-        pairs = list(
-            zip(
-                source.tolist(),
-                target.tolist(),
-            )
-        )
-        if len(set(pairs)) != len(pairs):
-            raise Kpnn2Error(
-                "PackedLinear indices contain duplicate "
-                "(source, target) pair(s)."
-            )
 
         self.in_features = in_features
         self.out_features = out_features
@@ -842,7 +748,7 @@ class PackedLinear(nn.Module):
                 self.out_features,
                 self.in_features,
             )
-            if not _digest_matches(
+            if not digest_matches(
                 saved,
                 current,
             ):
