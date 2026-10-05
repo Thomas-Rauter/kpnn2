@@ -1825,7 +1825,14 @@ PackedMultiheadAttention(
   many edges. Backward rematerializes those gathers so
   training does not save `(..., nnz, heads, head_dim)`
   pair tensors. Packed softmax `(..., nnz, heads)` is
-  still stored. `bool` and other non-`int` values, `0`,
+  still stored. With a positive int, forward and
+  backward check on every call that each query's packed
+  softmax sums to 1 and that its gradient sums to 0, and
+  raise `AssertionError` via `internal_error` (a kpnn2
+  bug) if not; each check waits for the device once.
+  The default unchunked path has no such check, so it
+  stays `torch.compile(fullgraph=True)`-traceable.
+  `bool` and other non-`int` values, `0`,
   and negatives raise `Kpnn2Error`. Not stored in
   `state_dict` or `index_digest`; a checkpoint loads
   into a layer with a different `chunk_size`.

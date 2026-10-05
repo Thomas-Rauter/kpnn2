@@ -11,7 +11,12 @@ import pytest
 import torch
 
 import kpnn2
-from kpnn2 import Kpnn2Error, _parse, _parse_adjacency
+from kpnn2 import (
+    Kpnn2Error,
+    _packed_multihead_attention,
+    _parse,
+    _parse_adjacency,
+)
 from kpnn2._errors import _ISSUES_URL, internal_error
 
 _PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
@@ -593,3 +598,271 @@ def test_parsers_pass_internal_checks_on_random_graphs():
 
     # ranks= must place nodes off longest-path on a fair share.
     assert n_reranked > 20
+
+
+def test_softmax_row_check_raises_on_rows_off_one():
+    row_sum = torch.tensor(
+        [
+            [1.0, 0.0],
+            [2.0, 0.5],
+        ]
+    )
+    degree = torch.full(
+        (2, 1),
+        4.0,
+    )
+
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "packed softmax weights of a query do not sum to 1"
+        ),
+    ):
+        _packed_multihead_attention._check_softmax_rows(
+            row_sum,
+            degree,
+            torch.float32,
+        )
+
+
+def test_softmax_row_check_passes_one_zero_and_non_finite_rows():
+    row_sum = torch.tensor(
+        [
+            [1.0, 0.0],
+            [float("nan"), float("inf")],
+        ]
+    )
+    degree = torch.full(
+        (2, 1),
+        4.0,
+    )
+
+    _packed_multihead_attention._check_softmax_rows(
+        row_sum,
+        degree,
+        torch.float32,
+    )
+
+
+def test_softmax_grad_row_check_raises_on_a_row_off_zero():
+    grad_sum = torch.tensor(
+        [
+            [0.0, 1.0],
+        ]
+    )
+    scale = torch.ones(
+        1,
+        2,
+    )
+    degree = torch.full(
+        (1, 1),
+        4.0,
+    )
+
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "packed softmax gradient of a query does not sum to 0"
+        ),
+    ):
+        _packed_multihead_attention._check_softmax_grad_rows(
+            grad_sum,
+            scale,
+            degree,
+            torch.float32,
+        )
+
+
+def test_softmax_grad_row_check_passes_zero_and_non_finite_rows():
+    grad_sum = torch.tensor(
+        [
+            [0.0, 1e-7],
+            [float("nan"), float("inf")],
+        ]
+    )
+    scale = torch.ones(
+        2,
+        2,
+    )
+    degree = torch.full(
+        (2, 1),
+        4.0,
+    )
+
+    _packed_multihead_attention._check_softmax_grad_rows(
+        grad_sum,
+        scale,
+        degree,
+        torch.float32,
+    )
+
+
+def _count_calls(
+    monkeypatch,
+    name,
+):
+    calls = []
+    check = getattr(
+        _packed_multihead_attention,
+        name,
+    )
+
+    def counted(*args):
+        calls.append(args)
+        return check(*args)
+
+    monkeypatch.setattr(
+        _packed_multihead_attention,
+        name,
+        counted,
+    )
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("chunk_size", "n_calls"),
+    [
+        (None, 0),
+        (2, 1),
+    ],
+)
+def test_attention_softmax_checks_run_once_per_chunked_pass(
+    monkeypatch,
+    chunk_size,
+    n_calls,
+):
+    torch.manual_seed(42)
+    row_calls = _count_calls(
+        monkeypatch,
+        "_check_softmax_rows",
+    )
+    grad_calls = _count_calls(
+        monkeypatch,
+        "_check_softmax_grad_rows",
+    )
+    spec = kpnn2.parse_adjacency(_cyclic_edgelist())
+    n = spec.state_dim
+    layer = kpnn2.PackedMultiheadAttention(
+        spec.source_index,
+        spec.target_index,
+        n,
+        n,
+        4,
+        2,
+        chunk_size=chunk_size,
+    )
+    x = torch.randn(
+        2,
+        n,
+        4,
+        requires_grad=True,
+    )
+
+    out, _ = layer(
+        x,
+        x,
+        x,
+    )
+    assert len(row_calls) == n_calls
+    assert len(grad_calls) == 0
+    out.sum().backward()
+
+    assert len(row_calls) == n_calls
+    assert len(grad_calls) == n_calls
+
+
+_STAR_KEYS = 1000
+
+
+def _star_attention(
+    dtype,
+    **kwargs,
+):
+    """
+    Query 0 attends over every other node, query 1 over three of
+    them, and the remaining queries have no live key.
+    """
+    n = _STAR_KEYS + 1
+    source = list(range(1, n)) + [2, 3, 4]
+    target = [0] * _STAR_KEYS + [1, 1, 1]
+    layer = kpnn2.PackedMultiheadAttention(
+        source,
+        target,
+        n,
+        n,
+        4,
+        2,
+        chunk_size=64,
+        **kwargs,
+    )
+    return layer.to(dtype=dtype)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.float32,
+        torch.float64,
+        torch.float16,
+        torch.bfloat16,
+    ],
+)
+@pytest.mark.parametrize(
+    ("layer_kwargs", "padding", "nan_input"),
+    [
+        ({}, False, False),
+        ({}, True, False),
+        ({"dropout": 0.5}, False, False),
+        ({"add_self_loops": True}, True, False),
+        ({}, False, True),
+    ],
+    ids=[
+        "star",
+        "padding",
+        "dropout",
+        "self_loops",
+        "nan_input",
+    ],
+)
+def test_chunked_attention_passes_internal_checks(
+    dtype,
+    layer_kwargs,
+    padding,
+    nan_input,
+):
+    torch.manual_seed(42)
+    layer = _star_attention(
+        dtype,
+        **layer_kwargs,
+    )
+    layer.train()
+    n = _STAR_KEYS + 1
+    x = torch.randn(
+        3,
+        n,
+        4,
+        dtype=dtype,
+    )
+    if nan_input:
+        x[0, 3, 0] = float("nan")
+    x.requires_grad_(True)
+    key_padding_mask = None
+    if padding:
+        key_padding_mask = torch.rand(3, n) < 0.5
+        key_padding_mask[1] = True
+
+    out, weights = layer(
+        x,
+        x,
+        x,
+        key_padding_mask=key_padding_mask,
+        need_weights=True,
+    )
+    (out.sum() + weights.sum()).backward()
+
+    # Non-finite rows skip the checks, so the clean runs must be finite.
+    if nan_input:
+        assert torch.isnan(out).any()
+    else:
+        assert torch.isfinite(weights).all()
+        assert torch.isfinite(x.grad).all()

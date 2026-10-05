@@ -4,6 +4,16 @@ Notable API and core changes only. This project follows
 semantic versioning.
 
 
+## [Unreleased]
+
+### Changed
+
+- `PackedMultiheadAttention` with a positive `chunk_size`
+  checks on every call that each query's softmax sums to 1
+  and its gradient to 0, and waits for the device once per
+  forward and once per backward.
+
+
 ## [0.2.0] - 23. September 2026
 
 ### Changed

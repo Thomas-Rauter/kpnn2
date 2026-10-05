@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, internal_error
 from ._generator import as_generator, run_preserving_default_rng
 from ._identity import as_identity, check_identity, save_identity
 
@@ -434,6 +434,69 @@ def _apply_participate_to_scores(
     return scores_for_max, exp_delta
 
 
+def _accumulation_dtype(dtype: torch.dtype) -> torch.dtype:
+    if dtype == torch.float64:
+        return torch.float64
+    return torch.float32
+
+
+def _query_degree(
+    target_index: torch.Tensor,
+    n_query: int,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """
+    Live keys per query as ``(n_query, 1)``, counted on the device.
+    """
+    degree = torch.bincount(
+        target_index,
+        minlength=n_query,
+    )
+    return degree.to(dtype=dtype).unsqueeze(-1)
+
+
+def _rounding_eps(dtype: torch.dtype) -> float:
+    acc_dtype = _accumulation_dtype(dtype)
+    return torch.finfo(dtype).eps + torch.finfo(acc_dtype).eps
+
+
+def _check_softmax_rows(
+    row_sum: torch.Tensor,
+    degree: torch.Tensor,
+    dtype: torch.dtype,
+) -> None:
+    # n positive terms sum to within (n - 1) * u of the computed sum
+    # (u = eps / 2); with the divide and re-sum, |sum - 1| <= ~tol / 2.
+    tol = (degree + 2) * _rounding_eps(dtype)
+    ok = (
+        ((row_sum - 1.0).abs() <= tol)
+        | (row_sum.abs() <= tol)
+        | ~torch.isfinite(row_sum)
+    )
+    if not bool(ok.all()):
+        raise internal_error(
+            "packed softmax weights of a query do not sum to 1"
+        )
+
+
+def _check_softmax_grad_rows(
+    grad_sum: torch.Tensor,
+    scale: torch.Tensor,
+    degree: torch.Tensor,
+    dtype: torch.dtype,
+) -> None:
+    # dot, dot * (1 - sum a), each term, and the re-sum each err by at most
+    # one row tolerance of scale; underflow adds <= tiny per rounding.
+    bound = (degree + 2) * (
+        4 * _rounding_eps(dtype) * scale + 8 * torch.finfo(dtype).tiny
+    )
+    ok = (grad_sum.abs() <= bound) | ~torch.isfinite(grad_sum)
+    if not bool(ok.all()):
+        raise internal_error(
+            "packed softmax gradient of a query does not sum to 0"
+        )
+
+
 class _PackedAttentionChunked(torch.autograd.Function):
     """
     Softmax and mix packed pairs in edge chunks.
@@ -562,6 +625,11 @@ class _PackedAttentionChunked(torch.autograd.Function):
             start = end
 
         tiny = torch.finfo(query.dtype).tiny
+        acc_dtype = _accumulation_dtype(query.dtype)
+        row_sum = query.new_zeros(
+            (*leading, n_query, heads),
+            dtype=acc_dtype,
+        )
         start = 0
         while start < nnz:
             end = min(start + chunk_size, nnz)
@@ -582,7 +650,21 @@ class _PackedAttentionChunked(torch.autograd.Function):
                     dtype=chunk_attn.dtype,
                 )
             softmax_attn[..., start:end, :] = chunk_attn
+            row_sum.scatter_add_(
+                -2,
+                score_index,
+                chunk_attn.to(dtype=acc_dtype),
+            )
             start = end
+        _check_softmax_rows(
+            row_sum,
+            _query_degree(
+                target_index,
+                n_query,
+                acc_dtype,
+            ),
+            query.dtype,
+        )
 
         used_dropout = dropout_p > 0.0 and training
         dropped_attn = softmax_attn
@@ -753,6 +835,12 @@ class _PackedAttentionChunked(torch.autograd.Function):
             dot_buf = query.new_zeros(
                 (*leading, n_query, heads),
             )
+            acc_dtype = _accumulation_dtype(query.dtype)
+            prod_scale = query.new_zeros(
+                (*leading, n_query, heads),
+                dtype=acc_dtype,
+            )
+            grad_sum = torch.zeros_like(prod_scale)
             start = 0
             while start < nnz:
                 end = min(start + chunk_size, nnz)
@@ -769,6 +857,11 @@ class _PackedAttentionChunked(torch.autograd.Function):
                     -2,
                     score_index,
                     prod,
+                )
+                prod_scale.scatter_add_(
+                    -2,
+                    score_index,
+                    prod.abs().to(dtype=acc_dtype),
                 )
                 start = end
             start = 0
@@ -788,6 +881,11 @@ class _PackedAttentionChunked(torch.autograd.Function):
                     score_index,
                 )
                 d_scores = a_chunk * (da_chunk - gathered_dot)
+                grad_sum.scatter_add_(
+                    -2,
+                    score_index,
+                    d_scores.to(dtype=acc_dtype),
+                )
                 q_live = query[..., tgt, :, :]
                 k_live = key[..., src, :, :]
                 if need_q and grad_query is not None:
@@ -815,6 +913,17 @@ class _PackedAttentionChunked(torch.autograd.Function):
                         d_k_live,
                     )
                 start = end
+            # sum_j d_scores_j = dot * (1 - sum_j a_j), so each row is ~0.
+            _check_softmax_grad_rows(
+                grad_sum,
+                prod_scale + dot_buf.to(dtype=acc_dtype).abs(),
+                _query_degree(
+                    target_index,
+                    n_query,
+                    acc_dtype,
+                ),
+                query.dtype,
+            )
 
         return (
             grad_query,
@@ -955,7 +1064,12 @@ class PackedMultiheadAttention(nn.Module):
         once. A positive int uses chunked live pairs: softmax
         is still over every live key of a query, but pair
         gathers are slices of that many edges and those
-        gathers are rematerialized in backward. ``bool`` and
+        gathers are rematerialized in backward. With a
+        positive int, forward and backward check on every
+        call that each query's packed softmax sums to 1 and
+        that its gradient sums to 0, and raise
+        ``AssertionError`` (a kpnn2 bug) if not; each check
+        waits for the device once. ``bool`` and
         values other than ``None`` or a positive ``int``
         raise ``Kpnn2Error``. Not stored on the module
         ``state_dict`` or in ``index_digest``.
