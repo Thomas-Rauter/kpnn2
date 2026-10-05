@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg"
-     width="600pt" height="218pt"
-     viewBox="0 0 600 218"
+     width="620pt" height="218pt"
+     viewBox="0 0 620 218"
      font-family="Liberation Sans, sans-serif">
   <defs>
     <marker id="edge-arrow" viewBox="0 0 10 10" refX="0" refY="5"
@@ -14,53 +14,53 @@
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#ee4c2c"/>
     </marker>
   </defs>
-  <rect width="600" height="218" rx="8" fill="#fff"/>
+  <rect width="620" height="218" rx="8" fill="#fff"/>
   <text x="16" y="24" font-size="10.5" text-anchor="start" font-weight="700" fill="#000">Your graph, as an edgelist</text>
   <text x="16" y="42" font-size="8.5" text-anchor="start" font-weight="400" fill="#6b6b6b">source</text>
   <text x="98" y="42" font-size="8.5" text-anchor="start" font-weight="400" fill="#6b6b6b">target</text>
   <line x1="16" y1="45.5" x2="154" y2="45.5" stroke="#9a9a9a" stroke-width="0.6"/>
-  <text x="16" y="54" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">gene_signal_1</text>
-  <text x="98" y="54" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">tf_signal</text>
-  <text x="16" y="66" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">gene_signal_2</text>
-  <text x="98" y="66" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">tf_signal</text>
-  <text x="16" y="78" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">gene_noise_1</text>
-  <text x="98" y="78" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">tf_noise</text>
-  <text x="16" y="90" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">gene_noise_2</text>
-  <text x="98" y="90" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">tf_noise</text>
-  <text x="16" y="102" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">tf_signal</text>
-  <text x="98" y="102" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">phenotype</text>
-  <text x="16" y="114" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">tf_noise</text>
-  <text x="98" y="114" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">phenotype</text>
+  <text x="16" y="54" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">input_signal_1</text>
+  <text x="98" y="54" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">hidden_signal</text>
+  <text x="16" y="66" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">input_signal_2</text>
+  <text x="98" y="66" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">hidden_signal</text>
+  <text x="16" y="78" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">input_noise_1</text>
+  <text x="98" y="78" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">hidden_noise</text>
+  <text x="16" y="90" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">input_noise_2</text>
+  <text x="98" y="90" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">hidden_noise</text>
+  <text x="16" y="102" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">hidden_signal</text>
+  <text x="98" y="102" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">output</text>
+  <text x="16" y="114" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">hidden_noise</text>
+  <text x="98" y="114" font-size="8.5" text-anchor="start" font-weight="400" fill="#000">output</text>
   <text x="16" y="136" font-size="10.5" text-anchor="start" font-weight="700" fill="#000">Your data, by name</text>
-  <text x="16" y="153.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">gene_signal_1</text>
+  <text x="16" y="153.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">input_signal_1</text>
   <rect x="84" y="146" width="9" height="9" fill="#9e9e9e" stroke="#000" stroke-width="0.4"/>
   <rect x="95" y="146" width="9" height="9" fill="#a0a0a0" stroke="#000" stroke-width="0.4"/>
   <rect x="106" y="146" width="9" height="9" fill="#9d9d9d" stroke="#000" stroke-width="0.4"/>
   <rect x="117" y="146" width="9" height="9" fill="#7c7c7c" stroke="#000" stroke-width="0.4"/>
   <rect x="128" y="146" width="9" height="9" fill="#9e9e9e" stroke="#000" stroke-width="0.4"/>
   <rect x="139" y="146" width="9" height="9" fill="#d6d6d6" stroke="#000" stroke-width="0.4"/>
-  <text x="16" y="164.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">gene_signal_2</text>
+  <text x="16" y="164.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">input_signal_2</text>
   <rect x="84" y="157" width="9" height="9" fill="#8b8b8b" stroke="#000" stroke-width="0.4"/>
   <rect x="95" y="157" width="9" height="9" fill="#a4a4a4" stroke="#000" stroke-width="0.4"/>
   <rect x="106" y="157" width="9" height="9" fill="#a1a1a1" stroke="#000" stroke-width="0.4"/>
   <rect x="117" y="157" width="9" height="9" fill="#949494" stroke="#000" stroke-width="0.4"/>
   <rect x="128" y="157" width="9" height="9" fill="#8f8f8f" stroke="#000" stroke-width="0.4"/>
   <rect x="139" y="157" width="9" height="9" fill="#696969" stroke="#000" stroke-width="0.4"/>
-  <text x="16" y="175.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">gene_noise_1</text>
+  <text x="16" y="175.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">input_noise_1</text>
   <rect x="84" y="168" width="9" height="9" fill="#7d7d7d" stroke="#000" stroke-width="0.4"/>
   <rect x="95" y="168" width="9" height="9" fill="#949494" stroke="#000" stroke-width="0.4"/>
   <rect x="106" y="168" width="9" height="9" fill="#b7b7b7" stroke="#000" stroke-width="0.4"/>
   <rect x="117" y="168" width="9" height="9" fill="#c2c2c2" stroke="#000" stroke-width="0.4"/>
   <rect x="128" y="168" width="9" height="9" fill="#8e8e8e" stroke="#000" stroke-width="0.4"/>
   <rect x="139" y="168" width="9" height="9" fill="#626262" stroke="#000" stroke-width="0.4"/>
-  <text x="16" y="186.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">gene_noise_2</text>
+  <text x="16" y="186.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">input_noise_2</text>
   <rect x="84" y="179" width="9" height="9" fill="#979797" stroke="#000" stroke-width="0.4"/>
   <rect x="95" y="179" width="9" height="9" fill="#9d9d9d" stroke="#000" stroke-width="0.4"/>
   <rect x="106" y="179" width="9" height="9" fill="#838383" stroke="#000" stroke-width="0.4"/>
   <rect x="117" y="179" width="9" height="9" fill="#d4d4d4" stroke="#000" stroke-width="0.4"/>
   <rect x="128" y="179" width="9" height="9" fill="#a5a5a5" stroke="#000" stroke-width="0.4"/>
   <rect x="139" y="179" width="9" height="9" fill="#848484" stroke="#000" stroke-width="0.4"/>
-  <text x="16" y="200.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">phenotype</text>
+  <text x="16" y="200.5" font-size="7.5" text-anchor="start" font-weight="400" fill="#000">output</text>
   <rect x="84" y="193" width="9" height="9" fill="#000" stroke="#000" stroke-width="0.4"/>
   <rect x="95" y="193" width="9" height="9" fill="#fff" stroke="#000" stroke-width="0.4"/>
   <rect x="106" y="193" width="9" height="9" fill="#fff" stroke="#000" stroke-width="0.4"/>
@@ -71,34 +71,34 @@
   <text x="179" y="110" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">kpnn2 + PyTorch</text>
   <text x="334" y="24" font-size="10.5" text-anchor="middle" font-weight="700" fill="#000">Sparsely connected PyTorch model</text>
   <text x="334" y="37" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">one unit per node, connected only along the edges</text>
-  <line x1="280" y1="70" x2="315.69" y2="80.71" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
-  <line x1="280" y1="94" x2="315.69" y2="83.29" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
-  <line x1="280" y1="140" x2="315.69" y2="150.71" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
-  <line x1="280" y1="164" x2="315.69" y2="153.29" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
-  <line x1="378" y1="82" x2="400.38" y2="113.34" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
-  <line x1="378" y1="152" x2="400.38" y2="120.66" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
+  <line x1="280" y1="70" x2="308.77" y2="80.46" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
+  <line x1="280" y1="94" x2="308.77" y2="83.54" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
+  <line x1="280" y1="140" x2="308.77" y2="150.46" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
+  <line x1="280" y1="164" x2="308.77" y2="153.54" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
+  <line x1="385" y1="82" x2="406.46" y2="113.29" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
+  <line x1="385" y1="152" x2="406.46" y2="120.71" stroke="#000" stroke-width="0.9" marker-end="url(#edge-arrow)"/>
   <rect x="206" y="62.5" width="74" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="243" y="73" font-size="7.5" text-anchor="middle" fill="#000">gene_signal_1</text>
+  <text x="243" y="73" font-size="7.5" text-anchor="middle" fill="#000">input_signal_1</text>
   <rect x="206" y="86.5" width="74" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="243" y="97" font-size="7.5" text-anchor="middle" fill="#000">gene_signal_2</text>
+  <text x="243" y="97" font-size="7.5" text-anchor="middle" fill="#000">input_signal_2</text>
   <rect x="206" y="132.5" width="74" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="243" y="143" font-size="7.5" text-anchor="middle" fill="#000">gene_noise_1</text>
+  <text x="243" y="143" font-size="7.5" text-anchor="middle" fill="#000">input_noise_1</text>
   <rect x="206" y="156.5" width="74" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="243" y="167" font-size="7.5" text-anchor="middle" fill="#000">gene_noise_2</text>
-  <rect x="320" y="74.5" width="58" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="349" y="85" font-size="7.5" text-anchor="middle" fill="#000">tf_signal</text>
-  <rect x="320" y="144.5" width="58" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="349" y="155" font-size="7.5" text-anchor="middle" fill="#000">tf_noise</text>
-  <rect x="403" y="109.5" width="60" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
-  <text x="433" y="120" font-size="7.5" text-anchor="middle" fill="#000">phenotype</text>
-  <line x1="472" y1="117" x2="493" y2="117" stroke="#ee4c2c" stroke-width="2.2" marker-end="url(#flow-arrow)"/>
-  <text x="486" y="110" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">attribution</text>
-  <text x="544" y="24" font-size="10.5" text-anchor="middle" font-weight="700" fill="#000">Scores by name</text>
-  <text x="544" y="37" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">how much the model relies</text>
-  <text x="544" y="47" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">on each hidden node</text>
-  <line x1="546" y1="94" x2="546" y2="141" stroke="#000" stroke-width="0.6"/>
-  <text x="540" y="108" font-size="7.5" text-anchor="end" font-weight="400" fill="#000">tf_signal</text>
-  <rect x="546" y="100" width="44.00" height="11" fill="#ee4c2c"/>
-  <text x="540" y="132" font-size="7.5" text-anchor="end" font-weight="400" fill="#000">tf_noise</text>
-  <rect x="546" y="124" width="3.50" height="11" fill="#ee4c2c"/>
+  <text x="243" y="167" font-size="7.5" text-anchor="middle" fill="#000">input_noise_2</text>
+  <rect x="313" y="74.5" width="72" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
+  <text x="349" y="85" font-size="7.5" text-anchor="middle" fill="#000">hidden_signal</text>
+  <rect x="313" y="144.5" width="72" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
+  <text x="349" y="155" font-size="7.5" text-anchor="middle" fill="#000">hidden_noise</text>
+  <rect x="409" y="109.5" width="48" height="15" rx="7.5" fill="#fff" stroke="#000" stroke-width="0.9"/>
+  <text x="433" y="120" font-size="7.5" text-anchor="middle" fill="#000">output</text>
+  <line x1="466" y1="117" x2="487" y2="117" stroke="#ee4c2c" stroke-width="2.2" marker-end="url(#flow-arrow)"/>
+  <text x="480" y="110" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">attribution</text>
+  <text x="558" y="24" font-size="10.5" text-anchor="middle" font-weight="700" fill="#000">Scores by name</text>
+  <text x="558" y="37" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">how much the model relies</text>
+  <text x="558" y="47" font-size="7.5" text-anchor="middle" font-weight="400" fill="#6b6b6b">on each hidden node</text>
+  <line x1="560" y1="94" x2="560" y2="141" stroke="#000" stroke-width="0.6"/>
+  <text x="554" y="108" font-size="7.5" text-anchor="end" font-weight="400" fill="#000">hidden_signal</text>
+  <rect x="560" y="100" width="44.00" height="11" fill="#ee4c2c"/>
+  <text x="554" y="132" font-size="7.5" text-anchor="end" font-weight="400" fill="#000">hidden_noise</text>
+  <rect x="560" y="124" width="3.50" height="11" fill="#ee4c2c"/>
 </svg>

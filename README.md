@@ -33,7 +33,7 @@ unit of the network, and each edge becomes a connection, including
 edges that skip layers. Pairs of nodes without an edge stay
 unconnected.
 
-![Left: a six-row edgelist and a data table with one row per gene plus a phenotype row. Middle: the same graph as a network, two signal genes feeding tf_signal and two noise genes feeding tf_noise, both feeding phenotype. Right: the bar for tf_signal is many times longer than the bar for tf_noise.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_overview.png)
+![Left: a six-row edgelist and a data table with one row per input plus an output row. Middle: the same graph as a network, two signal inputs feeding hidden_signal and two noise inputs feeding hidden_noise, both feeding output. Right: the bar for hidden_signal is many times longer than the bar for hidden_noise.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_overview.png)
 
 **Figure 1.** You provide a graph and data with named features.
 `kpnn2` turns the graph into sparsely connected PyTorch layers, you
@@ -58,9 +58,9 @@ factors, kinases, and pathways as nodes, for example
 [Fortelny and Bock (2020)](https://doi.org/10.1186/s13059-020-02100-5).
 The idea is not specific to biology: any domain whose entities have
 names and known relationships, such as chemistry, works the same
-way. Figure 1 and the quick start use a small gene-regulation
-example, in which four genes feed two transcription factors that
-feed a phenotype. When each sample is its own graph, use a graph
+way. Figure 1 and the quick start use a small graph with generic
+names, in which four inputs feed two hidden nodes that feed one
+output. When each sample is its own graph, use a graph
 neural network instead; see
 [Why not a GNN?](https://thomas-rauter.github.io/kpnn2/latest/supported/#why-not-a-gnn).
 
@@ -75,10 +75,10 @@ pip install kpnn2
 ## Quick start
 
 This example builds the model in Figure 1. The labels depend only
-on `gene_signal_1` and `gene_signal_2`, so a model that learned
-the task should rely on `tf_signal` and not on `tf_noise`. The
-last step uses Captum (`pip install captum`), which `kpnn2` does
-not depend on.
+on `input_signal_1` and `input_signal_2`, so a model that learned
+the task should rely on `hidden_signal` and not on `hidden_noise`.
+The last step uses Captum (`pip install captum`), which `kpnn2`
+does not depend on.
 
 ### 1. Write the graph as an edgelist
 
@@ -98,12 +98,12 @@ torch.manual_seed(42)
 
 edgelist = pd.DataFrame(
     [
-        ("gene_signal_1", "tf_signal"),
-        ("gene_signal_2", "tf_signal"),
-        ("gene_noise_1", "tf_noise"),
-        ("gene_noise_2", "tf_noise"),
-        ("tf_signal", "phenotype"),
-        ("tf_noise", "phenotype"),
+        ("input_signal_1", "hidden_signal"),
+        ("input_signal_2", "hidden_signal"),
+        ("input_noise_1", "hidden_noise"),
+        ("input_noise_2", "hidden_noise"),
+        ("hidden_signal", "output"),
+        ("hidden_noise", "output"),
     ],
     columns=["source", "target"],
 )
@@ -113,9 +113,9 @@ for layer in spec.layer_nodes:
 ```
 
 ```text
-('gene_noise_1', 'gene_noise_2', 'gene_signal_1', 'gene_signal_2')
-('tf_noise', 'tf_signal')
-('phenotype',)
+('input_noise_1', 'input_noise_2', 'input_signal_1', 'input_signal_2')
+('hidden_noise', 'hidden_signal')
+('output',)
 ```
 
 ### 2. Build the model in PyTorch
@@ -158,20 +158,20 @@ model = nn.Sequential(
 expects, by name, so a table in any column order lines up.
 
 ```python
-genes = [
-    "gene_signal_1",
-    "gene_signal_2",
-    "gene_noise_1",
-    "gene_noise_2",
+input_names = [
+    "input_signal_1",
+    "input_signal_2",
+    "input_noise_1",
+    "input_noise_2",
 ]
 features = pd.DataFrame(
     torch.randn(
         200,
         4,
     ).numpy(),
-    columns=genes,
+    columns=input_names,
 )
-labels = features["gene_signal_1"] + features["gene_signal_2"] > 0
+labels = features["input_signal_1"] + features["input_signal_2"] > 0
 
 col = kpnn2.align_inputs(
     features.columns,
@@ -225,12 +225,12 @@ print(abs(scores).mean("observation").to_pandas().round(2))
 
 ```text
 node
-tf_noise     0.39
-tf_signal    4.90
+hidden_noise     0.39
+hidden_signal    4.90
 dtype: float32
 ```
 
-The trained model relies on `tf_signal`, as the labels require.
+The trained model relies on `hidden_signal`, as the labels require.
 The
 [Feedforward example](https://thomas-rauter.github.io/kpnn2/latest/feedforward-example/)
 goes further, with a held-out test set, input-level attributions,

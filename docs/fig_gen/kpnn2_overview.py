@@ -9,7 +9,7 @@ sparsely connected model in the middle, scores per named node on
 the right. The graph and node names are the README example's,
 and the bar lengths follow the scores that example prints. The
 data cells are texture, not the example's values; only the
-phenotype row follows the example's labelling rule.
+output row follows the example's labelling rule.
 """
 
 import random
@@ -22,7 +22,7 @@ _FONT = "Liberation Sans, sans-serif"
 _PNG_DPI = 384
 
 # User units are PostScript points, so font-size 9 is 9 pt.
-_WIDTH = 600.0
+_WIDTH = 620.0
 _HEIGHT = 218.0
 _TITLE_SIZE = 10.5
 _TEXT_SIZE = 8.5
@@ -35,17 +35,17 @@ _GREY = "#6b6b6b"
 _RULE = "#9a9a9a"
 
 EDGES = [
-    ("gene_signal_1", "tf_signal"),
-    ("gene_signal_2", "tf_signal"),
-    ("gene_noise_1", "tf_noise"),
-    ("gene_noise_2", "tf_noise"),
-    ("tf_signal", "phenotype"),
-    ("tf_noise", "phenotype"),
+    ("input_signal_1", "hidden_signal"),
+    ("input_signal_2", "hidden_signal"),
+    ("input_noise_1", "hidden_noise"),
+    ("input_noise_2", "hidden_noise"),
+    ("hidden_signal", "output"),
+    ("hidden_noise", "output"),
 ]
 # Mean absolute conductance the README example prints.
 SCORES = {
-    "tf_signal": 4.90,
-    "tf_noise": 0.39,
+    "hidden_signal": 4.90,
+    "hidden_noise": 0.39,
 }
 
 # Left column: the edgelist table and the data table.
@@ -61,10 +61,10 @@ _CELL_STEP = 11.0
 _CELLS_X = 84.0
 _N_SAMPLES = 6
 _DATA_ROWS = [
-    "gene_signal_1",
-    "gene_signal_2",
-    "gene_noise_1",
-    "gene_noise_2",
+    "input_signal_1",
+    "input_signal_2",
+    "input_noise_1",
+    "input_noise_2",
 ]
 
 # Middle column: the network, one pill per named node.
@@ -72,43 +72,43 @@ _MODEL_CX = 334.0
 _PILL_H = 15.0
 _INPUT_CX = 243.0
 _INPUT_W = 74.0
-_TF_CX = 349.0
-_TF_W = 58.0
+_HIDDEN_CX = 349.0
+_HIDDEN_W = 72.0
 _OUT_CX = 433.0
-_OUT_W = 60.0
+_OUT_W = 48.0
 _NODE_Y = {
-    "gene_signal_1": 70.0,
-    "gene_signal_2": 94.0,
-    "gene_noise_1": 140.0,
-    "gene_noise_2": 164.0,
-    "tf_signal": 82.0,
-    "tf_noise": 152.0,
-    "phenotype": 117.0,
+    "input_signal_1": 70.0,
+    "input_signal_2": 94.0,
+    "input_noise_1": 140.0,
+    "input_noise_2": 164.0,
+    "hidden_signal": 82.0,
+    "hidden_noise": 152.0,
+    "output": 117.0,
 }
 _NODE_X = {
-    "gene_signal_1": (_INPUT_CX, _INPUT_W),
-    "gene_signal_2": (_INPUT_CX, _INPUT_W),
-    "gene_noise_1": (_INPUT_CX, _INPUT_W),
-    "gene_noise_2": (_INPUT_CX, _INPUT_W),
-    "tf_signal": (_TF_CX, _TF_W),
-    "tf_noise": (_TF_CX, _TF_W),
-    "phenotype": (_OUT_CX, _OUT_W),
+    "input_signal_1": (_INPUT_CX, _INPUT_W),
+    "input_signal_2": (_INPUT_CX, _INPUT_W),
+    "input_noise_1": (_INPUT_CX, _INPUT_W),
+    "input_noise_2": (_INPUT_CX, _INPUT_W),
+    "hidden_signal": (_HIDDEN_CX, _HIDDEN_W),
+    "hidden_noise": (_HIDDEN_CX, _HIDDEN_W),
+    "output": (_OUT_CX, _OUT_W),
 }
 
 # Right column: one bar per named hidden node.
-_BARS_LABEL_X = 540.0
-_BARS_X = 546.0
+_BARS_LABEL_X = 554.0
+_BARS_X = 560.0
 _BAR_MAX = 44.0
 _BAR_H = 11.0
 _BARS_Y = {
-    "tf_signal": 100.0,
-    "tf_noise": 124.0,
+    "hidden_signal": 100.0,
+    "hidden_noise": 124.0,
 }
 
 # Flow arrows between the columns.
 _FLOW_Y = 117.0
 _FLOW_1 = (160.0, 198.0)
-_FLOW_2 = (472.0, 500.0)
+_FLOW_2 = (466.0, 494.0)
 
 
 def _text(
@@ -231,10 +231,10 @@ def _data_table() -> list[str]:
             weight="700",
         ),
     ]
-    rows = [*_DATA_ROWS, "phenotype"]
+    rows = [*_DATA_ROWS, "output"]
     for row, name in enumerate(rows):
         top = _DATA_TOP + _CELL_STEP * row
-        if name == "phenotype":
+        if name == "output":
             top += 3.0
         parts.append(
             _text(
@@ -245,9 +245,9 @@ def _data_table() -> list[str]:
             )
         )
         for sample in range(_N_SAMPLES):
-            if name == "phenotype":
+            if name == "output":
                 # The README example labels a sample 1 when the
-                # two signal genes sum above zero.
+                # two signal inputs sum above zero.
                 label = values[0][sample] + values[1][sample] > 0
                 fill = "#000" if label else "#fff"
             else:

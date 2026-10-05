@@ -7,8 +7,8 @@ that block's printed output and is compared with what the code
 prints: words exactly, numbers within a small tolerance, so a torch
 release that moves the last digit does not fail the suite. The
 claims around the code are pinned too: the trained model relies on
-``tf_signal`` far more than on ``tf_noise``, and Figure 1 draws the
-scores the page shows.
+``hidden_signal`` far more than on ``hidden_noise``, and Figure 1
+draws the scores the page shows.
 
 The last block imports Captum, which is in the ``dev`` extra.
 """
@@ -39,7 +39,8 @@ _BLOCK = re.compile(
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 _SCORE_LINE = re.compile(r"^(\w+)\s+(-?\d+\.\d+)$", re.M)
 _ABS_TOL = 0.1
-# The prose says the model relies on tf_signal and not on tf_noise.
+# The prose says the model relies on hidden_signal and not on
+# hidden_noise.
 _MIN_RATIO = 5.0
 
 
@@ -115,10 +116,10 @@ def test_every_block_with_output_shows_what_it_prints(
                 assert want == got, f"block {index}: {want!r} != {got!r}"
 
 
-def test_trained_model_relies_on_tf_signal(printed: list[str]) -> None:
+def test_trained_model_relies_on_hidden_signal(printed: list[str]) -> None:
     scores = _scores(printed[-1])
-    assert set(scores) == {"tf_noise", "tf_signal"}
-    assert scores["tf_signal"] > _MIN_RATIO * scores["tf_noise"]
+    assert set(scores) == {"hidden_noise", "hidden_signal"}
+    assert scores["hidden_signal"] > _MIN_RATIO * scores["hidden_noise"]
 
 
 def test_figure_draws_the_scores_the_page_shows() -> None:
