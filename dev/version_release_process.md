@@ -56,6 +56,11 @@ green on `main`.
       `main`:
       `https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/<name>.png`.
       PyPI shows neither relative paths nor SVGs.
+- [ ] Every README link to the docs points at the website's
+      `latest` version:
+      `https://thomas-rauter.github.io/kpnn2/latest/<page>/#<anchor>`.
+      CI fails on a relative link. A page or anchor that is new
+      since the last release 404s until this release deploys.
 - [ ] `X.Y.ZrcN` is not on TestPyPI yet:
       <https://test.pypi.org/project/kpnn2/#history>
 - [ ] Everything is committed and pushed. This changes no files;
@@ -199,7 +204,8 @@ dependencies, so Colab keeps its own CUDA or XLA PyTorch.
 
 6. Verify:
     - [ ] `https://pypi.org/project/kpnn2/X.Y.Z/` shows the README
-          with every image.
+          with every image, and its docs links open pages on the
+          website, including any page new in this release.
     - [ ] <https://thomas-rauter.github.io/kpnn2/> opens `X.Y.Z` as
           `latest`.
     - [ ] A clean install reports the version:

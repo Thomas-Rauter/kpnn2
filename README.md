@@ -62,7 +62,7 @@ way. Figure 1 and the quick start use a small gene-regulation
 example, in which four genes feed two transcription factors that
 feed a phenotype. When each sample is its own graph, use a graph
 neural network instead; see
-[Why not a GNN?](docs/supported.md#why-not-a-gnn).
+[Why not a GNN?](https://thomas-rauter.github.io/kpnn2/latest/supported/#why-not-a-gnn).
 
 ## Installation
 
@@ -82,9 +82,10 @@ not depend on.
 
 ### 1. Write the graph as an edgelist
 
-An [edgelist](docs/concepts.md#edgelist) has one row per edge,
-from `source` to `target`. `parse_layered()` sorts the nodes into
-layers.
+An
+[edgelist](https://thomas-rauter.github.io/kpnn2/latest/concepts/#edgelist)
+has one row per edge, from `source` to `target`. `parse_layered()`
+sorts the nodes into layers.
 
 ```python
 import pandas as pd
@@ -119,12 +120,14 @@ for layer in spec.layer_nodes:
 
 ### 2. Build the model in PyTorch
 
-Each [hop](docs/concepts.md#hop) — the edges entering one layer —
-becomes one `PackedLinear`, which stores one weight per edge.
-Without [skip edges](docs/concepts.md#skip-edge), each hop reads
-only the layer before it, so `nn.Sequential` is enough. With them,
-a hop also reads earlier layers, and `gather_hop_inputs()`
-assembles its input; see [Skip edges](docs/skip-edges.ipynb).
+Each [hop](https://thomas-rauter.github.io/kpnn2/latest/concepts/#hop)
+— the edges entering one layer — becomes one `PackedLinear`, which
+stores one weight per edge. Without
+[skip edges](https://thomas-rauter.github.io/kpnn2/latest/concepts/#skip-edge),
+each hop reads only the layer before it, so `nn.Sequential` is
+enough. With them, a hop also reads earlier layers, and
+`gather_hop_inputs()` assembles its input; see
+[Skip edges](https://thomas-rauter.github.io/kpnn2/latest/skip-edges/).
 `identity=spec.fingerprint` makes a checkpoint from a different
 graph refuse to load.
 
@@ -228,42 +231,46 @@ dtype: float32
 ```
 
 The trained model relies on `tf_signal`, as the labels require.
-The [Feedforward example](docs/feedforward-example.ipynb) goes
-further, with a held-out test set, input-level attributions, and a
-control that moves the signal to the other branch.
+The
+[Feedforward example](https://thomas-rauter.github.io/kpnn2/latest/feedforward-example/)
+goes further, with a held-out test set, input-level attributions,
+and a control that moves the signal to the other branch.
 
 ## Key features
 
 - **Names stay attached.** Every tensor position keeps its node
   name from the edgelist to the attribution scores, and `kpnn2`
   checks the match at every step; see
-  [Checks where names meet tensor positions](docs/why_kpnn2.md#checks-where-names-meet-tensor-positions).
+  [Checks where names meet tensor positions](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#checks-where-names-meet-tensor-positions).
 - **Mistakes raise instead of running silently.** A reordered
   feature table is realigned by name, and a checkpoint trained on a
   different graph refuses to load; see
-  [A checkpoint that loads the wrong wiring](docs/why_kpnn2.md#a-checkpoint-that-loads-the-wrong-wiring).
+  [A checkpoint that loads the wrong wiring](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#a-checkpoint-that-loads-the-wrong-wiring).
 - **One call instead of a hand-written parser.** `parse_layered()`
   replaces the layer sorting, mask building, and skip-edge
   bookkeeping; see
-  [Why not custom PyTorch?](docs/why_kpnn2.md#why-not-custom-pytorch)
+  [Why not custom PyTorch?](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#why-not-custom-pytorch)
 - **Plain PyTorch.** There is no compiler and no ready-made model:
   activations, losses, training, and the attribution method stay
   your code. Cyclic, recurrent, and attention models work too; see
-  [Supported architectures](docs/supported.md).
+  [Supported architectures](https://thomas-rauter.github.io/kpnn2/latest/supported/).
 
-[**Why kpnn2**](docs/why_kpnn2.md) makes the full case, with a
-side-by-side against hand-written PyTorch.
+[**Why kpnn2**](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/)
+makes the full case, with a side-by-side against hand-written
+PyTorch.
 
 ## Next steps
 
-- [**Feedforward example**](docs/feedforward-example.ipynb) for a
-  full tutorial, from edgelist to node-level interpretation
-- [**Supported architectures**](docs/supported.md) for cyclic,
-  recurrent, and attention-based models
-- [**How we test**](docs/how_we_test.md) for the tests that pin
-  scientific claims, including a reproduction of
-  [Fortelny and Bock (2020)](docs/literature/fortelny-bock-2020.ipynb)
-- [**API reference**](docs/reference/api.md) for every public name
+- [**Feedforward example**](https://thomas-rauter.github.io/kpnn2/latest/feedforward-example/)
+  for a full tutorial, from edgelist to node-level interpretation
+- [**Supported architectures**](https://thomas-rauter.github.io/kpnn2/latest/supported/)
+  for cyclic, recurrent, and attention-based models
+- [**How we test**](https://thomas-rauter.github.io/kpnn2/latest/how_we_test/)
+  for the tests that pin scientific claims, including a
+  reproduction of
+  [Fortelny and Bock (2020)](https://thomas-rauter.github.io/kpnn2/latest/literature/fortelny-bock-2020/)
+- [**API reference**](https://thomas-rauter.github.io/kpnn2/latest/reference/api/)
+  for every public name
 
 ## Citation
 

@@ -278,11 +278,18 @@ sprinkle that class through feedforward-example.
 Notebooks must be valid nbformat v4. Stream outputs need
 `name` (`stdout` / `stderr`).
 
-`README.md` links raster figures by absolute raw GitHub URL
-on `main`, because PyPI cannot resolve relative paths. Commit
-a 384 dpi PNG next to the SVG. The
-`dev/docs_readme_figures.py` hook serves the local copy in
-MkDocs, so a new figure shows before it is pushed.
+`README.md` uses absolute URLs only, because GitHub and PyPI
+cannot resolve its relative paths. It links docs pages on the
+website's `latest` version
+(`https://thomas-rauter.github.io/kpnn2/latest/concepts/#hop`)
+and raster figures by raw GitHub URL on `main`. Commit a
+384 dpi PNG next to the SVG. The `dev/docs_readme_urls.py`
+hook maps both back to local paths on Home, so
+`mkdocs build --strict` checks the links and a new figure
+shows before it is pushed. `tests/module/test_docs_readme_urls.py`
+fails on a relative README link. A page or anchor that is new
+on `main` 404s from GitHub until the next release deploys
+`latest`.
 
 Terminology (concepts vs abbreviations vs docstrings): see
 `CONTEXT.md` **Docs terminology**. `docs/concepts.md` owns

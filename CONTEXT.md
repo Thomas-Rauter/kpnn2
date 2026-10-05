@@ -2681,7 +2681,7 @@ tests/
 
 dev/
   docs_notebooks.py           # tutorials in CI; literature opt-in
-  docs_readme_figures.py      # MkDocs hook; local README figures
+  docs_readme_urls.py         # MkDocs hook; local README links, figures
 
 AGENTS.md                     # how to work; read first
 CONTEXT.md                    # this file (product contract)
@@ -2878,8 +2878,10 @@ nothing points in.
 **Link form by source:** `concepts.md#anchor` from a `docs/*.md`
 page, `../concepts/#anchor` from a `docs/*.ipynb` notebook,
 `../../concepts/#anchor` from `docs/literature/*.ipynb`, and
-`docs/concepts.md#anchor` from `README.md` (include-markdown
-rewrites it). Do not link from docstrings into narrative docs.
+`https://thomas-rauter.github.io/kpnn2/latest/concepts/#anchor`
+from `README.md`, because GitHub and PyPI show it too
+(`dev/docs_readme_urls.py` maps it back to `concepts.md#anchor`
+on Home). Do not link from docstrings into narrative docs.
 
 **`abbr` reaches `.md` pages only.** mkdocs-jupyter renders
 notebooks outside the markdown pipeline, so acronyms in
