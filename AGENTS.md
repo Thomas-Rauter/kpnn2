@@ -89,6 +89,9 @@ changes, update **all** of these in the same change:
   source of truth)
 - `tests/api/test_public_api.py` (`_PUBLIC_NAMES` and leftover
   guards)
+- `tests/api/test_input_validation.py` (bad-input rows for
+  every public entry point; its coverage guard fails
+  otherwise)
 
 Do not export compiler leftovers (`compile_graph`,
 `customize_model`, and the rest listed in that test).

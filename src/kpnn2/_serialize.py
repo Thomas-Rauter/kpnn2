@@ -322,13 +322,17 @@ def _edgelist_from_payload(
     if "edges" not in payload:
         raise Kpnn2Error("'edges' is missing.")
     pairs = _pairs_from_edges(payload["edges"])
+    # Names stay raw, so the parser rejects a missing one (None,
+    # NaN) as it does in a caller's edgelist instead of reading
+    # "None". Object dtype keeps 1 from becoming 1.0.
     return pd.DataFrame(
         pairs,
         columns=["source", "target"],
+        dtype=object,
     )
 
 
-def _pairs_from_edges(edges: object) -> list[list[str]]:
+def _pairs_from_edges(edges: object) -> list[list[object]]:
     if not isinstance(edges, Sequence) or isinstance(
         edges,
         _NON_PAIR_SEQUENCES,
@@ -337,7 +341,7 @@ def _pairs_from_edges(edges: object) -> list[list[str]]:
             "'edges' must be a sequence of [source, target] pairs. Got "
             f"{describe(edges)}."
         )
-    pairs: list[list[str]] = []
+    pairs: list[list[object]] = []
     for position, pair in enumerate(edges):
         is_pair = (
             isinstance(pair, Sequence)
@@ -350,7 +354,7 @@ def _pairs_from_edges(edges: object) -> list[list[str]]:
                 "Each edge must be a pair of two nonempty names. Got "
                 f"edges[{position}] = {describe(pair)}."
             )
-        pairs.append(names)
+        pairs.append(list(pair))
     return pairs
 
 

@@ -102,6 +102,21 @@ and explain the conflict.
   policy (reject, propagate, or mask) in its contract.
 - Enforce important constraints in code, not only in
   docstrings.
+- Messages name the argument, state the expectation, then
+  `Got <received>.`, then a fix sentence when the fix is
+  obvious: "'bias' must be True or False. Got 'no' (str)."
+  Build `<received>` with `_validate.describe`; never print
+  tensor values.
+- Flag arguments must be a Python `bool`
+  (`_validate.as_bool`). Integer arguments go through
+  `_validate.is_integer`, which accepts numpy integers, and
+  are converted to `int` before they are stored.
+- A check used by more than one entry point is defined once
+  and called: argument primitives in `_validate.py`, packed
+  indices in `_packed_index.py`, hop checks in `_spec.py`,
+  node-name lookup in `_layout.py`. Do not copy a check.
+- Every new public entry point gets rows in
+  `tests/api/test_input_validation.py`.
 
 
 4. NUMERICS AND API STABILITY
@@ -174,6 +189,9 @@ BEFORE FINISHING ANY CHANGE TO src/
 [ ] Key invariants the change touches are checked with
     `internal_error`, not `assert`, and caller mistakes
     still raise `Kpnn2Error`.
+[ ] Boundary checks call the shared helpers, messages
+    report `Got <received>.`, and every new public entry
+    point has rows in `tests/api/test_input_validation.py`.
 [ ] No numerical defaults or public signatures changed
     without approval.
 [ ] No new dependencies, options, or features beyond the

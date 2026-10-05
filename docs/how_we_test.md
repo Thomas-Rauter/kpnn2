@@ -352,6 +352,11 @@ shape raises. Loading into a same-shape rename raises when
 surface is a frozen list.
 [`tests/api/test_public_api.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/api/test_public_api.py).
 
+**Bad input.** We call every public entry point with bad
+input, and each call must raise `Kpnn2Error` with a message
+that names the argument or the offending node.
+[`tests/api/test_input_validation.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/api/test_input_validation.py).
+
 **A real table.** One integration test trains on the Breast
 Cancer Wisconsin Diagnostic data through a sparse DAG built
 from the named features, with ordinary PyTorch training. It
