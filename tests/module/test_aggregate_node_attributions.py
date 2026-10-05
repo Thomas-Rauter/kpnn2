@@ -196,14 +196,16 @@ def test_method_must_return_a_dataset(register_dummy):
         return attributions.mean("observation")
 
     with pytest.raises(
-        Kpnn2Error,
-        match="must return an xarray.Dataset",
-    ):
+        AssertionError,
+        match="internal check failed",
+    ) as excinfo:
         aggregate_node_attributions(
             _da([[1.0], [0.0]], nodes=["n"]),
             np.array([0, 1]),
             method=name,
         )
+    assert repr(name) in str(excinfo.value)
+    assert "DataArray" in str(excinfo.value)
 
 
 def test_experimental_method_emits_user_warning(register_dummy):

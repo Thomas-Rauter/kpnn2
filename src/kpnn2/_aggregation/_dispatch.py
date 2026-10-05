@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from .._errors import Kpnn2Error
+from .._errors import Kpnn2Error, internal_error
 from ._registry import (
     AggregationMethod,
     lookup_aggregation_method,
@@ -117,8 +117,9 @@ def aggregate_node_attributions(
         **method_kwargs,
     )
     if not isinstance(result, xr.Dataset):
-        raise Kpnn2Error(
-            f"Aggregation method {method!r} must return an xarray.Dataset."
+        raise internal_error(
+            f"aggregation method {method!r} returned "
+            f"{type(result).__name__}, not an xarray.Dataset"
         )
     stamped = result.copy(deep=False)
     stamped.attrs["method"] = method

@@ -117,10 +117,10 @@ def test_layout_rejects_unknown_name_and_unknown_start():
         layout.slot_at(7)
 
 
-def test_layout_rejects_gaps_overlaps_duplicates_and_zero_width():
+def test_layout_gaps_and_overlaps_fail_an_internal_check():
     with pytest.raises(
-        Kpnn2Error,
-        match="without gaps",
+        AssertionError,
+        match="internal check failed",
     ):
         Layout(
             slots=(
@@ -132,8 +132,8 @@ def test_layout_rejects_gaps_overlaps_duplicates_and_zero_width():
             )
         )
     with pytest.raises(
-        Kpnn2Error,
-        match="without gaps",
+        AssertionError,
+        match="internal check failed",
     ):
         Layout(
             slots=(
@@ -149,6 +149,9 @@ def test_layout_rejects_gaps_overlaps_duplicates_and_zero_width():
                 ),
             )
         )
+
+
+def test_layout_rejects_duplicates_and_zero_width():
     with pytest.raises(
         Kpnn2Error,
         match="Duplicate node name",

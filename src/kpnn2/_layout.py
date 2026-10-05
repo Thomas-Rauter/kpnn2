@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, internal_error
 
 DEFAULT_NODE_WIDTH = 1
 
@@ -77,8 +77,10 @@ class Layout:
     Raises
     ------
     Kpnn2Error
-        If a width is below 1, a name repeats, or the slots do
-        not tile the axis contiguously from 0.
+        If a width is below 1 or a name repeats.
+    AssertionError
+        From ``internal_error``, if the slots do not tile the
+        axis contiguously from 0.
     """
 
     slots: tuple[NodeSlot, ...]
@@ -112,10 +114,10 @@ class Layout:
                     f"unit. Got width {slot.width}."
                 )
             if slot.start != position:
-                raise Kpnn2Error(
-                    "Node slots must tile the axis without gaps. "
-                    f"Node {slot.name!r} starts at {slot.start}, "
-                    f"expected {position}."
+                raise internal_error(
+                    "layout slots do not tile the axis: node "
+                    f"{slot.name!r} starts at {slot.start}, "
+                    f"expected {position}"
                 )
             if slot.name in by_name:
                 raise Kpnn2Error(f"Duplicate node name in layout: {slot.name}.")
