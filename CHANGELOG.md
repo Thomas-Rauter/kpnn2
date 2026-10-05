@@ -22,6 +22,9 @@ semantic versioning.
   `add_self_loops`, `need_weights`, `average_attn_weights`)
   must be `bool`, and `PackedMultiheadAttention` `dropout`
   must be in [0, 1]; other values raise `Kpnn2Error`.
+- `parse_layered` and `parse_adjacency` reject node names that
+  differ only by leading or trailing whitespace (for example
+  `'A'` and `'A '`).
 
 
 ## [0.2.0] - 23. September 2026

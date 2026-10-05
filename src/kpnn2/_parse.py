@@ -46,8 +46,10 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     Kpnn2Error
         If ``edgelist`` is not a DataFrame, required columns are
         missing, values are missing or empty, the table has no rows,
-        or ``(source, target)`` pairs are duplicated (message
-        names the unique pairs, sorted).
+        two or more names differ only by leading or trailing
+        whitespace (message names every such group, sorted), or
+        ``(source, target)`` pairs are duplicated (message names
+        the unique pairs, sorted).
     """
     if not isinstance(edgelist, pd.DataFrame):
         raise Kpnn2Error("'edgelist' must be a pandas DataFrame.")
@@ -84,6 +86,30 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     if empty_source.any() or empty_target.any():
         raise Kpnn2Error(
             "Edgelist contains empty node names in 'source' or 'target'."
+        )
+
+    names = set(normalized[_SOURCE]) | set(normalized[_TARGET])
+    names_by_stripped: dict[str, list[str]] = {}
+    for name in names:
+        names_by_stripped.setdefault(
+            name.strip(),
+            [],
+        ).append(name)
+    collisions = [
+        sorted(names_by_stripped[stripped])
+        for stripped in sorted(names_by_stripped)
+        if len(names_by_stripped[stripped]) > 1
+    ]
+    if collisions:
+        groups_str = "; ".join(
+            ", ".join(repr(name) for name in group) for group in collisions
+        )
+        raise Kpnn2Error(
+            "Edgelist contains node names that differ only by leading "
+            f"or trailing whitespace: {groups_str}. Strip the names "
+            "before parsing (for example "
+            'edgelist["source"].str.strip()) or give them distinct '
+            "names."
         )
 
     n_duplicates = int(normalized.duplicated().sum())
@@ -800,15 +826,16 @@ def parse_layered(
     Kpnn2Error
         If ``edgelist`` is not a DataFrame; ``source`` or ``target``
         is absent, missing, or an empty name; the table has no rows;
-        a ``(source, target)`` pair is duplicated; any edge is a
-        self-loop; the graph has a cycle; there is no in-degree-0
-        node or no out-degree-0 node; ``widths`` names an unknown
-        node or is not a mapping of positive integers; or
-        ``ranks`` is incomplete, names an unknown node, is not a
-        mapping of non-negative integers, places inputs off the
-        minimum rank, places a non-input at that minimum, or
-        contains a non-forward edge. Each message names the offending
-        pairs or nodes, sorted.
+        two node names differ only by leading or trailing whitespace
+        (``'A'`` and ``'A '``); a ``(source, target)`` pair is
+        duplicated; any edge is a self-loop; the graph has a cycle;
+        there is no in-degree-0 node or no out-degree-0 node;
+        ``widths`` names an unknown node or is not a mapping of
+        positive integers; or ``ranks`` is incomplete, names an
+        unknown node, is not a mapping of non-negative integers,
+        places inputs off the minimum rank, places a non-input at
+        that minimum, or contains a non-forward edge. Each message
+        names the offending pairs or nodes, sorted.
 
     See Also
     --------

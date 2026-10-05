@@ -485,8 +485,11 @@ catches a mistake that would not show up in the loss.
 
 - **Malformed edgelists are rejected.** Both parsers reject missing
   columns, missing or empty names, and duplicate edges, which would
-  otherwise collapse into one weight. `parse_layered()` also
-  rejects cycles and self-loops.
+  otherwise collapse into one weight. They also reject names that
+  differ only by leading or trailing whitespace, such as `"A"` and
+  `" A"` from a CSV with `", "` separators, which would otherwise
+  split one node into two. `parse_layered()` also rejects cycles
+  and self-loops.
 - **Edges that skip layers stay in the wiring.** Such an edge is
   part of the layer it feeds, so that layer's input width includes
   it, and `gather_hop_inputs()` raises when an earlier layer it

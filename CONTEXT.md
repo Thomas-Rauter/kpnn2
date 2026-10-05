@@ -448,6 +448,7 @@ Node names are stored as strings. Non-string values in `source` /
 | Columns `source` and `target` exist | `Kpnn2Error` |
 | No missing values in `source` or `target` | `Kpnn2Error` |
 | No empty-string node names | `Kpnn2Error` |
+| No two distinct node names equal after `str.strip()` | `Kpnn2Error` naming every group, sorted |
 | At least one edge | `Kpnn2Error` |
 | No duplicate `(source, target)` pairs | `Kpnn2Error` naming the pair(s), sorted |
 | No self-loops (`source == target`) | `Kpnn2Error` naming the node(s), sorted |
@@ -458,9 +459,10 @@ Node names are stored as strings. Non-string values in `source` /
 `parse_adjacency()` enforces **every rule in that table except the
 two structural ones**: self-loops are allowed and cycles are
 allowed. Everything else (DataFrame, columns, missing values,
-empty names, at least one edge, duplicate pairs, at least one
-input, at least one output) is identical, and identically worded,
-because both parsers call the same validation helpers. Self-loops
+empty names, at least one edge, names that differ only by
+surrounding whitespace, duplicate pairs, at least one input, at
+least one output) is identical, and identically worded, because
+both parsers call the same validation helpers. Self-loops
 are the only edgelist rule the two parsers disagree on.
 
 **Node roles (inferred, not user-declared):**
@@ -520,6 +522,14 @@ name (`nodes` minus keys of `depths`), sorted alphabetically and
 comma-separated. That leftover set may include nodes downstream
 of a cycle, not only vertices on a directed cycle. Do not run a
 separate cycle-extraction algorithm.
+
+Two or more distinct names in `source` and `target` that are
+equal after `str.strip()` (tabs, newlines, and non-breaking
+spaces included) raise `Kpnn2Error`. The message lists every
+group by `repr`, groups sorted by stripped name and names within
+a group sorted, and ends with the fix: strip the names before
+parsing or give them distinct names. Only collisions raise; names
+are never stripped, case-folded, or otherwise rewritten.
 
 Duplicate `(source, target)` pairs raise `Kpnn2Error` with the
 count of extra rows after the first of each pair

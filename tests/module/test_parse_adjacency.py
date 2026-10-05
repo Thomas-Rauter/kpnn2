@@ -253,6 +253,23 @@ def test_parse_adjacency_rejects_duplicate_edges():
     assert "a -> b" in str(exc_info.value)
 
 
+def test_parse_adjacency_rejects_whitespace_name_collision():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["a", "b"],
+            "target": ["b", "a "],
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match="differ only by leading or trailing whitespace",
+    ) as exc_info:
+        parse_adjacency(edgelist)
+
+    assert "'a', 'a '" in str(exc_info.value)
+
+
 def test_parse_adjacency_rejects_a_pure_ring_for_having_no_input():
     edgelist = pd.DataFrame(
         {

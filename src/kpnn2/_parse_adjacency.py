@@ -132,11 +132,13 @@ def parse_adjacency(
     Kpnn2Error
         If ``edgelist`` is not a DataFrame; ``source`` or ``target``
         is absent, missing, or an empty name; the table has no rows;
-        a ``(source, target)`` pair is duplicated; there is no
-        in-degree-0 node or no out-degree-0 node; or ``widths`` is
-        not a mapping, names an unknown node, or holds a value that
-        is not a positive integer (``bool`` included). Each message
-        names the offending pairs or nodes, sorted.
+        two node names differ only by leading or trailing whitespace
+        (``'A'`` and ``'A '``); a ``(source, target)`` pair is
+        duplicated; there is no in-degree-0 node or no out-degree-0
+        node; or ``widths`` is not a mapping, names an unknown node,
+        or holds a value that is not a positive integer (``bool``
+        included). Each message names the offending pairs or nodes,
+        sorted.
 
     See Also
     --------
