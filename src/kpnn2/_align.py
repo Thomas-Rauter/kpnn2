@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, internal_error
 from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
 
@@ -267,7 +267,60 @@ def align_inputs(
             node_index,
             widths,
         )
+    _check_input_alignment(
+        labels,
+        node_index,
+        spec,
+    )
     return node_index
+
+
+def _check_input_alignment(
+    labels: list[str],
+    node_index: np.ndarray,
+    spec: LayeredSpec | AdjacencySpec,
+) -> None:
+    """
+    Raise unless ``node_index`` picks the names of the input axis.
+
+    The axis is rebuilt from spec fields the alignment did not
+    read: ``layer_nodes[0]`` and ``layer_dims[0]`` on a
+    ``LayeredSpec``, the owner of each ``input_index`` unit on an
+    ``AdjacencySpec``.
+    """
+    if isinstance(spec, LayeredSpec):
+        if len(node_index) != spec.layer_dims[0]:
+            raise internal_error(
+                f"align_inputs returned {len(node_index)} column(s), "
+                f"but spec.layer_dims[0] is {spec.layer_dims[0]}"
+            )
+        expected = build_layout(
+            spec.layer_nodes[0],
+            spec.layer_widths[0],
+        ).unit_names()
+    else:
+        layout = spec._layout()
+        expected = [
+            layout.slot_containing(unit).name for unit in spec.input_index
+        ]
+    found = [labels[index] for index in node_index]
+    if len(found) != len(expected):
+        raise internal_error(
+            f"align_inputs returned {len(found)} column(s) for an "
+            f"input axis of {len(expected)} unit(s)"
+        )
+    for position, (name, expected_name) in enumerate(
+        zip(
+            found,
+            expected,
+            strict=True,
+        )
+    ):
+        if name != expected_name:
+            raise internal_error(
+                f"align_inputs column {position} holds {name!r}, but "
+                f"the spec's input axis has {expected_name!r} there"
+            )
 
 
 def _labels_from_names(names: object) -> list[str]:

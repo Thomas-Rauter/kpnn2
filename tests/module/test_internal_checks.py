@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import torch
 
 import kpnn2
 from kpnn2 import Kpnn2Error, _parse, _parse_adjacency
@@ -36,6 +37,18 @@ def _cyclic_edgelist():
         {
             "source": ["x", "a", "b", "a"],
             "target": ["a", "b", "a", "y"],
+        }
+    )
+
+
+def _two_input_cyclic_edgelist():
+    """
+    Inputs x1 and x2 feed a two-node feedback core; a feeds y.
+    """
+    return pd.DataFrame(
+        {
+            "source": ["x1", "x2", "a", "b", "a"],
+            "target": ["a", "a", "b", "a", "y"],
         }
     )
 
@@ -305,6 +318,167 @@ def test_internal_checks_run_under_python_optimize():
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_align_inputs_raises_when_input_nodes_leave_layer_zero_order():
+    spec = kpnn2.parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "B"],
+                "target": ["C", "C"],
+            }
+        )
+    )
+    broken = dataclasses.replace(
+        spec,
+        input_nodes=spec.input_nodes[::-1],
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "align_inputs column 0 holds 'B', but the spec's input "
+            "axis has 'A' there"
+        ),
+    ):
+        kpnn2.align_inputs(
+            ["A", "B"],
+            broken,
+        )
+
+
+def test_align_inputs_raises_when_layer_dims_disagree():
+    spec = kpnn2.parse_layered(_skip_edgelist())
+    broken = dataclasses.replace(
+        spec,
+        layer_dims=(spec.layer_dims[0] + 1,) + spec.layer_dims[1:],
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "align_inputs returned 1 column(s), but spec.layer_dims[0] is 2"
+        ),
+    ):
+        kpnn2.align_inputs(
+            ["A"],
+            broken,
+        )
+
+
+def test_align_inputs_raises_when_input_index_is_reordered():
+    spec = kpnn2.parse_adjacency(_two_input_cyclic_edgelist())
+    assert spec.input_nodes == ("x1", "x2")
+    broken = dataclasses.replace(
+        spec,
+        input_index=spec.input_index[::-1],
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "align_inputs column 0 holds 'x1', but the spec's input "
+            "axis has 'x2' there"
+        ),
+    ):
+        kpnn2.align_inputs(
+            ["x1", "x2"],
+            broken,
+        )
+
+
+# Width 1 is the layer's real width; width 2 is what the broken
+# layer_dims claims. Neither caller is wrong.
+@pytest.mark.parametrize(
+    "n_units",
+    [1, 2],
+)
+def test_map_node_attributions_raises_when_layer_dims_disagree(n_units):
+    spec = kpnn2.parse_layered(_skip_edgelist())
+    assert spec.layer_dims == (1, 1, 1)
+    broken = dataclasses.replace(
+        spec,
+        layer_dims=(1, 2, 1),
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "map_node_attributions named 1 unit(s) of layer 1, but "
+            "spec.layer_dims[1] is 2"
+        ),
+    ):
+        kpnn2.map_node_attributions(
+            torch.zeros(2, n_units),
+            broken,
+            layer=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "what"),
+    [
+        (
+            "source_nodes",
+            "map_node_attributions hop_input names (2 nodes) differ "
+            "from hop.source_nodes (2 nodes) in names or order",
+        ),
+        (
+            "source_dims",
+            "map_node_attributions named 2 unit(s) on the hop_input "
+            "axis, but hop.in_features is 3",
+        ),
+    ],
+)
+def test_map_node_attributions_raises_when_hop_input_disagrees(
+    field,
+    what,
+):
+    spec = kpnn2.parse_layered(_skip_edgelist())
+    skip_hop = spec.hops[1]
+    assert skip_hop.source_nodes == ("A", "H")
+    assert skip_hop.source_dims == (1, 1)
+    broken_value = {
+        "source_nodes": ("H", "A"),
+        "source_dims": (1, 2),
+    }[field]
+    broken_hop = dataclasses.replace(
+        skip_hop,
+        **{field: broken_value},
+    )
+    broken = dataclasses.replace(
+        spec,
+        hops=(spec.hops[0], broken_hop),
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(what),
+    ):
+        kpnn2.map_node_attributions(
+            torch.zeros(2, 2),
+            broken,
+            hop_input=broken_hop,
+        )
+
+
+def test_map_node_attributions_raises_when_input_index_is_short():
+    spec = kpnn2.parse_adjacency(
+        _cyclic_edgelist(),
+        widths={"x": 2},
+    )
+    assert len(spec.input_index) == 2
+    broken = dataclasses.replace(
+        spec,
+        input_index=spec.input_index[:-1],
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "map_node_attributions named 2 input unit(s), but "
+            "spec.input_index has 1"
+        ),
+    ):
+        kpnn2.map_node_attributions(
+            torch.zeros(2, 2),
+            broken,
+            axis="inputs",
+        )
 
 
 def _shuffled_frame(edges):
