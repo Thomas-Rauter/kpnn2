@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 import torch
 
-from kpnn2 import Kpnn2Error, parse_adjacency, parse_layered
+from kpnn2 import parse_adjacency, parse_layered
 from kpnn2._layout import (
     DEFAULT_NODE_WIDTH,
     Layout,
@@ -86,13 +86,13 @@ def test_slot_containing_returns_the_owning_slot():
     assert layout.slot_containing(3) is layout.slot("C")
     assert layout.slot_containing(5) is layout.slot("C")
     with pytest.raises(
-        Kpnn2Error,
-        match="out of range",
+        AssertionError,
+        match="internal check failed: unit index -1 is out of",
     ):
         layout.slot_containing(-1)
     with pytest.raises(
-        Kpnn2Error,
-        match="out of range",
+        AssertionError,
+        match="internal check failed: unit index 6 is out of",
     ):
         layout.slot_containing(6)
 
@@ -103,16 +103,16 @@ def test_slot_containing_matches_slot_at_when_width_is_one():
         assert layout.slot_containing(index) is layout.slot_at(index)
 
 
-def test_layout_rejects_unknown_name_and_unknown_start():
+def test_layout_lookup_misses_fail_an_internal_check():
     layout = build_layout(["A", "B"])
     with pytest.raises(
-        Kpnn2Error,
-        match="Unknown node name",
+        AssertionError,
+        match="internal check failed: node 'missing' is not in this",
     ):
         layout.slot("missing")
     with pytest.raises(
-        Kpnn2Error,
-        match="No node begins at unit index",
+        AssertionError,
+        match="internal check failed: no layout node begins at unit index 7",
     ):
         layout.slot_at(7)
 
@@ -151,10 +151,10 @@ def test_layout_gaps_and_overlaps_fail_an_internal_check():
         )
 
 
-def test_layout_rejects_duplicates_and_zero_width():
+def test_layout_duplicates_and_zero_width_fail_an_internal_check():
     with pytest.raises(
-        Kpnn2Error,
-        match="Duplicate node name",
+        AssertionError,
+        match="internal check failed: layout node 'A' appears more than",
     ):
         Layout(
             slots=(
@@ -171,8 +171,8 @@ def test_layout_rejects_duplicates_and_zero_width():
             )
         )
     with pytest.raises(
-        Kpnn2Error,
-        match="at least one unit",
+        AssertionError,
+        match="internal check failed: layout node 'A' has width 0, below 1",
     ):
         Layout(
             slots=(
@@ -185,10 +185,13 @@ def test_layout_rejects_duplicates_and_zero_width():
         )
 
 
-def test_build_layout_rejects_width_count_mismatch():
+def test_build_layout_width_count_mismatch_fails_an_internal_check():
     with pytest.raises(
-        Kpnn2Error,
-        match="one entry per node",
+        AssertionError,
+        match=(
+            r"internal check failed: build_layout got 1 width\(s\) for "
+            r"2 node name\(s\)"
+        ),
     ):
         build_layout(
             ["A", "B"],
@@ -234,6 +237,22 @@ def test_dense_mask_from_indices_sets_live_cells():
         2,
     )
     assert again[0, 1].item() == 1.0
+
+
+def test_dense_mask_from_indices_length_mismatch_fails_an_internal_check():
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"internal check failed: packed mask got 2 source and "
+            r"1 target index\(es\)"
+        ),
+    ):
+        dense_mask_from_indices(
+            (0, 1),
+            (1,),
+            2,
+            2,
+        )
 
 
 def test_fill_block_marks_every_unit_pair_of_one_edge():
@@ -320,11 +339,11 @@ def test_concat_layouts_of_nothing_is_an_empty_axis():
     assert joined.names == ()
 
 
-def test_concat_layouts_rejects_a_repeated_name():
+def test_concat_layouts_repeated_name_fails_an_internal_check():
     layout = build_layout(["A"])
     with pytest.raises(
-        Kpnn2Error,
-        match="Duplicate node name",
+        AssertionError,
+        match="internal check failed: layout node 'A' appears more than",
     ):
         concat_layouts(
             [

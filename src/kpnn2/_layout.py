@@ -10,6 +10,14 @@ Routing index arithmetic through this module is what keeps node
 width additive: give ``build_layout`` real widths and mask
 construction, input alignment, hop concatenation, and attribution
 naming follow without changes at their call sites.
+
+Everything this module is handed comes from kpnn2 itself: spec
+fields and values the parsers computed. Public entry points
+validate caller-supplied names before they ask a ``Layout``, so
+an inconsistent layout or a failed lookup here is a kpnn2 bug and
+raises through ``internal_error``. ``resolve_edge_names`` is the
+exception: it checks caller-supplied edge names and raises
+``Kpnn2Error``.
 """
 
 from collections.abc import Container, Iterator, Sequence
@@ -76,11 +84,10 @@ class Layout:
 
     Raises
     ------
-    Kpnn2Error
-        If a width is below 1 or a name repeats.
     AssertionError
-        From ``internal_error``, if the slots do not tile the
-        axis contiguously from 0.
+        From ``internal_error``, if a width is below 1, a name
+        repeats, or the slots do not tile the axis contiguously
+        from 0.
     """
 
     slots: tuple[NodeSlot, ...]
@@ -109,9 +116,8 @@ class Layout:
         position = 0
         for slot in slots:
             if slot.width < 1:
-                raise Kpnn2Error(
-                    f"Node {slot.name!r} must own at least one "
-                    f"unit. Got width {slot.width}."
+                raise internal_error(
+                    f"layout node {slot.name!r} has width {slot.width}, below 1"
                 )
             if slot.start != position:
                 raise internal_error(
@@ -120,7 +126,9 @@ class Layout:
                     f"expected {position}"
                 )
             if slot.name in by_name:
-                raise Kpnn2Error(f"Duplicate node name in layout: {slot.name}.")
+                raise internal_error(
+                    f"layout node {slot.name!r} appears more than once"
+                )
             by_name[slot.name] = slot
             by_unit.extend([slot] * slot.width)
             position = slot.stop
@@ -158,7 +166,9 @@ class Layout:
         try:
             return self._by_name[name]
         except KeyError:
-            raise Kpnn2Error(f"Unknown node name in layout: {name}.") from None
+            raise internal_error(
+                f"node {name!r} is not in this layout"
+            ) from None
 
     def start_of(self, name: str) -> int:
         """
@@ -177,7 +187,7 @@ class Layout:
         for slot in self.slots:
             if slot.start == start:
                 return slot
-        raise Kpnn2Error(f"No node begins at unit index {start}.")
+        raise internal_error(f"no layout node begins at unit index {start}")
 
     def slot_containing(self, unit: int) -> NodeSlot:
         """
@@ -188,8 +198,8 @@ class Layout:
         """
         n_units = len(self._by_unit)
         if unit < 0 or unit >= n_units:
-            raise Kpnn2Error(
-                f"Unit index {unit} is out of range [0, {n_units})."
+            raise internal_error(
+                f"unit index {unit} is out of the layout's range [0, {n_units})"
             )
         return self._by_unit[unit]
 
@@ -234,9 +244,10 @@ def build_layout(
 
     Raises
     ------
-    Kpnn2Error
-        If ``widths`` has a different length than ``names``, or
-        the resulting slots are not a valid layout.
+    AssertionError
+        From ``internal_error``, if ``widths`` has a different
+        length than ``names``, or the resulting slots are not a
+        valid layout.
     """
     ordered = list(names)
     if widths is None:
@@ -244,9 +255,9 @@ def build_layout(
     else:
         sizes = list(widths)
         if len(sizes) != len(ordered):
-            raise Kpnn2Error(
-                "'widths' must have one entry per node. Expected "
-                f"{len(ordered)}, got {len(sizes)}."
+            raise internal_error(
+                f"build_layout got {len(sizes)} width(s) for "
+                f"{len(ordered)} node name(s)"
             )
     slots: list[NodeSlot] = []
     start = 0
@@ -289,8 +300,9 @@ def concat_layouts(
 
     Raises
     ------
-    Kpnn2Error
-        If a name appears in more than one input layout.
+    AssertionError
+        From ``internal_error``, if a name appears in more than
+        one input layout.
     """
     slots: list[NodeSlot] = []
     start = 0
@@ -517,8 +529,9 @@ def dense_mask_from_indices(
         dtype=torch.int64,
     )
     if source.shape != target.shape:
-        raise Kpnn2Error(
-            "'source_index' and 'target_index' must have the same length."
+        raise internal_error(
+            f"packed mask got {source.numel()} source and "
+            f"{target.numel()} target index(es)"
         )
     mask[target, source] = 1.0
     return mask

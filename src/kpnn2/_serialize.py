@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, internal_error
 from ._layout import build_layout, hop_axis_layouts
 from ._spec import LayeredSpec
 
@@ -381,6 +381,11 @@ def _layered_ranks_payload(spec: LayeredSpec) -> dict[str, int] | None:
     """
     Compacted depth of every node, or ``None`` when that equals
     longest-path on the same edges.
+
+    ``_rank_layers`` validates caller edgelists inside
+    ``parse_layered``. Here it re-ranks the spec's own edges, so
+    its ``Kpnn2Error`` would be a kpnn2 bug and is raised through
+    ``internal_error`` instead.
     """
     from ._parse import (
         _build_adjacency,
@@ -395,12 +400,17 @@ def _layered_ranks_payload(spec: LayeredSpec) -> dict[str, int] | None:
         in_degree,
         _,
     ) = _build_adjacency(table)
-    default_layers = _rank_layers(
-        nodes,
-        children,
-        parents,
-        in_degree,
-    )
+    try:
+        default_layers = _rank_layers(
+            nodes,
+            children,
+            parents,
+            in_degree,
+        )
+    except Kpnn2Error as error:
+        raise internal_error(
+            f"re-ranking a LayeredSpec's own edges failed: {error}"
+        ) from error
     default = tuple(tuple(layer) for layer in default_layers)
     if default == spec.layer_nodes:
         return None

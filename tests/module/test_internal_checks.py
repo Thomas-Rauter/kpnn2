@@ -486,6 +486,165 @@ def test_map_node_attributions_raises_when_input_index_is_short():
         )
 
 
+def test_parse_layered_out_of_range_unit_fails_an_internal_check(
+    monkeypatch,
+):
+    build_hops = _parse._build_hops
+
+    def push_unit_out_of_range(*args, **kwargs):
+        hops = build_hops(
+            *args,
+            **kwargs,
+        )
+        last = hops[-1]
+        hops[-1] = dataclasses.replace(
+            last,
+            source_index=last.source_index[:-1] + (last.in_features,),
+        )
+        return hops
+
+    monkeypatch.setattr(
+        _parse,
+        "_build_hops",
+        push_unit_out_of_range,
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "unit index 2 is out of the layout's range [0, 2)"
+        ),
+    ):
+        kpnn2.parse_layered(_skip_edgelist())
+
+
+def test_align_inputs_out_of_range_input_index_fails_an_internal_check():
+    spec = kpnn2.parse_adjacency(_cyclic_edgelist())
+    assert spec.state_dim == 4
+    broken = dataclasses.replace(
+        spec,
+        input_index=(spec.state_dim,),
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "unit index 4 is out of the layout's range [0, 4)"
+        ),
+    ):
+        kpnn2.align_inputs(
+            ["x"],
+            broken,
+        )
+
+
+def test_layered_edge_location_out_of_range_unit_fails_an_internal_check():
+    spec = kpnn2.parse_layered(_skip_edgelist())
+    skip_hop = spec.hops[1]
+    assert skip_hop.in_features == 2
+    broken_hop = dataclasses.replace(
+        skip_hop,
+        source_index=skip_hop.source_index[:-1] + (2,),
+    )
+    broken = dataclasses.replace(
+        spec,
+        hops=(spec.hops[0], broken_hop),
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "unit index 2 is out of the layout's range [0, 2)"
+        ),
+    ):
+        broken.edge_location(
+            "A",
+            "H",
+        )
+
+
+def test_adjacency_edge_location_out_of_range_unit_fails_an_internal_check():
+    spec = kpnn2.parse_adjacency(_cyclic_edgelist())
+    broken = dataclasses.replace(
+        spec,
+        source_index=spec.source_index[:-1] + (spec.state_dim,),
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "unit index 4 is out of the layout's range [0, 4)"
+        ),
+    ):
+        broken.edge_location(
+            "a",
+            "b",
+        )
+
+
+def test_to_dict_re_ranking_failure_fails_an_internal_check(monkeypatch):
+    spec = kpnn2.parse_layered(_skip_edgelist())
+
+    def refuse_to_rank(*args, **kwargs):
+        raise Kpnn2Error("Edgelist contains a cycle.")
+
+    monkeypatch.setattr(
+        _parse,
+        "_rank_layers",
+        refuse_to_rank,
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "re-ranking a LayeredSpec's own edges failed: "
+            "Edgelist contains a cycle."
+        ),
+    ) as caught:
+        spec.to_dict()
+    assert isinstance(
+        caught.value.__cause__,
+        Kpnn2Error,
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "method", "args"),
+    [
+        ("layered", "node_units", ("missing",)),
+        ("layered", "node_units", ("",)),
+        ("layered", "hop_units", ("missing",)),
+        ("layered", "hop_units", ("C",)),
+        ("layered", "edge_location", ("A", "missing")),
+        ("layered", "edge_location", ("C", "A")),
+        ("adjacency", "node_units", ("missing",)),
+        ("adjacency", "edge_location", ("x", "missing")),
+        ("adjacency", "edge_location", ("y", "x")),
+    ],
+)
+def test_public_name_misses_still_raise_kpnn2_error(
+    kind,
+    method,
+    args,
+):
+    """
+    Layout lookups fail as internal checks, so every public path
+    that takes a caller's node or edge name must validate first.
+    """
+    if kind == "layered":
+        spec = kpnn2.parse_layered(
+            _skip_edgelist(),
+            widths={"H": 2},
+        )
+    else:
+        spec = kpnn2.parse_adjacency(
+            _cyclic_edgelist(),
+            widths={"a": 2},
+        )
+    if method == "hop_units":
+        args = (spec.hops[1], *args)
+    with pytest.raises(Kpnn2Error):
+        getattr(
+            spec,
+            method,
+        )(*args)
+
+
 def _shuffled_frame(edges):
     rows = list(edges)
     random.shuffle(rows)

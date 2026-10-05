@@ -2411,6 +2411,14 @@ or what validation guarantees, they stay cheap, and they never go
 into a forward path that must stay
 `torch.compile(fullgraph=True)`-traceable.
 
+Which of the two a failure raises depends on where the failing value
+came from, not on which helper fails. A value a caller passed to a
+public function, or a public attribute the caller may replace, is
+validated with `Kpnn2Error` before it reaches kpnn2's own data. A
+private helper that only sees kpnn2-produced data, such as every
+lookup on the internal unit layout (`src/kpnn2/_layout.py`), raises
+an internal error.
+
 `LayeredSpec`, `Hop`, `Skip`, and `AdjacencySpec` are valid only as
 returned by the parsers or `from_dict`. Constructing them directly
 is unsupported, and a hand-built spec that breaks the parsers'
