@@ -18,6 +18,10 @@ semantic versioning.
 - `MaskedLinear.forward` raises `Kpnn2Error` (was a raw torch
   error) when the input is not a tensor or its last dimension
   is not `in_features`.
+- Flag arguments (`bias`, `tie`, `batch_first`,
+  `add_self_loops`, `need_weights`, `average_attn_weights`)
+  must be `bool`, and `PackedMultiheadAttention` `dropout`
+  must be in [0, 1]; other values raise `Kpnn2Error`.
 
 
 ## [0.2.0] - 23. September 2026

@@ -11,6 +11,7 @@ from torch import nn
 from torch.nn.utils import parametrize, prune
 
 from kpnn2 import Kpnn2Error, MaskedLinear, parse_adjacency, parse_layered
+from tests.helpers.flags import NON_BOOL_FLAGS, non_bool_match
 
 
 def _trainable(layer):
@@ -169,6 +170,25 @@ def test_masked_linear_bias_false_has_no_bias_parameter():
     assert layer.bias is None
     parameters = dict(layer.named_parameters())
     assert "bias" not in parameters
+
+
+@pytest.mark.parametrize(
+    "value",
+    NON_BOOL_FLAGS,
+)
+def test_masked_linear_rejects_non_bool_bias(value):
+    mask = torch.ones(
+        2,
+        3,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match("bias"),
+    ):
+        MaskedLinear(
+            mask,
+            bias=value,
+        )
 
 
 def test_masked_linear_bias_false_matches_zero_bias():

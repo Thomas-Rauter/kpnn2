@@ -5,6 +5,7 @@ import torch
 
 from kpnn2 import Kpnn2Error
 from kpnn2._validate import (
+    as_bool,
     as_positive_int,
     describe,
     is_integer,
@@ -104,6 +105,62 @@ def test_as_positive_int_rejects_and_reports_value(
         as_positive_int(
             value,
             "n",
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        True,
+        False,
+    ],
+)
+def test_as_bool_returns_the_flag(value):
+    assert (
+        as_bool(
+            value,
+            "flag",
+        )
+        is value
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "got"),
+    [
+        pytest.param(
+            "False",
+            "'False' (str)",
+            id="str",
+        ),
+        pytest.param(
+            0,
+            "0 (int)",
+            id="zero",
+        ),
+        pytest.param(
+            1,
+            "1 (int)",
+            id="one",
+        ),
+        pytest.param(
+            None,
+            "None",
+            id="None",
+        ),
+    ],
+)
+def test_as_bool_rejects_and_reports_value(
+    value,
+    got,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(f"'flag' must be True or False. Got {got}."),
+    ):
+        as_bool(
+            value,
+            "flag",
         )
 
 

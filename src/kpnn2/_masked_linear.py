@@ -20,7 +20,7 @@ from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 from ._mask_tensor import as_mask_tensor
-from ._validate import check_layer_input
+from ._validate import as_bool, check_layer_input
 
 _MASK_DIGEST_KEY = "mask_digest"
 # kpnn2 0.1 stored the trainable tensor through torch parametrize.
@@ -144,7 +144,7 @@ class MaskedLinear(nn.Module):
         not reach this layer.
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
-        If ``False``, there is no bias.
+        If ``False``, there is no bias. Must be a ``bool``.
     identity : str or None, default=None
         Opaque checkpoint identity, typically
         ``spec.fingerprint``. Stored in ``state_dict`` next to
@@ -214,8 +214,9 @@ class MaskedLinear(nn.Module):
         If ``mask`` is not a ``torch.Tensor`` or is not 2-D; if
         ``mask`` has a dimension of size 0, has a complex dtype,
         holds a value other than 0 and 1 (NaN included), or has
-        no entry equal to 1; if ``identity`` is neither a ``str``
-        nor ``None``; if ``constraint`` is neither an
+        no entry equal to 1; if ``bias`` is not a ``bool``; if
+        ``identity`` is neither a ``str`` nor ``None``; if
+        ``constraint`` is neither an
         ``nn.Module`` nor ``None``, or does not preserve the
         weight shape; if ``generator`` is neither a
         ``torch.Generator`` nor ``None``; from
@@ -358,6 +359,10 @@ class MaskedLinear(nn.Module):
         generator: torch.Generator | None = None,
     ) -> None:
         super().__init__()
+        bias = as_bool(
+            bias,
+            "bias",
+        )
         if not isinstance(mask, torch.Tensor):
             raise Kpnn2Error("'mask' must be a torch.Tensor.")
         if mask.ndim != 2:

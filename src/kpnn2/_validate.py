@@ -48,6 +48,30 @@ def as_positive_int(
     return value
 
 
+def as_bool(
+    value: object,
+    name: str,
+) -> bool:
+    """
+    Return ``value`` if it is a ``bool``.
+
+    A flag is read by its value, never by truthiness, so a
+    stand-in such as ``"False"``, ``0``, ``None``, or a
+    ``numpy.bool_`` is rejected rather than guessed at.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``value`` is not a ``bool``. The message names ``name``
+        and describes ``value``.
+    """
+    if not isinstance(value, bool):
+        raise Kpnn2Error(
+            f"'{name}' must be True or False. Got {describe(value)}."
+        )
+    return value
+
+
 def describe(value: object) -> str:
     """
     Describe a received value in one short line for a message.

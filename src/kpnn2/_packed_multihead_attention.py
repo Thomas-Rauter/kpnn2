@@ -14,7 +14,7 @@ from ._errors import Kpnn2Error, internal_error
 from ._generator import as_generator, run_preserving_default_rng
 from ._identity import as_identity, check_identity, save_identity
 from ._packed_index import as_packed_pairs, digest_matches
-from ._validate import as_positive_int, is_integer
+from ._validate import as_bool, as_positive_int, describe, is_integer
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -127,10 +127,18 @@ def _expand_index(
 
 
 def _dropout_value(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise Kpnn2Error("'dropout' must be a float >= 0.")
-    if not (value >= 0):
-        raise Kpnn2Error("'dropout' must be a float >= 0.")
+    """
+    Return ``dropout`` as a float in [0, 1], the range torch accepts.
+
+    Integers 0 and 1 count; ``bool``, NaN, and infinities do not.
+    """
+    if (
+        not (is_integer(value) or isinstance(value, float))
+        or not 0 <= value <= 1
+    ):
+        raise Kpnn2Error(
+            f"'dropout' must be a float in [0, 1]. Got {describe(value)}."
+        )
     return float(value)
 
 
@@ -944,14 +952,16 @@ class PackedMultiheadAttention(nn.Module):
     dropout : float, default=0.0
         Dropout probability applied to the packed attention
         weights in training mode only; ``0.0`` disables it.
-        Must be ``>= 0``; integer ``0`` is accepted, ``bool``
-        and negatives are rejected.
+        Must be finite and in ``[0, 1]``, the range torch
+        accepts; integers ``0`` and ``1`` are accepted,
+        ``bool`` is rejected.
     bias : bool, default=True
         Whether the four projections learn a bias. ``False``
-        makes them pure linear maps.
+        makes them pure linear maps. Must be a ``bool``.
     kdim : int or None, default=None
-        Key embed width. Must be ``None`` or equal to
-        ``embed_dim``; kept for ``nn.MultiheadAttention``
+        Key embed width. Must be ``None`` or an ``int`` equal
+        to ``embed_dim`` (``True`` is rejected even when
+        ``embed_dim`` is 1); kept for ``nn.MultiheadAttention``
         call-site parity, not to support a differing width.
     vdim : int or None, default=None
         Value embed width, under the same restriction as
@@ -960,13 +970,14 @@ class PackedMultiheadAttention(nn.Module):
         Layout of batched tensors: ``(..., seq, embed_dim)`` when
         ``True`` (kpnn2 sample-major), ``(seq, batch, embed_dim)``
         when ``False`` (the ``nn.MultiheadAttention`` layout).
-        Unbatched 2-D ``(seq, embed)`` ignores this flag.
+        Unbatched 2-D ``(seq, embed)`` ignores this flag. Must
+        be a ``bool``.
     add_self_loops : bool, default=False
         If ``True``, OR any missing ``(i, i)`` pair into the
         module buffers, so every query keeps its own token as a
         key. Existing self-loops are kept, not duplicated, and
         the caller's index objects are not mutated. Requires
-        ``query_features == key_features``.
+        ``query_features == key_features``. Must be a ``bool``.
     identity : str or None, default=None
         Opaque checkpoint identity, typically
         ``spec.fingerprint``. Stored in ``state_dict`` next to
@@ -1045,9 +1056,12 @@ class PackedMultiheadAttention(nn.Module):
         integers, mismatched in length, out of range, or
         duplicated as ``(source, target)`` pairs; if the sizes
         are not positive ints; if ``embed_dim`` is not divisible
-        by ``num_heads``; if ``dropout`` is a ``bool`` or
-        negative; if ``kdim`` / ``vdim`` are neither ``None`` nor
-        ``embed_dim``; if ``add_self_loops`` is set when
+        by ``num_heads``; if ``dropout`` is a ``bool``, not a
+        number, NaN, or outside ``[0, 1]``; if ``bias``,
+        ``batch_first``, or ``add_self_loops`` is not a
+        ``bool``; if ``kdim`` / ``vdim`` are neither ``None``
+        nor an ``int`` equal to ``embed_dim``; if
+        ``add_self_loops`` is set when
         ``query_features != key_features``; if ``identity`` is
         neither a ``str`` nor ``None``; if ``generator`` is
         neither a ``torch.Generator`` nor ``None``; or if
@@ -1195,10 +1209,22 @@ class PackedMultiheadAttention(nn.Module):
         if embed_dim % num_heads != 0:
             raise Kpnn2Error("'embed_dim' must be divisible by 'num_heads'.")
         dropout = _dropout_value(dropout)
-        if kdim is not None and kdim != embed_dim:
+        bias = as_bool(
+            bias,
+            "bias",
+        )
+        if kdim is not None and not (is_integer(kdim) and kdim == embed_dim):
             raise Kpnn2Error("'kdim' must be None or equal to embed_dim.")
-        if vdim is not None and vdim != embed_dim:
+        if vdim is not None and not (is_integer(vdim) and vdim == embed_dim):
             raise Kpnn2Error("'vdim' must be None or equal to embed_dim.")
+        batch_first = as_bool(
+            batch_first,
+            "batch_first",
+        )
+        add_self_loops = as_bool(
+            add_self_loops,
+            "add_self_loops",
+        )
         source, target = as_packed_pairs(
             source_index,
             target_index,
@@ -1438,7 +1464,9 @@ class PackedMultiheadAttention(nn.Module):
         ``(..., nnz)``. With ``False``, shape
         ``(..., nnz, num_heads)``. Batch layout follows the
         output (including ``batch_first``). This path does
-        not allocate ``(L, S)``.
+        not allocate ``(L, S)``. ``need_weights`` and
+        ``average_attn_weights`` must be ``bool``; any other
+        value raises ``Kpnn2Error``.
 
         ``attn_mask`` must be ``None``. ``is_causal`` must be
         ``False``. ``key_padding_mask`` is ``None`` or a
@@ -1449,6 +1477,14 @@ class PackedMultiheadAttention(nn.Module):
         padding masks raise ``Kpnn2Error``. After padding, a
         query with no remaining keys stays zeros, not NaN.
         """
+        need_weights = as_bool(
+            need_weights,
+            "need_weights",
+        )
+        average_attn_weights = as_bool(
+            average_attn_weights,
+            "average_attn_weights",
+        )
         if attn_mask is not None:
             raise Kpnn2Error(
                 "'attn_mask' must be None; the edgelist is the structural mask."

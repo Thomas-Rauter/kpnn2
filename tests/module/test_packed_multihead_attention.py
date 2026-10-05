@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import re
 import struct
 
 import pandas as pd
@@ -12,6 +13,7 @@ from kpnn2 import (
     PackedMultiheadAttention,
     parse_adjacency,
 )
+from tests.helpers.flags import NON_BOOL_FLAGS, non_bool_match
 from tests.helpers.packed_attention import (
     dense_packed_weights,
     pin_projections_identity,
@@ -697,6 +699,236 @@ def test_kdim_or_vdim_not_embed_dim_raises():
             8,
             2,
             vdim=4,
+        )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "kdim",
+        "vdim",
+    ],
+)
+def test_kdim_or_vdim_true_raises_when_embed_dim_is_one(name):
+    with pytest.raises(
+        Kpnn2Error,
+        match=name,
+    ):
+        PackedMultiheadAttention(
+            [0],
+            [0],
+            1,
+            1,
+            1,
+            1,
+            **{name: True},
+        )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "bias",
+        "batch_first",
+        "add_self_loops",
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    NON_BOOL_FLAGS,
+)
+def test_rejects_non_bool_constructor_flags(
+    name,
+    value,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match(name),
+    ):
+        PackedMultiheadAttention(
+            [0, 1],
+            [1, 0],
+            2,
+            2,
+            8,
+            2,
+            **{name: value},
+        )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "need_weights",
+        "average_attn_weights",
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    NON_BOOL_FLAGS,
+)
+def test_forward_rejects_non_bool_flags(
+    name,
+    value,
+):
+    torch.manual_seed(42)
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+    )
+    x = torch.randn(
+        3,
+        2,
+        8,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match(name),
+    ):
+        layer(
+            x,
+            x,
+            x,
+            **{name: value},
+        )
+
+
+def test_batch_first_string_false_raises():
+    # "False" is truthy: read as True, a (seq, batch, embed) input
+    # with seq == batch would be misread as batch-major silently.
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match("batch_first"),
+    ):
+        PackedMultiheadAttention(
+            [0, 1],
+            [1, 0],
+            2,
+            2,
+            8,
+            2,
+            batch_first="False",
+        )
+
+
+def test_add_self_loops_no_raises_and_false_keeps_nnz():
+    spec = parse_adjacency(_tiny_edgelist())
+    n = len(spec.nodes)
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match("add_self_loops"),
+    ):
+        PackedMultiheadAttention(
+            spec.source_index,
+            spec.target_index,
+            n,
+            n,
+            8,
+            2,
+            add_self_loops="no",
+        )
+    layer = PackedMultiheadAttention(
+        spec.source_index,
+        spec.target_index,
+        n,
+        n,
+        8,
+        2,
+        add_self_loops=False,
+    )
+    assert layer.nnz == len(spec.source_index)
+
+
+@pytest.mark.parametrize(
+    "dropout",
+    [
+        0,
+        0.0,
+        0.5,
+        1,
+        1.0,
+    ],
+)
+def test_dropout_in_unit_interval_is_accepted(dropout):
+    torch.manual_seed(42)
+    layer = PackedMultiheadAttention(
+        [0, 1],
+        [1, 0],
+        2,
+        2,
+        8,
+        2,
+        dropout=dropout,
+    )
+    assert isinstance(
+        layer.dropout,
+        float,
+    )
+    assert layer.dropout == dropout
+    layer.train()
+    x = torch.randn(
+        3,
+        2,
+        8,
+    )
+    output, _ = layer(
+        x,
+        x,
+        x,
+    )
+    assert torch.isfinite(output).all()
+
+
+@pytest.mark.parametrize(
+    ("dropout", "got"),
+    [
+        pytest.param(
+            -0.1,
+            "-0.1 (float)",
+            id="negative",
+        ),
+        pytest.param(
+            1.5,
+            "1.5 (float)",
+            id="above_one",
+        ),
+        pytest.param(
+            float("nan"),
+            "nan (float)",
+            id="nan",
+        ),
+        pytest.param(
+            float("inf"),
+            "inf (float)",
+            id="inf",
+        ),
+        pytest.param(
+            True,
+            "True (bool)",
+            id="bool",
+        ),
+    ],
+)
+def test_dropout_outside_unit_interval_raises(
+    dropout,
+    got,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(f"'dropout' must be a float in [0, 1]. Got {got}."),
+    ):
+        PackedMultiheadAttention(
+            [0, 1],
+            [1, 0],
+            2,
+            2,
+            8,
+            2,
+            dropout=dropout,
         )
 
 

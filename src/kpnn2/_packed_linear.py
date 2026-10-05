@@ -20,7 +20,7 @@ from ._errors import Kpnn2Error
 from ._generator import as_generator
 from ._identity import as_identity, check_identity, save_identity
 from ._packed_index import as_packed_pairs, digest_matches
-from ._validate import as_positive_int, check_layer_input
+from ._validate import as_bool, as_positive_int, check_layer_input
 
 _INDEX_DIGEST_KEY = "index_digest"
 
@@ -106,7 +106,7 @@ class PackedLinear(nn.Module):
         Width of the input axis. Must be a positive int.
     bias : bool, default=True
         If ``True``, learn a bias of shape ``(out_features,)``.
-        If ``False``, there is no bias.
+        If ``False``, there is no bias. Must be a ``bool``.
     identity : str or None, default=None
         Opaque checkpoint identity, typically
         ``spec.fingerprint``. Stored in ``state_dict`` next to
@@ -181,8 +181,9 @@ class PackedLinear(nn.Module):
         If the indices are empty, not 1-D integers, mismatched in
         length, out of range, or duplicated as
         ``(source, target)`` pairs; if ``out_features`` /
-        ``in_features`` are not positive ints; if ``identity`` is
-        neither a ``str`` nor ``None``; if ``constraint`` is
+        ``in_features`` are not positive ints; if ``bias`` is not a
+        ``bool``; if ``identity`` is neither a ``str`` nor
+        ``None``; if ``constraint`` is
         neither an ``nn.Module`` nor ``None``, or does not
         preserve the packed weight shape; if ``generator`` is
         neither a ``torch.Generator`` nor ``None``; from
@@ -355,6 +356,10 @@ class PackedLinear(nn.Module):
         in_features = as_positive_int(
             in_features,
             "in_features",
+        )
+        bias = as_bool(
+            bias,
+            "bias",
         )
         source, target = as_packed_pairs(
             source_index,
@@ -540,7 +545,7 @@ class PackedLinear(nn.Module):
             shape ``(in_features,)``, the original input
             width, initialized from the transposed packed
             degree. If ``False``, there is no bias. This
-            layer's bias is not copied.
+            layer's bias is not copied. Must be a ``bool``.
         tie : bool, default=True
             If ``True``, the returned layer's ``weight`` is
             this layer's ``weight`` ``nn.Parameter``, and its
@@ -554,6 +559,7 @@ class PackedLinear(nn.Module):
             map. If ``False``, copy the current ``weight``
             values into a new Parameter and deepcopy the
             constraint; the two layers are then independent.
+            Must be a ``bool``.
         identity : str or None, default=None
             Checkpoint identity for the new layer, typically
             ``spec.fingerprint``. This layer's identity is
@@ -579,8 +585,9 @@ class PackedLinear(nn.Module):
         Raises
         ------
         Kpnn2Error
-            If ``tie`` is not a ``bool``, or if constructing
-            the new layer fails (see the constructor).
+            If ``bias`` or ``tie`` is not a ``bool``, or if
+            constructing the new layer fails (see the
+            constructor).
 
         Notes
         -----
@@ -627,8 +634,14 @@ class PackedLinear(nn.Module):
         >>> mirrored(torch.tensor([[1.0]])).tolist()
         [[2.0, 3.0]]
         """
-        if not isinstance(tie, bool):
-            raise Kpnn2Error("'tie' must be True or False.")
+        bias = as_bool(
+            bias,
+            "bias",
+        )
+        tie = as_bool(
+            tie,
+            "tie",
+        )
         copied_constraint = None
         if not tie and self.constraint is not None:
             copied_constraint = copy.deepcopy(self.constraint)

@@ -18,6 +18,7 @@ from kpnn2 import (
     parse_adjacency,
     parse_layered,
 )
+from tests.helpers.flags import NON_BOOL_FLAGS, non_bool_match
 
 
 def _cyclic_edgelist():
@@ -437,6 +438,24 @@ def test_packed_linear_bias_false_has_no_bias_parameter():
     )
     y = layer(x)
     assert y.shape == (3, 2)
+
+
+@pytest.mark.parametrize(
+    "value",
+    NON_BOOL_FLAGS,
+)
+def test_packed_linear_rejects_non_bool_bias(value):
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match("bias"),
+    ):
+        PackedLinear(
+            [0, 1],
+            [1, 0],
+            2,
+            2,
+            bias=value,
+        )
 
 
 def test_packed_linear_dtype_cast_keeps_integer_indices():

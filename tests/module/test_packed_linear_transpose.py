@@ -14,6 +14,7 @@ from kpnn2 import (
     parse_layered,
     scatter_hop_outputs,
 )
+from tests.helpers.flags import NON_BOOL_FLAGS, non_bool_match
 
 
 def _dense_from_packed(packed):
@@ -247,6 +248,35 @@ def test_transpose_rejects_non_bool_tie():
         match="tie",
     ):
         layer.transpose(tie=1)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "bias",
+        "tie",
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    NON_BOOL_FLAGS,
+)
+def test_transpose_rejects_non_bool_flags(
+    name,
+    value,
+):
+    layer = PackedLinear(
+        [0, 1],
+        [0, 0],
+        1,
+        2,
+        bias=False,
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=non_bool_match(name),
+    ):
+        layer.transpose(**{name: value})
 
 
 def test_transpose_does_not_copy_identity_by_default():

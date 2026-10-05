@@ -1281,7 +1281,7 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   scaling and signs go in `constraint=`, not in the mask
   (see **Package philosophy**).
 - Optional `bias`: shape `(out_features,)`. If `bias=False`,
-  no bias parameter.
+  no bias parameter. Must be a `bool`.
 - Optional `identity`: opaque `str`, typically
   `spec.fingerprint`. Stored in `state_dict` next to
   `mask_digest` as UTF-8 `uint8` bytes. `load_state_dict`
@@ -1497,7 +1497,7 @@ PackedLinear(
   ndim, or length mismatch raise `Kpnn2Error`.
 - `out_features`, `in_features`: positive ints.
 - Optional `bias`: shape `(out_features,)`. If
-  `bias=False`, no bias parameter.
+  `bias=False`, no bias parameter. Must be a `bool`.
 - Optional `identity`: opaque `str`, typically
   `spec.fingerprint`. Stored in `state_dict` next to
   `index_digest` as UTF-8 `uint8` bytes. `load_state_dict`
@@ -1668,11 +1668,12 @@ still the same edge; the 1-D `weight` is not permuted.
   always applies the transpose of the encoder's live map.
 - `tie=False`: copy the current `weight` values into a new
   Parameter and deepcopy the constraint. The two layers are
-  then independent.
+  then independent. `tie` must be a `bool`.
 - Bias is never tied. Default `bias=True` allocates a new
   bias of shape `(in_features,)` (the original input
   width), degree-aware init on the transposed fan-in.
-  `bias=False` means no bias. This layer's bias is unused.
+  `bias=False` means no bias; `bias` must be a `bool`. This
+  layer's bias is unused.
 - `constraint` on the result is this layer's module when
   `tie=True`, a deepcopy when `tie=False`, or `None`. Do
   not deepcopy it under `tie=True`: a copied stateful
@@ -1797,25 +1798,28 @@ PackedMultiheadAttention(
   Sequence lengths of `query` and of `key` / `value`.
 - `embed_dim`: positive int, divisible by `num_heads`.
 - `num_heads`: positive int.
-- `dropout`: float `>= 0` on packed attention weights.
-  Integer `0` is accepted. `bool` and negatives raise
-  `Kpnn2Error`.
+- `dropout`: float in `[0, 1]` on packed attention
+  weights, the range torch accepts. Integers `0` and `1`
+  are accepted. `bool`, NaN, infinities, negatives, and
+  values above 1 raise `Kpnn2Error` at construction.
 - Optional `bias`: on the four `nn.Linear` projections.
-- `kdim`, `vdim`: must be `None` or equal to
-  `embed_dim`. Other values raise `Kpnn2Error`.
+  Must be a `bool`.
+- `kdim`, `vdim`: must be `None` or an `int` equal to
+  `embed_dim`. Other values, `True` included, raise
+  `Kpnn2Error`.
 - `batch_first`: default `True` (kpnn2 sample-major).
   That differs from `nn.MultiheadAttention`, whose
   default is sequence-major. Batched tensors are
   `(..., seq, embed_dim)` when True;
   `(seq, batch, embed_dim)` when False. Unbatched 2-D
-  `(seq, embed)` ignores this flag.
+  `(seq, embed)` ignores this flag. Must be a `bool`.
 - `add_self_loops`: if `True`, OR missing `(i, i)`
   pairs into the module buffers when
   `query_features == key_features`. Caller index
   objects are not mutated. Existing self-loops are
   kept, not duplicated. If
   `query_features != key_features`, raise
-  `Kpnn2Error`.
+  `Kpnn2Error`. Must be a `bool`.
 - Optional `identity`: opaque `str`, typically
   `spec.fingerprint`. Stored in `state_dict` next to
   `index_digest` as UTF-8 `uint8` bytes. `load_state_dict`
@@ -1881,9 +1885,10 @@ forward(
   `target_index`, **not** MHA's dense `(L, S)` map.
   `average_attn_weights=True` (default) averages heads:
   shape `(..., nnz)`. `False` keeps heads:
-  `(..., nnz, num_heads)`. Batch layout follows the
-  output, including `batch_first`. Does not allocate
-  `(L, S)`. Packed length is the module `nnz`, including
+  `(..., nnz, num_heads)`. Both flags must be a `bool`.
+  Batch layout follows the output, including
+  `batch_first`. Does not allocate `(L, S)`. Packed
+  length is the module `nnz`, including
   pairs OR-ed by `add_self_loops`; zip with
   `source_index` / `target_index`, not `to_edgelist()`,
   when that flag added pairs.
