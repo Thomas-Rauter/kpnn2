@@ -1509,8 +1509,9 @@ PackedLinear(
   `0 <= source_index < in_features` and
   `0 <= target_index < out_features`. Duplicate
   `(source, target)` pairs, empty indices, bad types /
-  ndim (`bool`, floating, or object tensors and arrays
-  included), or length mismatch raise `Kpnn2Error`.
+  ndim (`bool`, floating, complex, or object tensors and
+  arrays included), a set or mapping (no positional order),
+  or length mismatch raise `Kpnn2Error`.
 - `out_features`, `in_features`: positive ints or numpy
   integers, stored as `int`.
 - Optional `bias`: shape `(out_features,)`. If
@@ -1811,8 +1812,9 @@ PackedMultiheadAttention(
   `0 <= source_index < key_features` and
   `0 <= target_index < query_features`. Duplicate
   `(source, target)` pairs, empty indices, bad types /
-  ndim (`bool`, floating, or object tensors and arrays
-  included), or length mismatch raise `Kpnn2Error`.
+  ndim (`bool`, floating, complex, or object tensors and
+  arrays included), a set or mapping (no positional order),
+  or length mismatch raise `Kpnn2Error`.
 - `query_features`, `key_features`: positive ints or numpy
   integers, stored as `int`. Sequence lengths of `query` and
   of `key` / `value`.
@@ -2252,7 +2254,8 @@ concat_layouts(
   `node` exactly once.
 - `coords`: optional labels for axes other than `node` and `layer`,
   one sequence per dim. A single `str` as `dims` or as a `coords`
-  value is rejected, not split into characters.
+  value is rejected, not split into characters, and so is a set
+  or mapping, which has no positional order.
 - Values: detached CPU copy of the tensor. No abs/sum/mean.
   `bfloat16` is stored as float32 because NumPy has no
   bfloat16 dtype; those values are unchanged. Other dtypes
@@ -2446,6 +2449,11 @@ Integer arguments accept a Python `int` or a numpy integer scalar
 (`numbers.Integral`) and convert it to `int` at the boundary, so
 nothing kpnn2 stores or returns holds a numpy integer; `bool`,
 `numpy.bool_`, and floats (`2.0` included) are rejected.
+
+An argument whose items are matched by position (packed
+`source_index` / `target_index`, `dims`, `coords` values, the
+`names` of `align_inputs`) rejects a set or a mapping: a set has
+no order, and a mapping would be read as its keys.
 
 `Kpnn2Error` is for caller mistakes. A failed internal consistency
 check is a kpnn2 bug: package code raises it explicitly with

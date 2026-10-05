@@ -18,6 +18,11 @@ semantic versioning.
 - `MaskedLinear.forward` raises `Kpnn2Error` (was a raw torch
   error) when the input is not a tensor or its last dimension
   is not `in_features`.
+- Arguments whose items are matched by position reject a set
+  or mapping: `source_index` / `target_index` of
+  `PackedLinear` and `PackedMultiheadAttention`, and `dims` and
+  `coords` values of `map_node_attributions`. The packed layers
+  also reject a complex index tensor.
 - `gather_hop_inputs` raises `Kpnn2Error` (was a `RuntimeError`
   from `torch.cat`) when the saved source layers differ in a
   dimension other than the last, such as the batch size.

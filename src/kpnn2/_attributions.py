@@ -13,7 +13,12 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import Layout, build_layout, concat_layouts
 from ._spec import Hop, LayeredSpec, require_spec_hop
-from ._validate import describe, is_integer, require_spec
+from ._validate import (
+    describe,
+    is_integer,
+    reject_unordered,
+    require_spec,
+)
 
 _NODE_DIM = "node"
 _LAYER_COORD = "layer"
@@ -111,16 +116,18 @@ def map_node_attributions(  # numpydoc ignore=PR06
     dims : sequence of str, optional
         One name per axis of the tensor after any stacking,
         containing ``node`` exactly once and never ``layer``. A
-        single ``str`` is rejected, not split into characters.
+        single ``str`` is rejected, not split into characters,
+        and so are a set and a mapping, which carry no axis order.
         Required at 3 or more axes, unless the tensor is a stacked
         sequence of 1-D or 2-D pieces. The defaults are
         ``("node",)`` for 1-D and ``("observation", "node")`` for
         2-D, with ``step`` prepended when a sequence was stacked.
     coords : mapping of str to sequence, optional
         Labels for axes other than ``node`` and ``layer``, keyed by
-        dim name; each sequence must be as long as its axis, and a
-        single ``str`` is rejected, not split into characters. Axes
-        left out are labelled with their integer positions.
+        dim name; each sequence must be as long as its axis. A
+        single ``str`` is rejected, not split into characters, and
+        so are a set and a mapping (a dict would give its keys).
+        Axes left out are labelled with their integer positions.
 
     Returns
     -------
@@ -153,11 +160,13 @@ def map_node_attributions(  # numpydoc ignore=PR06
         of ``spec.hops``;
         ``attributions`` is neither a tensor nor a non-empty
         sequence of equal-shaped tensors; ``dims`` is missing, not
-        a sequence of strings, the wrong length, non-unique, or
-        does not name ``node`` exactly once; the node axis is not
-        as long as the named units; or ``coords`` is not a
-        mapping, names an unknown axis, or holds a value that is
-        not a sequence of labels or has the wrong length.
+        a sequence of strings (a ``str``, set, or mapping
+        included), the wrong length, non-unique, or does not name
+        ``node`` exactly once; the node axis is not as long as the
+        named units; or ``coords`` is not a mapping, names an
+        unknown axis, or holds a value that is not a sequence of
+        labels (a ``str``, set, or mapping included) or has the
+        wrong length.
 
     See Also
     --------
@@ -733,16 +742,17 @@ def _sequence_items(
     Return the items of ``value``, an argument that holds one per axis.
 
     A ``str`` or ``bytes`` is one value, not a sequence of them, so
-    it is rejected rather than split into characters. So is
-    anything ``list`` cannot iterate, a 0-dimensional array
+    it is rejected rather than split into characters. A set or a
+    mapping is rejected because its order is not the caller's. So
+    is anything ``list`` cannot iterate, a 0-dimensional array
     included.
 
     Raises
     ------
     Kpnn2Error
-        If ``value`` is a ``str``, ``bytes``, or not iterable. The
-        message says ``name`` must be ``expected`` and describes
-        ``value``.
+        If ``value`` is a ``str``, ``bytes``, set, mapping, or not
+        iterable. The message says ``name`` must be ``expected``
+        and describes ``value``.
     """
     if isinstance(value, (str, bytes)):
         raise Kpnn2Error(
@@ -750,6 +760,11 @@ def _sequence_items(
             "single string is one value, not a sequence; wrap it in "
             "a list."
         )
+    reject_unordered(
+        value,
+        name,
+        expected,
+    )
     message = f"'{name}' must be {expected}. Got {describe(value)}."
     if not isinstance(value, Iterable):
         raise Kpnn2Error(message)

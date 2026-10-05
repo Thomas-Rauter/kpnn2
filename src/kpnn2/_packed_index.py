@@ -7,9 +7,10 @@ import numpy as np
 import torch
 
 from ._errors import Kpnn2Error
-from ._validate import describe, is_integer
+from ._validate import describe, is_integer, reject_unordered
 
-_NOT_INDEX = "must be a 1-dimensional integer tensor or a sequence of int."
+_INDEX_FORMS = "a 1-dimensional integer tensor or a sequence of int"
+_NOT_INDEX = f"must be {_INDEX_FORMS}."
 
 # A duplicate-pair message lists at most this many pairs.
 _DUPLICATES_SHOWN = 5
@@ -31,9 +32,10 @@ def copy_index(
 
     Accepts a 1-D integer ``torch.Tensor``, a 1-D
     ``numpy.ndarray`` of an integer dtype, or a sequence of
-    ``int`` or numpy integer scalars. ``bool`` and floating
-    tensors or arrays are rejected. The result is contiguous and
-    independent of ``value``.
+    ``int`` or numpy integer scalars. ``bool``, floating, and
+    complex tensors or arrays are rejected, and so are sets and
+    mappings, whose order is not the caller's. The result is
+    contiguous and independent of ``value``.
     """
     if isinstance(value, torch.Tensor):
         if value.ndim != 1:
@@ -41,7 +43,11 @@ def copy_index(
                 name,
                 describe(value),
             )
-        if value.is_floating_point() or value.dtype == torch.bool:
+        if (
+            value.is_floating_point()
+            or value.is_complex()
+            or value.dtype == torch.bool
+        ):
             raise _not_an_index(
                 name,
                 describe(value),
@@ -64,6 +70,11 @@ def copy_index(
             )
         )
 
+    reject_unordered(
+        value,
+        name,
+        _INDEX_FORMS,
+    )
     if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
         raise _not_an_index(
             name,
@@ -102,10 +113,11 @@ def as_packed_pairs(
     Copy and check the packed ``(source, target)`` index pair.
 
     Checks run in a fixed order: each index is a 1-D integer
-    tensor, a 1-D integer numpy array, or a sequence of ``int``
-    or numpy integer scalars, the two have the same length,
-    they hold at least one entry, every entry is in range of its
-    bound, and no ``(source, target)`` pair repeats.
+    tensor, a 1-D integer numpy array, or a sequence (not a set
+    or mapping) of ``int`` or numpy integer scalars, the two
+    have the same length, they hold at least one entry, every
+    entry is in range of its bound, and no ``(source, target)``
+    pair repeats.
 
     Parameters
     ----------

@@ -110,7 +110,9 @@ and explain the conflict.
 - Flag arguments must be a Python `bool`
   (`_validate.as_bool`). Integer arguments go through
   `_validate.is_integer`, which accepts numpy integers, and
-  are converted to `int` before they are stored.
+  are converted to `int` before they are stored. Arguments
+  whose items are matched by position go through
+  `_validate.reject_unordered`, so a set or mapping fails.
 - A check used by more than one entry point is defined once
   and called: argument primitives in `_validate.py`, packed
   indices in `_packed_index.py`, hop checks in `_spec.py`,

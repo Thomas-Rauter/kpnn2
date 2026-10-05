@@ -91,9 +91,10 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     source_index : torch.Tensor, numpy.ndarray, or sequence of int
         1-D integer indices of length ``nnz >= 1``: an integer
         tensor, an integer numpy array, or a sequence of ``int``
-        or numpy integers. Entry ``i`` is the input column of
-        live edge ``i``, and must satisfy
-        ``0 <= source_index < in_features``. Copied to an int64
+        or numpy integers. A set or a mapping is rejected, since
+        entries pair up by position, and so is a complex tensor.
+        Entry ``i`` is the input column of live edge ``i``, and
+        must satisfy ``0 <= source_index < in_features``. Copied to an int64
         buffer, so later writes to the argument do not reach this
         layer.
     target_index : torch.Tensor, numpy.ndarray, or sequence of int

@@ -315,13 +315,13 @@ def _invalid_align_cases():
         pytest.param(
             {"A": 0, "B": 1},
             spec,
-            "mapping",
+            "'names' must be a sequence of feature names, not a mapping",
             id="mapping",
         ),
         pytest.param(
             {"A", "B"},
             spec,
-            "set",
+            "'names' must be a sequence of feature names, not a set",
             id="set",
         ),
     ]

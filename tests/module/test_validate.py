@@ -11,6 +11,7 @@ from kpnn2._validate import (
     as_positive_int,
     describe,
     is_integer,
+    reject_unordered,
     require_node_mapping,
 )
 
@@ -310,6 +311,16 @@ def test_describe_short_values(
             "dict of length 1",
             id="dict_of_tensors",
         ),
+        pytest.param(
+            {torch.tensor([12345.0])},
+            "set of length 1",
+            id="set_of_tensors",
+        ),
+        pytest.param(
+            frozenset({torch.tensor([67890.0])}),
+            "frozenset of length 1",
+            id="frozenset_of_tensors",
+        ),
     ],
 )
 def test_describe_container_of_data_by_length_not_values(
@@ -371,4 +382,104 @@ def test_require_node_mapping_rejects_and_reports_value(
         require_node_mapping(
             value,
             "widths",
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(
+            [1, 0],
+            id="list",
+        ),
+        pytest.param(
+            (1, 0),
+            id="tuple",
+        ),
+        pytest.param(
+            range(2),
+            id="range",
+        ),
+        pytest.param(
+            np.array([1, 0]),
+            id="array",
+        ),
+        pytest.param(
+            torch.tensor([1, 0]),
+            id="tensor",
+        ),
+        pytest.param(
+            {"a": 1, "b": 0}.values(),
+            id="dict_values",
+        ),
+        pytest.param(
+            (item for item in [1, 0]),
+            id="generator",
+        ),
+        pytest.param(
+            "ab",
+            id="str_left_to_the_caller",
+        ),
+    ],
+)
+def test_reject_unordered_accepts_ordered_values(value):
+    reject_unordered(
+        value,
+        "index",
+        "a sequence of int",
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "kind", "got"),
+    [
+        pytest.param(
+            {1, 0},
+            "a set",
+            "{0, 1} (set)",
+            id="set",
+        ),
+        pytest.param(
+            frozenset({0}),
+            "a set",
+            "frozenset({0}) (frozenset)",
+            id="frozenset",
+        ),
+        pytest.param(
+            {"a": 1}.keys(),
+            "a set",
+            "dict_keys(['a']) (dict_keys)",
+            id="dict_keys",
+        ),
+        pytest.param(
+            {"a": 1},
+            "a mapping",
+            "{'a': 1} (dict)",
+            id="dict",
+        ),
+        pytest.param(
+            MappingProxyType({"a": 1}),
+            "a mapping",
+            "mappingproxy({'a': 1}) (mappingproxy)",
+            id="mapping_proxy",
+        ),
+    ],
+)
+def test_reject_unordered_rejects_sets_and_mappings(
+    value,
+    kind,
+    got,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"'index' must be a sequence of int, not {kind}: its items "
+            f"are matched by position. Got {got}. Pass a list or tuple "
+            "in the intended order."
+        ),
+    ):
+        reject_unordered(
+            value,
+            "index",
+            "a sequence of int",
         )

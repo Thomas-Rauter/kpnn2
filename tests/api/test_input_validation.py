@@ -852,6 +852,21 @@ _PACKED_LINEAR_CASES = [
     ),
     _Bad(
         "PackedLinear",
+        "source_index_is_a_complex_tensor",
+        _TYPE,
+        "dtype torch.complex64",
+        lambda: _packed(source_index=torch.tensor([0j, 1j])),
+    ),
+    _Bad(
+        "PackedLinear",
+        "source_index_is_a_set",
+        _TYPE,
+        "'source_index' must be a 1-dimensional integer tensor or a "
+        "sequence of int, not a set",
+        lambda: _packed(source_index={1, 0}),
+    ),
+    _Bad(
+        "PackedLinear",
         "constraint_is_a_class",
         _TYPE,
         "'constraint'",
@@ -1040,6 +1055,14 @@ _ATTENTION_CASES = [
         _SHAPE,
         "'source_index'",
         lambda: _attention(source_index=torch.tensor([[0, 1]])),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "target_index_is_a_mapping",
+        _TYPE,
+        "'target_index' must be a 1-dimensional integer tensor or a "
+        "sequence of int, not a mapping",
+        lambda: _attention(target_index={0: 0, 1: 0}),
     ),
     _Bad(
         "PackedMultiheadAttention",
@@ -1338,6 +1361,13 @@ _MAP_CASES = [
     ),
     _Bad(
         "map_node_attributions",
+        "dims_is_a_set",
+        _TYPE,
+        "'dims' must be a sequence of strings, one per tensor axis, not a set",
+        lambda: _map(dims={"node"}),
+    ),
+    _Bad(
+        "map_node_attributions",
         "coords_not_a_mapping",
         _TYPE,
         "'coords'",
@@ -1356,6 +1386,13 @@ _MAP_CASES = [
         _TYPE,
         "'coords['observation']'",
         lambda: _map(coords={"observation": "abc"}),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "coords_value_is_a_mapping",
+        _TYPE,
+        "not a mapping",
+        lambda: _map(coords={"observation": {0: "a", 1: "b", 2: "c"}}),
     ),
     _Bad(
         "map_node_attributions",
@@ -1555,6 +1592,14 @@ _VALID_CASES = [
         "PackedLinear",
         "int32_index_tensor",
         lambda: _packed(source_index=_INDEX_INT32),
+    ),
+    _Valid(
+        "PackedLinear",
+        "ordered_iterable_indices",
+        lambda: _packed(
+            source_index=range(2),
+            target_index={"a": 0, "b": 0}.values(),
+        ),
     ),
     _Valid(
         "PackedLinear",

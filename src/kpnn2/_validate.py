@@ -5,7 +5,7 @@ At module level this imports nothing from kpnn2 but ``_errors``,
 so the spec and layout modules can import it without a cycle.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Set
 from numbers import Integral
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -85,13 +85,13 @@ def describe(value: object) -> str:
 
     A value with a tuple ``shape`` (tensor, array, frame, series)
     is described by type name, shape, and ``dtype`` when it has
-    one, never by its values. A list, tuple, or dict that holds
-    such a value is described by type name and length, so its
-    ``repr`` cannot print those values either:
-    ``list of length 2``. Anything else is its ``repr``, cut at
-    the first line break and at about 60 characters, followed by
-    its type name: ``'no' (str)``, ``1.5 (float)``. ``None`` is
-    ``None``.
+    one, never by its values. A list, tuple, dict, set, or
+    frozenset that holds such a value is described by type name
+    and length, so its ``repr`` cannot print those values
+    either: ``list of length 2``. Anything else is its ``repr``,
+    cut at the first line break and at about 60 characters,
+    followed by its type name: ``'no' (str)``, ``1.5 (float)``.
+    ``None`` is ``None``.
     """
     if value is None:
         return "None"
@@ -102,7 +102,7 @@ def describe(value: object) -> str:
         if dtype is not None:
             text = f"{text}, dtype {dtype}"
         return text
-    if isinstance(value, (list, tuple, dict)):
+    if isinstance(value, (list, tuple, dict, set, frozenset)):
         items = value.values() if isinstance(value, dict) else value
         if any(
             isinstance(getattr(item, "shape", None), tuple) for item in items
@@ -113,6 +113,40 @@ def describe(value: object) -> str:
     if text != full or len(text) > _DESCRIBE_LIMIT:
         text = f"{text[: _DESCRIBE_LIMIT - 3]}..."
     return f"{text} ({type(value).__name__})"
+
+
+def reject_unordered(
+    value: object,
+    name: str,
+    expected: str,
+) -> None:
+    """
+    Raise if ``value`` is a set or a mapping where order matters.
+
+    The items of ``value`` are matched to positions: an index
+    pair, a tensor axis, a feature column. A set has no order
+    and a mapping iterates its keys, so either would be read in
+    an arbitrary or unintended order instead of failing.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``value`` is a ``collections.abc.Set`` or
+        ``collections.abc.Mapping``. The message says ``name``
+        must be ``expected``, names the kind, and describes
+        ``value``.
+    """
+    if isinstance(value, Mapping):
+        kind = "a mapping"
+    elif isinstance(value, Set):
+        kind = "a set"
+    else:
+        return
+    raise Kpnn2Error(
+        f"'{name}' must be {expected}, not {kind}: its items are "
+        f"matched by position. Got {describe(value)}. Pass a list or "
+        "tuple in the intended order."
+    )
 
 
 def require_node_mapping(

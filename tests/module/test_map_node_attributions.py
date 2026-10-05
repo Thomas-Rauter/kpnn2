@@ -1192,6 +1192,17 @@ def _received_value_cases():
             id="dims_zero_dim_array",
         ),
         pytest.param(
+            torch.zeros(2),
+            {
+                "layer": 1,
+                "dims": {"node"},
+            },
+            "'dims' must be a sequence of strings, one per tensor axis, "
+            "not a set: its items are matched by position. Got "
+            "{'node'} (set). Pass a list or tuple in the intended order.",
+            id="dims_set",
+        ),
+        pytest.param(
             torch.zeros(1, 1, 1, 2),
             {
                 "layer": 1,
@@ -1256,6 +1267,30 @@ def _received_value_cases():
             "per position on that axis. Got 's' (str). A single string "
             "is one value, not a sequence; wrap it in a list.",
             id="coords_value_str",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {"observation": {"s"}},
+            },
+            "'coords['observation']' must be a sequence of labels, one "
+            "per position on that axis, not a set: its items are "
+            "matched by position. Got {'s'} (set). Pass a list or tuple "
+            "in the intended order.",
+            id="coords_value_set",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {"observation": {0: "s"}},
+            },
+            "'coords['observation']' must be a sequence of labels, one "
+            "per position on that axis, not a mapping: its items are "
+            "matched by position. Got {0: 's'} (dict). Pass a list or "
+            "tuple in the intended order.",
+            id="coords_value_mapping",
         ),
     ]
 

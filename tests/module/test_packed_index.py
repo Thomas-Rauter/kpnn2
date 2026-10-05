@@ -56,6 +56,10 @@ _LAYERS = [
 ]
 
 _NOT_INDEX = "must be a 1-dimensional integer tensor or a sequence of int."
+_UNORDERED = (
+    "must be a 1-dimensional integer tensor or a sequence of int, not "
+    "{kind}: its items are matched by position."
+)
 
 # Type name of a numpy scalar: ``bool`` on numpy 2, ``bool_`` on 1.x.
 _NUMPY_BOOL = type(np.bool_(True)).__name__
@@ -154,6 +158,36 @@ _CASES = [
         [0],
         f"'source_index' {_NOT_INDEX} Got 5 (int).",
         id="not_iterable",
+    ),
+    pytest.param(
+        torch.tensor([0j, 1j]),
+        [0, 1],
+        f"'source_index' {_NOT_INDEX} Got Tensor of shape (2,), "
+        "dtype torch.complex64.",
+        id="complex_tensor",
+    ),
+    pytest.param(
+        {1, 0},
+        [0, 1],
+        f"'source_index' {_UNORDERED.format(kind='a set')} Got "
+        "{{0, 1}} (set). Pass a list or tuple in the intended order.",
+        id="set",
+    ),
+    pytest.param(
+        [0, 1],
+        frozenset({0, 1}),
+        f"'target_index' {_UNORDERED.format(kind='a set')} Got "
+        "frozenset({{0, 1}}) (frozenset). Pass a list or tuple in the "
+        "intended order.",
+        id="frozenset",
+    ),
+    pytest.param(
+        {1: "b", 0: "a"},
+        [0, 1],
+        f"'source_index' {_UNORDERED.format(kind='a mapping')} Got "
+        "{{1: 'b', 0: 'a'}} (dict). Pass a list or tuple in the "
+        "intended order.",
+        id="mapping",
     ),
     pytest.param(
         [0],

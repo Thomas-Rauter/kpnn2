@@ -2,7 +2,7 @@
 Align feature names to ``spec.input_nodes``.
 """
 
-from collections.abc import Iterable, Mapping, Set
+from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
-from ._validate import describe, require_spec
+from ._validate import describe, reject_unordered, require_spec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'names' is a tensor; pass the feature names that "
@@ -28,12 +28,6 @@ _STRING_NOT_ACCEPTED_MSG = (
     "'names' is a string; pass a sequence of feature names."
 )
 _BYTES_NOT_ACCEPTED_MSG = "'names' is bytes; pass a sequence of feature names."
-_MAPPING_NOT_ACCEPTED_MSG = (
-    "'names' must be a sequence of feature names, not a mapping."
-)
-_SET_NOT_ACCEPTED_MSG = (
-    "'names' must be a sequence of feature names, not a set."
-)
 _ANNDATA_NOT_ACCEPTED_MSG = (
     "'names' looks like AnnData; pass the .var_names "
     "and apply the index to .X yourself."
@@ -333,10 +327,11 @@ def _labels_from_names(names: object) -> list[str]:
         raise Kpnn2Error(_STRING_NOT_ACCEPTED_MSG)
     if isinstance(names, bytes):
         raise Kpnn2Error(_BYTES_NOT_ACCEPTED_MSG)
-    if isinstance(names, Mapping):
-        raise Kpnn2Error(_MAPPING_NOT_ACCEPTED_MSG)
-    if isinstance(names, Set):
-        raise Kpnn2Error(_SET_NOT_ACCEPTED_MSG)
+    reject_unordered(
+        names,
+        "names",
+        "a sequence of feature names",
+    )
     if hasattr(names, "var_names") and hasattr(names, "X"):
         raise Kpnn2Error(_ANNDATA_NOT_ACCEPTED_MSG)
     ndim = getattr(names, "ndim", None)
