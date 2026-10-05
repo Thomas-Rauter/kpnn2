@@ -2501,7 +2501,15 @@ an internal error.
 `LayeredSpec`, `Hop`, `Skip`, and `AdjacencySpec` are valid only as
 returned by the parsers or `from_dict`. Constructing them directly
 is unsupported, and a hand-built spec that breaks the parsers'
-invariants may trip an internal check.
+invariants may trip an internal check or go unnoticed.
+
+A spec's own consistency is checked once, at the end of the parser
+that builds it: edge conservation, and that the fields consumers
+read for an axis agree (`input_nodes`, `layer_dims`, each hop's
+`source_nodes` and `source_dims` against `layer_nodes` and
+`layer_widths`; `input_index` against `nodes` and `node_widths`).
+Consumers such as `align_inputs` and `map_node_attributions` trust
+those fields and do not re-check them.
 
 ---
 

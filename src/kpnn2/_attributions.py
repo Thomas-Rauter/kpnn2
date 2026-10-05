@@ -10,7 +10,7 @@ import torch
 import xarray as xr
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error, internal_error
+from ._errors import Kpnn2Error
 from ._layout import Layout, build_layout, concat_layouts
 from ._spec import Hop, LayeredSpec, require_spec_hop
 from ._validate import (
@@ -396,9 +396,6 @@ def _resolve_node_layout(
     ``AdjacencySpec`` or a hop input axis, neither of which is
     one depth. ``axis="inputs"`` on a ``LayeredSpec`` is layer
     0. On an ``AdjacencySpec`` it is the input units only.
-    Each layout is checked against the width the spec stores
-    for that axis, so a disagreement inside the spec raises
-    ``internal_error`` before the tensor is looked at.
     """
     if axis is not None and (not isinstance(axis, str) or axis != "inputs"):
         raise Kpnn2Error(
@@ -443,9 +440,9 @@ def _resolve_node_layout(
             )
             layer = hop_output.target_layer
         if axis == "inputs":
-            return _layer_layout(
-                spec,
-                0,
+            return build_layout(
+                spec.layer_nodes[0],
+                spec.layer_widths[0],
             ), 0
         if not is_integer(layer):
             raise Kpnn2Error(f"'layer' must be an int. Got {describe(layer)}.")
@@ -455,9 +452,9 @@ def _resolve_node_layout(
             raise Kpnn2Error(
                 f"'layer' must be in range [0, {n_layers}). Got {layer}."
             )
-        return _layer_layout(
-            spec,
-            layer,
+        return build_layout(
+            spec.layer_nodes[layer],
+            spec.layer_widths[layer],
         ), layer
     if layer is not None or hop_input is not None or hop_output is not None:
         raise Kpnn2Error(
@@ -475,41 +472,14 @@ def _resolve_node_layout(
                 spec.node_widths,
             )
         }
-        layout = build_layout(
+        return build_layout(
             spec.input_nodes,
             [width_of[name] for name in spec.input_nodes],
-        )
-        if layout.n_units != len(spec.input_index):
-            raise internal_error(
-                f"map_node_attributions named {layout.n_units} "
-                "input unit(s), but spec.input_index has "
-                f"{len(spec.input_index)}"
-            )
-        return layout, None
+        ), None
     return build_layout(
         spec.nodes,
         spec.node_widths,
     ), None
-
-
-def _layer_layout(
-    spec: LayeredSpec,
-    layer: int,
-) -> Layout:
-    """
-    Return the layout of one layer, checked against ``layer_dims``.
-    """
-    layout = build_layout(
-        spec.layer_nodes[layer],
-        spec.layer_widths[layer],
-    )
-    if layout.n_units != spec.layer_dims[layer]:
-        raise internal_error(
-            f"map_node_attributions named {layout.n_units} unit(s) "
-            f"of layer {layer}, but spec.layer_dims[{layer}] is "
-            f"{spec.layer_dims[layer]}"
-        )
-    return layout
 
 
 def _layout_for_hop_input(
@@ -518,16 +488,13 @@ def _layout_for_hop_input(
 ) -> Layout:
     """
     Concatenate source-layer layouts of one hop on the spec.
-
-    The result is checked against ``hop.in_features`` and
-    ``hop.source_nodes``, which the parser stored separately.
     """
     require_spec_hop(
         hop,
         spec.hops,
         "hop_input",
     )
-    layout = concat_layouts(
+    return concat_layouts(
         [
             build_layout(
                 spec.layer_nodes[i],
@@ -536,20 +503,6 @@ def _layout_for_hop_input(
             for i in hop.source_layers
         ]
     )
-    if layout.n_units != hop.in_features:
-        raise internal_error(
-            f"map_node_attributions named {layout.n_units} unit(s) "
-            "on the hop_input axis, but hop.in_features is "
-            f"{hop.in_features}"
-        )
-    if layout.names != hop.source_nodes:
-        raise internal_error(
-            "map_node_attributions hop_input names "
-            f"({len(layout.names)} nodes) differ from "
-            f"hop.source_nodes ({len(hop.source_nodes)} nodes) in "
-            "names or order"
-        )
-    return layout
 
 
 def _as_tensor(

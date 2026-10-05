@@ -7,6 +7,7 @@ from collections.abc import Mapping
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
+from ._errors import internal_error
 from ._layout import Layout, build_layout, iter_block_pairs
 from ._parse import (
     _SOURCE,
@@ -80,6 +81,37 @@ def _units_of(
         slot = layout.slot(name)
         units.extend(range(slot.start, slot.stop))
     return tuple(units)
+
+
+def _check_input_units(spec: AdjacencySpec) -> None:
+    """
+    Raise unless ``input_index`` is the units of ``input_nodes``.
+
+    ``align_inputs`` and ``map_node_attributions`` name the input
+    units from ``input_nodes`` and ``node_widths`` and trust
+    ``input_index`` to hold exactly those units, in that order.
+    The expected units are rebuilt here from the stored ``nodes``
+    and ``node_widths``, once, instead of on each call.
+
+    Raises
+    ------
+    AssertionError
+        From ``internal_error``, if ``input_index`` differs.
+    """
+    layout = build_layout(
+        spec.nodes,
+        spec.node_widths,
+    )
+    slots = [layout.slot(name) for name in spec.input_nodes]
+    expected = tuple(
+        unit for slot in slots for unit in range(slot.start, slot.stop)
+    )
+    if spec.input_index != expected:
+        raise internal_error(
+            f"parse_adjacency input_index ({len(spec.input_index)} "
+            "units) differs from the units of input_nodes "
+            f"({len(expected)} units) in values or order"
+        )
 
 
 def parse_adjacency(  # numpydoc ignore=PR06
@@ -271,4 +303,5 @@ def parse_adjacency(  # numpydoc ignore=PR06
         width_of,
         [(spec.source_index, spec.target_index)],
     )
+    _check_input_units(spec)
     return spec

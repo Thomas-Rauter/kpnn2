@@ -998,6 +998,71 @@ def _check_edges_conserved(
         )
 
 
+def _check_layer_axes(spec: LayeredSpec) -> None:
+    """
+    Raise unless the fields that describe each axis agree.
+
+    ``align_inputs``, ``map_node_attributions``, and
+    ``gather_hop_inputs`` build an axis from ``layer_nodes`` and
+    ``layer_widths`` and trust ``input_nodes``, ``layer_dims``,
+    and each hop's ``source_nodes`` and ``source_dims`` to match
+    it. The parser stores those fields separately, so they are
+    checked once here, where every spec is made, instead of on
+    each call that reads them.
+
+    Raises
+    ------
+    AssertionError
+        From ``internal_error``, if a field disagrees.
+    """
+    if spec.input_nodes != spec.layer_nodes[0]:
+        raise internal_error(
+            f"parse_layered input_nodes ({len(spec.input_nodes)} "
+            "names) differ from layer_nodes[0] "
+            f"({len(spec.layer_nodes[0])} names) in names or order"
+        )
+    n_layers = len(spec.layer_nodes)
+    if len(spec.layer_widths) != n_layers or len(spec.layer_dims) != n_layers:
+        raise internal_error(
+            f"parse_layered stored {n_layers} layer_nodes, "
+            f"{len(spec.layer_widths)} layer_widths, and "
+            f"{len(spec.layer_dims)} layer_dims"
+        )
+    for layer in range(n_layers):
+        n_units = build_layout(
+            spec.layer_nodes[layer],
+            spec.layer_widths[layer],
+        ).n_units
+        if n_units != spec.layer_dims[layer]:
+            raise internal_error(
+                f"parse_layered layer {layer} holds {n_units} unit(s) "
+                f"by layer_widths, but layer_dims[{layer}] is "
+                f"{spec.layer_dims[layer]}"
+            )
+    for hop in spec.hops:
+        source_nodes = tuple(
+            name
+            for layer in hop.source_layers
+            for name in spec.layer_nodes[layer]
+        )
+        if hop.source_nodes != source_nodes:
+            raise internal_error(
+                f"parse_layered hop into layer {hop.target_layer} lists "
+                f"{len(hop.source_nodes)} source_nodes that differ from "
+                f"the {len(source_nodes)} names of its source layers in "
+                "names or order"
+            )
+        source_dims = tuple(
+            spec.layer_dims[layer] for layer in hop.source_layers
+        )
+        if hop.source_dims != source_dims:
+            raise internal_error(
+                f"parse_layered hop into layer {hop.target_layer} has "
+                f"source_dims {hop.source_dims}, but its source layers "
+                f"are {source_dims} units wide"
+            )
+
+
 def parse_layered(  # numpydoc ignore=PR06
     edgelist: pd.DataFrame,
     *,
@@ -1234,10 +1299,5 @@ def parse_layered(  # numpydoc ignore=PR06
         width_of,
         [(hop.source_index, hop.target_index) for hop in spec.hops],
     )
-    if spec.input_nodes != spec.layer_nodes[0]:
-        raise internal_error(
-            f"parse_layered input_nodes ({len(spec.input_nodes)} "
-            "names) differ from layer_nodes[0] "
-            f"({len(spec.layer_nodes[0])} names) in names or order"
-        )
+    _check_layer_axes(spec)
     return spec
