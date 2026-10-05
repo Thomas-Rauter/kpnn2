@@ -16,9 +16,13 @@ from ._constraint import (
     check_constraint_shape,
     stored_from_effective,
 )
-from ._errors import Kpnn2Error
 from ._generator import as_generator
-from ._identity import as_identity, check_identity, save_identity
+from ._identity import (
+    as_identity,
+    check_identity,
+    save_identity,
+    wiring_mismatch,
+)
 from ._packed_index import as_packed_pairs, digest_matches
 from ._validate import as_bool, as_positive_int, check_layer_input
 
@@ -735,8 +739,9 @@ class PackedLinear(nn.Module):
                 saved,
                 current,
             ):
-                raise Kpnn2Error(
-                    "The checkpoint indices do not match this layer."
+                raise wiring_mismatch(
+                    "The checkpoint indices do not match this layer.",
+                    prefix,
                 )
         super()._load_from_state_dict(
             state_dict,

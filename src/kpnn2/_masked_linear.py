@@ -18,7 +18,12 @@ from ._constraint import (
 )
 from ._errors import Kpnn2Error
 from ._generator import as_generator
-from ._identity import as_identity, check_identity, save_identity
+from ._identity import (
+    as_identity,
+    check_identity,
+    save_identity,
+    wiring_mismatch,
+)
 from ._mask_tensor import as_mask_tensor
 from ._validate import as_bool, check_layer_input
 
@@ -633,8 +638,9 @@ class MaskedLinear(nn.Module):
                 saved,
                 current,
             ):
-                raise Kpnn2Error(
-                    "The checkpoint mask does not match this layer."
+                raise wiring_mismatch(
+                    "The checkpoint mask does not match this layer.",
+                    prefix,
                 )
         legacy = prefix + _LEGACY_WEIGHT_KEY
         migrated = (
