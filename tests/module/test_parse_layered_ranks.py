@@ -220,11 +220,13 @@ def test_ranks_rejects_non_mapping():
     with pytest.raises(
         Kpnn2Error,
         match="mapping of node name",
-    ):
+    ) as exc_info:
         parse_layered(
             _chain_edgelist(),
             ranks=["A"],
         )
+
+    assert "Got ['A'] (list)." in str(exc_info.value)
 
 
 def test_inputs_not_all_at_min_rank_raise():

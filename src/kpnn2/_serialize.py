@@ -13,6 +13,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error, internal_error
 from ._layout import build_layout, hop_axis_layouts
 from ._spec import LayeredSpec
+from ._validate import describe, require_node_mapping
 
 _SPEC_VERSION = 1
 _LAYOUT_LAYERED = "layered"
@@ -293,15 +294,25 @@ def _edgelist_from_payload(
     expected_layout: str,
 ) -> pd.DataFrame:
     if not isinstance(payload, dict):
-        raise Kpnn2Error("'payload' must be a dict.")
-    version = payload.get("kpnn2_spec")
+        raise Kpnn2Error(f"'payload' must be a dict. Got {describe(payload)}.")
+    if "kpnn2_spec" not in payload:
+        raise Kpnn2Error(
+            "'kpnn2_spec' must be 1. The payload has no 'kpnn2_spec' key."
+        )
+    version = payload["kpnn2_spec"]
     if type(version) is not int or version != _SPEC_VERSION:
-        raise Kpnn2Error("'kpnn2_spec' must be 1.")
+        raise Kpnn2Error(f"'kpnn2_spec' must be 1. Got {describe(version)}.")
     if "layout" not in payload:
-        raise Kpnn2Error("'layout' must be 'layered' or 'adjacency'.")
+        raise Kpnn2Error(
+            "'layout' must be 'layered' or 'adjacency'. The payload has "
+            "no 'layout' key."
+        )
     layout = payload["layout"]
     if layout not in _KNOWN_LAYOUTS:
-        raise Kpnn2Error("'layout' must be 'layered' or 'adjacency'.")
+        raise Kpnn2Error(
+            "'layout' must be 'layered' or 'adjacency'. Got "
+            f"{describe(layout)}."
+        )
     if layout != expected_layout:
         class_name = _LAYOUT_CLASS_NAME[expected_layout]
         raise Kpnn2Error(
@@ -323,27 +334,23 @@ def _pairs_from_edges(edges: object) -> list[list[str]]:
         _NON_PAIR_SEQUENCES,
     ):
         raise Kpnn2Error(
-            "'edges' must be a sequence of [source, target] pairs."
+            "'edges' must be a sequence of [source, target] pairs. Got "
+            f"{describe(edges)}."
         )
     pairs: list[list[str]] = []
-    for pair in edges:
-        if (
-            not isinstance(pair, Sequence)
-            or isinstance(pair, _NON_PAIR_SEQUENCES)
-            or len(pair) != 2
-        ):
-            raise Kpnn2Error("Each edge must be a pair of two nonempty names.")
-        source, target = pair
-        source_name = str(source)
-        target_name = str(target)
-        if source_name == "" or target_name == "":
-            raise Kpnn2Error("Each edge must be a pair of two nonempty names.")
-        pairs.append(
-            [
-                source_name,
-                target_name,
-            ]
+    for position, pair in enumerate(edges):
+        is_pair = (
+            isinstance(pair, Sequence)
+            and not isinstance(pair, _NON_PAIR_SEQUENCES)
+            and len(pair) == 2
         )
+        names = [str(name) for name in pair] if is_pair else []
+        if not is_pair or "" in names:
+            raise Kpnn2Error(
+                "Each edge must be a pair of two nonempty names. Got "
+                f"edges[{position}] = {describe(pair)}."
+            )
+        pairs.append(names)
     return pairs
 
 
@@ -374,8 +381,10 @@ def _widths_from_payload(payload: object) -> Mapping[str, int] | None:
     widths = payload["widths"]
     if widths is None:
         return None
-    if not isinstance(widths, Mapping):
-        raise Kpnn2Error("'widths' must be a mapping of node name to int.")
+    require_node_mapping(
+        widths,
+        "widths",
+    )
     if len(widths) == 0:
         return None
     return widths
@@ -434,8 +443,10 @@ def _ranks_from_payload(payload: object) -> Mapping[str, int] | None:
     ranks = payload["ranks"]
     if ranks is None:
         return None
-    if not isinstance(ranks, Mapping):
-        raise Kpnn2Error("'ranks' must be a mapping of node name to int.")
+    require_node_mapping(
+        ranks,
+        "ranks",
+    )
     return ranks
 
 

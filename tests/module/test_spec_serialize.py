@@ -2,6 +2,7 @@ import ast
 import hashlib
 import inspect
 import json
+import re
 
 import pandas as pd
 import pytest
@@ -356,6 +357,174 @@ def test_from_dict_rejects_missing_version_and_layout():
         match="layout",
     ):
         LayeredSpec.from_dict(payload)
+
+
+def test_from_dict_bad_third_edge_names_its_position_and_pair():
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    payload["edges"] = [
+        ["A", "H"],
+        ["H", "C"],
+        ["C", ""],
+    ]
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Each edge must be a pair of two nonempty names. Got "
+            "edges[2] = ['C', ''] (list)."
+        ),
+    ):
+        LayeredSpec.from_dict(payload)
+
+    payload["edges"][2] = ("C", "D", "E")
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("Got edges[2] = ('C', 'D', 'E') (tuple)."),
+    ):
+        LayeredSpec.from_dict(payload)
+
+
+def test_from_dict_bad_edge_message_shortens_a_long_pair():
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    long_name = "x" * 200
+    payload["edges"] = [
+        ["A", "H"],
+        [long_name, "H", "C"],
+    ]
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("Got edges[1] = ['xxx"),
+    ) as exc_info:
+        LayeredSpec.from_dict(payload)
+
+    message = str(exc_info.value)
+    assert message.endswith("... (list).")
+    assert long_name not in message
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        pytest.param(
+            "kpnn2_spec",
+            2,
+            "'kpnn2_spec' must be 1. Got 2 (int).",
+            id="version-2",
+        ),
+        pytest.param(
+            "kpnn2_spec",
+            "1",
+            "'kpnn2_spec' must be 1. Got '1' (str).",
+            id="version-str",
+        ),
+        pytest.param(
+            "layout",
+            "Layered",
+            "'layout' must be 'layered' or 'adjacency'. Got 'Layered' (str).",
+            id="layout-case",
+        ),
+        pytest.param(
+            "edges",
+            "not-pairs",
+            "'edges' must be a sequence of [source, target] pairs. Got "
+            "'not-pairs' (str).",
+            id="edges-str",
+        ),
+        pytest.param(
+            "edges",
+            {"A": "H"},
+            "'edges' must be a sequence of [source, target] pairs. Got "
+            "{'A': 'H'} (dict).",
+            id="edges-dict",
+        ),
+        pytest.param(
+            "widths",
+            ["H"],
+            "'widths' must be a mapping of node name to int. Got ['H'] (list).",
+            id="widths-list",
+        ),
+        pytest.param(
+            "ranks",
+            3,
+            "'ranks' must be a mapping of node name to int. Got 3 (int).",
+            id="ranks-int",
+        ),
+    ],
+)
+def test_from_dict_reports_the_received_value(
+    key,
+    value,
+    expected,
+):
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    payload[key] = value
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(expected),
+    ):
+        LayeredSpec.from_dict(payload)
+
+
+def test_adjacency_from_dict_reports_received_widths():
+    payload = parse_adjacency(_cycle_edgelist()).to_dict()
+    payload["widths"] = [("x", 2)]
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'widths' must be a mapping of node name to int. Got "
+            "[('x', 2)] (list)."
+        ),
+    ):
+        AdjacencySpec.from_dict(payload)
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        pytest.param(
+            "kpnn2_spec",
+            "'kpnn2_spec' must be 1. The payload has no 'kpnn2_spec' key.",
+            id="version",
+        ),
+        pytest.param(
+            "layout",
+            "'layout' must be 'layered' or 'adjacency'. The payload has no "
+            "'layout' key.",
+            id="layout",
+        ),
+    ],
+)
+def test_from_dict_says_which_key_is_missing(
+    key,
+    expected,
+):
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    del payload[key]
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(expected),
+    ):
+        LayeredSpec.from_dict(payload)
+
+
+def test_from_dict_non_dict_payload_names_its_type():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'payload' must be a dict. Got ['A', 'H'] (list)."),
+    ):
+        LayeredSpec.from_dict(["A", "H"])
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'payload' must be a dict. Got '{\"kpnn2_spec\": 1}' (str)."
+        ),
+    ):
+        AdjacencySpec.from_dict('{"kpnn2_spec": 1}')
 
 
 def test_spec_modules_lazy_import_serialize_and_not_parse():

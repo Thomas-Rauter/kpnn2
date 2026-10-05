@@ -18,10 +18,52 @@ from ._layout import (
 )
 from ._serialize import canonical_edges
 from ._spec import Hop, LayeredSpec, Skip
-from ._validate import is_integer
+from ._validate import describe, is_integer, require_node_mapping
 
 _SOURCE = "source"
 _TARGET = "target"
+_COLUMN_LIMIT = 10
+_ROW_LIMIT = 5
+
+
+def _capped_list(
+    items: Sequence[object],
+    limit: int,
+) -> str:
+    """
+    Join the ``repr`` of the first ``limit`` items.
+
+    Past ``limit``, the rest are counted: ``'a', 'b', and 3 more``.
+    """
+    shown = ", ".join(repr(item) for item in items[:limit])
+    if len(items) > limit:
+        return f"{shown}, and {len(items) - limit} more"
+    return shown
+
+
+def _flagged_rows(
+    flags: Mapping[str, pd.Series],
+    index: pd.Index,
+) -> str:
+    """
+    Name, per column, how many rows are flagged and where.
+
+    Rows are named by their label in ``index``, as the caller sees
+    them, not by position. Columns with no flagged row are left
+    out.
+    """
+    parts = []
+    for column, flagged in flags.items():
+        labels = index[flagged.to_numpy()].tolist()
+        if labels:
+            labels_str = _capped_list(
+                labels,
+                _ROW_LIMIT,
+            )
+            parts.append(
+                f"'{column}': {len(labels)} row(s) at index {labels_str}"
+            )
+    return "; ".join(parts)
 
 
 def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
@@ -45,23 +87,35 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     ------
     Kpnn2Error
         If ``edgelist`` is not a DataFrame, required columns are
-        missing, values are missing or empty, the table has no rows,
+        missing (message lists the present columns), values are
+        missing or empty (message counts the rows per column and
+        names the first few by index label), the table has no rows,
         two or more names differ only by leading or trailing
         whitespace (message names every such group, sorted), or
         ``(source, target)`` pairs are duplicated (message names
         the unique pairs, sorted).
     """
     if not isinstance(edgelist, pd.DataFrame):
-        raise Kpnn2Error("'edgelist' must be a pandas DataFrame.")
+        raise Kpnn2Error(
+            f"'edgelist' must be a pandas DataFrame. Got {describe(edgelist)}."
+        )
 
     missing_columns = [
         name for name in (_SOURCE, _TARGET) if name not in edgelist.columns
     ]
     if missing_columns:
         missing_str = ", ".join(missing_columns)
+        present = edgelist.columns.tolist()
+        present_str = (
+            _capped_list(
+                present,
+                _COLUMN_LIMIT,
+            )
+            or "none"
+        )
         raise Kpnn2Error(
             "Edgelist must contain columns 'source' and 'target'. "
-            f"Missing: {missing_str}."
+            f"Missing: {missing_str}. Present columns: {present_str}."
         )
 
     if len(edgelist) == 0:
@@ -70,8 +124,16 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     source = edgelist[_SOURCE]
     target = edgelist[_TARGET]
     if source.isna().any() or target.isna().any():
+        rows_str = _flagged_rows(
+            {
+                _SOURCE: source.isna(),
+                _TARGET: target.isna(),
+            },
+            edgelist.index,
+        )
         raise Kpnn2Error(
-            "Edgelist contains missing values in 'source' or 'target'."
+            "Edgelist contains missing values in 'source' or 'target'. "
+            f"{rows_str}."
         )
 
     normalized = pd.DataFrame(
@@ -84,8 +146,16 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
     empty_source = normalized[_SOURCE] == ""
     empty_target = normalized[_TARGET] == ""
     if empty_source.any() or empty_target.any():
+        rows_str = _flagged_rows(
+            {
+                _SOURCE: empty_source,
+                _TARGET: empty_target,
+            },
+            edgelist.index,
+        )
         raise Kpnn2Error(
-            "Edgelist contains empty node names in 'source' or 'target'."
+            "Edgelist contains empty node names in 'source' or 'target'. "
+            f"{rows_str}."
         )
 
     names = set(normalized[_SOURCE]) | set(normalized[_TARGET])
@@ -242,11 +312,15 @@ def _node_sets(
     output_nodes = sorted(node for node in nodes if out_degree[node] == 0)
     if not input_nodes:
         raise Kpnn2Error(
-            "Edgelist must contain at least one input node (in-degree 0)."
+            "Edgelist must contain at least one input node (in-degree 0). "
+            "Every node has an incoming edge, so the graph has no entry "
+            "point; add input nodes that appear only in 'source'."
         )
     if not output_nodes:
         raise Kpnn2Error(
-            "Edgelist must contain at least one output node (out-degree 0)."
+            "Edgelist must contain at least one output node (out-degree 0). "
+            "Every node has an outgoing edge, so the graph has no exit "
+            "point; add output nodes that appear only in 'target'."
         )
     input_set = set(input_nodes)
     output_set = set(output_nodes)
@@ -354,8 +428,10 @@ def _layers_from_user_ranks(
     rank, and no non-input may sit there. Every named edge must
     be strictly forward after compacting.
     """
-    if not isinstance(ranks, Mapping):
-        raise Kpnn2Error("'ranks' must be a mapping of node name to int.")
+    require_node_mapping(
+        ranks,
+        "ranks",
+    )
     requested: dict[str, int] = {}
     for key, value in ranks.items():
         name = str(key)
@@ -453,8 +529,10 @@ def _normalize_widths(
     """
     if widths is None:
         return {node: 1 for node in nodes}
-    if not isinstance(widths, Mapping):
-        raise Kpnn2Error("'widths' must be a mapping of node name to int.")
+    require_node_mapping(
+        widths,
+        "widths",
+    )
     requested: dict[str, int] = {}
     for key, value in widths.items():
         name = str(key)

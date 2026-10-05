@@ -118,11 +118,13 @@ def test_widths_rejects_non_mapping():
     with pytest.raises(
         Kpnn2Error,
         match="mapping of node name",
-    ):
+    ) as exc_info:
         parse_layered(
             _chain_edgelist(),
             widths=[("H", 2)],
         )
+
+    assert "Got [('H', 2)] (list)." in str(exc_info.value)
 
 
 def test_edgelist_round_trip_requires_widths():

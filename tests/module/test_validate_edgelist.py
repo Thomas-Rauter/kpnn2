@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 import pytest
 
@@ -48,6 +50,57 @@ def test_validate_edgelist_rejects_missing_columns():
         _validate_edgelist(edgelist)
 
 
+def test_validate_edgelist_non_dataframe_message_names_its_type():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'edgelist' must be a pandas DataFrame. Got [['a', 'b']] (list)."
+        ),
+    ):
+        _validate_edgelist(
+            [["a", "b"]],
+        )
+
+
+def test_validate_edgelist_missing_column_message_lists_present_columns():
+    edgelist = pd.DataFrame(
+        {
+            "Source": ["a"],
+            "target": ["b"],
+        }
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Missing: source. Present columns: 'Source', 'target'."
+        ),
+    ):
+        _validate_edgelist(edgelist)
+
+
+def test_validate_edgelist_present_columns_are_capped_at_ten():
+    edgelist = pd.DataFrame({f"c{i:02d}": ["a"] for i in range(13)})
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'c08', 'c09', and 3 more."),
+    ) as exc_info:
+        _validate_edgelist(edgelist)
+
+    message = str(exc_info.value)
+    assert "Present columns: 'c00', 'c01'," in message
+    assert "'c10'" not in message
+
+
+def test_validate_edgelist_frame_without_columns_says_none_present():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("Missing: source, target. Present columns: none."),
+    ):
+        _validate_edgelist(pd.DataFrame())
+
+
 def test_validate_edgelist_rejects_empty_table():
     edgelist = pd.DataFrame(
         {
@@ -91,6 +144,153 @@ def test_validate_edgelist_rejects_empty_names():
         match="empty node names",
     ):
         _validate_edgelist(edgelist)
+
+
+_BAD_ROW_CASES = [
+    pytest.param(
+        None,
+        "missing values",
+        id="missing-values",
+    ),
+    pytest.param(
+        "",
+        "empty node names",
+        id="empty-names",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("bad", "problem"),
+    _BAD_ROW_CASES,
+)
+def test_validate_edgelist_bad_rows_named_by_index_label_and_counted(
+    bad,
+    problem,
+):
+    edgelist = pd.DataFrame(
+        {
+            "source": ["a", bad, "c", bad],
+            "target": ["b", "c", "d", "e"],
+        },
+        index=["r0", "r1", "r2", "r3"],
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"Edgelist contains {problem} in 'source' or 'target'. "
+            "'source': 2 row(s) at index 'r1', 'r3'."
+        ),
+    ):
+        _validate_edgelist(edgelist)
+
+
+@pytest.mark.parametrize(
+    ("bad", "problem"),
+    _BAD_ROW_CASES,
+)
+def test_validate_edgelist_bad_rows_are_counted_per_column(
+    bad,
+    problem,
+):
+    edgelist = pd.DataFrame(
+        {
+            "source": ["a", bad, "c"],
+            "target": ["b", "c", bad],
+        },
+        index=["r0", "r1", "r2"],
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'source': 1 row(s) at index 'r1'; "
+            "'target': 1 row(s) at index 'r2'."
+        ),
+    ):
+        _validate_edgelist(edgelist)
+
+
+@pytest.mark.parametrize(
+    ("bad", "problem"),
+    _BAD_ROW_CASES,
+)
+def test_validate_edgelist_bad_rows_show_only_the_first_five_labels(
+    bad,
+    problem,
+):
+    edgelist = pd.DataFrame(
+        {
+            "source": ["a"] * 7,
+            "target": [bad] * 7,
+        },
+        index=list("abcdefg"),
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'target': 7 row(s) at index 'a', 'b', 'c', 'd', 'e', and 2 more."
+        ),
+    ) as exc_info:
+        _validate_edgelist(edgelist)
+
+    message = str(exc_info.value)
+    assert "'f'" not in message
+    assert "'g'" not in message
+
+
+@pytest.mark.parametrize(
+    ("bad", "problem"),
+    _BAD_ROW_CASES,
+)
+def test_validate_edgelist_bad_rows_use_labels_not_positions(
+    bad,
+    problem,
+):
+    edgelist = pd.DataFrame(
+        {
+            "source": ["a", bad],
+            "target": ["b", "c"],
+        },
+        index=[10, 20],
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'source': 1 row(s) at index 20."),
+    ):
+        _validate_edgelist(edgelist)
+
+
+@pytest.mark.parametrize(
+    "parse",
+    [
+        pytest.param(
+            parse_layered,
+            id="parse_layered",
+        ),
+        pytest.param(
+            parse_adjacency,
+            id="parse_adjacency",
+        ),
+    ],
+)
+def test_parsers_name_bad_rows_by_index_label(parse):
+    edgelist = pd.DataFrame(
+        {
+            "source": ["a", None],
+            "target": ["b", "c"],
+        },
+        index=["first", "second"],
+    )
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("'source': 1 row(s) at index 'second'."),
+    ):
+        parse(edgelist)
 
 
 def test_validate_edgelist_rejects_duplicate_edges():

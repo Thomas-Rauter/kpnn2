@@ -5,6 +5,7 @@ At module level this imports nothing from kpnn2 but ``_errors``,
 so the spec and layout modules can import it without a cycle.
 """
 
+from collections.abc import Mapping
 from numbers import Integral
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -112,6 +113,29 @@ def describe(value: object) -> str:
     if text != full or len(text) > _DESCRIBE_LIMIT:
         text = f"{text[: _DESCRIBE_LIMIT - 3]}..."
     return f"{text} ({type(value).__name__})"
+
+
+def require_node_mapping(
+    value: object,
+    name: str,
+) -> None:
+    """
+    Raise unless ``value`` is a mapping of node name to int.
+
+    Only the container is checked here: ``widths`` and ``ranks``
+    each check their own keys and values.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``value`` is not a ``collections.abc.Mapping``. The
+        message names ``name`` and describes ``value``.
+    """
+    if not isinstance(value, Mapping):
+        raise Kpnn2Error(
+            f"'{name}' must be a mapping of node name to int. Got "
+            f"{describe(value)}."
+        )
 
 
 def require_spec(spec: "LayeredSpec | AdjacencySpec") -> None:

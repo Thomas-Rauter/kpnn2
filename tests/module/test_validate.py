@@ -1,4 +1,5 @@
 import re
+from types import MappingProxyType
 
 import numpy as np
 import pytest
@@ -10,6 +11,7 @@ from kpnn2._validate import (
     as_positive_int,
     describe,
     is_integer,
+    require_node_mapping,
 )
 
 
@@ -323,3 +325,50 @@ def test_describe_container_of_data_by_length_not_values(
 
 def test_describe_container_without_data_keeps_its_repr():
     assert describe([0.0, 1.0]) == "[0.0, 1.0] (list)"
+
+
+def test_require_node_mapping_accepts_any_mapping():
+    require_node_mapping(
+        {"A": 2},
+        "widths",
+    )
+    require_node_mapping(
+        MappingProxyType({}),
+        "ranks",
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "got"),
+    [
+        pytest.param(
+            [("A", 2)],
+            "[('A', 2)] (list)",
+            id="list_of_pairs",
+        ),
+        pytest.param(
+            "A",
+            "'A' (str)",
+            id="str",
+        ),
+        pytest.param(
+            None,
+            "None",
+            id="None",
+        ),
+    ],
+)
+def test_require_node_mapping_rejects_and_reports_value(
+    value,
+    got,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            f"'widths' must be a mapping of node name to int. Got {got}."
+        ),
+    ):
+        require_node_mapping(
+            value,
+            "widths",
+        )

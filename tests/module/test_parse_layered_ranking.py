@@ -124,8 +124,12 @@ def test_parse_layered_rejects_missing_input():
     with pytest.raises(
         Kpnn2Error,
         match="input node",
-    ):
+    ) as exc_info:
         parse_layered(edgelist)
+
+    message = str(exc_info.value)
+    assert "Every node has an incoming edge" in message
+    assert message.endswith("add input nodes that appear only in 'source'.")
 
 
 def test_parse_layered_rejects_missing_output():
@@ -139,5 +143,9 @@ def test_parse_layered_rejects_missing_output():
     with pytest.raises(
         Kpnn2Error,
         match="output node",
-    ):
+    ) as exc_info:
         parse_layered(edgelist)
+
+    message = str(exc_info.value)
+    assert "Every node has an outgoing edge" in message
+    assert message.endswith("add output nodes that appear only in 'target'.")
