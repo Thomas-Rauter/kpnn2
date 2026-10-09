@@ -9,24 +9,20 @@ from torch import nn
 import kpnn2
 
 torch.manual_seed(42)
-# Regulator -> target pairs as in the KPNN edge list; genes carry _gene.
+# Final edge list, regulator -> target as KPNN stores it; genes carry
+# _gene. How it was derived (SIGNOR paths, pruning of unlabeled roots and
+# unmeasured genes) is upstream of kpnn2.
 pairs = ("CD4 R1|CD4 R2|CD8 R3|R1 S1|R2 S1|R2 S2|R3 TF3|R1 g8_gene|S1 TF1|"
          "S1 TF2|S2 TF2|S2 TF3|TF1 g1_gene|TF1 g2_gene|TF1 g3_gene|"
          "TF2 g3_gene|TF2 g4_gene|TF2 g5_gene|TF3 g5_gene|TF3 g6_gene|"
-         "TF3 g7_gene|TF3 g9_gene|XYZ S2|XYZ S3|S3 TF4|TF4 g6_gene")
+         "TF3 g7_gene")
 e = pd.DataFrame([p.split() for p in pairs.split("|")],
                  columns=["target", "source"])  # data flows child -> parent
+spec = kpnn2.parse_layered(e)
 data = pd.DataFrame(torch.rand(16, 9).numpy(),
                     columns=[f"g{i}" for i in [1, 2, 3, 4, 5, 6, 7, 8, 10]])
 data.columns = data.columns + "_gene"
 labels = ["CD4", "CD8"]
-while True:  # GLUE: drop unmatched leaves and unlabeled roots until stable
-    keep = ((e.source.isin(data.columns) | e.source.isin(e.target))  # GLUE
-            & (e.target.isin(labels) | e.target.isin(e.source)))  # GLUE
-    if keep.all():  # GLUE
-        break  # GLUE
-    e = e[keep]  # GLUE
-spec = kpnn2.parse_layered(e)
 sib = e.merge(e, on="target").groupby("source_x").source_y.nunique()  # GLUE
 kp = sib.map(lambda c: {1: 1.0, 2: 0.9, 3: 0.7}.get(c, 0.5))  # GLUE
 keep = [torch.tensor([kp.get(n, 1.0) for n in spec.layer_nodes[  # GLUE

@@ -1,6 +1,5 @@
-"""MULGONET: BP and MF branches by depth from a root, one shared input."""
+"""MULGONET: BP and MF branches on one shared input, a dense head."""
 
-import networkx as nx
 import pandas as pd
 import torch
 from captum.attr import IntegratedGradients, LayerIntegratedGradients
@@ -9,36 +8,20 @@ from torch import nn
 import kpnn2
 
 torch.manual_seed(42)
-L, MAX_GENES, OMICS = 3, 3, ["meth", "amp", "del", "exp"]  # paper: 5, 200
-go = pd.DataFrame([t.split() for t in (
-    "B1 B0 bp|B2 B0 bp|B11 B1 bp|B12 B1 bp|B21 B2 bp|B111 B11 bp|B111 B12 bp|"
-    "B112 B11 bp|B121 B12 bp|B211 B21 bp|B1111 B111 bp|M1 M0 mf|M11 M1 mf|"
-    "M12 M1 mf|M111 M11 mf|M121 M12 mf").split("|")],
-    columns=["term", "parent", "ns"])
-ann = pd.DataFrame([t.split() for t in "B111 g1|B111 g2|B121 g2|B121 g3|"
-                    "B112 g1|B112 g2|B112 g3|B112 g4|M111 g1|M111 g4|M121 g3"
-                    .split("|")], columns=["term", "gene"])
-ann = ann[ann.groupby("term").gene.transform("size") <= MAX_GENES]  # GLUE
+OMICS = ["meth", "amp", "del", "exp"]
+# Final edgelists, 3 levels (paper: 5). How they were derived from GO
+# (depth cut, adjacent levels, gene-set size filter, pruning, one input
+# per omics) is upstream of kpnn2.
+terms = {"bp": "B11 B1|B12 B1|B111 B11|B111 B12|B121 B12",
+         "mf": "M11 M1|M12 M1|M111 M11|M121 M12"}
+genes = {"bp": {"B111": ["g1", "g2"], "B121": ["g2", "g3"]},
+         "mf": {"M111": ["g1", "g4"], "M121": ["g3"]}}
+specs = {ns: kpnn2.parse_layered(pd.DataFrame(
+    [p.split() for p in terms[ns].split("|")] + [[f"{g}_{o}", t] for t, gs
+     in genes[ns].items() for g in gs for o in OMICS],
+    columns=["source", "target"])) for ns in terms}
 X = pd.DataFrame(torch.rand(10, 20).numpy(), columns=[
     f"{g}_{o}" for o in OMICS for g in ["g1", "g2", "g3", "g4", "g5"]])
-
-
-def branch(ns):
-    g = nx.DiGraph(go[go.ns == ns][["parent", "term"]].to_numpy().tolist())  # GLUE
-    root = [n for n, k in g.in_degree() if k == 0][0]  # GLUE: roots[0]
-    d = nx.single_source_shortest_path_length(g, root, cutoff=L)  # GLUE
-    e = [(c, p) for p, c in g.edges if p != root and c in d  # GLUE: adjacent
-         and d[c] == d[p] + 1]  # GLUE: layers only
-    a = ann[ann.term.map(d) == L].merge(pd.Series(OMICS, name="o"),  # GLUE
-                                        how="cross")  # GLUE: one per omics
-    e = pd.DataFrame(e + list(zip(a.gene + "_" + a.o, a.term)),  # GLUE
-                     columns=["source", "target"])
-    while not (ok := e.source.isin(X.columns)  # GLUE
-               | e.source.isin(e.target)).all():  # GLUE
-        e = e[ok]  # GLUE: drop terms with no child below, until stable
-    return kpnn2.parse_layered(e, ranks={n: 0 if n in X.columns else  # GLUE
-        L + 1 - d[n] for n in {*e.source, *e.target}})  # GLUE
-
 
 class Branch(nn.Module):
     def __init__(self, spec):
@@ -60,7 +43,6 @@ class Branch(nn.Module):
         return h
 
 
-specs = {ns: branch(ns) for ns in ("bp", "mf")}
 model = nn.ModuleDict({ns: Branch(s) for ns, s in specs.items()})
 head = nn.Sequential(nn.Linear(sum(s.layer_dims[-1] for s in specs.values()),
                                16), nn.Tanh(), nn.Linear(16, 1), nn.Sigmoid())

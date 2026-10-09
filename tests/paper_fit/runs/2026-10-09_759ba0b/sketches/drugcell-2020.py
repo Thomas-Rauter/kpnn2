@@ -22,8 +22,8 @@ ont = pd.DataFrame(
 edges = ont.rename(columns={"child": "source", "parent": "target"})
 terms = set(edges.target)
 spec = kpnn2.parse_layered(edges, widths={t: K for t in terms})
-if len(spec.output_nodes) != 1:  # GLUE: DrugCell needs one root
-    raise ValueError(spec.output_nodes)  # GLUE
+if len(spec.output_nodes) != 1:  # the head reads exactly one root
+    raise ValueError(spec.output_nodes)
 
 
 class DrugCell(nn.Module):

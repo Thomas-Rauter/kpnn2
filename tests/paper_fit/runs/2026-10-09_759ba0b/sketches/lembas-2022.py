@@ -1,6 +1,5 @@
 """LEMBAS: signed cyclic network, one recurrent unit per node, knockouts."""
 
-import networkx as nx
 import pandas as pd
 import torch
 from torch import nn
@@ -8,15 +7,13 @@ from torch import nn
 import kpnn2
 
 torch.manual_seed(42)
+# Final signed edge list with cycles. How it was derived from OmniPath
+# (source filter, sign merging, reachability pruning) is upstream of kpnn2.
 net = pd.DataFrame([r.split() for r in (
     "L1 R1 1|L2 R1 1|L2 R2 1|L3 R2 1|R1 K1 1|R2 K2 1|K1 K3 1|K2 K3 -1|"
-    "K3 K1 -1|K3 T1 1|K2 T2 0|T1 K2 1|K3 T3 -1|K9 K1 1|K1 K5 1"
+    "K3 K1 -1|K3 T1 1|K2 T2 0|T1 K2 1|K3 T3 -1"
 ).split("|")], columns=["source", "target", "sign"]).astype({"sign": int})
-LIG, TF = ["L1", "L2", "L3"], ["T1", "T2", "T3"]
-G = nx.DiGraph(net[["source", "target"]].to_numpy().tolist())  # GLUE
-ok = set().union(*({n} | nx.descendants(G, n) for n in LIG)) & set(  # GLUE
-    ).union(*({n} | nx.ancestors(G, n) for n in TF))  # GLUE: reachability
-net = net[net.source.isin(ok) & net.target.isin(ok)]  # GLUE
+TF = ["T1", "T2", "T3"]
 spec = kpnn2.parse_adjacency(net)
 n, nnz = spec.state_dim, len(spec.source_index)
 sign = torch.zeros(nnz)

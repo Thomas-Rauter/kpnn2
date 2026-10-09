@@ -1,6 +1,5 @@
-"""P-NET: Reactome by depth from a root, copy chains, a head per layer."""
+"""P-NET: three inputs per gene, a gene layer, pathway layers, a head each."""
 
-import networkx as nx
 import pandas as pd
 import torch
 from captum.attr import DeepLift, LayerDeepLift
@@ -9,29 +8,15 @@ from torch import nn
 import kpnn2
 
 torch.manual_seed(42)
-L = 3  # pathway levels kept (paper: 5)
-rel = pd.DataFrame([("P1", "P11"), ("P1", "P112"), ("P11", "P112"),
-                    ("P11", "P111"), ("P2", "P21")], columns=["parent", "child"])
-gmt = {"P111": ["g1", "g2"], "P21": ["g3", "g4"], "P112": ["g2", "g4"]}
 genes, types = ["g1", "g2", "g3", "g4", "g5"], ["mut", "amp", "del"]
-G = nx.DiGraph(rel.to_numpy().tolist())  # GLUE: add a root, depth from it
-G.add_edges_from([("root", n) for n, k in G.in_degree() if k == 0])  # GLUE
-d = nx.single_source_shortest_path_length(G, "root", cutoff=L)  # GLUE
-e = [(c, p) for p, c in G.edges if p != "root" and c in d  # GLUE: adjacent
-     and d[c] == d[p] + 1]  # GLUE: layers only
-for n in [n for n in d if n != "root" and not any(  # GLUE: leaves above
-        d.get(c) == d[n] + 1 for c in G[n])]:  # GLUE: the cut get copies
-    chain = [n] + [f"{n}_copy{i}" for i in range(1, L - d[n] + 1)]  # GLUE
-    d.update({c: d[n] + i for i, c in enumerate(chain)})  # GLUE
-    e += list(zip(chain[1:], chain[:-1]))  # GLUE: copy feeds original
-    e += [(g, chain[-1]) for g in gmt[n]]  # gene sets join the deepest
-e += [(f"{g}_{t}", g) for g in genes for t in types]  # GLUE: input per type
-e = pd.DataFrame(e, columns=["source", "target"])
-nodes = set(e.source) | set(e.target)  # GLUE
-spec = kpnn2.parse_layered(e, ranks={  # GLUE: rank from depth from root
-    n: 0 if n not in d and n not in genes else 1 if n in genes  # GLUE
-    else L + 2 - d[n] for n in nodes})  # GLUE
-
+# Final edgelist, 3 pathway levels (paper: 5). How it was derived from
+# Reactome (depth cut, adjacent levels, copy nodes) is upstream of kpnn2.
+e = pd.DataFrame([p.split() for p in (
+    "g1 P111|g2 P111|g2 P112_copy1|g4 P112_copy1|g3 P21_copy1|g4 P21_copy1|"
+    "P112_copy1 P112|P21_copy1 P21|P111 P11|P11 P1|P112 P1|P21 P2"
+).split("|")] + [[f"{g}_{t}", g] for g in genes for t in types],
+    columns=["source", "target"])
+spec = kpnn2.parse_layered(e)
 
 class PNet(nn.Module):
     def __init__(self, spec):
