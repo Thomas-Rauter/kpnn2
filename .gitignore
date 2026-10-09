@@ -21,3 +21,4 @@ RELEASE_NOTES.md
 .cursorignore
 dev/llm_dev/
 .literature-data/
+.paper-code/

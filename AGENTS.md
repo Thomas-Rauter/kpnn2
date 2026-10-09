@@ -198,8 +198,8 @@ python -m ruff check .
 ```
 
 Fix format and lint failures from those runs. Ruff covers
-the repo except `*.md`, `tests/manual/`, and `out/` (see
-`pyproject.toml`). Markdown-only, rules-only, or other
+the repo except `*.md`, `tests/manual/`,
+`tests/paper_fit/`, and `out/` (see `pyproject.toml`). Markdown-only, rules-only, or other
 non-Python edits do not require these runs. Do not use a
 global `ruff` on `PATH`; it can disagree with CI. Exact
 pin: `pyproject.toml`. The full local checklist is
@@ -243,6 +243,16 @@ docs. Do not execute it in CI or with
 `dev/docs_notebooks.py`. Open it from GitHub with the link
 in `dev/version_release_process.md`, which is the whole
 release procedure. Install from TestPyPI with `--no-deps`.
+
+`tests/paper_fit/` compares kpnn2 with published KPNN code
+in agent sessions the user starts by hand. It is not
+pytest (`pyproject.toml` ignores it), not CI, and not
+docs. Work in it only when the current chat points at
+`tests/paper_fit/extract_prompt.md` or
+`tests/paper_fit/assess_prompt.md`; its `README.md`
+explains both. An extraction session does not read kpnn2
+sources, docs, or `CONTEXT.md`. Paper code is fetched into
+gitignored `.paper-code/`. Do not add it to git.
 
 MkDocs output, coverage, and wheels go under gitignored
 `out/` (`out/site`, `out/htmlcov`, `out/coverage.xml`,

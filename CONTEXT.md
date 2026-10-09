@@ -2724,6 +2724,7 @@ tests/
   controls/                   # live-path, importance, unrolled-adjacency
   integration/                # real tabular task
   manual/                     # Colab GPU/TPU smoke; not pytest
+  paper_fit/                  # agent-run fit vs papers; not pytest
 
 dev/
   docs_notebooks.py           # tutorials in CI; literature opt-in
