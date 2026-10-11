@@ -248,9 +248,12 @@ release procedure. Install from TestPyPI with `--no-deps`.
 in agent sessions the user starts by hand. It is not
 pytest (`pyproject.toml` ignores it), not CI, and not
 docs. Work in it only when the current chat points at
-`tests/paper_fit/extract_prompt.md` or
-`tests/paper_fit/assess_prompt.md`; its `README.md`
-explains both. An extraction session does not read kpnn2
+`tests/paper_fit/extract_prompt.md`,
+`tests/paper_fit/assess_prompt.md`, or
+`tests/paper_fit/propose_prompt.md`; its `README.md`
+explains all three. A proposal session writes one
+proposal file and does not implement it. An extraction
+session does not read kpnn2
 sources, docs, or `CONTEXT.md`. Paper code is fetched into
 gitignored `.paper-code/`. Do not add it to git.
 

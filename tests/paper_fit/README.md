@@ -13,7 +13,7 @@ This directory is **not** pytest and **not** CI.
 `pyproject.toml` tells pytest and Ruff to skip it. Nothing here
 runs unless you start a session for it.
 
-## Two kinds of session
+## Three kinds of session
 
 Start each one in a fresh agent session. That keeps the token
 budget per session small.
@@ -22,6 +22,7 @@ budget per session small.
 |---------|------|--------|
 | Extract | `Follow tests/paper_fit/extract_prompt.md for <id>.` | `cards/<id>.md`, its row in `papers.csv`, `needs.md` |
 | Assess | `Follow tests/paper_fit/assess_prompt.md.` | `runs/<date>_<commit>/` |
+| Propose | `Follow tests/paper_fit/propose_prompt.md.` | `proposals/<date>_<slug>.md` |
 
 `Follow tests/paper_fit/extract_prompt.md for the next pending
 paper.` takes the first `pending` row in `papers.csv`.
@@ -29,7 +30,9 @@ paper.` takes the first `pending` row in `papers.csv`.
 Extraction reads one paper and its code. It is the expensive
 step and runs once per paper. Assessment reads only cards, the
 needs catalog, and the kpnn2 contract. It is cheap enough to
-repeat for each release.
+repeat for each release. A proposal reads the newest run and the
+kpnn2 sources, and picks one change to kpnn2. It runs after an
+assessment that covers every included paper.
 
 Run extractions one at a time. Two parallel sessions can give
 two different needs the same new ID in `needs.md`.
@@ -55,12 +58,15 @@ the graph enters the model.
 | `papers.csv` | Target list; one row per paper, never deleted |
 | `extract_prompt.md` | Prompt for one extraction session |
 | `assess_prompt.md` | Prompt for one assessment session |
+| `propose_prompt.md` | Prompt for one proposal session |
 | `needs.md` | Paper-neutral catalog of needs |
 | `cards/_template.md` | Card layout |
 | `cards/<id>.md` | One card per included paper |
 | `runs/_template.md` | Report layout |
 | `runs/<date>_<commit>/report.md` | One report per assessment |
 | `runs/<date>_<commit>/sketches/<id>.py` | kpnn2 sketch per paper |
+| `proposals/_template.md` | Proposal layout |
+| `proposals/<date>_<slug>.md` | One proposed change to kpnn2 |
 
 Paper code is cloned into `.paper-code/<id>/` at the repo root.
 That directory is gitignored. Delete it whenever you like. The
@@ -119,6 +125,29 @@ to move to the latest commit. It rewrites the card and keeps
 existing need IDs. Re-extract when the card template gains a
 field the assessment needs, or when a run reports a card as
 wrong.
+
+## Proposals
+
+A proposal is one change to kpnn2, backed by the newest run. It
+may need many commits, but it solves one problem. The session
+does not implement it. You decide by editing two fields at the
+top of the file:
+
+| Status | Meaning |
+|--------|---------|
+| `proposed` | Written by the session; no decision yet |
+| `accepted` | You will implement it |
+| `rejected` | Not wanted; write why in **Decision** |
+| `deferred` | Maybe later; write why in **Decision** |
+| `done` | The last slice landed |
+
+To implement an accepted proposal, give its slices one at a time
+to `dev/llm_dev/planner.txt` as the TASK. The next assessment
+shows whether the predicted effect held. The next proposal
+session records that.
+
+A later session does not repeat a `rejected` or `deferred`
+proposal unless a run adds evidence for it.
 
 ## Why extraction does not see kpnn2
 
