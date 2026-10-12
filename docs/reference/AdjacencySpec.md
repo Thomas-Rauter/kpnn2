@@ -3,6 +3,7 @@
       members:
         - state_dim
         - node_units
+        - unit_index
         - to_edgelist
         - to_mask
         - edge_location

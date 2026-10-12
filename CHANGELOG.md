@@ -43,6 +43,12 @@ semantic versioning.
   float or `bool` (`1.0` becomes `'1.0'`), and reject any other
   value, such as a list or a tensor.
 
+### Added
+
+- `AdjacencySpec.unit_index(names)`: every state unit of the
+  named nodes, in order, for nodes outside `input_nodes` and
+  `output_nodes`.
+
 
 ## [0.2.0] - 23. September 2026
 

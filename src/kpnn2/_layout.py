@@ -15,12 +15,13 @@ Everything this module is handed comes from kpnn2 itself: spec
 fields and values the parsers computed. Public entry points
 validate caller-supplied names before they ask a ``Layout``, so
 an inconsistent layout or a failed lookup here is a kpnn2 bug and
-raises through ``internal_error``. ``resolve_edge_names`` and
-``resolve_node_name`` are the exception: they check
-caller-supplied names and raise ``Kpnn2Error``.
+raises through ``internal_error``. ``resolve_edge_names``,
+``resolve_node_name``, and ``resolve_node_names`` are the
+exception: they check caller-supplied names and raise
+``Kpnn2Error``.
 """
 
-from collections.abc import Container, Iterator, Sequence
+from collections.abc import Container, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -29,6 +30,8 @@ import torch
 from ._errors import Kpnn2Error, internal_error
 
 DEFAULT_NODE_WIDTH = 1
+
+_EMPTY_NODE_NAME = "Node name is empty."
 
 
 @dataclass(frozen=True)
@@ -534,6 +537,54 @@ def resolve_node_name(
     return node_name
 
 
+def resolve_node_names(
+    names: Iterable[object],
+    known_names: Iterable[str],
+    listed_in: str,
+) -> list[str]:
+    """
+    Match several node names the way parse matches node names.
+
+    The many-name form of ``resolve_node_name``. Converts each
+    name with ``str(...)``. An empty name raises first. Otherwise
+    every name that is not in ``known_names`` is reported in one
+    ``Kpnn2Error``, each once, sorted.
+
+    Parameters
+    ----------
+    names
+        Node names, or values converted with ``str``, in order.
+        Repeats are allowed.
+    known_names
+        Node names that exist on the spec. Read once into a set.
+    listed_in
+        The spec field a caller reads for the valid names, such
+        as ``"spec.nodes"``, quoted in the message.
+
+    Returns
+    -------
+    list of str
+        The node names after ``str(...)``, in ``names`` order.
+
+    Raises
+    ------
+    Kpnn2Error
+        If a name is empty, or if any name is not in
+        ``known_names``.
+    """
+    node_names = [str(name) for name in names]
+    if "" in node_names:
+        raise Kpnn2Error(_EMPTY_NODE_NAME)
+    known = frozenset(known_names)
+    unknown = sorted({name for name in node_names if name not in known})
+    if unknown:
+        raise Kpnn2Error(
+            f"Unknown node name(s): {', '.join(unknown)}. Valid names are "
+            f"in {listed_in}."
+        )
+    return node_names
+
+
 def _node_name_problem(
     node_name: str,
     known_names: Container[str],
@@ -546,7 +597,7 @@ def _node_name_problem(
     thousands; the message points at ``listed_in`` instead.
     """
     if node_name == "":
-        return "Node name is empty."
+        return _EMPTY_NODE_NAME
     if node_name not in known_names:
         return (
             f"Unknown node name: {node_name}. Valid names are in {listed_in}."

@@ -691,6 +691,48 @@ _ADJACENCY_SPEC_CASES = [
     ),
     _Bad(
         "AdjacencySpec",
+        "unit_index_names_is_an_int",
+        _TYPE,
+        "Unsupported names type",
+        lambda: _ADJACENCY.unit_index(5),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "unit_index_names_is_a_set",
+        _TYPE,
+        "'names' must be a sequence of node names, not a set",
+        lambda: _ADJACENCY.unit_index({"a"}),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "unit_index_names_is_a_mapping",
+        _TYPE,
+        "'names' must be a sequence of node names, not a mapping",
+        lambda: _ADJACENCY.unit_index({"a": 0}),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "unit_index_names_is_a_matrix",
+        _SHAPE,
+        "'names' must be one-dimensional",
+        lambda: _ADJACENCY.unit_index(np.array([["a"]])),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "unit_index_empty_name",
+        _SEMANTIC,
+        "Node name is empty",
+        lambda: _ADJACENCY.unit_index(["a", ""]),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "unit_index_unknown_names",
+        _SEMANTIC,
+        "Unknown node name(s): p, q",
+        lambda: _ADJACENCY.unit_index(["q", "a", "p", "q"]),
+    ),
+    _Bad(
+        "AdjacencySpec",
         "from_dict_payload_is_json_text",
         _TYPE,
         "'payload'",
@@ -1610,6 +1652,16 @@ _VALID_CASES = [
                 }
             )
         ).node_units("y "),
+    ),
+    _Valid(
+        "AdjacencySpec",
+        "unit_index_empty_list",
+        lambda: _ADJACENCY.unit_index([]),
+    ),
+    _Valid(
+        "AdjacencySpec",
+        "unit_index_repeated_name",
+        lambda: _ADJACENCY.unit_index(["a", "a"]),
     ),
     _Valid(
         "MaskedLinear",

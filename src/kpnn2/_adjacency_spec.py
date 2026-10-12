@@ -14,7 +14,9 @@ from ._layout import (
     dense_mask_from_indices,
     resolve_edge_names,
     resolve_node_name,
+    resolve_node_names,
 )
+from ._validate import as_name_list
 
 
 @dataclass(frozen=True)
@@ -286,6 +288,109 @@ class AdjacencySpec:
             "spec.nodes",
         )
         return self._layout().slot(node_name).units
+
+    def unit_index(
+        self,
+        names: object,
+    ) -> tuple[int, ...]:
+        """
+        Return every state unit of the named nodes, in order.
+
+        Each named node contributes all of its units, ascending,
+        in ``names`` order. This is the rule that builds
+        ``input_index`` and ``output_index``, so
+        ``spec.unit_index(spec.input_nodes) == spec.input_index``
+        (same for outputs). Use it for nodes you name yourself,
+        such as readouts that are not in ``output_nodes`` or data
+        written onto hidden nodes. At width 1, position ``i``
+        belongs to ``names[i]``; a node of width ``k`` contributes
+        ``k`` entries. ``node_units`` is the slice of one node.
+
+        Parameters
+        ----------
+        names : sequence of str
+            Node names in the order to index: a list, a tuple, a
+            one-dimensional numpy array, a ``pandas.Index``, or
+            another ordered iterable. Each name is matched after
+            ``str(...)``, same as parse. A repeated name repeats
+            its units. ``names`` is not modified.
+
+        Returns
+        -------
+        tuple of int
+            State units of the named nodes, in order. ``()`` when
+            ``names`` is empty.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``names`` is a tensor, a ``str``, ``bytes``, a set, a
+            mapping, not one-dimensional, or not iterable; if a
+            name is empty; or if a name is not a node. One message
+            lists every unknown name.
+
+        Notes
+        -----
+        This is identity into the state axis: it takes no tensor
+        and no data. Keep it as a buffer, as ``input_index`` is,
+        with ``torch.as_tensor(index, dtype=torch.int64)``. The
+        ``dtype`` is needed because ``torch.as_tensor(())`` is
+        float32 and fails as an index.
+
+        Reading through a repeated unit is safe. Writing through
+        one is your concern: ``index_copy`` through repeated units
+        is ambiguous, while ``index_add`` sums.
+
+        Examples
+        --------
+        At width 1, each name gives its position in ``nodes``:
+
+        >>> import pandas as pd
+        >>> import torch
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_adjacency(edgelist)
+        >>> spec.nodes
+        ('a', 'b', 'x', 'y')
+        >>> spec.unit_index(["b", "a"])
+        (1, 0)
+
+        A node of width 3 gives its whole block:
+
+        >>> wide = kpnn2.parse_adjacency(
+        ...     edgelist,
+        ...     widths={"b": 3},
+        ... )
+        >>> wide.unit_index(["b", "a"])
+        (1, 2, 3, 0)
+        >>> wide.unit_index(wide.input_nodes) == wide.input_index
+        True
+
+        As a buffer, it reads those units from a state tensor:
+
+        >>> index = torch.as_tensor(
+        ...     wide.unit_index(["b"]),
+        ...     dtype=torch.int64,
+        ... )
+        >>> state = torch.arange(6.0).unsqueeze(0)
+        >>> state[..., index].tolist()
+        [[1.0, 2.0, 3.0]]
+        """
+        node_names = resolve_node_names(
+            as_name_list(
+                names,
+                "names",
+                "node names",
+            ),
+            self.nodes,
+            "spec.nodes",
+        )
+        return self._layout().units_of(node_names)
 
     def _layout(self) -> Layout:
         """

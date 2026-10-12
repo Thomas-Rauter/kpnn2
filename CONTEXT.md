@@ -342,7 +342,7 @@ Division of labor:
 | `gather_hop_inputs` (source axis of one hop) | kpnn2 |
 | `scatter_hop_outputs` (split that axis onto source layers) | kpnn2 |
 | `PackedLinear.transpose` (tied packed `W.T`) | kpnn2 |
-| Named node → unit slice (`node_units` / `hop_units`) | kpnn2 |
+| Named node → unit slice (`node_units` / `hop_units`); named nodes → unit index (`unit_index`) | kpnn2 |
 | Feature names → column index (`align_inputs`) | kpnn2 |
 | Apply that index on host X (`X[:, col]`) | User |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
@@ -876,7 +876,18 @@ length, the side of `to_mask()`, and the `in_features` /
 `out_features` of a `PackedLinear` on this spec. It equals
 `len(nodes)` at width 1. `node_units(name)` returns a node's
 contiguous unit slice (matched after `str(...)`; empty or
-unknown names raise `Kpnn2Error`).
+unknown names raise `Kpnn2Error`). `unit_index(names)` returns
+every unit of each named node, in `names` order, as a
+`tuple[int, ...]`: the rule that builds `input_index`, so
+`spec.unit_index(spec.input_nodes) == spec.input_index` (same
+for outputs). It is for nodes the caller names outside
+`input_nodes` and `output_nodes`, instead of a hand-built
+`[spec.node_units(n).start for n in names]`, which silently
+reads one unit of a wide node. A repeated name repeats its
+units; empty `names` gives `()`. Names are matched after
+`str(...)`; an empty name raises `Kpnn2Error`, and so do
+unknown names, all listed in one message. There is no
+`LayeredSpec` counterpart.
 
 `source_index` and `target_index` have one entry per live unit
 pair: the sum over named edges of `k_source * k_target`, the
@@ -2433,7 +2444,10 @@ Width 1 stays numerically identical.
   unit pair** of each named edge (`iter_block_pairs`, as on a
   hop) on the `build_layout(nodes, node_widths)` axis.
   `to_mask()` writes `1.0` at each
-  `[target_index[i], source_index[i]]`.
+  `[target_index[i], source_index[i]]`. `input_index`,
+  `output_index`, and `AdjacencySpec.unit_index(names)` use
+  one rule, `Layout.units_of`: every unit of each named node,
+  in name order.
 - `Skip.source_in_layer` and `Skip.target_in_layer` store a
   **block start** inside their own layer. One `Skip` per named
   edge.
@@ -2473,7 +2487,8 @@ nothing kpnn2 stores or returns holds a numpy integer; `bool`,
 
 An argument whose items are matched by position (packed
 `source_index` / `target_index`, `dims`, `coords` values, the
-`names` of `align_inputs`) rejects a set or a mapping: a set has
+`names` of `align_inputs` and of `AdjacencySpec.unit_index`)
+rejects a set or a mapping: a set has
 no order, and a mapping would be read as its keys.
 
 `Kpnn2Error` is for caller mistakes. A failed internal consistency
