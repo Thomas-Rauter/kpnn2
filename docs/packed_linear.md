@@ -388,10 +388,10 @@ After the new parse:
    at a different packed index.
 3. **Copy bias node by node.** Bias is `(out_features,)`, one
    value per output unit, so it moves by named node, not by
-   packed slot. On an `AdjacencySpec`, index `spec.nodes` by
-   name. On a `LayeredSpec`, `node_units()` gives a node's
-   layer and unit slice; copy only when the node still exists
-   and its layer and width still match.
+   packed slot. `node_units()` gives a node's unit slice on
+   either spec type, and on a `LayeredSpec` also its layer.
+   Copy only when the node still exists and its width still
+   matches; on a `LayeredSpec`, its layer must match too.
 4. **Recompute `align_inputs()`** on the new spec. Dropping an
    input's last edge removes that input, so an index kept from
    the old spec is one column too wide; `PackedLinear` raises
@@ -408,20 +408,18 @@ The example below does steps 1, 2, 3, and 5 on an
 ```python
 old_spec = kpnn2.parse_adjacency(old_edgelist)
 new_spec = kpnn2.parse_adjacency(new_edgelist)
-n_old = len(old_spec.nodes)
-n_new = len(new_spec.nodes)
 old_core = kpnn2.PackedLinear(
     old_spec.source_index,
     old_spec.target_index,
-    n_old,
-    n_old,
+    old_spec.state_dim,
+    old_spec.state_dim,
     identity=old_spec.fingerprint,
 )
 new_core = kpnn2.PackedLinear(
     new_spec.source_index,
     new_spec.target_index,
-    n_new,
-    n_new,
+    new_spec.state_dim,
+    new_spec.state_dim,
     identity=new_spec.fingerprint,
 )
 old_edges = set(
@@ -454,16 +452,17 @@ with torch.no_grad():
         old_core.bias is not None
         and new_core.bias is not None
     ):
-        old_index = {
-            name: i
-            for i, name in enumerate(old_spec.nodes)
-        }
-        for i, name in enumerate(new_spec.nodes):
-            if name not in old_index:
+        old_nodes = set(old_spec.nodes)
+        for name in new_spec.nodes:
+            if name not in old_nodes:
                 continue
-            new_core.bias[i] = old_core.bias[
-                old_index[name]
-            ]
+            old_units = old_spec.node_units(name)
+            new_units = new_spec.node_units(name)
+            old_width = old_units.stop - old_units.start
+            new_width = new_units.stop - new_units.start
+            if old_width != new_width:
+                continue
+            new_core.bias[new_units] = old_core.bias[old_units]
 optimizer = torch.optim.Adam(new_core.parameters())
 ```
 

@@ -1152,10 +1152,10 @@ Copy it by named node → unit slice:
 `LayeredSpec.node_units` indexes the hop's output axis (the
 target layer of `hops[layer - 1]`). Copy only when the node
 still exists, its width is unchanged, and it still lives on
-the same layer. On an `AdjacencySpec` there is no
-`node_units`; index `spec.nodes` (the state-vector / bias
-axis) by name. Do not copy bias by packed edge index. New
-nodes keep the degree-aware init.
+the same layer. `AdjacencySpec.node_units` indexes the state
+vector, which is the bias axis; copy only when the node
+still exists and its width is unchanged. Do not copy bias by
+packed edge index. New nodes keep the degree-aware init.
 
 **Optimizer state is not copied.** Adam moments (`exp_avg`,
 `exp_avg_sq`) are keyed by `Parameter` identity on the old
