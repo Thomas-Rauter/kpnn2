@@ -5,7 +5,7 @@ At module level this imports nothing from kpnn2 but ``_errors``,
 so the spec and layout modules can import it without a cycle.
 """
 
-from collections.abc import Mapping, Set
+from collections.abc import Iterable, Mapping, Set
 from numbers import Integral
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -170,6 +170,80 @@ def reject_unordered(
         f"matched by position. Got {describe(value)}. Pass a list or "
         "tuple in the intended order."
     )
+
+
+def as_name_list(
+    names: object,
+    argument: str,
+    noun: str,
+) -> list[str]:
+    """
+    Return ``names`` as a list of ``str`` labels, or raise.
+
+    Each item is a label matched by position, so a value that
+    would iterate into the wrong labels is rejected rather than
+    read: a string into characters, a matrix into rows, a
+    mapping into its keys. Labels go through ``str(...)``, the
+    conversion edgelist node names go through, so an integer
+    label ``1`` becomes ``"1"``.
+
+    Parameters
+    ----------
+    names : object
+        Labels in the caller's order: a list, a tuple, a
+        one-dimensional numpy array, a ``pandas.Index``, or any
+        other iterable that is not rejected below. It is not
+        modified.
+    argument : str
+        Name of the caller's argument that the messages quote,
+        such as ``"names"``.
+    noun : str
+        What the labels are, in the plural, such as
+        ``"feature names"``.
+
+    Returns
+    -------
+    list of str
+        ``str(item)`` for each item of ``names``, in order.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``names`` is a ``torch.Tensor``, a ``str``, ``bytes``,
+        a set or a mapping, has an ``ndim`` other than 1, or is
+        not iterable, checked in that order. The message quotes
+        ``argument`` and names ``noun``. For a set, a mapping, a
+        wrong ``ndim``, or a non-iterable it also describes
+        ``names``.
+    """
+    if isinstance(names, torch.Tensor):
+        raise Kpnn2Error(
+            f"'{argument}' is a tensor; pass a sequence of {noun}."
+        )
+    if isinstance(names, str):
+        raise Kpnn2Error(
+            f"'{argument}' is a string; pass a sequence of {noun}."
+        )
+    if isinstance(names, bytes):
+        raise Kpnn2Error(f"'{argument}' is bytes; pass a sequence of {noun}.")
+    reject_unordered(
+        names,
+        argument,
+        f"a sequence of {noun}",
+    )
+    ndim = getattr(names, "ndim", None)
+    if ndim is not None and ndim != 1:
+        raise Kpnn2Error(
+            f"'{argument}' must be one-dimensional. Got "
+            f"{describe(names)}. A matrix is not a name list; pass the "
+            f"{noun} and index the matrix yourself."
+        )
+    if not isinstance(names, Iterable):
+        raise Kpnn2Error(
+            f"Unsupported {argument} type. Expected a sequence of "
+            f"{noun}. Got {describe(names)}."
+        )
+    return [str(item) for item in names]
 
 
 def require_node_mapping(

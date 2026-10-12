@@ -2,8 +2,6 @@
 Align feature names to ``spec.input_nodes``.
 """
 
-from collections.abc import Iterable
-
 import numpy as np
 import pandas as pd
 import torch
@@ -12,7 +10,7 @@ from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
 from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
-from ._validate import describe, reject_unordered, require_spec
+from ._validate import as_name_list, require_spec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'names' is a tensor; pass the feature names that "
@@ -24,22 +22,9 @@ _DATAFRAME_NOT_ACCEPTED_MSG = (
     "(for example data.columns). Apply the returned index "
     "on the matrix yourself."
 )
-_STRING_NOT_ACCEPTED_MSG = (
-    "'names' is a string; pass a sequence of feature names."
-)
-_BYTES_NOT_ACCEPTED_MSG = "'names' is bytes; pass a sequence of feature names."
 _ANNDATA_NOT_ACCEPTED_MSG = (
     "'names' looks like AnnData; pass the .var_names "
     "and apply the index to .X yourself."
-)
-_NOT_1D_MSG = (
-    "'names' must be one-dimensional. Got {received}. A matrix "
-    "is not a name list; pass the feature names and index the "
-    "matrix yourself."
-)
-_UNSUPPORTED_TYPE_MSG = (
-    "Unsupported names type. Expected a sequence of feature "
-    "names. Got {received}."
 )
 
 
@@ -270,20 +255,10 @@ def _labels_from_names(names: object) -> list[str]:
         raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
     if isinstance(names, pd.DataFrame):
         raise Kpnn2Error(_DATAFRAME_NOT_ACCEPTED_MSG)
-    if isinstance(names, str):
-        raise Kpnn2Error(_STRING_NOT_ACCEPTED_MSG)
-    if isinstance(names, bytes):
-        raise Kpnn2Error(_BYTES_NOT_ACCEPTED_MSG)
-    reject_unordered(
-        names,
-        "names",
-        "a sequence of feature names",
-    )
     if hasattr(names, "var_names") and hasattr(names, "X"):
         raise Kpnn2Error(_ANNDATA_NOT_ACCEPTED_MSG)
-    ndim = getattr(names, "ndim", None)
-    if ndim is not None and ndim != 1:
-        raise Kpnn2Error(_NOT_1D_MSG.format(received=describe(names)))
-    if not isinstance(names, Iterable):
-        raise Kpnn2Error(_UNSUPPORTED_TYPE_MSG.format(received=describe(names)))
-    return [str(name) for name in names]
+    return as_name_list(
+        names,
+        "names",
+        "feature names",
+    )

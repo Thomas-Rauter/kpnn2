@@ -667,6 +667,87 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
         )
 
 
+@pytest.mark.parametrize(
+    ("names", "message"),
+    [
+        pytest.param(
+            5,
+            "Unsupported names type. Expected a sequence of feature "
+            "names. Got 5 (int).",
+            id="int",
+        ),
+        pytest.param(
+            "A",
+            "'names' is a string; pass a sequence of feature names.",
+            id="str",
+        ),
+        pytest.param(
+            b"A",
+            "'names' is bytes; pass a sequence of feature names.",
+            id="bytes",
+        ),
+        pytest.param(
+            {"A"},
+            "'names' must be a sequence of feature names, not a set: its "
+            "items are matched by position. Got {'A'} (set). Pass a list "
+            "or tuple in the intended order.",
+            id="set",
+        ),
+        pytest.param(
+            {"A": 0},
+            "'names' must be a sequence of feature names, not a mapping: "
+            "its items are matched by position. Got {'A': 0} (dict). "
+            "Pass a list or tuple in the intended order.",
+            id="mapping",
+        ),
+        pytest.param(
+            np.array([["A"]]),
+            "'names' must be one-dimensional. Got ndarray of shape "
+            "(1, 1), dtype <U1. A matrix is not a name list; pass the "
+            "feature names and index the matrix yourself.",
+            id="matrix",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1.0],
+                    "B": [2.0],
+                }
+            ),
+            "'names' is a DataFrame; pass the feature names (for "
+            "example data.columns). Apply the returned index on the "
+            "matrix yourself.",
+            id="dataframe",
+        ),
+        pytest.param(
+            torch.tensor([1]),
+            "'names' is a tensor; pass the feature names that label "
+            "that axis. A tensor whose columns already follow "
+            "spec.input_nodes goes straight to the model.",
+            id="tensor",
+        ),
+        pytest.param(
+            _FakeAnnData(),
+            "'names' looks like AnnData; pass the .var_names and apply "
+            "the index to .X yourself.",
+            id="anndata_like",
+        ),
+    ],
+)
+def test_align_inputs_rejection_messages_are_pinned(
+    names,
+    message,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=f"^{re.escape(message)}$",
+    ):
+        align_inputs(
+            names,
+            _tiny_spec(),
+        )
+
+
 def test_align_inputs_spec_message_reports_the_received_type():
     edgelist = pd.DataFrame(
         {

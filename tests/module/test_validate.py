@@ -2,12 +2,14 @@ import re
 from types import MappingProxyType
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
 from kpnn2 import Kpnn2Error
 from kpnn2._validate import (
     as_bool,
+    as_name_list,
     as_positive_int,
     describe,
     is_integer,
@@ -484,6 +486,161 @@ def test_reject_unordered_rejects_sets_and_mappings(
             "index",
             "a sequence of int",
         )
+
+
+def _as_node_name_list(names):
+    return as_name_list(
+        names,
+        "names",
+        "node names",
+    )
+
+
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        pytest.param(
+            ["B", "A"],
+            ["B", "A"],
+            id="list",
+        ),
+        pytest.param(
+            ("B", "A"),
+            ["B", "A"],
+            id="tuple",
+        ),
+        pytest.param(
+            np.array(["B", "A"]),
+            ["B", "A"],
+            id="array",
+        ),
+        pytest.param(
+            pd.Index(["B", "A"]),
+            ["B", "A"],
+            id="pandas_index",
+        ),
+        pytest.param(
+            (name for name in ["B", "A"]),
+            ["B", "A"],
+            id="generator",
+        ),
+        pytest.param(
+            [],
+            [],
+            id="empty",
+        ),
+        pytest.param(
+            [1, "B", np.int64(2), 1.5],
+            ["1", "B", "2", "1.5"],
+            id="str_conversion",
+        ),
+        pytest.param(
+            np.array([2, 1]),
+            ["2", "1"],
+            id="integer_array",
+        ),
+    ],
+)
+def test_as_name_list_returns_str_labels_in_order(
+    names,
+    expected,
+):
+    labels = _as_node_name_list(names)
+
+    assert labels == expected
+    assert all(type(label) is str for label in labels)
+
+
+def test_as_name_list_does_not_mutate_the_callers_sequence():
+    names = ["B", 1]
+    array = np.array([2, 1])
+
+    labels = _as_node_name_list(names)
+    _as_node_name_list(array)
+
+    assert labels is not names
+    assert names == ["B", 1]
+    np.testing.assert_array_equal(
+        array,
+        np.array([2, 1]),
+    )
+    assert array.dtype == np.array([2, 1]).dtype
+
+
+@pytest.mark.parametrize(
+    ("names", "message"),
+    [
+        pytest.param(
+            torch.tensor([1]),
+            "'names' is a tensor; pass a sequence of node names.",
+            id="tensor",
+        ),
+        pytest.param(
+            torch.tensor([[1.0, 2.0]]),
+            "'names' is a tensor; pass a sequence of node names.",
+            id="tensor_2d_before_ndim",
+        ),
+        pytest.param(
+            "A",
+            "'names' is a string; pass a sequence of node names.",
+            id="str",
+        ),
+        pytest.param(
+            b"A",
+            "'names' is bytes; pass a sequence of node names.",
+            id="bytes",
+        ),
+        pytest.param(
+            {"A"},
+            "'names' must be a sequence of node names, not a set: its "
+            "items are matched by position. Got {'A'} (set). Pass a "
+            "list or tuple in the intended order.",
+            id="set",
+        ),
+        pytest.param(
+            {"A": 0},
+            "'names' must be a sequence of node names, not a mapping: "
+            "its items are matched by position. Got {'A': 0} (dict). "
+            "Pass a list or tuple in the intended order.",
+            id="mapping",
+        ),
+        pytest.param(
+            np.array([["A"]]),
+            "'names' must be one-dimensional. Got ndarray of shape "
+            "(1, 1), dtype <U1. A matrix is not a name list; pass the "
+            "node names and index the matrix yourself.",
+            id="matrix",
+        ),
+        pytest.param(
+            np.array("A"),
+            "'names' must be one-dimensional. Got ndarray of shape (), "
+            "dtype <U1. A matrix is not a name list; pass the node "
+            "names and index the matrix yourself.",
+            id="zero_dim_array",
+        ),
+        pytest.param(
+            5,
+            "Unsupported names type. Expected a sequence of node names. "
+            "Got 5 (int).",
+            id="int",
+        ),
+        pytest.param(
+            None,
+            "Unsupported names type. Expected a sequence of node names. "
+            "Got None.",
+            id="None",
+        ),
+    ],
+)
+def test_as_name_list_rejects_and_reports_value(
+    names,
+    message,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=f"^{re.escape(message)}$",
+    ):
+        _as_node_name_list(names)
 
 
 @pytest.mark.parametrize(
