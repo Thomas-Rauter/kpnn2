@@ -1,11 +1,9 @@
-claude --resume 9845e682-66ce-4618-9deb-cd0bab9598a2
-
 # Proposal: Add `AdjacencySpec.unit_index(names)`
 
 | Field | Value |
 |-------|-------|
-| Status | `proposed` |
-| Decision | |
+| Status | `done` |
+| Decision | 2026-10-12: accepted and done. Slice 2 landed first and uses `node_units` instead of `unit_index`; the name-list checks moved to `_validate.as_name_list` in their own commit. Open questions: `unit_index`, repeats allowed, `()` for empty, no `LayeredSpec` form. |
 | Date | 2026-10-11 |
 | Based on | `runs/2026-10-11_fc5b67c-dirty/report.md` |
 | kpnn2 commit | `fc5b67c` dirty (paper-fit files and `AGENTS.md` only; nothing under `src/`) |
