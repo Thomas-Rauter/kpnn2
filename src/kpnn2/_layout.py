@@ -176,6 +176,25 @@ class Layout:
         """
         return self.slot(name).start
 
+    def units_of(self, names: Sequence[str]) -> tuple[int, ...]:
+        """
+        Return every unit of each named node, in ``names`` order.
+
+        Units of one node are ascending. A repeated name repeats
+        its units, and empty ``names`` gives ``()``. With width-1
+        nodes this is each name's column index.
+        """
+        units: list[int] = []
+        for name in names:
+            slot = self.slot(name)
+            units.extend(
+                range(
+                    slot.start,
+                    slot.stop,
+                )
+            )
+        return tuple(units)
+
     def slot_at(self, start: int) -> NodeSlot:
         """
         Return the slot that begins at unit index ``start``.

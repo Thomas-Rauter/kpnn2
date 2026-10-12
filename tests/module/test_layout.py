@@ -117,6 +117,77 @@ def test_layout_lookup_misses_fail_an_internal_check():
         layout.slot_at(7)
 
 
+def test_units_of_at_width_one_is_each_names_ordinal():
+    names = ["A", "B", "C", "D"]
+    layout = build_layout(names)
+    assert layout.units_of(names) == (0, 1, 2, 3)
+    assert layout.units_of(["C"]) == (2,)
+    assert layout.units_of(["B", "D"]) == (1, 3)
+
+
+def test_units_of_gives_the_full_block_of_a_wide_node():
+    layout = build_layout(
+        ["A", "B", "C"],
+        [2, 1, 3],
+    )
+    assert layout.units_of(["A"]) == (0, 1)
+    assert layout.units_of(["B"]) == (2,)
+    assert layout.units_of(["C"]) == (3, 4, 5)
+    assert layout.units_of(["A", "B", "C"]) == tuple(range(layout.n_units))
+
+
+def test_units_of_follows_names_order_not_layout_order():
+    layout = build_layout(
+        ["A", "B", "C"],
+        [2, 1, 3],
+    )
+    assert layout.units_of(["C", "A"]) == (3, 4, 5, 0, 1)
+    assert layout.units_of(["B", "C", "A"]) == (2, 3, 4, 5, 0, 1)
+
+
+def test_units_of_repeats_the_units_of_a_repeated_name():
+    layout = build_layout(
+        ["A", "B"],
+        [2, 1],
+    )
+    assert layout.units_of(["A", "B", "A"]) == (0, 1, 2, 0, 1)
+    assert layout.units_of(["B", "B"]) == (2, 2)
+
+
+def test_units_of_no_names_is_empty():
+    layout = build_layout(
+        ["A", "B"],
+        [2, 1],
+    )
+    assert layout.units_of([]) == ()
+    assert layout.units_of(()) == ()
+
+
+def test_units_of_returns_python_ints():
+    layout = build_layout(
+        ["A", "B", "C"],
+        [2, 1, 3],
+    )
+    units = layout.units_of(["C", "A", "B"])
+    assert isinstance(units, tuple)
+    assert len(units) == 6
+    assert all(type(unit) is int for unit in units)
+
+
+def test_units_of_unknown_name_fails_an_internal_check():
+    layout = build_layout(["A", "B"])
+    with pytest.raises(
+        AssertionError,
+        match="internal check failed: node 'missing' is not in this",
+    ):
+        layout.units_of(
+            [
+                "A",
+                "missing",
+            ]
+        )
+
+
 def test_layout_gaps_and_overlaps_fail_an_internal_check():
     with pytest.raises(
         AssertionError,

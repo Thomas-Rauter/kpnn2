@@ -69,20 +69,6 @@ def _packed_edge_indices(
     )
 
 
-def _units_of(
-    names: list[str],
-    layout: Layout,
-) -> tuple[int, ...]:
-    """
-    Return every unit of each named node, in ``names`` order.
-    """
-    units: list[int] = []
-    for name in names:
-        slot = layout.slot(name)
-        units.extend(range(slot.start, slot.stop))
-    return tuple(units)
-
-
 def _check_input_units(spec: AdjacencySpec) -> None:
     """
     Raise unless ``input_index`` is the units of ``input_nodes``.
@@ -288,14 +274,8 @@ def parse_adjacency(  # numpydoc ignore=PR06
         hidden_nodes=tuple(hidden_nodes),
         source_index=source_index,
         target_index=target_index,
-        input_index=_units_of(
-            input_nodes,
-            layout,
-        ),
-        output_index=_units_of(
-            output_nodes,
-            layout,
-        ),
+        input_index=layout.units_of(input_nodes),
+        output_index=layout.units_of(output_nodes),
     )
     _check_edges_conserved(
         spec,

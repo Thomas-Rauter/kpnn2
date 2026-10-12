@@ -19,6 +19,7 @@ from kpnn2 import (
     _serialize,
 )
 from kpnn2._errors import _ISSUES_URL, internal_error, warn_at_caller
+from kpnn2._layout import Layout
 
 _PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
@@ -498,7 +499,7 @@ def test_input_units_check_raises_when_input_index_disagrees(
 
 
 def test_parse_adjacency_runs_the_input_units_check(monkeypatch):
-    units_of = _parse_adjacency._units_of
+    units_of = Layout.units_of
 
     def reverse_units(*args, **kwargs):
         return units_of(
@@ -507,8 +508,8 @@ def test_parse_adjacency_runs_the_input_units_check(monkeypatch):
         )[::-1]
 
     monkeypatch.setattr(
-        _parse_adjacency,
-        "_units_of",
+        Layout,
+        "units_of",
         reverse_units,
     )
     with pytest.raises(
