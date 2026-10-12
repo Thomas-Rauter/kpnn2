@@ -1,7 +1,7 @@
 # Paper-fit proposal prompt
 
 You are writing one **proposal** for the paper-fit check in
-`tests/paper_fit/`. An assessment run lists where kpnn2 falls
+`dev/paper_fit/`. An assessment run lists where kpnn2 falls
 short of published KPNN code: gaps, orphans, and friction. A
 proposal turns that list into one change to kpnn2 that the
 maintainer can accept or reject. You recommend. The maintainer
@@ -13,17 +13,17 @@ together.
 
 ## Scope
 
-Work from the newest directory under `tests/paper_fit/runs/`,
+Work from the newest directory under `dev/paper_fit/runs/`,
 unless the user names a run. If the user names a gap, need, or
 kpnn2 name, propose for that one, or explain why it fails the
 rules below.
 
 ## Read, in this order
 
-1. `tests/paper_fit/README.md`.
+1. `dev/paper_fit/README.md`.
 2. The run's `report.md` and its `sketches/`. Skim the
    `report.md` of older runs for trends only.
-3. Every file in `tests/paper_fit/proposals/` except
+3. Every file in `dev/paper_fit/proposals/` except
    `_template.md`.
 4. `AGENTS.md`, `CONTEXT.md` in full, and
    `dev/src_guidelines.txt`.
@@ -107,8 +107,8 @@ Go on only if the user tells you to, and list the mismatch under
 - **Earlier proposals.** Do not repeat a `rejected` or `deferred`
   proposal unless the run brings evidence it lacked; say what is
   new. Do not overlap an `accepted` one.
-- **Write only** `tests/paper_fit/proposals/<YYYY-MM-DD>_<slug>.md`.
-  Do not edit `src/`, `tests/` outside that file, `docs/`,
+- **Write only** `dev/paper_fit/proposals/<YYYY-MM-DD>_<slug>.md`.
+  Do not edit `src/`, `tests/`, `dev/` outside that file, `docs/`,
   `CONTEXT.md`, `AGENTS.md`, `CHANGELOG.md`, runs, cards,
   `needs.md`, `papers.csv`, or earlier proposals. Do not write
   planner task files. Do not stage or commit.
@@ -169,8 +169,8 @@ and the rule each candidate failed.
 
 ### 4. Write
 
-Copy `tests/paper_fit/proposals/_template.md` to
-`tests/paper_fit/proposals/<YYYY-MM-DD>_<slug>.md`. The slug is
+Copy `dev/paper_fit/proposals/_template.md` to
+`dev/paper_fit/proposals/<YYYY-MM-DD>_<slug>.md`. The slug is
 two to four lowercase words joined by hyphens. Set **Status** to
 `proposed` and fill every section. Keep it under about 300 lines.
 

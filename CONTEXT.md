@@ -2724,11 +2724,11 @@ tests/
   controls/                   # live-path, importance, unrolled-adjacency
   integration/                # real tabular task
   manual/                     # Colab GPU/TPU smoke; not pytest
-  paper_fit/                  # agent-run fit vs papers; not pytest
 
 dev/
   docs_notebooks.py           # tutorials in CI; literature opt-in
   docs_readme_urls.py         # MkDocs hook; local README links, figures
+  paper_fit/                  # agent-run fit vs papers; not pytest
 
 AGENTS.md                     # how to work; read first
 CONTEXT.md                    # this file (product contract)

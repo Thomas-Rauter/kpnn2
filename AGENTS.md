@@ -199,7 +199,7 @@ python -m ruff check .
 
 Fix format and lint failures from those runs. Ruff covers
 the repo except `*.md`, `tests/manual/`,
-`tests/paper_fit/`, and `out/` (see `pyproject.toml`). Markdown-only, rules-only, or other
+`dev/paper_fit/`, and `out/` (see `pyproject.toml`). Markdown-only, rules-only, or other
 non-Python edits do not require these runs. Do not use a
 global `ruff` on `PATH`; it can disagree with CI. Exact
 pin: `pyproject.toml`. The full local checklist is
@@ -244,13 +244,13 @@ docs. Do not execute it in CI or with
 in `dev/version_release_process.md`, which is the whole
 release procedure. Install from TestPyPI with `--no-deps`.
 
-`tests/paper_fit/` compares kpnn2 with published KPNN code
+`dev/paper_fit/` compares kpnn2 with published KPNN code
 in agent sessions the user starts by hand. It is not
-pytest (`pyproject.toml` ignores it), not CI, and not
-docs. Work in it only when the current chat points at
-`tests/paper_fit/extract_prompt.md`,
-`tests/paper_fit/assess_prompt.md`, or
-`tests/paper_fit/propose_prompt.md`; its `README.md`
+pytest (outside `testpaths`), not CI, and not docs.
+Work in it only when the current chat points at
+`dev/paper_fit/extract_prompt.md`,
+`dev/paper_fit/assess_prompt.md`, or
+`dev/paper_fit/propose_prompt.md`; its `README.md`
 explains all three. A proposal session writes one
 proposal file and does not implement it. An extraction
 session does not read kpnn2

@@ -1,6 +1,6 @@
 # Proposal: <title>
 
-<!-- Written by tests/paper_fit/propose_prompt.md. Delete this
+<!-- Written by dev/paper_fit/propose_prompt.md. Delete this
 comment and every placeholder line in italics. The maintainer
 sets Status and Decision; the session leaves them as given. -->
 

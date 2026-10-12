@@ -1,14 +1,14 @@
 # Paper-fit extraction prompt
 
 You are writing one **paper card** for the paper-fit check in
-`tests/paper_fit/`. A card is a compact, faithful record of how
+`dev/paper_fit/`. A card is a compact, faithful record of how
 one published model puts prior knowledge into a neural network. A
 later session works from cards alone, so the card must be precise
 enough that nobody has to open the code again.
 
 ## Target
 
-The user names a paper `id` from `tests/paper_fit/papers.csv`. If
+The user names a paper `id` from `dev/paper_fit/papers.csv`. If
 they ask for the next pending paper, take the first row whose
 `status` is `pending`. Work on that one paper only.
 
@@ -21,9 +21,9 @@ they ask for the next pending paper, take the first row whose
 ## Rules
 
 1. **Do not look at the library in this repository.** Do not open
-   `src/`, `CONTEXT.md`, `README.md`, `docs/`, `dev/`, `local/`,
-   or any path under `tests/` outside `tests/paper_fit/`. Inside
-   `tests/paper_fit/`, do not open `assess_prompt.md`, `runs/`,
+   `src/`, `tests/`, `CONTEXT.md`, `README.md`, `docs/`, `local/`,
+   or any path under `dev/` outside `dev/paper_fit/`. Inside
+   `dev/paper_fit/`, do not open `assess_prompt.md`, `runs/`,
    or other papers' cards. If your harness loaded `AGENTS.md`,
    ignore what it says about the package. Its git rules still
    apply.
@@ -38,9 +38,9 @@ they ask for the next pending paper, take the first row whose
    code quality, or on what some library could do for the paper.
 5. **The paper's code is read-only.** Do not install its
    dependencies, run it, or download its data.
-6. **Write only** `tests/paper_fit/cards/<id>.md`, the target's
-   row in `tests/paper_fit/papers.csv`, and
-   `tests/paper_fit/needs.md`. Fetch code only into
+6. **Write only** `dev/paper_fit/cards/<id>.md`, the target's
+   row in `dev/paper_fit/papers.csv`, and
+   `dev/paper_fit/needs.md`. Fetch code only into
    `.paper-code/<id>/` at the repo root. Do not stage or commit.
 7. **Budget.** Aim for well under 100k tokens. Search before you
    read, and read files in line ranges. Do not read data files,
@@ -154,14 +154,14 @@ code. Record the difference under **Paper vs code**.
 
 ### 5. Card
 
-Copy `tests/paper_fit/cards/_template.md` to
-`tests/paper_fit/cards/<id>.md` and fill every section. Keep it
+Copy `dev/paper_fit/cards/_template.md` to
+`dev/paper_fit/cards/<id>.md` and fill every section. Keep it
 under about 250 lines. Excerpts are verbatim, at most 60 lines in
 total, each headed by its `path:start-end`.
 
 ### 6. Needs
 
-Read `tests/paper_fit/needs.md` and follow its rules. List what
+Read `dev/paper_fit/needs.md` and follow its rules. List what
 the model has to do to get prior knowledge into, through, or out
 of the network. For each item:
 

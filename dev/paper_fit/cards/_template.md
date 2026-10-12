@@ -1,6 +1,6 @@
 # <id>: <model name or short title>
 
-<!-- Written by tests/paper_fit/extract_prompt.md. Plain terms
+<!-- Written by dev/paper_fit/extract_prompt.md. Plain terms
 only, no verdicts on library fit. Every claim about code cites
 path:line at code_ref. Delete this comment and every placeholder
 line in italics. -->

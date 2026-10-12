@@ -1,3 +1,5 @@
+claude --resume 9845e682-66ce-4618-9deb-cd0bab9598a2
+
 # Proposal: Add `AdjacencySpec.unit_index(names)`
 
 | Field | Value |

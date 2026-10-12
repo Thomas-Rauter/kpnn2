@@ -1,6 +1,6 @@
 # Paper-fit run YYYY-MM-DD
 
-<!-- Written by tests/paper_fit/assess_prompt.md. Delete this
+<!-- Written by dev/paper_fit/assess_prompt.md. Delete this
 comment and every placeholder line in italics. -->
 
 | Field | Value |

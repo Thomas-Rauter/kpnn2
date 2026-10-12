@@ -84,7 +84,7 @@ target-version = "py310"
 extend-exclude = [
     "*.md",
     "tests/manual",
-    "tests/paper_fit",
+    "dev/paper_fit",
     "out",
 ]
 
@@ -192,7 +192,6 @@ addopts = [
     "scipy_doctest",
     "--doctest-modules",
     "--ignore=tests/manual",
-    "--ignore=tests/paper_fit",
 ]
 testpaths = [
     "tests",

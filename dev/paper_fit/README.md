@@ -9,9 +9,9 @@ the abstraction. The check asks three things:
 2. Which needs, shared across papers, kpnn2 misses.
 3. Which kpnn2 features no paper needs.
 
-This directory is **not** pytest and **not** CI.
-`pyproject.toml` tells pytest and Ruff to skip it. Nothing here
-runs unless you start a session for it.
+This directory is **not** pytest and **not** CI. Pytest does not
+collect `dev/`, and `pyproject.toml` tells Ruff to skip this
+directory. Nothing here runs unless you start a session for it.
 
 ## Three kinds of session
 
@@ -20,11 +20,11 @@ budget per session small.
 
 | Session | Send | Writes |
 |---------|------|--------|
-| Extract | `Follow tests/paper_fit/extract_prompt.md for <id>.` | `cards/<id>.md`, its row in `papers.csv`, `needs.md` |
-| Assess | `Follow tests/paper_fit/assess_prompt.md.` | `runs/<date>_<commit>/` |
-| Propose | `Follow tests/paper_fit/propose_prompt.md.` | `proposals/<date>_<slug>.md` |
+| Extract | `Follow dev/paper_fit/extract_prompt.md for <id>.` | `cards/<id>.md`, its row in `papers.csv`, `needs.md` |
+| Assess | `Follow dev/paper_fit/assess_prompt.md.` | `runs/<date>_<commit>/` |
+| Propose | `Follow dev/paper_fit/propose_prompt.md.` | `proposals/<date>_<slug>.md` |
 
-`Follow tests/paper_fit/extract_prompt.md for the next pending
+`Follow dev/paper_fit/extract_prompt.md for the next pending
 paper.` takes the first `pending` row in `papers.csv`.
 
 Extraction reads one paper and its code. It is the expensive
@@ -117,7 +117,7 @@ released.
 Ask for it explicitly:
 
 ```text
-Follow tests/paper_fit/extract_prompt.md and re-extract <id>.
+Follow dev/paper_fit/extract_prompt.md and re-extract <id>.
 ```
 
 The session fetches the pinned `code_ref`, unless you also ask it

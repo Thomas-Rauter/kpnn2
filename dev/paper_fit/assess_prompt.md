@@ -1,7 +1,7 @@
 # Paper-fit assessment prompt
 
 You are running one assessment of the paper-fit check in
-`tests/paper_fit/`. It tests the rule "derive abstractions from
+`dev/paper_fit/`. It tests the rule "derive abstractions from
 applications, not applications from abstractions". Published
 KPNN code is the application. kpnn2 is the abstraction. Answer
 three questions from the cards:
@@ -15,17 +15,17 @@ three questions from the cards:
 
 ## Scope
 
-Assess every row of `tests/paper_fit/papers.csv` whose `status`
+Assess every row of `dev/paper_fit/papers.csv` whose `status`
 is `included`. If the user names ids, assess only those, mark the
 cross-paper sections as not updated, and say so at the top of the
 report.
 
 ## Read, in this order
 
-1. `tests/paper_fit/README.md`, `papers.csv`, and `needs.md`.
-2. Every `tests/paper_fit/cards/<id>.md` in scope.
+1. `dev/paper_fit/README.md`, `papers.csv`, and `needs.md`.
+2. Every `dev/paper_fit/cards/<id>.md` in scope.
 3. `report.md` in the newest directory under
-   `tests/paper_fit/runs/`, if there is one.
+   `dev/paper_fit/runs/`, if there is one.
 4. `AGENTS.md` and `CONTEXT.md` in full. `CONTEXT.md` is the
    kpnn2 contract: public API, locked decisions, and what the
    package is not.
@@ -65,7 +65,7 @@ the card is the only source.
   `AGENTS.md`, cards, `needs.md`, or `papers.csv`. If a card
   looks wrong, report it under **Caveats**.
 - **Write only** the run directory
-  `tests/paper_fit/runs/<YYYY-MM-DD>_<short-sha>/`. Add
+  `dev/paper_fit/runs/<YYYY-MM-DD>_<short-sha>/`. Add
   `-dirty` to the name if `git status --short` was not empty. Do
   not stage or commit.
 
@@ -125,7 +125,7 @@ For each card in scope:
 
 ### 3. Report
 
-Copy `tests/paper_fit/runs/_template.md` to `report.md` in the run
+Copy `dev/paper_fit/runs/_template.md` to `report.md` in the run
 directory and fill it. Reply with the run directory, the verdict
 counts, the main gaps, and the orphans. End with the commit
 message block that `AGENTS.md` asks for.
