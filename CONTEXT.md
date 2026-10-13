@@ -2855,6 +2855,7 @@ docs/
   cyclic-graph-example.ipynb  # cyclic graph; AdjacencySpec
   time-series-example.ipynb   # sequence x_t; AdjacencySpec
   transformer-example.ipynb   # PackedMultiheadAttention walkthrough
+  network-bias.ipynb          # measure network bias; try published corrections
   fig_gen/                    # figure generators; write to figures/
   fig_gen/correctness/        # scientific-correctness icons
   figures/

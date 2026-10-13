@@ -65,6 +65,7 @@ nav:
       - Layered vs. Adjacency: layered_vs_adjacency.md
       - Skip edges: skip-edges.ipynb
       - Mapping attributions: map-node-attributions.ipynb
+      - Network bias: network-bias.ipynb
       - PackedLinear: packed_linear.md
   - Reference:
       - API: reference/api.md
@@ -128,6 +129,11 @@ plugins:
         - "*.md"
       include_source: true
       execute: false
+      # Cells tagged remove-input show only their output (drawing
+      # code). mkdocs-jupyter reads only the first tag of each list.
+      remove_tag_config:
+        remove_input_tags:
+          - remove-input
       ignore_h1_titles: true
 
 markdown_extensions:
