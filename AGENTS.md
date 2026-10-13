@@ -216,16 +216,34 @@ new result. A bugfix whose existing test already states
 the contract still finishes after a green suite. So does
 work that does not change a number.
 
-Execute tutorial notebooks with:
+After editing a tutorial notebook, execute that notebook:
+
+```
+python dev/docs_notebooks.py docs/<page>.ipynb
+```
+
+After changing anything under `src/`, execute every
+tutorial notebook:
 
 ```
 python dev/docs_notebooks.py
 ```
 
-That clears cell `execution_count` and Jupyter
+CI executes every notebook and builds the website from
+those fresh outputs, so it catches a notebook that fails,
+but not a result that moved. A changed output in a
+notebook you did not edit comes from the `src/` change and
+falls under **Scientific acceptance**: stop, name the old
+and the new output, and let the current chat decide
+whether the new output stays.
+
+Both commands clear cell `execution_count` and Jupyter
 `metadata.execution` afterward (outputs and cell ids
-stay). Use `--fix-only` to clear without re-running.
-Use the venv kernel, not
+stay). They also fix the SVG date and ids of plots and
+drop memory addresses from object reprs, so a re-run of
+unchanged code leaves a notebook byte-identical, and any
+diff is a real change. Use `--fix-only` to clear without
+re-running. Use the venv kernel, not
 `ipykernel install --user --name python3`. `mkdocs serve`
 repairs missing stream `name` fields on pre-build.
 Literature notebooks under `docs/literature/` are frozen.

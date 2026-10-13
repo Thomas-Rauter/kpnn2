@@ -5,13 +5,22 @@ drop it; mkdocs-jupyter then fails validation. This module repairs
 that on ``mkdocs`` pre-build, and is the supported execute path:
 
     python dev/docs_notebooks.py
+    python dev/docs_notebooks.py docs/skip-edges.ipynb
     python dev/docs_notebooks.py --fix-only
     python dev/docs_notebooks.py --literature
+
+With notebook paths, only those notebooks are executed (or, with
+``--fix-only``, repaired). Without paths, every notebook of the
+chosen kind is.
 
 After execute, cell ``execution_count`` values and Jupyter
 ``metadata.execution`` timestamps are cleared so a re-run with
 unchanged outputs does not dirty the working tree. Outputs and
-cell ids are kept.
+cell ids are kept. For the same reason the kernel runs with a
+fixed ``SOURCE_DATE_EPOCH`` and Matplotlib ``svg.hashsalt``, so a
+plot is written with the same SVG date and ids every time, and
+memory addresses are dropped from plain-text object reprs such as
+``<graphviz.graphs.Digraph at 0x...>``.
 
 Tutorial notebooks under ``docs/*.ipynb`` are executed in CI.
 Notebooks under ``docs/literature/`` are frozen reproductions:
@@ -23,10 +32,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
+import tempfile
 from pathlib import Path
 
 _LITERATURE_DIR = "literature"
+
+# Matplotlib stamps each SVG with the render time unless
+# SOURCE_DATE_EPOCH is set, and salts its SVG ids with a random
+# value unless svg.hashsalt is set.
+_SOURCE_DATE_EPOCH = "0"
+_SVG_HASHSALT = "kpnn2-docs"
+
+# The address in a default repr like <module.Class at 0x7f...>.
+_OBJECT_ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+>")
 
 
 def _is_literature(
@@ -55,6 +76,46 @@ def _iter_notebooks(
         ):
             continue
         notebooks.append(path)
+    return notebooks
+
+
+def _requested_notebooks(
+    paths: list[Path],
+    docs_dir: Path,
+    *,
+    literature: bool,
+    fix_only: bool,
+) -> list[Path]:
+    """Resolve notebook paths named on the command line.
+
+    Each path must be an ``.ipynb`` file under ``docs_dir``. To
+    execute, a literature notebook needs ``literature=True``, and
+    ``literature=True`` takes literature notebooks only. Repair
+    (``fix_only``) takes either. A repeated path is kept once.
+    """
+    notebooks: list[Path] = []
+    for raw in paths:
+        path = raw.resolve()
+        if path.suffix != ".ipynb" or not path.is_file():
+            raise SystemExit(f"Not a notebook file: {raw}")
+        if not path.is_relative_to(docs_dir):
+            raise SystemExit(f"Not a docs notebook under {docs_dir}: {raw}")
+        frozen = _is_literature(
+            path,
+            docs_dir,
+        )
+        if not fix_only and frozen and not literature:
+            raise SystemExit(
+                f"{raw} is a frozen literature notebook. Pass --literature "
+                "to execute it."
+            )
+        if not fix_only and literature and not frozen:
+            raise SystemExit(
+                f"{raw} is not under docs/literature/. --literature "
+                "executes literature notebooks only."
+            )
+        if path not in notebooks:
+            notebooks.append(path)
     return notebooks
 
 
@@ -189,10 +250,60 @@ def execute_notebook(path: Path) -> None:
             },
         },
     )
-    client.execute()
+    with tempfile.TemporaryDirectory() as rc_dir:
+        rc_file = Path(rc_dir) / "matplotlibrc"
+        rc_file.write_text(f"svg.hashsalt: {_SVG_HASHSALT}\n")
+        client.execute(env=_kernel_env(rc_file))
     _changes, nb = normalize(nb)
     nbformat.validate(nb)
     nbformat.write(nb, path)
+
+
+def _kernel_env(rc_file: Path) -> dict[str, str]:
+    """Return this process's environment plus reproducible-plot settings.
+
+    ``rc_file`` is a ``matplotlibrc`` that sets ``svg.hashsalt``. It
+    replaces any personal Matplotlib config, so local runs match CI.
+    """
+    env = dict(os.environ)
+    env["SOURCE_DATE_EPOCH"] = _SOURCE_DATE_EPOCH
+    env["MATPLOTLIBRC"] = str(rc_file)
+    return env
+
+
+def strip_object_addresses(path: Path) -> bool:
+    """Drop memory addresses from plain-text object reprs.
+
+    An object without its own text form, such as a Graphviz drawing,
+    is stored as ``<module.Class at 0x...>`` next to its rich output,
+    and the address differs on every run. Return True if the file
+    changed.
+    """
+    raw = path.read_text()
+    data = json.loads(raw)
+    changed = False
+    for cell in data.get("cells", []):
+        for output in cell.get("outputs") or []:
+            bundle = output.get("data")
+            if not isinstance(bundle, dict) or "text/plain" not in bundle:
+                continue
+            text = bundle["text/plain"]
+            lines = [text] if isinstance(text, str) else text
+            stripped = [_OBJECT_ADDRESS.sub(">", line) for line in lines]
+            if stripped == lines:
+                continue
+            bundle["text/plain"] = (
+                stripped[0] if isinstance(text, str) else stripped
+            )
+            changed = True
+    if not changed:
+        return False
+    _write_notebook(
+        path,
+        data,
+        _detect_indent(raw),
+    )
+    return True
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -217,9 +328,25 @@ def main(argv: list[str] | None = None) -> None:
             "instead of the tutorial notebooks."
         ),
     )
+    parser.add_argument(
+        "notebooks",
+        nargs="*",
+        type=Path,
+        help=(
+            "Notebooks to process, such as docs/skip-edges.ipynb. "
+            "Omit to process every notebook of the chosen kind."
+        ),
+    )
     args = parser.parse_args(argv)
     docs_dir = Path(__file__).resolve().parents[1] / "docs"
-    if args.fix_only:
+    if args.notebooks:
+        notebooks = _requested_notebooks(
+            args.notebooks,
+            docs_dir,
+            literature=args.literature,
+            fix_only=args.fix_only,
+        )
+    elif args.fix_only:
         notebooks = _iter_notebooks(
             docs_dir,
             include_literature=True,
@@ -255,6 +382,7 @@ def main(argv: list[str] | None = None) -> None:
         execute_notebook(path)
         repair_stream_names(path)
         clear_execution_metadata(path)
+        strip_object_addresses(path)
         print(f"Wrote {path}")
 
 
