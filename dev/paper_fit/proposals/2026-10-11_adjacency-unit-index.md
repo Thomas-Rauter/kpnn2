@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Status | `done` |
-| Decision | 2026-10-12: accepted and done. Slice 2 landed first and uses `node_units` instead of `unit_index`; the name-list checks moved to `_validate.as_name_list` in their own commit. Open questions: `unit_index`, repeats allowed, `()` for empty, no `LayeredSpec` form. |
+| Decision | 2026-10-12: accepted and done. Slice 2 landed first and uses `node_units` instead of `unit_index`; the name-list checks moved to `_validate.as_name_list` in their own commit. Open questions: `unit_index`, repeats allowed, `()` for empty, no `LayeredSpec` form (overridden 2026-10-13; see Open question 3). |
 | Date | 2026-10-11 |
 | Based on | `runs/2026-10-11_fc5b67c-dirty/report.md` |
 | kpnn2 commit | `fc5b67c` dirty (paper-fit files and `AGENTS.md` only; nothing under `src/`) |
@@ -273,7 +273,14 @@ ia, ib = (torch.as_tensor(spec.unit_index(  # PROPOSED
    reindexes on `layer_nodes[2]` (loud at width > 1). A layered
    form also needs a layer rule, and `kpnn-2020`'s roots span
    layers. Recommend not now; revisit if a run shows `.start` on
-   a `LayeredSpec`.
+   a `LayeredSpec`. **2026-10-13: overridden by the maintainer**
+   and done as `LayeredSpec.unit_index(names, *, layer)`. The
+   reason is the API, not the papers: with the method on one
+   spec only, the obvious layered substitute
+   `layer_nodes[i].index(name)` counts nodes, not units, and
+   silently points into the wrong node after a wide one. `layer`
+   is required and never inferred; names in several layers need
+   one call per layer.
 4. **Empty `names`.** Return `()` (two drugs with no shared
    target give an empty DeepSignalingFlow flag set) or raise.
    `torch.as_tensor(())` is float32 and fails as an index with a
