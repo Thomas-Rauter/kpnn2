@@ -120,11 +120,17 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         Opaque checkpoint identity, typically
         ``spec.fingerprint``. Stored in ``state_dict`` next to
         ``index_digest`` as a 1-D CPU ``uint8`` tensor of the
-        UTF-8 bytes. ``load_state_dict`` raises ``Kpnn2Error``
-        when a present identity does not match this layer, and
-        does not load the weights. A missing identity is not an
-        error, even with ``strict=True``. ``None`` means this
-        layer does not claim an identity.
+        UTF-8 bytes. ``load_state_dict`` compares it with the
+        checkpoint's identity:
+
+        - the checkpoint has no identity: it loads, even with
+          ``strict=True``
+        - it has this layer's identity: it loads
+        - it has another identity, or this layer's identity is
+          ``None``: ``Kpnn2Error``, and no weights are loaded
+
+        ``None`` means this layer does not claim an identity, so
+        it loads only checkpoints saved without one.
     constraint : torch.nn.Module or None, default=None
         Optional per-entry map on the packed ``weight``, applied
         in ``forward``. The module must return a tensor of shape
@@ -575,7 +581,8 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
             Checkpoint identity for the new layer, typically
             ``spec.fingerprint``. This layer's identity is
             not copied. ``None`` means the new layer does
-            not claim an identity.
+            not claim an identity, so it loads only
+            checkpoints saved without one.
         generator : torch.Generator or None, default=None
             Forwarded to the inner ``PackedLinear``
             constructor. ``None`` uses the default torch

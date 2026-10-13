@@ -1330,10 +1330,12 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
 - Optional `identity`: opaque `str`, typically
   `spec.fingerprint`. Stored in `state_dict` next to
   `mask_digest` as UTF-8 `uint8` bytes. `load_state_dict`
-  raises `Kpnn2Error` when a present identity does not
-  match. A missing identity is not an error, even with
-  `strict=True`. `None` means this layer does not claim
-  an identity.
+  loads a checkpoint without an identity (even with
+  `strict=True`) or with this layer's identity. Another
+  identity raises `Kpnn2Error` and loads no weights, and
+  so does any identity when this layer's is `None`: a
+  layer that claims no identity loads only checkpoints
+  saved without one.
 - Optional `constraint`: `nn.Module` or `None`. A per-entry
   map on `weight`, applied in `forward` **before** the mask.
   `nn.Softplus()` is the textbook non-negative edge
@@ -1404,10 +1406,12 @@ MaskedLinear(mask, bias=True, *, identity=None, constraint=None, generator=None)
   not a registered buffer. `load_state_dict` raises
   `Kpnn2Error` when a present digest or identity does not
   match the live layer, and does not load the weights. A
-  missing digest or identity is not an error, even with
-  `strict=True`. The digest catches same-shape rewiring. A
-  rename that leaves the 0/1 pattern unchanged is caught by
-  `identity` when callers pass `spec.fingerprint`. Do not
+  checkpoint without a digest or identity is not an error,
+  even with `strict=True`. A layer with `identity=None`
+  refuses a checkpoint that carries one. The digest catches
+  same-shape rewiring. A rename that leaves the 0/1 pattern
+  unchanged is caught by `identity` when callers pass
+  `spec.fingerprint`. Do not
   `load_state_dict` or `Tensor.copy_` a weight across a
   reparse; see **Reparse hatch**.
 - **0.1 checkpoints still load.** kpnn2 0.1 saved the
@@ -1553,10 +1557,12 @@ PackedLinear(
 - Optional `identity`: opaque `str`, typically
   `spec.fingerprint`. Stored in `state_dict` next to
   `index_digest` as UTF-8 `uint8` bytes. `load_state_dict`
-  raises `Kpnn2Error` when a present identity does not
-  match. A missing identity is not an error, even with
-  `strict=True`. `None` means this layer does not claim
-  an identity.
+  loads a checkpoint without an identity (even with
+  `strict=True`) or with this layer's identity. Another
+  identity raises `Kpnn2Error` and loads no weights, and
+  so does any identity when this layer's is `None`: a
+  layer that claims no identity loads only checkpoints
+  saved without one.
 - Optional `constraint`: `nn.Module` or `None`. A per-entry
   map on the packed `weight`, applied in `forward`.
   `nn.Softplus()` is the textbook non-negative edge
@@ -1662,9 +1668,11 @@ PackedLinear(
   constructor string, also not a registered buffer.
   `load_state_dict` raises `Kpnn2Error` when a present
   digest or identity does not match, and does not load
-  the weights. A missing digest or identity is not an
-  error, even with `strict=True`. The digest catches
-  same-shape rewiring. A rename that leaves the packed
+  the weights. A checkpoint without a digest or identity
+  is not an error, even with `strict=True`. A layer with
+  `identity=None` refuses a checkpoint that carries one.
+  The digest catches same-shape rewiring. A rename that
+  leaves the packed
   index pattern unchanged is caught by `identity` when
   callers pass `spec.fingerprint`. Do not `load_state_dict`
   or `Tensor.copy_` a `weight` across a reparse; see
@@ -1882,10 +1890,12 @@ PackedMultiheadAttention(
 - Optional `identity`: opaque `str`, typically
   `spec.fingerprint`. Stored in `state_dict` next to
   `index_digest` as UTF-8 `uint8` bytes. `load_state_dict`
-  raises `Kpnn2Error` when a present identity does not
-  match. A missing identity is not an error, even with
-  `strict=True`. `None` means this layer does not claim
-  an identity.
+  loads a checkpoint without an identity (even with
+  `strict=True`) or with this layer's identity. Another
+  identity raises `Kpnn2Error` and loads no weights, and
+  so does any identity when this layer's is `None`: a
+  layer that claims no identity loads only checkpoints
+  saved without one.
 - Optional `generator`: Xavier-uniform on the four
   projections uses that `torch.Generator`. `None` keeps
   today's path: `nn.Linear` kaiming-init then Xavier on
@@ -1995,9 +2005,11 @@ forward(
   `identity`, `state_dict` also includes that string
   as UTF-8 `uint8` bytes. `load_state_dict` raises
   `Kpnn2Error` when a present digest or identity does
-  not match, and does not load the weights. A missing
-  digest or identity is not an error, even with
-  `strict=True`. Same pattern as `PackedLinear`.
+  not match, and does not load the weights. A checkpoint
+  without a digest or identity is not an error, even with
+  `strict=True`. A layer with `identity=None` refuses a
+  checkpoint that carries one. Same pattern as
+  `PackedLinear`.
   `copy.deepcopy` works.
 
 Typical construction:
@@ -2640,8 +2652,10 @@ to the connectivity digest. `load_state_dict` raises
 `Kpnn2Error` when a present identity does not match: a rename
 that preserves alphabetical position (for example
 `('g1','g2')` → `('g1b','g2')`) is then a loud failure
-instead of silent mis-attribution. A missing identity is not
-an error (old checkpoints). There is no `layout=` parser
+instead of silent mis-attribution. A checkpoint without an
+identity still loads; one with an identity loads only into a
+layer with the same identity, never into one built with
+`identity=None`. There is no `layout=` parser
 flag: choose `LayeredSpec.from_dict` or
 `AdjacencySpec.from_dict` from `blob["spec"]["layout"]`.
 

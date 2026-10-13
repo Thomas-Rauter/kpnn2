@@ -154,11 +154,17 @@ class MaskedLinear(nn.Module):
         Opaque checkpoint identity, typically
         ``spec.fingerprint``. Stored in ``state_dict`` next to
         ``mask_digest`` as a 1-D CPU ``uint8`` tensor of the
-        UTF-8 bytes. ``load_state_dict`` raises ``Kpnn2Error``
-        when a present identity does not match this layer, and
-        does not load the weights. A missing identity is not an
-        error, even with ``strict=True``. ``None`` means this
-        layer does not claim an identity.
+        UTF-8 bytes. ``load_state_dict`` compares it with the
+        checkpoint's identity:
+
+        - the checkpoint has no identity: it loads, even with
+          ``strict=True``
+        - it has this layer's identity: it loads
+        - it has another identity, or this layer's identity is
+          ``None``: ``Kpnn2Error``, and no weights are loaded
+
+        ``None`` means this layer does not claim an identity, so
+        it loads only checkpoints saved without one.
     constraint : torch.nn.Module or None, default=None
         Optional per-entry map on ``weight``, applied in
         ``forward`` **before** the mask. The module must return a

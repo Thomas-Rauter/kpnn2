@@ -140,7 +140,7 @@ def check_identity(
     identity: str | None,
 ) -> None:
     """
-    Pop and check a saved identity; missing is not an error.
+    Pop and check a saved identity; none saved is not an error.
 
     Parameters
     ----------
@@ -156,9 +156,10 @@ def check_identity(
     Raises
     ------
     Kpnn2Error
-        If a present identity does not match ``identity``. The
-        message names the submodule and shows both identities,
-        shortened.
+        If a present identity does not match ``identity``,
+        which includes any identity when ``identity`` is
+        ``None``. The message names the submodule and shows
+        both identities, shortened.
     """
     key = prefix + IDENTITY_KEY
     saved = state_dict.pop(key, None)
