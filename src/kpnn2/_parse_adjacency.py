@@ -114,7 +114,9 @@ def parse_adjacency(  # numpydoc ignore=PR06
     for it when the graph has cycles or self-loops, or when a
     shared-state loop is the update; ``parse_layered`` ranks a DAG
     into one packed hop per layer instead. Nothing is ranked here,
-    and no ``(n, n)`` tensor is allocated.
+    and no ``(n, n)`` tensor is allocated. Every node is a single
+    unit, one neuron, unless ``widths`` makes it a block of
+    several.
 
     Parameters
     ----------
@@ -128,17 +130,44 @@ def parse_adjacency(  # numpydoc ignore=PR06
         Extra columns are ignored. The frame is read, never
         modified.
     widths : mapping of str to int or numpy integer, optional
-        Units per named node, for a node backed by several
-        neurons (DCell-style), exactly as in ``parse_layered``.
-        Keys are matched after ``str(...)``; omitted names are
-        width 1, and ``None`` makes every node width 1. numpy
-        integers are stored as ``int``. A node of width ``k``
-        owns a contiguous block of ``k`` units of the state
-        vector (``node_units``), and a named edge ``A -> B``
-        becomes every unit pair of its ``(k_B, k_A)`` block.
-        Input nodes must stay width 1: each reads one feature
-        column, so separate measurements belong on separate
-        input nodes.
+        Number of units per named node. A unit is one neuron: it
+        holds one number per sample. A node of width ``k`` is a
+        block of ``k`` units, a contiguous slice of the state
+        vector (``node_units``), so it can carry ``k`` numbers
+        instead of one. An edge ``A -> B`` then connects every
+        unit of ``A`` to every unit of ``B``, its ``(k_B, k_A)``
+        block of unit pairs, which is ``k_B * k_A`` weights
+        instead of one.
+
+        Widths change what the network can compute. A node of
+        width 1 squeezes everything its parents send into one
+        number, and every node it feeds sees that same number.
+        So wider nodes matter where one number per node is too
+        little:
+
+        - a hidden node that combines many parents and should
+          pass on more than one summary of them
+        - a node in a feedback loop that should carry more than
+          one number from one update to the next
+        - capacity that grows with the node, such as a width set
+          by its number of parents
+        - an output that is several numbers, such as class
+          scores or the parameters of a distribution
+
+        The price is ``k_B * k_A`` weights per edge, and a score
+        per node has to combine the scores of its units. A wide
+        node also shifts every node after it in the state
+        vector, so read positions from ``node_units``,
+        ``unit_index``, ``input_index``, and ``output_index``
+        instead of counting nodes.
+
+        Omitted names, ``None``, and an empty mapping are width 1.
+        Keys are matched after ``str(...)``. Unknown names raise
+        ``Kpnn2Error``. Values must be positive ints or numpy
+        integers, stored as ``int``; ``bool``, ``numpy.bool_``,
+        floats, ``0``, and negatives are rejected. Input nodes
+        must stay width 1: each reads one feature column, so
+        separate measurements belong on separate input nodes.
 
     Returns
     -------
@@ -240,6 +269,9 @@ def parse_adjacency(  # numpydoc ignore=PR06
     slice(0, 2, None)
     >>> wide.edge_location("a", "b")
     (0, 1)
+
+    ``x`` moves from unit 2 to unit 3, because ``a`` now takes two:
+
     >>> wide.input_index
     (3,)
     """

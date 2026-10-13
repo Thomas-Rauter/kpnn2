@@ -85,8 +85,8 @@ later prompt asks.
 1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
    `source` and `target` only, validates a layered DAG, and returns a
    `LayeredSpec`. Optional keyword-only `widths=` gives a hidden or
-   output node several units (DCell-style); omitted or `None` is
-   width 1, and input nodes always stay width 1.
+   output node several units; omitted or `None` is width 1, and
+   input nodes always stay width 1.
    Optional keyword-only `ranks=` assigns compact depths so official
    ontology levels (P-NET / Reactome) need not be longest-path hops;
    omitted or `None` is longest-path. `parse_adjacency()` reads
