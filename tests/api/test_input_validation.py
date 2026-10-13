@@ -612,6 +612,86 @@ _LAYERED_SPEC_CASES = [
     ),
     _Bad(
         "LayeredSpec",
+        "unit_index_names_is_an_int",
+        _TYPE,
+        "Unsupported names type",
+        lambda: _LAYERED.unit_index(
+            5,
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_names_is_a_set",
+        _TYPE,
+        "'names' must be a sequence of node names, not a set",
+        lambda: _LAYERED.unit_index(
+            {"H"},
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_names_is_a_matrix",
+        _SHAPE,
+        "'names' must be one-dimensional",
+        lambda: _LAYERED.unit_index(
+            np.array([["H"]]),
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_layer_is_a_float",
+        _TYPE,
+        "'layer' must be an int",
+        lambda: _LAYERED.unit_index(
+            ["H"],
+            layer=1.0,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_layer_out_of_range",
+        _VALUE,
+        "'layer' must be in range [0, 3)",
+        lambda: _LAYERED.unit_index(
+            ["H"],
+            layer=3,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_empty_name",
+        _SEMANTIC,
+        "Node name is empty",
+        lambda: _LAYERED.unit_index(
+            ["H", ""],
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_unknown_names",
+        _SEMANTIC,
+        "Unknown node name(s): P, Q",
+        lambda: _LAYERED.unit_index(
+            ["Q", "H", "P"],
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_node_in_another_layer",
+        _SEMANTIC,
+        "Node(s) not in layer 1: A (layer 0), C (layer 2)",
+        lambda: _LAYERED.unit_index(
+            ["C", "H", "A"],
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
         "from_dict_payload_not_a_dict",
         _TYPE,
         "'payload'",
@@ -1690,6 +1770,22 @@ _VALID_CASES = [
         "AdjacencySpec",
         "unit_index_repeated_name",
         lambda: _ADJACENCY.unit_index(["a", "a"]),
+    ),
+    _Valid(
+        "LayeredSpec",
+        "unit_index_empty_list",
+        lambda: _LAYERED.unit_index(
+            [],
+            layer=1,
+        ),
+    ),
+    _Valid(
+        "LayeredSpec",
+        "unit_index_numpy_integer_layer",
+        lambda: _LAYERED.unit_index(
+            ["H", "H"],
+            layer=np.int64(1),
+        ),
     ),
     _Valid(
         "LayeredSpec",

@@ -307,6 +307,8 @@ class AdjacencySpec:
         written onto hidden nodes. At width 1, position ``i``
         belongs to ``names[i]``; a node of width ``k`` contributes
         ``k`` entries. ``node_units`` is the slice of one node.
+        ``LayeredSpec.unit_index`` is the same rule on one layer
+        and also takes ``layer=``; this layout has none.
 
         Parameters
         ----------

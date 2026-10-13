@@ -14,8 +14,8 @@ from ._errors import Kpnn2Error
 from ._layout import Layout, build_layout, concat_layouts
 from ._spec import Hop, LayeredSpec, require_spec_hop
 from ._validate import (
+    as_layer_index,
     describe,
-    is_integer,
     reject_unordered,
     require_spec,
 )
@@ -444,14 +444,10 @@ def _resolve_node_layout(
                 spec.layer_nodes[0],
                 spec.layer_widths[0],
             ), 0
-        if not is_integer(layer):
-            raise Kpnn2Error(f"'layer' must be an int. Got {describe(layer)}.")
-        layer = int(layer)
-        n_layers = len(spec.layer_nodes)
-        if layer < 0 or layer >= n_layers:
-            raise Kpnn2Error(
-                f"'layer' must be in range [0, {n_layers}). Got {layer}."
-            )
+        layer = as_layer_index(
+            layer,
+            len(spec.layer_nodes),
+        )
         return build_layout(
             spec.layer_nodes[layer],
             spec.layer_widths[layer],

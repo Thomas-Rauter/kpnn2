@@ -14,8 +14,20 @@ from ._layout import (
     hop_axis_layouts,
     resolve_edge_names,
     resolve_node_name,
+    resolve_node_names,
 )
-from ._validate import describe
+from ._validate import as_layer_index, as_name_list, describe
+
+
+def _node_layers(
+    layer_nodes: tuple[tuple[str, ...], ...],
+) -> dict[str, int]:
+    """
+    Return the depth of every layered node, keyed by name.
+    """
+    return {
+        node: layer for layer, names in enumerate(layer_nodes) for node in names
+    }
 
 
 def _layered_node_layer(
@@ -25,9 +37,7 @@ def _layered_node_layer(
     """
     Return the depth and string name of one layered node.
     """
-    layer_of = {
-        node: layer for layer, names in enumerate(layer_nodes) for node in names
-    }
+    layer_of = _node_layers(layer_nodes)
     node_name = resolve_node_name(
         name,
         layer_of,
@@ -495,7 +505,9 @@ class LayeredSpec:
     not a constraint. A hard freeze of those slots is
     ``torch.where`` inside ``constraint=``. ``node_units`` and
     ``hop_units`` map a named node to its contiguous unit slice
-    on a layer tensor or a hop source axis. ``node_table``
+    on a layer tensor or a hop source axis. ``unit_index`` gives
+    every unit of several named nodes of one layer, in order, as
+    one index. ``node_table``
     counts each node's edges and the nodes that reach it or
     that it reaches.
 
@@ -925,6 +937,148 @@ class LayeredSpec:
                 f"layers {list(hop.source_layers)}."
             )
         return source_layout.slot(node_name).units
+
+    def unit_index(
+        self,
+        names: object,
+        *,
+        layer: int,
+    ) -> tuple[int, ...]:
+        """
+        Return every unit of the named nodes of one layer, in order.
+
+        The units index the last axis of that layer's tensor
+        (``saved[layer]``). Each named node contributes all of its
+        units, ascending, in ``names`` order. Use it for nodes you
+        name yourself within a layer, such as readouts, a loss
+        against measured values, or data written onto hidden
+        nodes. At width 1, position ``i`` belongs to
+        ``names[i]``; a node of width ``k`` contributes ``k``
+        entries. ``node_units`` is the slice of one node.
+        ``AdjacencySpec.unit_index`` is the same rule on the
+        state vector, which has no layers.
+
+        Parameters
+        ----------
+        names : sequence of str
+            Node names in the order to index: a list, a tuple, a
+            one-dimensional numpy array, a ``pandas.Index``, or
+            another ordered iterable. Each name is matched after
+            ``str(...)``, same as parse, and must be in
+            ``layer_nodes[layer]``. A repeated name repeats its
+            units. ``names`` is not modified.
+        layer : int
+            0-based index into ``layer_nodes``, index 0 being the
+            input layer. A numpy integer is accepted. It is never
+            inferred from the names.
+
+        Returns
+        -------
+        tuple of int
+            Units of the named nodes on that layer, in order.
+            ``()`` when ``names`` is empty.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``names`` is a tensor, a ``str``, ``bytes``, a set, a
+            mapping, not one-dimensional, or not iterable; if
+            ``layer`` is not an integer in range; if a name is
+            empty; if a name is not a node; or if a node is in
+            another layer. One message lists every unknown name,
+            and one lists every node in another layer with its
+            layer.
+
+        Notes
+        -----
+        This is identity into a layer's unit axis: it takes no
+        tensor and no data. Keep it as a buffer with
+        ``torch.as_tensor(index, dtype=torch.int64)``. The
+        ``dtype`` is needed because ``torch.as_tensor(())`` is
+        float32 and fails as an index.
+
+        Names in several layers need one call per layer, because
+        no single tensor holds their units. ``node_units`` gives
+        the layer of each node.
+
+        Reading through a repeated unit is safe. Writing through
+        one is your concern: ``index_copy`` through repeated units
+        is ambiguous, while ``index_add`` sums.
+
+        Examples
+        --------
+        At width 1, each name gives its position in the layer:
+
+        >>> import pandas as pd
+        >>> import torch
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["a", "b", "H", "K"],
+        ...         "target": ["H", "K", "C", "C"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_layered(edgelist)
+        >>> spec.layer_nodes[1]
+        ('H', 'K')
+        >>> spec.unit_index(["K", "H"], layer=1)
+        (1, 0)
+
+        A node of width 3 gives its whole block, and every node
+        of a layer gives every unit of that layer:
+
+        >>> wide = kpnn2.parse_layered(
+        ...     edgelist,
+        ...     widths={"H": 3},
+        ... )
+        >>> wide.unit_index(["K", "H"], layer=1)
+        (3, 0, 1, 2)
+        >>> wide.unit_index(wide.layer_nodes[1], layer=1) == tuple(
+        ...     range(wide.layer_dims[1])
+        ... )
+        True
+
+        As a buffer, it reads those units from that layer's
+        tensor:
+
+        >>> index = torch.as_tensor(
+        ...     wide.unit_index(["K"], layer=1),
+        ...     dtype=torch.int64,
+        ... )
+        >>> saved = {1: torch.arange(4.0).unsqueeze(0)}
+        >>> saved[1][..., index].tolist()
+        [[3.0]]
+        """
+        name_list = as_name_list(
+            names,
+            "names",
+            "node names",
+        )
+        layer = as_layer_index(
+            layer,
+            len(self.layer_nodes),
+        )
+        layer_of = _node_layers(self.layer_nodes)
+        node_names = resolve_node_names(
+            name_list,
+            layer_of,
+            "spec.layer_nodes",
+        )
+        elsewhere = sorted(
+            {name for name in node_names if layer_of[name] != layer}
+        )
+        if elsewhere:
+            listed = ", ".join(
+                f"{name} (layer {layer_of[name]})" for name in elsewhere
+            )
+            raise Kpnn2Error(
+                f"Node(s) not in layer {layer}: {listed}. Valid names are "
+                f"in spec.layer_nodes[{layer}]."
+            )
+        return build_layout(
+            self.layer_nodes[layer],
+            self.layer_widths[layer],
+        ).units_of(node_names)
 
     def node_table(self) -> pd.DataFrame:
         """

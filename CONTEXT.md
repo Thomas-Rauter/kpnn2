@@ -790,6 +790,46 @@ and not a head helper. After a reparse, copy bias with
 `node_units` only when width and layer still match; see
 **Reparse hatch**.
 
+### `LayeredSpec.unit_index()`
+
+```python
+layered_spec.unit_index(names, *, layer) -> tuple[int, ...]
+```
+
+Every unit of each named node of one layer, in `names` order,
+units of one node ascending, as Python `int`s on the last axis
+of `saved[layer]`. It is `AdjacencySpec.unit_index` on one
+layer: the same rule (`Layout.units_of` on
+`build_layout(layer_nodes[layer], layer_widths[layer])`), so
+`spec.unit_index(spec.layer_nodes[i], layer=i) ==
+tuple(range(spec.layer_dims[i]))`. It is for nodes the caller
+names within a layer (readouts, a loss against measured values,
+data written onto hidden nodes) instead of a hand-built
+`layer_nodes[i].index(name)`, which counts nodes, not units, and
+silently points into the wrong node after a wide one.
+
+- `layer` is required and keyword-only, and is never inferred
+  from the names. It takes the same check as
+  `map_node_attributions(layer=)`: an int or numpy integer in
+  `[0, len(layer_nodes))`; negatives are rejected, not counted
+  from the end.
+- `names` takes the same checks as on `AdjacencySpec`
+  (`as_name_list`): a tensor, `str`, `bytes`, set, mapping,
+  `ndim != 1`, or a non-iterable raises. A repeated name
+  repeats its units; empty `names` gives `()`.
+- Order of checks: `names` type, `layer`, an empty name, names
+  that are not nodes (all listed in one message, pointing at
+  `spec.layer_nodes`), then nodes in another layer, all listed
+  in one message, sorted, each with its layer:
+  `Node(s) not in layer 1: c (layer 2), u (layer 0). Valid
+  names are in spec.layer_nodes[1].`
+- Names in several layers need one call per layer; no single
+  tensor holds their units. Outputs at different depths can
+  share the last layer through `ranks=`.
+- It takes no tensor or data, and there is no form for a hop's
+  source axis (`hop_units` covers one name there). Stored
+  fields, `to_dict()`, and `fingerprint` do not change.
+
 ### `LayeredSpec.node_table()`
 
 ```python
@@ -950,8 +990,9 @@ for outputs). It is for nodes the caller names outside
 reads one unit of a wide node. A repeated name repeats its
 units; empty `names` gives `()`. Names are matched after
 `str(...)`; an empty name raises `Kpnn2Error`, and so do
-unknown names, all listed in one message. There is no
-`LayeredSpec` counterpart.
+unknown names, all listed in one message.
+`LayeredSpec.unit_index(names, layer=)` is the same rule on one
+layer.
 
 `source_index` and `target_index` have one entry per live unit
 pair: the sum over named edges of `k_source * k_target`, the
@@ -2529,8 +2570,9 @@ Width 1 stays numerically identical.
   value); do not store that policy on the spec.
   `LayeredSpec.node_units` and `LayeredSpec.hop_units` are
   the matching lookup for a named node: a contiguous unit
-  slice on a layer tensor or a hop source axis. Do not
-  export `Layout`.
+  slice on a layer tensor or a hop source axis.
+  `LayeredSpec.unit_index(names, layer=)` is the many-name
+  form on one layer tensor. Do not export `Layout`.
 - `AdjacencySpec.source_index` / `target_index` store **every
   unit pair** of each named edge (`iter_block_pairs`, as on a
   hop) on the `build_layout(nodes, node_widths)` axis.
@@ -2538,7 +2580,9 @@ Width 1 stays numerically identical.
   `[target_index[i], source_index[i]]`. `input_index`,
   `output_index`, and `AdjacencySpec.unit_index(names)` use
   one rule, `Layout.units_of`: every unit of each named node,
-  in name order.
+  in name order. `LayeredSpec.unit_index` applies the same
+  rule to `build_layout(layer_nodes[layer],
+  layer_widths[layer])`.
 - `Skip.source_in_layer` and `Skip.target_in_layer` store a
   **block start** inside their own layer. One `Skip` per named
   edge.
@@ -2577,7 +2621,7 @@ nothing kpnn2 stores or returns holds a numpy integer; `bool`,
 
 An argument whose items are matched by position (packed
 `source_index` / `target_index`, `dims`, `coords` values, the
-`names` of `align_inputs` and of `AdjacencySpec.unit_index`)
+`names` of `align_inputs` and of both `unit_index` methods)
 rejects a set or a mapping: a set has
 no order, and a mapping would be read as its keys.
 

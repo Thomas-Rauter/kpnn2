@@ -56,6 +56,34 @@ def as_positive_int(
     return int(value)
 
 
+def as_layer_index(
+    value: object,
+    n_layers: int,
+) -> int:
+    """
+    Return ``value`` as an ``int`` if it is a layer of the spec.
+
+    A layer is a 0-based index into ``spec.layer_nodes``.
+    Negative indices are rejected rather than counted from the
+    end, so a layer number always means the same depth.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``value`` is not an integer, or is outside
+        ``[0, n_layers)``. The message names ``'layer'`` and
+        reports ``value``.
+    """
+    if not is_integer(value):
+        raise Kpnn2Error(f"'layer' must be an int. Got {describe(value)}.")
+    layer = int(value)
+    if layer < 0 or layer >= n_layers:
+        raise Kpnn2Error(
+            f"'layer' must be in range [0, {n_layers}). Got {layer}."
+        )
+    return layer
+
+
 def as_bool(
     value: object,
     name: str,
