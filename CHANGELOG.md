@@ -53,6 +53,10 @@ semantic versioning.
 - `AdjacencySpec.unit_index(names)`: every state unit of the
   named nodes, in order, for nodes outside `input_nodes` and
   `output_nodes`.
+- `node_table()` on both specs: one row per node with its
+  layer (layered only), width, in- and out-degree, and counts
+  of ancestors, descendants, and input ancestors, in unit
+  order.
 
 
 ## [0.2.0] - 23. September 2026

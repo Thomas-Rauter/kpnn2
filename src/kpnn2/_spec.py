@@ -495,7 +495,9 @@ class LayeredSpec:
     not a constraint. A hard freeze of those slots is
     ``torch.where`` inside ``constraint=``. ``node_units`` and
     ``hop_units`` map a named node to its contiguous unit slice
-    on a layer tensor or a hop source axis.
+    on a layer tensor or a hop source axis. ``node_table``
+    counts each node's edges and the nodes that reach it or
+    that it reaches.
 
     Examples
     --------
@@ -923,6 +925,114 @@ class LayeredSpec:
                 f"layers {list(hop.source_layers)}."
             )
         return source_layout.slot(node_name).units
+
+    def node_table(self) -> pd.DataFrame:
+        """
+        Return one row of graph counts per node.
+
+        Each row says where a node sits in the graph: its layer,
+        how many units it owns, how many edges enter and leave
+        it, and how many nodes reach it or are reached from it.
+        A node with many connections tends to get large sums and
+        large scores only because it is large, so these counts
+        are what such a node is scaled by: a ``widths`` value set
+        from its number of parents, a division of its input by
+        its in-degree in ``forward()``, or a check of whether
+        node scores follow connectivity. The table holds the raw
+        counts; the formula stays yours.
+
+        Counts are over named edges in the direction of
+        computation, so widths never change them. An input that
+        feeds a node, directly or through other nodes, is one of
+        its ancestors. The table is computed on each call and is
+        a new DataFrame each time, so changing it does not change
+        this spec.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Index ``node``: every node name in unit order, layer
+            by layer and alphabetical within a layer (the
+            flattened ``layer_nodes``). Columns, all ``int64``:
+
+            - ``layer``: the node's layer in ``layer_nodes``
+            - ``width``: the number of units the node owns
+            - ``in_degree``: edges into the node, one per parent
+            - ``out_degree``: edges out of the node, one per
+              child
+            - ``n_ancestors``: other nodes with a path to the
+              node
+            - ``n_descendants``: other nodes the node has a path
+              to
+            - ``n_input_ancestors``: how many of its ancestors
+              are in ``input_nodes``
+
+        See Also
+        --------
+        to_edgelist : The named edges the counts are taken over.
+        node_units : One node's unit slice on its layer.
+
+        Notes
+        -----
+        ``in_degree == 0`` selects exactly ``input_nodes``, and
+        ``out_degree == 0`` exactly ``output_nodes``. Rows follow
+        unit order, so
+        ``numpy.repeat(table[column], table["width"])`` gives one
+        value per unit, layer after layer; filter
+        ``table[table["layer"] == i]`` first for the units of
+        layer ``i``. When counts should set ``widths``, read them
+        from a first parse without ``widths``: they count named
+        edges, so the second parse has the same counts.
+
+        Examples
+        --------
+        Three inputs feed two hidden nodes, which feed ``y``;
+        ``x3`` also feeds ``y`` directly:
+
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x1", "x2", "x2", "x3", "h1", "h2", "x3"],
+        ...         "target": ["h1", "h1", "h2", "h2", "y", "y", "y"],
+        ...     }
+        ... )
+        >>> table = kpnn2.parse_layered(edgelist).node_table()
+        >>> table[["layer", "width", "in_degree", "out_degree"]]
+              layer  width  in_degree  out_degree
+        node
+        x1        0      1          0           1
+        x2        0      1          0           2
+        x3        0      1          0           2
+        h1        1      1          2           1
+        h2        1      1          2           1
+        y         2      1          3           0
+        >>> table[["n_ancestors", "n_descendants", "n_input_ancestors"]]
+              n_ancestors  n_descendants  n_input_ancestors
+        node
+        x1              0              2                  0
+        x2              0              3                  0
+        x3              0              2                  0
+        h1              2              1                  2
+        h2              2              1                  2
+        y               5              0                  3
+
+        A wider node keeps its counts, and repeating a column by
+        ``width`` gives one value per unit:
+
+        >>> import numpy as np
+        >>> wide = kpnn2.parse_layered(
+        ...     edgelist,
+        ...     widths={"h1": 2},
+        ... ).node_table()
+        >>> wide.loc["h1", ["width", "in_degree"]].tolist()
+        [2, 2]
+        >>> np.repeat(wide["in_degree"], wide["width"]).tolist()
+        [0, 0, 0, 2, 2, 2, 3]
+        """
+        from ._node_table import spec_node_table
+
+        return spec_node_table(self)
 
     def to_dict(self) -> dict:
         """

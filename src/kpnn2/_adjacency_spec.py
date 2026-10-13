@@ -125,6 +125,8 @@ class AdjacencySpec:
     dataclass are not. ``edge_location`` finds packed slots of
     a named edge; it is not a constraint. A hard freeze of
     those slots is ``torch.where`` inside ``constraint=``.
+    ``node_table`` counts each node's edges and the nodes
+    that reach it or that it reaches.
 
     Examples
     --------
@@ -621,6 +623,108 @@ class AdjacencySpec:
             cached,
         )
         return cached
+
+    def node_table(self) -> pd.DataFrame:
+        """
+        Return one row of graph counts per node.
+
+        Each row says where a node sits in the graph: how many
+        units it owns, how many edges enter and leave it, and how
+        many nodes reach it or are reached from it. A node with
+        many connections tends to get large sums and large scores
+        only because it is large, so these counts are what such a
+        node is scaled by: a ``widths`` value set from its number
+        of parents, a division of its input by its in-degree in
+        ``forward()``, or a check of whether node scores follow
+        connectivity. The table holds the raw counts; the formula
+        stays yours.
+
+        Counts are over named edges in the direction of
+        computation, so widths never change them. An input that
+        feeds a node, directly or through other nodes, is one of
+        its ancestors. A self-loop adds 1 to both degrees of its
+        node. A node is never counted among its own ancestors or
+        descendants, even on a cycle; the other nodes of its
+        cycle are both. The table is computed on each call and is
+        a new DataFrame each time, so changing it does not change
+        this spec.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Index ``node``: every node name in ``nodes`` order,
+            the order of the state vector. Columns, all
+            ``int64``:
+
+            - ``width``: the number of units the node owns
+            - ``in_degree``: edges into the node, one per parent
+            - ``out_degree``: edges out of the node, one per
+              child
+            - ``n_ancestors``: other nodes with a path to the
+              node
+            - ``n_descendants``: other nodes the node has a path
+              to
+            - ``n_input_ancestors``: how many of its ancestors
+              are in ``input_nodes``
+
+        See Also
+        --------
+        to_edgelist : The named edges the counts are taken over.
+        node_units : One node's unit slice on the state vector.
+
+        Notes
+        -----
+        ``in_degree == 0`` selects exactly ``input_nodes``, and
+        ``out_degree == 0`` exactly ``output_nodes``, self-loops
+        included. Rows follow the state vector, so
+        ``numpy.repeat(table[column], table["width"])`` gives one
+        value per state unit, ``state_dim`` long. When counts
+        should set ``widths``, read them from a first parse
+        without ``widths``: they count named edges, so the second
+        parse has the same counts.
+
+        Examples
+        --------
+        A feedback edge ``b -> a`` and a self-loop on ``b``:
+
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a", "b"],
+        ...         "target": ["a", "b", "a", "y", "b"],
+        ...     }
+        ... )
+        >>> table = kpnn2.parse_adjacency(edgelist).node_table()
+        >>> table[["width", "in_degree", "out_degree"]]
+              width  in_degree  out_degree
+        node
+        a         1          2           2
+        b         1          2           2
+        x         1          0           1
+        y         1          1           0
+        >>> table[["n_ancestors", "n_descendants", "n_input_ancestors"]]
+              n_ancestors  n_descendants  n_input_ancestors
+        node
+        a               2              2                  1
+        b               2              2                  1
+        x               0              3                  0
+        y               3              0                  1
+
+        A wider node keeps its counts, and repeating a column by
+        ``width`` gives one value per state unit:
+
+        >>> import numpy as np
+        >>> wide = kpnn2.parse_adjacency(
+        ...     edgelist,
+        ...     widths={"a": 2},
+        ... ).node_table()
+        >>> np.repeat(wide["in_degree"], wide["width"]).tolist()
+        [2, 2, 2, 0, 1]
+        """
+        from ._node_table import spec_node_table
+
+        return spec_node_table(self)
 
     def to_dict(self) -> dict:
         """

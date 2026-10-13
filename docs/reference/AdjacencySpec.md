@@ -7,6 +7,7 @@
         - to_edgelist
         - to_mask
         - edge_location
+        - node_table
         - to_dict
         - from_dict
         - fingerprint

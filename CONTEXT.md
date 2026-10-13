@@ -344,6 +344,7 @@ Division of labor:
 | `scatter_hop_outputs` (split that axis onto source layers) | kpnn2 |
 | `PackedLinear.transpose` (tied packed `W.T`) | kpnn2 |
 | Named node → unit slice (`node_units` / `hop_units`); named nodes → unit index (`unit_index`) | kpnn2 |
+| Spec → per-node graph counts (`node_table`) | kpnn2 |
 | Feature names → column index (`align_inputs`) | kpnn2 |
 | Apply that index on host X (`X[:, col]`) | User |
 | `forward()`, activations, norms, heads, call order | User (PyTorch) |
@@ -789,6 +790,59 @@ and not a head helper. After a reparse, copy bias with
 `node_units` only when width and layer still match; see
 **Reparse hatch**.
 
+### `LayeredSpec.node_table()`
+
+```python
+layered_spec.node_table() -> pandas.DataFrame
+```
+
+One row of graph counts per node, so callers can scale nodes by
+how connected they are (a `widths=` value from a count, a
+division in `forward()`, scores checked against connectivity)
+without counting by hand. Hand counts are easy to get silently
+wrong: `bincount` on packed indices counts unit pairs, not
+parents; the inputs below a node need reachability; and counts
+keyed by name must be aligned to unit order.
+
+The index is `node`: names in unit order, the flattened
+`layer_nodes`. The columns are exactly these, in this order,
+all `int64`:
+
+| Column | Meaning |
+|--------|---------|
+| `layer` | The node's layer in `layer_nodes`, after `ranks=`. |
+| `width` | Units the node owns. |
+| `in_degree` | Named edges into the node, one per parent. |
+| `out_degree` | Named edges out of the node, one per child. |
+| `n_ancestors` | Other nodes with a path to the node. |
+| `n_descendants` | Other nodes the node has a path to. |
+| `n_input_ancestors` | `input_nodes` among its ancestors. |
+
+- Counts are over named edges (`to_edgelist()` rows), never unit
+  pairs: widths change only `width`, and ranks change only
+  `layer` and the row order.
+- Edges point in the direction of computation, so an input that
+  feeds a node, directly or through other nodes, is one of its
+  ancestors. The docstring says this in plain words, because
+  ontology pictures put members below a pathway.
+- `in_degree == 0` selects exactly `input_nodes` and
+  `out_degree == 0` exactly `output_nodes`. Every call checks
+  both with `internal_error`.
+- Rows follow unit order, so
+  `numpy.repeat(table[column], table["width"])` is one value per
+  unit, layer after layer. This promise is the unit-aligned
+  form; do not add a tensor method for it.
+- Computed on each call and returned as a new DataFrame; nothing
+  is cached on the spec.
+- Raw counts only. Formulas (log, square root, min-max scaling,
+  clamping) stay with the caller. Betweenness and other
+  centralities stay with networkx on `to_edgelist()`; do not add
+  them, column options, or a graph-library dependency.
+  Reachability uses strongly connected components and integer
+  bitsets in `_node_table.py`.
+- To set `widths=` from counts, read the table from a first
+  parse without `widths=`; the counts do not depend on widths.
+
 ---
 
 ## Skip connections (no pseudo nodes, no second mechanism)
@@ -960,6 +1014,25 @@ inside `constraint=` to hold a value), not on the spec.
 
 To copy weights onto a new prior, look up the same named
 edge on **both** specs. See **Reparse hatch**.
+
+### `AdjacencySpec.node_table()`
+
+```python
+adjacency_spec.node_table() -> pandas.DataFrame
+```
+
+Same contract as `LayeredSpec.node_table()`, without the
+`layer` column: `width`, `in_degree`, `out_degree`,
+`n_ancestors`, `n_descendants`, `n_input_ancestors`, all
+`int64`. Rows follow `nodes`, the state-vector order, so
+`numpy.repeat(table[column], table["width"])` is `state_dim`
+long. Cycles and self-loops follow networkx: a self-loop adds 1
+to both degrees of its node, and a node is never counted among
+its own ancestors or descendants, even on a cycle; the other
+nodes of its cycle are both. The `in_degree == 0` /
+`input_nodes` and `out_degree == 0` / `output_nodes` match holds
+with self-loops too, because a self-loop already takes its node
+out of both sets.
 
 ### `to_mask()` (allocating dense escape hatch)
 
@@ -2751,6 +2824,7 @@ src/kpnn2/
   _layout.py                  # node name -> units on an axis
   _identity.py                # opaque checkpoint identity
   _serialize.py               # private spec edges, dicts, fingerprints
+  _node_table.py              # per-node graph counts for node_table()
 
 tests/
   api/                        # public import surface

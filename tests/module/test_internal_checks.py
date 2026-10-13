@@ -13,6 +13,7 @@ import torch
 import kpnn2
 from kpnn2 import (
     Kpnn2Error,
+    _node_table,
     _packed_multihead_attention,
     _parse,
     _parse_adjacency,
@@ -630,6 +631,71 @@ def test_canonical_edges_on_a_non_spec_fails_an_internal_check():
         ),
     ):
         _serialize.canonical_edges(object())
+
+
+def test_spec_node_table_on_a_non_spec_fails_an_internal_check():
+    """
+    Only the two spec methods call it, so a caller cannot reach
+    this branch.
+    """
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(
+            "spec_node_table received type object, "
+            "not a LayeredSpec or an AdjacencySpec"
+        ),
+    ):
+        _node_table.spec_node_table(object())
+
+
+@pytest.mark.parametrize(
+    ("make_spec", "field", "value", "what"),
+    [
+        pytest.param(
+            lambda: kpnn2.parse_layered(_skip_edgelist()),
+            "input_nodes",
+            ("A", "H"),
+            "node_table's zero in-degree nodes differ from spec.input_nodes",
+            id="layered_inputs",
+        ),
+        pytest.param(
+            lambda: kpnn2.parse_layered(_skip_edgelist()),
+            "output_nodes",
+            (),
+            "node_table's zero out-degree nodes differ from spec.output_nodes",
+            id="layered_outputs",
+        ),
+        pytest.param(
+            lambda: kpnn2.parse_adjacency(_cyclic_edgelist()),
+            "input_nodes",
+            ("a", "x"),
+            "node_table's zero in-degree nodes differ from spec.input_nodes",
+            id="adjacency_inputs",
+        ),
+        pytest.param(
+            lambda: kpnn2.parse_adjacency(_cyclic_edgelist()),
+            "output_nodes",
+            ("b", "y"),
+            "node_table's zero out-degree nodes differ from spec.output_nodes",
+            id="adjacency_outputs",
+        ),
+    ],
+)
+def test_node_table_raises_when_degrees_disagree_with_roles(
+    make_spec,
+    field,
+    value,
+    what,
+):
+    broken = dataclasses.replace(
+        make_spec(),
+        **{field: value},
+    )
+    with pytest.raises(
+        AssertionError,
+        match=_internal_check(what),
+    ):
+        broken.node_table()
 
 
 @pytest.mark.parametrize(

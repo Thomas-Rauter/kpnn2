@@ -1692,6 +1692,26 @@ _VALID_CASES = [
         lambda: _ADJACENCY.unit_index(["a", "a"]),
     ),
     _Valid(
+        "LayeredSpec",
+        "node_table_with_widths_and_ranks",
+        lambda: _layered(
+            widths={"H": 2},
+            ranks={"A": 0, "H": 1, "C": 2},
+        ).node_table(),
+    ),
+    _Valid(
+        "AdjacencySpec",
+        "node_table_with_a_self_loop",
+        lambda: kpnn2.parse_adjacency(
+            pd.DataFrame(
+                {
+                    "source": ["x", "a", "a"],
+                    "target": ["a", "a", "y"],
+                }
+            )
+        ).node_table(),
+    ),
+    _Valid(
         "MaskedLinear",
         "bool_mask",
         lambda: _masked(mask=torch.tensor([[True, False]])),
