@@ -1048,17 +1048,21 @@ def parse_layered(  # numpydoc ignore=PR06
     """
     Parse a source/target edgelist into a ``LayeredSpec``.
 
-    Prior-knowledge edges, such as genes into pathways, become
-    depth-ranked layers plus one packed hop per layer, ready for
-    a ``PackedLinear`` stack. Reach for it when a DAG should
-    become one hop per layer; ``parse_adjacency`` is the
+    The parser sorts the nodes of a DAG into layers and turns the
+    edges entering each layer into one packed hop, ready for one
+    ``PackedLinear`` per hop. Reach for it when prior-knowledge
+    edges, such as genes into pathways, should run as a
+    layer-by-layer network; ``parse_adjacency`` is the
     shared-state packed alternative, which also allows cycles.
-    Depth is longest path from inputs unless ``ranks`` assigns
-    compact layers, names sort alphabetically within a layer,
-    and no hop mask is allocated. Optional ``widths`` lets a
-    named node own several units. Optional ``ranks`` places
-    nodes at official ontology levels instead of longest-path
-    hops.
+    Names sort alphabetically within a layer, and no hop mask is
+    allocated.
+
+    Two defaults shape the result, and one keyword changes each.
+    Every node is a single unit, one neuron, unless ``widths``
+    makes it a block of several. Every node sits one layer above
+    its deepest parent, so its layer is the length of its longest
+    path from the inputs, unless ``ranks`` places it at a level
+    you choose.
 
     Parameters
     ----------
@@ -1072,27 +1076,75 @@ def parse_layered(  # numpydoc ignore=PR06
         Extra columns are ignored. The frame is read, never
         modified.
     widths : mapping of str to int or numpy integer, optional
-        Units per named node. Omitted names, ``None``, and an
-        empty mapping are width 1. Keys are matched after
-        ``str(...)``. Unknown names raise ``Kpnn2Error``. Values
-        must be positive ints or numpy integers, stored as
-        ``int``; ``bool``, ``numpy.bool_``, floats, ``0``, and
-        negatives are rejected.
+        Number of units per named node. A unit is one neuron: it
+        holds one number per sample. A node of width ``k`` is a
+        block of ``k`` units, so it can carry ``k`` numbers
+        instead of one. An edge ``A -> B`` then connects every
+        unit of ``A`` to every unit of ``B``, which is
+        ``k_B * k_A`` weights instead of one. Widths change how
+        many units a layer has, never which layer a node sits in.
+
+        Unlike ``ranks``, widths change what the network can
+        compute. A node of width 1 squeezes everything its
+        parents send into one number, and every node it feeds
+        sees that same number. So wider nodes matter where one
+        number per node is too little:
+
+        - a hidden node that combines many parents and should
+          pass on more than one summary of them
+        - capacity that grows with the node, such as a width set
+          by its number of parents
+        - an output that is several numbers, such as class
+          scores or the parameters of a distribution
+
+        The price is ``k_B * k_A`` weights per edge, and a score
+        per node has to combine the scores of its units. Input
+        nodes gain nothing from width: ``align_inputs`` fills
+        every unit of an input with the same column, so separate
+        measurements belong on separate input nodes.
+
+        Omitted names, ``None``, and an empty mapping are width 1.
+        Keys are matched after ``str(...)``. Unknown names raise
+        ``Kpnn2Error``. Values must be positive ints or numpy
+        integers, stored as ``int``; ``bool``, ``numpy.bool_``,
+        floats, ``0``, and negatives are rejected.
     ranks : mapping of str to int or numpy integer, optional
-        User depth per named node. ``None`` or omitted is
-        longest-path ranking, identical to today's default.
-        Keys are matched after ``str(...)``. Every graph node
-        must be present; unknown names raise ``Kpnn2Error``.
-        Values are non-negative ints or numpy integers;
-        ``bool``, ``numpy.bool_``, and floats are rejected.
-        Unique values are compacted to layers ``0 .. L-1``
-        with no empty layers, so numbers need not be 0-based
-        or consecutive. All in-degree-0 nodes must
-        share the minimum rank, and no non-input may use it.
-        Every named edge must be strictly forward after
-        compacting; same-rank edges are illegal. A node may
-        have only skip parents (no parent at the previous
-        compact layer).
+        Level per named node, in place of longest-path ranking.
+        By default a node sits one layer above its deepest
+        parent, so two nodes that belong on the same level can
+        land in different layers only because one has a longer
+        chain of parents below it. ``ranks`` says where each
+        node belongs: nodes of equal rank share a layer, and a
+        higher rank is a later layer. Only the order of the
+        values matters. They are renumbered to layers
+        ``0 .. L-1`` with no empty layers, so ranks 0, 10, 20
+        give the same layers as 0, 1, 2. An edge that ends up
+        spanning more than one layer is a skip edge: an ordinary
+        weight in the hop into its target's layer.
+
+        Ranks change how nodes are grouped into layers, never
+        what the network computes: every node keeps the same
+        parents through the same weights. So they matter only
+        where something treats a layer as a group:
+
+        - normalization across a layer's units
+        - a prediction head per layer
+        - a dropout rate or activation that differs by layer
+        - reading all outputs from one layer tensor
+        - summing attributions per layer
+        - matching a layer structure given elsewhere, such as a
+          published model
+
+        ``None`` or omitted keeps longest-path ranking. Keys are
+        matched after ``str(...)``. Every graph node must be
+        present; unknown names raise ``Kpnn2Error``. Values are
+        non-negative ints or numpy integers; ``bool``,
+        ``numpy.bool_``, and floats are rejected. All
+        in-degree-0 nodes must share the minimum rank, and no
+        other node may use it. Every edge must go from a lower
+        rank to a strictly higher one, so an edge between two
+        nodes of equal rank is illegal. A node may have only
+        skip parents, with none in the layer just below it.
 
     Returns
     -------
@@ -1138,22 +1190,31 @@ def parse_layered(  # numpydoc ignore=PR06
 
     Notes
     -----
-    Every named edge belongs to exactly one hop, the one of its
-    target layer, whether its depth gap is 1 or larger. Packed
-    indices are in unit space: named edge ``A -> B`` expands
-    into a ``(k_B, k_A)`` block of live pairs. At default width
-    1 that is one pair per named edge. A hop whose target has
-    parents further back reads several layers, and its source
-    columns are those layers concatenated in ascending order, so
-    a skip edge is an ordinary weight rather than a dummy neuron
-    or a second mechanism; ``skips`` only reports it. Under
-    longest-path ranking a hop always reads the previous layer;
-    with ``ranks`` it may omit that layer when every parent is
-    a skip. Terminals below maximum depth (early outputs) are
-    allowed, and isolated nodes cannot appear, since the node
-    set is the union of ``source`` and ``target``. ``to_dict()``
-    stores compacted ranks only when they differ from
-    longest-path on the same edges.
+    Every named edge belongs to exactly one hop, the hop into its
+    target's layer, however many layers it spans. A hop whose
+    target layer has parents further back reads several layers:
+    its source columns are those whole layers concatenated in
+    ascending order, including nodes that feed nothing in this
+    hop. A skip edge is therefore an ordinary weight rather than
+    a dummy neuron or a second mechanism; ``skips`` only reports
+    it. Under longest-path ranking a hop always reads the
+    previous layer; with ``ranks`` it may omit that layer when
+    every parent is a skip.
+
+    Packed indices count units, not nodes: named edge ``A -> B``
+    expands into a ``(k_B, k_A)`` block of live pairs, which is
+    one pair per named edge at the default width 1.
+    ``layer_dims`` counts units too, while ``layer_nodes`` and
+    ``Hop.source_nodes`` hold one name per node, so their
+    lengths differ once any node is wider than 1.
+    ``LayeredSpec.node_units`` and ``LayeredSpec.hop_units``
+    find the units of one node.
+
+    Terminals below maximum depth (early outputs) are allowed,
+    and isolated nodes cannot appear, since the node set is the
+    union of ``source`` and ``target``. ``to_dict()`` stores the
+    renumbered ranks only when they put some node in a different
+    layer than longest-path ranking does on the same edges.
 
     Examples
     --------
@@ -1178,13 +1239,16 @@ def parse_layered(  # numpydoc ignore=PR06
     >>> spec.skips[0].source, spec.skips[0].target
     ('A', 'C')
 
-    A hidden node of width 2 owns two units; the named edge
-    ``A -> H`` becomes a 2-by-1 block:
+    With ``widths``, a hidden node of width 2 owns two units. Each
+    layer keeps the same nodes, only its unit count grows, and the
+    named edge ``A -> H`` becomes a 2-by-1 block:
 
     >>> spec = kpnn2.parse_layered(
     ...     edgelist,
     ...     widths={"H": 2},
     ... )
+    >>> spec.layer_nodes
+    (('A',), ('H',), ('C',))
     >>> spec.layer_dims
     (1, 2, 1)
     >>> spec.layer_widths
@@ -1192,8 +1256,16 @@ def parse_layered(  # numpydoc ignore=PR06
     >>> spec.hops[0].to_mask().tolist()
     [[1.0], [1.0]]
 
-    Two siblings at the same official level share a layer even
-    when longest-path depths differ:
+    ``C`` now reads two numbers from ``H`` instead of one, next to
+    the one from ``A``:
+
+    >>> spec.hops[1].to_mask().tolist()
+    [[1.0, 1.0, 1.0]]
+
+    With ``ranks``, two nodes can share a layer even when their
+    chains of parents differ in length. By default ``Short`` sits
+    in layer 1, one above its only parent, while ``Long`` sits in
+    layer 2 behind ``Mid``:
 
     >>> siblings = pd.DataFrame(
     ...     {
@@ -1201,6 +1273,14 @@ def parse_layered(  # numpydoc ignore=PR06
     ...         "target": ["Short", "Mid", "Long"],
     ...     }
     ... )
+    >>> kpnn2.parse_layered(siblings).layer_nodes
+    (('A',), ('Mid', 'Short'), ('Long',))
+
+    Giving both the same rank puts them in one layer, and
+    ``A -> Short`` becomes a skip edge. The edges and their
+    weights stay the same; only the grouping moves, so a head or
+    a normalization on the last layer now sees both nodes:
+
     >>> spec = kpnn2.parse_layered(
     ...     siblings,
     ...     ranks={
@@ -1212,6 +1292,8 @@ def parse_layered(  # numpydoc ignore=PR06
     ... )
     >>> spec.layer_nodes
     (('A',), ('Mid',), ('Long', 'Short'))
+    >>> spec.skips[0].source, spec.skips[0].target
+    ('A', 'Short')
     """
     normalized = _validate_edgelist(edgelist)
     _reject_self_loops(normalized)

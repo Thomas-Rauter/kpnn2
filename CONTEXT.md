@@ -88,13 +88,13 @@ later prompt asks.
    several units (DCell-style); omitted or `None` is width 1.
    Optional keyword-only `ranks=` assigns compact depths so official
    ontology levels (P-NET / Reactome) need not be longest-path hops;
-   omitted or `None` is longest-path, bit-identical to today's
-   default. `parse_adjacency()` reads the same table and
-   returns an `AdjacencySpec` instead: packed source/target indices
-   over every node, cycles and self-loops allowed. It never
-   allocates an `(n, n)` tensor. It takes the same optional
-   keyword-only `widths=` as `parse_layered` and has no `ranks=`
-   argument. The user picks the layout; a DAG is valid input to both.
+   omitted or `None` is longest-path. `parse_adjacency()` reads
+   the same table and returns an `AdjacencySpec` instead: packed
+   source/target indices over every node, cycles and self-loops
+   allowed. It never allocates an `(n, n)` tensor. It takes the
+   same optional keyword-only `widths=` as `parse_layered` and has
+   no `ranks=` argument. The user picks the layout; a DAG is valid
+   input to both.
 2. **Specify:** `LayeredSpec` holds named nodes by layer, per-node
    widths, and one `Hop` per layer after the first. A hop's packed
    indices are in **unit** space: a named edge `A→B` expands into
@@ -570,7 +570,7 @@ be positive ints or numpy integers, stored as `int` so
 `to_dict()` stays JSON-safe. Reject `bool` (`bool` is an `int`),
 `numpy.bool_`, and floats. Reject 0 and negatives. `Kpnn2Error`.
 
-`ranks=None` or omitted: longest-path, unchanged. When provided,
+`ranks=None` or omitted: longest-path. When provided,
 every graph node must have a non-negative int or numpy integer;
 see **Layering**.
 
