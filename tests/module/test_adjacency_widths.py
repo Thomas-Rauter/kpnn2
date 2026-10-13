@@ -176,13 +176,13 @@ def test_input_and_output_index_cover_every_unit():
     spec = parse_adjacency(
         _cycle_edgelist(),
         widths={
-            "x": 2,
+            "a": 2,
             "y": 3,
         },
     )
 
-    assert spec.node_units("x") == slice(2, 4)
-    assert spec.input_index == (2, 3)
+    assert spec.node_units("x") == slice(3, 4)
+    assert spec.input_index == (3,)
     assert spec.output_index == (4, 5, 6)
 
 
@@ -194,7 +194,7 @@ def test_align_inputs_and_input_index_scatter_each_input():
                 "target": ["a", "a", "y"],
             }
         ),
-        widths={"u": 2},
+        widths={"a": 2},
     )
     features = pd.DataFrame(
         {
@@ -209,7 +209,7 @@ def test_align_inputs_and_input_index_scatter_each_input():
         spec,
     )
 
-    assert len(col) == len(spec.input_index)
+    assert len(col) == len(spec.input_index) == len(spec.input_nodes)
     x = torch.as_tensor(
         features.to_numpy()[:, col],
         dtype=torch.float32,
@@ -219,8 +219,9 @@ def test_align_inputs_and_input_index_scatter_each_input():
         spec.state_dim,
     )
     state[:, spec.input_index] = x
-    assert state[0, spec.node_units("u")].tolist() == [3.0, 3.0]
+    assert state[0, spec.node_units("u")].tolist() == [3.0]
     assert state[0, spec.node_units("v")].tolist() == [5.0]
+    assert state[0, spec.node_units("a")].tolist() == [0.0, 0.0]
 
 
 def test_packed_linear_matches_masked_linear_with_widths():
@@ -293,6 +294,7 @@ def test_to_edgelist_keeps_named_edges_once():
         ({"a": True}, "positive int"),
         ({"a": 1.5}, "positive int"),
         (["a"], "mapping"),
+        ({"x": 2}, "Input nodes"),
     ],
 )
 def test_widths_are_validated_like_parse_layered(

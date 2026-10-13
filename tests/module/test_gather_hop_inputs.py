@@ -287,19 +287,21 @@ def test_gather_accepts_a_shared_non_default_dtype():
 def test_gather_concatenates_wide_source_layers():
     edgelist = pd.DataFrame(
         {
-            "source": ["A", "H", "A"],
-            "target": ["H", "C", "C"],
+            "source": ["x", "A", "H", "A"],
+            "target": ["A", "H", "C", "C"],
         }
     )
     spec = parse_layered(
         edgelist,
         widths={"A": 2, "H": 3},
     )
-    hop = spec.hops[1]
+    hop = spec.hops[2]
+    assert hop.source_layers == (1, 2)
     assert hop.source_dims == (2, 3)
     saved = {
-        0: torch.tensor([[1.0, 2.0]]),
-        1: torch.tensor([[3.0, 4.0, 5.0]]),
+        0: torch.tensor([[0.0]]),
+        1: torch.tensor([[1.0, 2.0]]),
+        2: torch.tensor([[3.0, 4.0, 5.0]]),
     }
     gathered = gather_hop_inputs(
         saved,
@@ -307,7 +309,7 @@ def test_gather_concatenates_wide_source_layers():
     )
     assert gathered.tolist() == [[1.0, 2.0, 3.0, 4.0, 5.0]]
     assert gathered.shape[-1] == hop.in_features
-    assert gathered.shape[-1] == spec.layer_dims[0] + spec.layer_dims[1]
+    assert gathered.shape[-1] == spec.layer_dims[1] + spec.layer_dims[2]
 
 
 def test_gather_non_mapping_message_reports_the_received_type():

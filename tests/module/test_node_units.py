@@ -26,11 +26,27 @@ def _chain_plus_skip():
     )
 
 
-def _two_parents():
+def _hidden_chain_plus_skip():
+    """
+    Input x feeds A -> H -> C, plus the skip A -> C between hidden
+    layers, so a wide A can sit on both ends of the skip's hop.
+    """
     return pd.DataFrame(
         {
-            "source": ["A", "B"],
-            "target": ["H", "H"],
+            "source": ["x", "A", "H", "A"],
+            "target": ["A", "H", "C", "C"],
+        }
+    )
+
+
+def _two_parents():
+    """
+    Inputs a and b feed hidden A and B, which both feed H.
+    """
+    return pd.DataFrame(
+        {
+            "source": ["a", "b", "A", "B"],
+            "target": ["A", "B", "H", "H"],
         }
     )
 
@@ -69,7 +85,7 @@ def test_two_nodes_in_a_layer_use_prefix_widths():
             "B": 3,
         },
     )
-    assert spec.layer_nodes[0] == ("A", "B")
+    assert spec.layer_nodes[1] == ("A", "B")
     saved = torch.tensor(
         [[0.0, 1.0, 2.0, 3.0, 4.0]],
     )
@@ -81,7 +97,7 @@ def test_two_nodes_in_a_layer_use_prefix_widths():
 
 def test_skip_block_starts_match_node_units():
     spec = parse_layered(
-        _chain_plus_skip(),
+        _hidden_chain_plus_skip(),
         widths={
             "A": 2,
             "C": 4,
@@ -118,13 +134,14 @@ def test_hop_units_skip_axis_concatenates_source_layers():
 
 def test_hop_units_wide_skip_matches_concatenated_blocks():
     spec = parse_layered(
-        _chain_plus_skip(),
+        _hidden_chain_plus_skip(),
         widths={
             "A": 2,
             "H": 3,
         },
     )
-    hop = spec.hops[1]
+    hop = spec.hops[2]
+    assert hop.source_layers == (1, 2)
     a_units = spec.hop_units(
         hop,
         "A",
@@ -150,9 +167,14 @@ def test_hop_units_first_hop_is_the_input_layer():
             "B": 3,
         },
     )
-    hop = spec.hops[0]
-    assert spec.hop_units(hop, "A") == spec.node_units("A")[1]
-    assert spec.hop_units(hop, "B") == spec.node_units("B")[1]
+    first = spec.hops[0]
+    assert spec.hop_units(first, "a") == spec.node_units("a")[1]
+    assert spec.hop_units(first, "b") == spec.node_units("b")[1]
+    # A hop that reads one wide layer has that layer's axis.
+    second = spec.hops[1]
+    assert second.source_layers == (1,)
+    assert spec.hop_units(second, "A") == spec.node_units("A")[1]
+    assert spec.hop_units(second, "B") == spec.node_units("B")[1]
 
 
 def test_str_matching_accepts_integer_names():

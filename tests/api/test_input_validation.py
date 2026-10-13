@@ -389,6 +389,13 @@ _PARSE_LAYERED_CASES = [
     ),
     _Bad(
         "parse_layered",
+        "widths_widen_an_input_node",
+        _SEMANTIC,
+        "Input nodes (in-degree 0) must have width 1 in 'widths'",
+        lambda: _layered(widths={"A": 2}),
+    ),
+    _Bad(
+        "parse_layered",
         "ranks_miss_a_node",
         _SEMANTIC,
         "Missing node name(s) in 'ranks': C, H",
@@ -448,6 +455,13 @@ _PARSE_ADJACENCY_CASES = [
         _VALUE,
         "Width for node 'a'",
         lambda: _adjacency(widths={"a": -1}),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "widths_widen_an_input_node",
+        _SEMANTIC,
+        "Input nodes (in-degree 0) must have width 1 in 'widths'",
+        lambda: _adjacency(widths={"x": 3}),
     ),
     _Bad(
         "parse_adjacency",
@@ -626,6 +640,13 @@ _LAYERED_SPEC_CASES = [
     ),
     _Bad(
         "LayeredSpec",
+        "from_dict_widths_widen_an_input_node",
+        _SEMANTIC,
+        "Input nodes (in-degree 0) must have width 1 in 'widths'",
+        lambda: _layered_payload(widths={"A": 2}),
+    ),
+    _Bad(
+        "LayeredSpec",
         "from_dict_ranks_not_a_mapping",
         _TYPE,
         "'ranks'",
@@ -758,6 +779,13 @@ _ADJACENCY_SPEC_CASES = [
         _VALUE,
         "Width for node 'a'",
         lambda: _adjacency_payload(widths={"a": 0}),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "from_dict_widths_widen_an_input_node",
+        _SEMANTIC,
+        "Input nodes (in-degree 0) must have width 1 in 'widths'",
+        lambda: _adjacency_payload(widths={"x": 3}),
     ),
     _Bad(
         "AdjacencySpec",

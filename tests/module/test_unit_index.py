@@ -7,10 +7,11 @@ import torch
 
 from kpnn2 import Kpnn2Error, map_node_attributions, parse_adjacency
 
-# Nodes of a width-k block: a hidden, an input, and an output node.
+# Nodes of a width-k block: two hidden nodes and an output node.
+# Input nodes always have width 1.
 _WIDTHS = {
     "a": 2,
-    "u": 3,
+    "b": 3,
     "y": 2,
 }
 
@@ -88,8 +89,8 @@ def test_each_node_gives_its_whole_block(widths):
 
 def test_wide_nodes_give_blocks_in_names_order():
     spec = _spec(_WIDTHS)
-    assert spec.node_widths == (2, 1, 3, 1, 2, 1)
-    assert spec.unit_index(["y", "b", "a"]) == (7, 8, 2, 0, 1)
+    assert spec.node_widths == (2, 3, 1, 1, 2, 1)
+    assert spec.unit_index(["y", "b", "a"]) == (7, 8, 2, 3, 4, 0, 1)
     assert spec.unit_index(spec.nodes) == tuple(range(spec.state_dim))
 
 

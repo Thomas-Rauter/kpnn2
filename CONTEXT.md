@@ -68,8 +68,8 @@ densify. Apply the index on the caller's storage (`X[:, col]`
 for numpy, scipy CSR/CSC, AnnData `.X` in those formats, or
 a tensor; `df.to_numpy()[:, col]` for a DataFrame). COO-style
 sparse layouts need a format that supports integer column
-indexing. Width greater than 1 repeats indices and copies
-those columns on CSR/CSC. Pre-ordered dense tensors already
+indexing. Input nodes are always width 1, so the index has
+one position per input node. Pre-ordered dense tensors already
 skip `align_inputs`. A caller with sparse host X applies the
 index on the sparse layout, then densifies only each row
 block.
@@ -84,8 +84,9 @@ later prompt asks.
 
 1. **Parse:** `parse_layered()` reads a pandas DataFrame with columns
    `source` and `target` only, validates a layered DAG, and returns a
-   `LayeredSpec`. Optional keyword-only `widths=` gives a named node
-   several units (DCell-style); omitted or `None` is width 1.
+   `LayeredSpec`. Optional keyword-only `widths=` gives a hidden or
+   output node several units (DCell-style); omitted or `None` is
+   width 1, and input nodes always stay width 1.
    Optional keyword-only `ranks=` assigns compact depths so official
    ontology levels (P-NET / Reactome) need not be longest-path hops;
    omitted or `None` is longest-path. `parse_adjacency()` reads
@@ -570,6 +571,15 @@ be positive ints or numpy integers, stored as `int` so
 `to_dict()` stays JSON-safe. Reject `bool` (`bool` is an `int`),
 `numpy.bool_`, and floats. Reject 0 and negatives. `Kpnn2Error`.
 
+Input nodes (in-degree 0) must have width 1; an explicit `1` is
+accepted. Each input reads one feature column, so extra units
+would only hold copies of it, and their weights would collapse
+to one effective weight per target unit. A wider input raises
+`Kpnn2Error` listing every offender as `name=width`, sorted by
+name, and telling the caller to give each measurement its own
+input node. Width is for hidden and output nodes. This check
+runs after the unknown-name check.
+
 `ranks=None` or omitted: longest-path. When provided,
 every graph node must have a non-negative int or numpy integer;
 see **Layering**.
@@ -868,7 +878,7 @@ stored mask tensor and no densifying `mask` property.
 | `hidden_nodes` | `tuple[str, ...]` | Neither input nor output, alphabetical. |
 | `source_index` | `tuple[int, ...]` | Source **unit** of each live unit pair. |
 | `target_index` | `tuple[int, ...]` | Target **unit** of each live unit pair. |
-| `input_index` | `tuple[int, ...]` | Every unit of each `input_nodes` name, in that order. |
+| `input_index` | `tuple[int, ...]` | The unit of each `input_nodes` name, in that order. Input nodes are always width 1, so it has one entry per input node. |
 | `output_index` | `tuple[int, ...]` | Every unit of each `output_nodes` name, in that order. |
 
 `state_dim` is a property, `sum(node_widths)`: the state-vector
@@ -897,9 +907,9 @@ Named edges are canonical: lexicographic by
 order; within a named edge, target-unit outer, source-unit
 inner. A dense square would still have `1.0` at
 `[target_index[i], source_index[i]]`. `input_index` has the
-length of `align_inputs(names, spec)`, so
-`state = state.index_copy(-1, input_index, x[:, col])`
-writes each input column into every unit of its node.
+length of `align_inputs(names, spec)` (one unit per input node),
+so `state = state.index_copy(-1, input_index, x[:, col])`
+writes each input column into its node's unit.
 `input_index` there is a buffer,
 `torch.as_tensor(spec.input_index)`.
 
@@ -2111,16 +2121,13 @@ the caller's storage. It is not a minibatch API, not a
 device-copy helper, and not a densifying path. See
 **Locked contrasts**.
 
-**Width differs by layout.** For a `LayeredSpec` that length is
-`layer_dims[0]` (the unit width of layer 0), not
-`len(input_nodes)` when an input node is wider than 1.
-`hops[0]` reads layer 0 alone, so a row block indexed with
-this result feeds `PackedLinear` on `hops[0]` (or
-`MaskedLinear(spec.hops[0].to_mask())`) directly with no
-gathering. The name list still has one label per input
-**node**; a width greater than 1 repeats that node's index
-across its units. For an `AdjacencySpec` the same repeat
-applies to wide input nodes, so the length is
+**One position per input node.** Input nodes are always width
+1 (see `parse_layered(..., widths=)`), so `width` is
+`len(input_nodes)` for both layouts. For a `LayeredSpec` that
+equals `layer_dims[0]`. `hops[0]` reads layer 0 alone, so a row
+block indexed with this result feeds `PackedLinear` on `hops[0]`
+(or `MaskedLinear(spec.hops[0].to_mask())`) directly with no
+gathering. For an `AdjacencySpec` it equals
 `len(spec.input_index)`, and it is **not** the state width:
 `to_mask()` is `(state_dim, state_dim)` over every node's units.
 Scatter the gathered columns into the `state_dim`-wide state
@@ -2179,8 +2186,7 @@ columns, scipy sparse matrices. Pass the labels that sit on
 that axis and apply the index on the matrix (`X[:, col]`).
 scipy CSR/CSC (and AnnData `.X` in those formats) stay sparse
 until the caller densifies one row block. COO-style layouts
-cannot be indexed that way; convert first. Width greater
-than 1 repeats indices and copies those columns on CSR/CSC.
+cannot be indexed that way; convert first.
 Passing `adata.to_df()` (or any full densify) and then a
 DataFrame into `align_inputs` is rejected at the DataFrame
 check.
@@ -2210,7 +2216,7 @@ never chooses the axis.
 | `LayeredSpec` | none | `Kpnn2Error`: need one of `layer`, `hop_input`, `hop_output`, or `axis="inputs"` |
 | `LayeredSpec` | two or more | `Kpnn2Error`: pass exactly one; the message names what was given |
 | `AdjacencySpec` | none | Unit names from `spec.nodes` and `node_widths` (a wide node's name repeats); **no** `layer` coordinate |
-| `AdjacencySpec` | `axis="inputs"` | Input-unit names in `input_index` order, length `len(input_index)` (a wide input's name repeats); **no** `layer` coordinate |
+| `AdjacencySpec` | `axis="inputs"` | Input names in `input_index` order, one per input node, length `len(input_index)`; **no** `layer` coordinate |
 | `AdjacencySpec` | `layer` / hop side | `Kpnn2Error`: `layer`, `hop_input`, and `hop_output` do not apply |
 
 **The hop side is always stated, never inferred.** There is no
@@ -2451,11 +2457,10 @@ Width 1 stays numerically identical.
 - `Skip.source_in_layer` and `Skip.target_in_layer` store a
   **block start** inside their own layer. One `Skip` per named
   edge.
-- `align_inputs` builds a `LayeredSpec` layout from
-  `input_nodes` plus `layer_widths[0]` and repeats a node's
-  column index across that node's units. On an
-  `AdjacencySpec` it repeats each input node's column by that
-  node's `node_widths` entry, the same rule.
+- `align_inputs` returns one column index per input node in
+  `input_nodes` order, on both layouts. It reads no widths:
+  the parsers reject an input wider than 1, so layer 0 (or
+  `input_index`) has exactly one unit per input node.
 - `map_node_attributions` on a `LayeredSpec` uses
   `build_layout(layer_nodes[layer], layer_widths[layer])` when
   `layer=` is given, and on `hop.target_layer` when

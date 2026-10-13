@@ -666,15 +666,15 @@ def test_adjacency_from_dict_reads_widths_and_ignores_ranks():
     spec = parse_adjacency(_cycle_edgelist())
     assert "widths" not in spec.to_dict()
     payload = spec.to_dict()
-    payload["widths"] = {"x": 3}
+    payload["widths"] = {"a": 3}
     payload["ranks"] = {"x": 0}
     wide = AdjacencySpec.from_dict(payload)
     expected = parse_adjacency(
         _cycle_edgelist(),
-        widths={"x": 3},
+        widths={"a": 3},
     )
     assert wide == expected
-    assert wide.to_dict()["widths"] == {"x": 3}
+    assert wide.to_dict()["widths"] == {"a": 3}
     assert "ranks" not in wide.to_dict()
 
 

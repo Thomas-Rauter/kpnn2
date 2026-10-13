@@ -136,6 +136,9 @@ def parse_adjacency(  # numpydoc ignore=PR06
         owns a contiguous block of ``k`` units of the state
         vector (``node_units``), and a named edge ``A -> B``
         becomes every unit pair of its ``(k_B, k_A)`` block.
+        Input nodes must stay width 1: each reads one feature
+        column, so separate measurements belong on separate
+        input nodes.
 
     Returns
     -------
@@ -160,9 +163,9 @@ def parse_adjacency(  # numpydoc ignore=PR06
         (``'A'`` and ``'A '``); a ``(source, target)`` pair is
         duplicated; there is no in-degree-0 node or no out-degree-0
         node; or ``widths`` is not a mapping, names an unknown node,
-        or holds a value that is not a positive integer (``bool``
-        included). Each message names the offending pairs or nodes,
-        sorted.
+        holds a value that is not a positive integer (``bool``
+        included), or gives an input node a width other than 1.
+        Each message names the offending pairs or nodes, sorted.
 
     Warns
     -----
@@ -257,6 +260,7 @@ def parse_adjacency(  # numpydoc ignore=PR06
     width_of = _normalize_widths(
         widths,
         node_set,
+        input_nodes,
     )
     layout = build_layout(
         nodes,

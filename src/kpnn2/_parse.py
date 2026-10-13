@@ -657,6 +657,7 @@ def _layers_from_user_ranks(
 def _normalize_widths(
     widths: Mapping[str, int] | None,
     nodes: set[str],
+    input_nodes: list[str],
 ) -> dict[str, int]:
     """
     Map each graph node to a positive unit count.
@@ -664,7 +665,9 @@ def _normalize_widths(
     ``None`` or omitted keys are width 1. Keys are matched after
     ``str(...)``. Unknown names and non-positive or non-integer
     values raise ``Kpnn2Error``. ``bool`` is rejected. numpy
-    integers are kept as ``int``.
+    integers are kept as ``int``. An input node wider than 1
+    raises: each input reads one feature column, so its extra
+    units would only hold copies.
     """
     if widths is None:
         return {node: 1 for node in nodes}
@@ -685,6 +688,16 @@ def _normalize_widths(
     if unknown:
         names_str = ", ".join(unknown)
         raise Kpnn2Error(f"Unknown node name(s) in 'widths': {names_str}.")
+    wide_inputs = sorted(
+        name for name in input_nodes if requested.get(name, 1) != 1
+    )
+    if wide_inputs:
+        got_str = ", ".join(f"{name}={requested[name]}" for name in wide_inputs)
+        raise Kpnn2Error(
+            "Input nodes (in-degree 0) must have width 1 in 'widths', "
+            f"since each reads one feature column. Got {got_str}. "
+            "Give each measurement its own input node."
+        )
     return {node: requested.get(node, 1) for node in nodes}
 
 
@@ -1098,16 +1111,15 @@ def parse_layered(  # numpydoc ignore=PR06
           scores or the parameters of a distribution
 
         The price is ``k_B * k_A`` weights per edge, and a score
-        per node has to combine the scores of its units. Input
-        nodes gain nothing from width: ``align_inputs`` fills
-        every unit of an input with the same column, so separate
-        measurements belong on separate input nodes.
+        per node has to combine the scores of its units.
 
         Omitted names, ``None``, and an empty mapping are width 1.
         Keys are matched after ``str(...)``. Unknown names raise
         ``Kpnn2Error``. Values must be positive ints or numpy
         integers, stored as ``int``; ``bool``, ``numpy.bool_``,
-        floats, ``0``, and negatives are rejected.
+        floats, ``0``, and negatives are rejected. Input nodes
+        must stay width 1: each reads one feature column, so
+        separate measurements belong on separate input nodes.
     ranks : mapping of str to int or numpy integer, optional
         Level per named node, in place of longest-path ranking.
         By default a node sits one layer above its deepest
@@ -1165,8 +1177,9 @@ def parse_layered(  # numpydoc ignore=PR06
         (``'A'`` and ``'A '``); a ``(source, target)`` pair is
         duplicated; any edge is a self-loop; the graph has a cycle;
         there is no in-degree-0 node or no out-degree-0 node;
-        ``widths`` names an unknown node or is not a mapping of
-        positive integers; or ``ranks`` is incomplete, names an
+        ``widths`` names an unknown node, is not a mapping of
+        positive integers, or gives an input node a width other
+        than 1; or ``ranks`` is incomplete, names an
         unknown node, is not a mapping of non-negative integers,
         places inputs off the minimum rank, places a non-input at
         that minimum, or contains a non-forward edge. Each message
@@ -1325,6 +1338,7 @@ def parse_layered(  # numpydoc ignore=PR06
     width_of = _normalize_widths(
         widths,
         nodes,
+        input_nodes,
     )
     layouts = _layer_layouts(
         layer_nodes,

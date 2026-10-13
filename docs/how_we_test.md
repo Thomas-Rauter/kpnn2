@@ -272,6 +272,8 @@ exactly one hop, the hop of its target, skips included. At
 width 1, summing the packed pair counts over all hops equals
 the edgelist length. A wider node expands that edge into a
 `k_source * k_target` block, and the sum counts those pairs.
+Width on an input node raises `Kpnn2Error` in both parsers and
+in `from_dict`.
 [`tests/module/test_parse_layered_hops.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_hops.py),
 [`tests/module/test_parse_layered_widths.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_parse_layered_widths.py).
 
@@ -308,10 +310,10 @@ silently dropping those edges.
 to a 1-D `int64` column index. It does not take the matrix or
 return a data tensor. A DataFrame, tensor, string, bytes,
 mapping, set, AnnData-like object, or a matrix (`ndim != 1`)
-raises `Kpnn2Error`. On a `LayeredSpec` a wide input node
-repeats its index, and so does one on an `AdjacencySpec`
-built with `widths=`, where the index is `len(input_index)`
-long and still needs scatter into the state vector.
+raises `Kpnn2Error`. The index has one position per input
+node on both layouts, because the parsers reject an input
+wider than 1. On an `AdjacencySpec` it still needs scatter
+into the state vector.
 [`tests/module/test_align_inputs.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_align_inputs.py).
 
 **MaskedLinear.** A zero mask entry blocks that source in the

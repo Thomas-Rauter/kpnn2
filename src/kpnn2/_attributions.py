@@ -76,8 +76,8 @@ def map_node_attributions(  # numpydoc ignore=PR06
         ``hop_output``) or the concatenated source units of one hop
         (``hop_input``); an ``AdjacencySpec`` names the whole state
         vector at once and has no depth to report, unless
-        ``axis="inputs"``, which names ``spec.input_nodes``
-        (a wide node's name repeats once per unit).
+        ``axis="inputs"``, which names ``spec.input_nodes``,
+        one unit each.
     layer : int or numpy integer, optional
         0-based depth into ``spec.layer_nodes``, index 0 being the
         input layer, whose names label the node axis; the index
@@ -465,17 +465,7 @@ def _resolve_node_layout(
             "label the input units."
         )
     if axis == "inputs":
-        width_of = {
-            name: width
-            for name, width in zip(
-                spec.nodes,
-                spec.node_widths,
-            )
-        }
-        return build_layout(
-            spec.input_nodes,
-            [width_of[name] for name in spec.input_nodes],
-        ), None
+        return build_layout(spec.input_nodes), None
     return build_layout(
         spec.nodes,
         spec.node_widths,

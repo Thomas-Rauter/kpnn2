@@ -42,6 +42,11 @@ semantic versioning.
   `from_dict` still read integers through `str()`, warn on a
   float or `bool` (`1.0` becomes `'1.0'`), and reject any other
   value, such as a list or a tensor.
+- `widths=` on `parse_layered`, `parse_adjacency`, and
+  `from_dict` rejects a width above 1 on an input node.
+  `align_inputs` returns one column per input node and no
+  longer repeats columns. Give each measurement its own input
+  node.
 
 ### Added
 

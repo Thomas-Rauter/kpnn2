@@ -162,6 +162,47 @@ def test_widths_message_describes_the_value_without_its_data(
     assert "12345" not in str(caught.value)
 
 
+def test_widths_rejects_wide_input_nodes_listed_sorted():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["B", "A", "H"],
+            "target": ["H", "H", "C"],
+        }
+    )
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Input nodes (in-degree 0) must have width 1 in 'widths', "
+            "since each reads one feature column. Got A=2, B=3. "
+            "Give each measurement its own input node."
+        ),
+    ):
+        parse_layered(
+            edgelist,
+            widths={
+                "B": np.int64(3),
+                "H": 4,
+                "A": 2,
+            },
+        )
+
+
+def test_widths_accept_input_nodes_at_width_one():
+    edgelist = _chain_edgelist()
+    spec = parse_layered(
+        edgelist,
+        widths={
+            "A": 1,
+            "H": 2,
+        },
+    )
+    assert spec == parse_layered(
+        edgelist,
+        widths={"H": 2},
+    )
+    assert spec.layer_widths[0] == (1,)
+
+
 def test_widths_rejects_non_mapping():
     with pytest.raises(
         Kpnn2Error,
@@ -197,8 +238,8 @@ def test_edgelist_round_trip_requires_widths():
 def test_skip_stays_one_record_with_block_starts():
     edgelist = pd.DataFrame(
         {
-            "source": ["A", "H", "A"],
-            "target": ["H", "C", "C"],
+            "source": ["x", "A", "H", "A"],
+            "target": ["A", "H", "C", "C"],
         }
     )
     spec = parse_layered(

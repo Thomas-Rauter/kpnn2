@@ -528,7 +528,7 @@ def test_align_inputs_adjacency_width_is_narrower_than_state():
     assert state[:, spec.input_index].tolist() == gathered.tolist()
 
 
-def test_align_inputs_repeats_a_wide_layered_input():
+def test_align_inputs_gives_one_column_per_input_beside_wide_nodes():
     edgelist = pd.DataFrame(
         {
             "source": ["A", "H"],
@@ -537,21 +537,21 @@ def test_align_inputs_repeats_a_wide_layered_input():
     )
     spec = parse_layered(
         edgelist,
-        widths={"A": 3},
+        widths={
+            "H": 3,
+            "C": 2,
+        },
     )
-    assert spec.layer_dims[0] == 3
+    assert spec.layer_dims == (1, 3, 2)
     col = align_inputs(
-        ["A"],
+        ["noise", "A"],
         spec,
     )
-    assert col.tolist() == [0, 0, 0]
-    values = np.array([[1.0], [2.0]])
+    assert col.tolist() == [1]
+    values = np.array([[9.0, 1.0], [9.0, 2.0]])
     gathered = values[:, col]
     assert tuple(gathered.shape) == (2, spec.layer_dims[0])
-    assert gathered.tolist() == [
-        [1.0, 1.0, 1.0],
-        [2.0, 2.0, 2.0],
-    ]
+    assert gathered.tolist() == [[1.0], [2.0]]
 
 
 def _invalid_adjacency_align_cases():

@@ -164,8 +164,8 @@ def test_parse_layered_raises_on_repeated_pair_with_totals_unchanged(
 ):
     edgelist = pd.DataFrame(
         {
-            "source": ["A", "B"],
-            "target": ["B", "C"],
+            "source": ["x", "A", "B"],
+            "target": ["A", "B", "C"],
         }
     )
     build_hops = _parse._build_hops
@@ -175,13 +175,13 @@ def test_parse_layered_raises_on_repeated_pair_with_totals_unchanged(
             *args,
             **kwargs,
         )
-        first = hops[0]
-        # hops[0] is the 2x2 block of A -> B; pair 3 becomes pair 0.
-        assert len(first.source_index) == 4
-        hops[0] = dataclasses.replace(
-            first,
-            source_index=first.source_index[:3] + first.source_index[:1],
-            target_index=first.target_index[:3] + first.target_index[:1],
+        block = hops[1]
+        # hops[1] is the 2x2 block of A -> B; pair 3 becomes pair 0.
+        assert len(block.source_index) == 4
+        hops[1] = dataclasses.replace(
+            block,
+            source_index=block.source_index[:3] + block.source_index[:1],
+            target_index=block.target_index[:3] + block.target_index[:1],
         )
         return hops
 
@@ -244,10 +244,10 @@ def test_parse_layered_raises_when_inputs_differ_from_layer_zero(
             None,
             "parse_adjacency packed pairs encode 3 named edges, not the 4",
         ),
-        # x is two units wide: x -> a keeps one of its two pairs.
+        # a is two units wide: x -> a keeps one of its two pairs.
         (
-            {"x": 2},
-            "parse_adjacency packed 4 unit pairs, expected 5",
+            {"a": 2},
+            "parse_adjacency packed 7 unit pairs, expected 8",
         ),
     ],
 )
@@ -726,7 +726,8 @@ def _random_ranks(order, edges):
 
 
 def _random_widths(edges):
-    nodes = sorted({name for edge in edges for name in edge})
+    # Input nodes must stay width 1, so only targets get a width.
+    nodes = sorted({target for _, target in edges})
     chosen = random.sample(
         nodes,
         random.randint(0, len(nodes)),

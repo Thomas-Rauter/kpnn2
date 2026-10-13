@@ -69,9 +69,9 @@ class AdjacencySpec:
         Target unit of each live unit pair. A dense square would
         have ``1.0`` at ``[target_index[i], source_index[i]]``.
     input_index : tuple[int, ...]
-        Every unit of each ``input_nodes`` name, in that order,
-        so a wide input contributes each of its units. Same
-        length as ``align_inputs(names, spec)``: scatter the
+        The unit of each ``input_nodes`` name, in that order;
+        input nodes always have width 1. Same length as
+        ``align_inputs(names, spec)``: scatter the
         gathered columns into the state vector along these
         units.
     output_index : tuple[int, ...]
@@ -103,7 +103,7 @@ class AdjacencySpec:
     built earlier keeps its own connectivity.
 
     ``align_inputs`` returns ``len(input_index)`` positions (one
-    per input unit), which is not the state width. Scatter the
+    per input node), which is not the state width. Scatter the
     gathered columns into the ``state_dim``-wide state vector
     with ``input_index``. Input rows of
     ``to_mask()`` are all zeros, so under the degree-aware init

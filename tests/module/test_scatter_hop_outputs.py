@@ -122,20 +122,21 @@ def test_scatter_splits_wide_source_layers():
     spec = parse_layered(
         pd.DataFrame(
             {
-                "source": ["A", "H", "A"],
-                "target": ["H", "C", "C"],
+                "source": ["x", "A", "H", "A"],
+                "target": ["A", "H", "C", "C"],
             }
         ),
         widths={"A": 2, "H": 3},
     )
-    hop = spec.hops[1]
+    hop = spec.hops[2]
+    assert hop.source_layers == (1, 2)
     concat = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0]])
     parts = scatter_hop_outputs(
         concat,
         hop,
     )
-    assert parts[0].tolist() == [[1.0, 2.0]]
-    assert parts[1].tolist() == [[3.0, 4.0, 5.0]]
+    assert parts[1].tolist() == [[1.0, 2.0]]
+    assert parts[2].tolist() == [[3.0, 4.0, 5.0]]
 
 
 def test_scatter_rejects_a_non_hop():

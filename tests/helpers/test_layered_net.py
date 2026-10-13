@@ -104,8 +104,8 @@ def test_pin_edge_pins_every_unit_pair_when_wide():
     spec = parse_layered(
         pd.DataFrame(
             {
-                "source": ["A", "B"],
-                "target": ["H", "H"],
+                "source": ["a", "b", "A", "B"],
+                "target": ["A", "B", "H", "H"],
             }
         ),
         widths={

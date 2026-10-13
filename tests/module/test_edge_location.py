@@ -30,8 +30,8 @@ def _chain_plus_skip():
 def _wide_two_parents():
     return pd.DataFrame(
         {
-            "source": ["A", "B"],
-            "target": ["H", "H"],
+            "source": ["a", "b", "A", "B"],
+            "target": ["A", "B", "H", "H"],
         }
     )
 
@@ -89,7 +89,7 @@ def test_layered_wide_named_edge_returns_the_full_block():
         "A",
         "H",
     )
-    assert hop_index == 0
+    assert hop_index == 1
     assert len(packed) == 6
     hop = spec.hops[hop_index]
     source_layout, target_layout = hop_axis_layouts(
@@ -260,7 +260,6 @@ def _named_edges(spec):
 
 def test_repeated_layered_lookup_reuses_stored_slots():
     widths = {
-        "A": 2,
         "H": 3,
         "C": 2,
     }
@@ -298,10 +297,10 @@ def test_repeated_layered_lookup_reuses_stored_slots():
         )
     )
     hop_index, packed = spec.edge_location(
-        "A",
         "H",
+        "C",
     )
-    assert hop_index == 0
+    assert hop_index == 1
     assert len(packed) == 6
     assert spec == twin
     assert spec.fingerprint == fingerprint

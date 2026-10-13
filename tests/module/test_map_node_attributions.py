@@ -564,15 +564,15 @@ def test_map_node_attributions_adjacency_inputs_axis():
     assert len(spec.input_index) == 1
 
 
-def test_map_node_attributions_adjacency_inputs_repeat_wide_names():
+def test_map_node_attributions_adjacency_inputs_name_each_input_once():
     spec = parse_adjacency(
         pd.DataFrame(
             {
-                "source": ["x", "a", "b", "a"],
-                "target": ["a", "b", "a", "y"],
+                "source": ["x", "w", "a", "b", "a"],
+                "target": ["a", "a", "b", "a", "y"],
             }
         ),
-        widths={"x": 2},
+        widths={"a": 2},
     )
     scores = torch.tensor(
         [[0.25, 0.75]],
@@ -585,8 +585,8 @@ def test_map_node_attributions_adjacency_inputs_repeat_wide_names():
         axis="inputs",
     )
 
-    assert spec.input_index == (2, 3)
-    assert da["node"].values.tolist() == ["x", "x"]
+    assert spec.input_index == (3, 4)
+    assert da["node"].values.tolist() == ["w", "x"]
     assert "layer" not in da.coords
 
 
@@ -611,10 +611,10 @@ def test_map_node_attributions_layered_inputs_axis_matches_layer_zero():
                 "target": ["H", "H", "C"],
             }
         ),
-        widths={"A": 2},
+        widths={"H": 2},
     )
     scores = torch.tensor(
-        [[0.1, 0.2, 0.3]],
+        [[0.1, 0.2]],
         dtype=torch.float32,
     )
 
@@ -633,7 +633,7 @@ def test_map_node_attributions_layered_inputs_axis_matches_layer_zero():
         by_axis,
         by_layer,
     )
-    assert by_axis["node"].values.tolist() == ["A", "A", "B"]
+    assert by_axis["node"].values.tolist() == ["A", "B"]
     assert int(by_axis.coords["layer"]) == 0
 
 
@@ -781,15 +781,15 @@ def test_map_node_attributions_names_skip_hop_source_axis():
 def test_map_node_attributions_repeats_wide_hop_source_names():
     edgelist = pd.DataFrame(
         {
-            "source": ["A", "H", "A"],
-            "target": ["H", "C", "C"],
+            "source": ["x", "A", "H", "A"],
+            "target": ["A", "H", "C", "C"],
         }
     )
     spec = parse_layered(
         edgelist,
         widths={"A": 2, "H": 3},
     )
-    hop = spec.hops[1]
+    hop = spec.hops[2]
     scores = torch.arange(
         hop.in_features,
         dtype=torch.float32,

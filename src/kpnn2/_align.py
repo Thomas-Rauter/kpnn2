@@ -8,7 +8,6 @@ import torch
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import Kpnn2Error
-from ._layout import DEFAULT_NODE_WIDTH, build_layout
 from ._spec import LayeredSpec
 from ._validate import as_name_list, require_spec
 
@@ -43,13 +42,8 @@ def align_inputs(
     ``X[:, col]`` for numpy, scipy CSR/CSC, AnnData ``.X`` in
     those formats, or a tensor; ``df.to_numpy()[:, col]`` for
     a DataFrame. COO-style sparse layouts do not support
-    integer column indexing; convert first. For a
-    ``LayeredSpec``, a node with width greater than 1 repeats
-    its column index across those units, so the length is
-    ``spec.layer_dims[0]``. On CSR/CSC that repeat copies
-    those columns and stays sparse; it is not a view. For an
-    ``AdjacencySpec`` the same repeat uses ``node_widths``, so
-    the length is ``len(spec.input_index)``.
+    integer column indexing; convert first. Input nodes always
+    have width 1, so the index has one position per input node.
     Call it after parsing, once, instead of hand-ordering
     columns. DataFrames, tensors, and matrices are rejected.
 
@@ -68,16 +62,15 @@ def align_inputs(
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
-        names and their order. A ``LayeredSpec`` also uses
-        ``layer_widths[0]``, an ``AdjacencySpec`` its
-        ``node_widths``, to repeat columns.
+        names and their order.
 
     Returns
     -------
-    numpy.ndarray of dtype int64, shape (width,)
-        Positions into ``names``. Shape is
-        ``(spec.layer_dims[0],)`` for a ``LayeredSpec`` and
-        ``(len(spec.input_index),)`` for an ``AdjacencySpec``.
+    numpy.ndarray of dtype int64, shape (len(spec.input_nodes),)
+        Positions into ``names``, one per input node in
+        ``spec.input_nodes`` order. That length is
+        ``spec.layer_dims[0]`` for a ``LayeredSpec`` and
+        ``len(spec.input_index)`` for an ``AdjacencySpec``.
         Index the caller's feature axis with it. An empty
         ``names`` sequence is allowed when ``input_nodes`` is
         empty; otherwise missing names raise.
@@ -114,17 +107,12 @@ def align_inputs(
     apply the index on the matrix. scipy CSR/CSC and AnnData
     ``.X`` in those formats stay sparse under ``X[:, col]``
     until the caller densifies one row block. COO and similar
-    layouts cannot be indexed that way. Width greater than 1
-    repeats indices; on CSR/CSC that copies the duplicated
-    columns.
+    layouts cannot be indexed that way.
 
-    The returned length for a ``LayeredSpec`` is
-    ``spec.layer_dims[0]``, which equals
-    ``len(spec.input_nodes)`` only when every input node has
-    width 1. ``hops[0]`` reads layer 0 alone, so a row block
-    indexed with this result feeds the first hop directly and
-    needs no gathering. For an ``AdjacencySpec`` it is **not**
-    the state width: ``to_mask()`` is
+    ``hops[0]`` of a ``LayeredSpec`` reads layer 0 alone, so a
+    row block indexed with this result feeds the first hop
+    directly and needs no gathering. For an ``AdjacencySpec``
+    the returned length is **not** the state width: ``to_mask()`` is
     ``(state_dim, state_dim)`` over every node's units, while
     the index covers the input units only
     (``len(spec.input_index)``). Scatter the gathered columns
@@ -221,30 +209,10 @@ def align_inputs(
         )
 
     position = {label: index for index, label in enumerate(labels)}
-    node_index = np.array(
+    return np.array(
         [position[name] for name in spec.input_nodes],
         dtype=np.int64,
     )
-    if isinstance(spec, LayeredSpec):
-        widths = build_layout(
-            spec.input_nodes,
-            spec.layer_widths[0],
-        ).widths()
-    else:
-        width_of = dict(
-            zip(
-                spec.nodes,
-                spec.node_widths,
-                strict=True,
-            )
-        )
-        widths = tuple(width_of[name] for name in spec.input_nodes)
-    if any(width != DEFAULT_NODE_WIDTH for width in widths):
-        node_index = np.repeat(
-            node_index,
-            widths,
-        )
-    return node_index
 
 
 def _labels_from_names(names: object) -> list[str]:

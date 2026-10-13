@@ -634,9 +634,9 @@ def test_transpose_on_wide_units_matches_dense():
                 "target": ["H", "C"],
             }
         ),
-        widths={"A": 2, "H": 3},
+        widths={"H": 3, "C": 2},
     )
-    hop = spec.hops[0]
+    hop = spec.hops[1]
     enc = PackedLinear(
         hop.source_index,
         hop.target_index,
