@@ -425,15 +425,14 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         """
         Build the layer that applies one hop of a ``LayeredSpec``.
 
-        The recommended way to build a ``PackedLinear`` on a hop.
-        It reads the packed indices and both widths off ``hop``,
-        so source and target cannot be swapped by hand. A swap
-        passes the constructor's range checks whenever the
-        swapped indices still fit, always when
-        ``out_features == in_features``, and every edge then runs
-        backwards. The result is the layer the constructor builds
-        from
-        ``hop.source_index``, ``hop.target_index``,
+        This is the recommended way to build a ``PackedLinear`` on
+        a hop. It reads the packed indices and both widths off
+        ``hop``, so source and target cannot be swapped by hand.
+        A hand-written swap passes the constructor's range checks
+        whenever the swapped indices still fit, which they always
+        do when ``out_features == in_features``; every edge then
+        runs backwards. The result is the layer the constructor
+        builds from ``hop.source_index``, ``hop.target_index``,
         ``hop.out_features``, and ``hop.in_features``, with the
         same init draws. It keeps no reference to ``hop``.
 
@@ -520,13 +519,13 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         """
         Build the layer that maps an ``AdjacencySpec`` state onto itself.
 
-        The recommended way to build a ``PackedLinear`` on an
-        ``AdjacencySpec``. It reads the packed indices off
+        This is the recommended way to build a ``PackedLinear`` on
+        an ``AdjacencySpec``. It reads the packed indices off
         ``spec`` and uses ``spec.state_dim`` as both widths, so
         source and target cannot be swapped by hand. On this
-        square layout a swap is always silent: the constructor
-        accepts it and every edge runs backwards. The result is
-        the layer the constructor builds from
+        square layout a hand-written swap is always silent: the
+        constructor accepts it and every edge runs backwards. The
+        result is the layer the constructor builds from
         ``spec.source_index``, ``spec.target_index``,
         ``spec.state_dim``, and ``spec.state_dim``, with the same
         init draws. It never allocates ``(n, n)`` and keeps no

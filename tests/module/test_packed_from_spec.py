@@ -10,6 +10,7 @@ against named nodes, which do not go through the packed layer.
 """
 
 import inspect
+import re
 
 import pandas as pd
 import pytest
@@ -18,6 +19,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from kpnn2 import (
+    Kpnn2Error,
     PackedLinear,
     PackedMultiheadAttention,
     parse_adjacency,
@@ -240,13 +242,21 @@ def test_from_adjacency_forwards_every_option():
     assert core.constraint is constraint
 
 
+def test_from_adjacency_points_a_layered_spec_at_from_hop():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("call PackedLinear.from_hop(hop) for each hop"),
+    ):
+        PackedLinear.from_adjacency(_layered_spec())
+
+
 def test_from_spec_methods_leave_identity_to_the_caller():
     spec = _adjacency_spec()
     assert PackedLinear.from_adjacency(spec).identity is None
     assert PackedLinear.from_hop(_layered_spec().hops[0]).identity is None
 
 
-def test_from_spec_methods_take_options_by_keyword_only():
+def test_from_spec_methods_take_only_leading_arguments_by_position():
     for method, leading in (
         (PackedLinear.from_hop, {"hop", "bias"}),
         (PackedLinear.from_adjacency, {"spec", "bias"}),

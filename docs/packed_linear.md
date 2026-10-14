@@ -109,7 +109,7 @@ new tensor. A step that Captum should hook is an
 `nn.Identity`.
 
 The same spec can feed
-[`PackedMultiheadAttention.from_adjacency()`](reference/PackedMultiheadAttention.md),
+[`PackedMultiheadAttention.from_adjacency()`][kpnn2.PackedMultiheadAttention.from_adjacency],
 a different primitive: attention on live pairs, not one scalar
 per edge. That layer's training RAM is pair gathers, not an
 `(n, n)` weight; pass `chunk_size` there when `nnz` is large.
@@ -118,11 +118,12 @@ walkthrough.
 
 ## Building from indices
 
-`from_hop()` and `from_adjacency()` call the `PackedLinear`
-constructor with the spec's packed indices and widths, so the
-layer they return is the one the constructor builds. To wire a
-layer from index lists that come from no spec, call the
-constructor yourself with your own `source_index`,
+`from_hop()` and `from_adjacency()` call the
+[`PackedLinear`][kpnn2.PackedLinear] constructor with the spec's
+packed indices and widths, so the layer they return is the one
+the constructor builds. To wire a layer from index lists that
+come from no spec, call the constructor yourself with your own
+[packed indices](concepts.md#packed-indices), `source_index` and
 `target_index`, and the two widths:
 
 ```python
@@ -134,10 +135,8 @@ layer = kpnn2.PackedLinear(
 )
 ```
 
-Pair `i` feeds input column `source_index[i]` into output row
-`target_index[i]`. `out_features` comes before `in_features`, as
-in the `(out, in)` shape of a dense weight, not in the
-`nn.Linear` order.
+`out_features` comes before `in_features`, as in the `(out, in)`
+shape of a dense weight, not in the `nn.Linear` order.
 
 On a spec, use the class methods. If you swap `source_index` and
 `target_index` by hand, the constructor raises only when a

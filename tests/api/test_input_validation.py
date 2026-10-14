@@ -1218,7 +1218,7 @@ _PACKED_LINEAR_CASES = [
         "PackedLinear",
         "from_adjacency_spec_is_a_layered_spec",
         _TYPE,
-        "PackedLinear.from_hop(hop)",
+        "'spec' must be an AdjacencySpec",
         lambda: kpnn2.PackedLinear.from_adjacency(_LAYERED),
     ),
     _Bad(

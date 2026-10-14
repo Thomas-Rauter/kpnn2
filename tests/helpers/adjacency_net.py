@@ -46,7 +46,7 @@ class AdjacencyNet(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        n_nodes = len(self.spec.nodes)
+        state_dim = self.spec.state_dim
         n_inputs = len(self.spec.input_nodes)
         if x.ndim == 2:
             if x.shape[1] != n_inputs:
@@ -67,7 +67,7 @@ class AdjacencyNet(nn.Module):
             batch = x.shape[0]
         else:
             raise ValueError(f"x must be 2-D or 3-D, got ndim={x.ndim}.")
-        state = x.new_zeros(batch, n_nodes)
+        state = x.new_zeros(batch, state_dim)
         self.step_states = []
         last = self.n_steps - 1
         input_index = list(self.spec.input_index)

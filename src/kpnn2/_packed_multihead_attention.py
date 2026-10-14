@@ -1446,16 +1446,16 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         """
         Build attention over the nodes of an ``AdjacencySpec``.
 
-        The recommended way to build this layer on an
+        This is the recommended way to build this layer on an
         ``AdjacencySpec``: one token per unit of the state vector,
         and the query at each edge's target attends to the key at
         its source. It reads the packed indices off ``spec`` and
         uses ``spec.state_dim`` as both sequence lengths, so the
         query and key sides cannot be swapped by hand. On this
-        square layout a swap is always silent: the constructor
-        accepts it and every node attends along reversed edges.
-        The result is the layer the constructor builds from
-        ``spec.source_index``, ``spec.target_index``,
+        square layout a hand-written swap is always silent: the
+        constructor accepts it and every node attends along
+        reversed edges. The result is the layer the constructor
+        builds from ``spec.source_index``, ``spec.target_index``,
         ``spec.state_dim``, ``spec.state_dim``, ``embed_dim``, and
         ``num_heads``, with the same init draws. It keeps no
         reference to ``spec``. Options after ``num_heads`` are
