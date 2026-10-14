@@ -1160,6 +1160,94 @@ _PACKED_LINEAR_CASES = [
         "'generator'",
         lambda: _PACKED.reset_parameters(42),
     ),
+    _Bad(
+        "PackedLinear",
+        "from_hop_hop_is_a_layered_spec",
+        _TYPE,
+        "'hop' must be a Hop",
+        lambda: kpnn2.PackedLinear.from_hop(_LAYERED),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_hop_hop_is_an_adjacency_spec",
+        _TYPE,
+        "'hop' must be a Hop",
+        lambda: kpnn2.PackedLinear.from_hop(_ADJACENCY),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_hop_bias_is_str",
+        _FLAG,
+        "'bias'",
+        lambda: kpnn2.PackedLinear.from_hop(
+            _TWO_SOURCE_HOP,
+            bias="no",
+        ),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_hop_identity_is_int",
+        _TYPE,
+        "'identity'",
+        lambda: kpnn2.PackedLinear.from_hop(
+            _TWO_SOURCE_HOP,
+            identity=5,
+        ),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_hop_constraint_is_a_class",
+        _TYPE,
+        "'constraint'",
+        lambda: kpnn2.PackedLinear.from_hop(
+            _TWO_SOURCE_HOP,
+            constraint=nn.Softplus,
+        ),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_hop_generator_is_a_seed",
+        _TYPE,
+        "'generator'",
+        lambda: kpnn2.PackedLinear.from_hop(
+            _TWO_SOURCE_HOP,
+            generator=42,
+        ),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_adjacency_spec_is_a_layered_spec",
+        _TYPE,
+        "PackedLinear.from_hop(hop)",
+        lambda: kpnn2.PackedLinear.from_adjacency(_LAYERED),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_adjacency_spec_is_a_hop",
+        _TYPE,
+        "'spec' must be an AdjacencySpec",
+        lambda: kpnn2.PackedLinear.from_adjacency(_TWO_SOURCE_HOP),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_adjacency_bias_is_int",
+        _FLAG,
+        "'bias'",
+        lambda: kpnn2.PackedLinear.from_adjacency(
+            _ADJACENCY,
+            bias=1,
+        ),
+    ),
+    _Bad(
+        "PackedLinear",
+        "from_adjacency_generator_is_a_seed",
+        _TYPE,
+        "'generator'",
+        lambda: kpnn2.PackedLinear.from_adjacency(
+            _ADJACENCY,
+            generator=42,
+        ),
+    ),
 ]
 
 _ATTENTION_CASES = [
@@ -1376,6 +1464,75 @@ _ATTENTION_CASES = [
         _TYPE,
         "'generator'",
         lambda: _ATTENTION.reset_parameters(42),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "from_adjacency_spec_is_a_layered_spec",
+        _TYPE,
+        "'spec' must be an AdjacencySpec",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _LAYERED,
+            4,
+            2,
+        ),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "from_adjacency_spec_is_a_hop",
+        _TYPE,
+        "'spec' must be an AdjacencySpec",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _TWO_SOURCE_HOP,
+            4,
+            2,
+        ),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "from_adjacency_num_heads_does_not_divide",
+        _SEMANTIC,
+        "'embed_dim' must be divisible by 'num_heads'",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _ADJACENCY,
+            4,
+            3,
+        ),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "from_adjacency_dropout_is_bool",
+        _TYPE,
+        "'dropout'",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _ADJACENCY,
+            4,
+            2,
+            dropout=True,
+        ),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "from_adjacency_add_self_loops_is_str",
+        _FLAG,
+        "'add_self_loops'",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _ADJACENCY,
+            4,
+            2,
+            add_self_loops="yes",
+        ),
+    ),
+    _Bad(
+        "PackedMultiheadAttention",
+        "from_adjacency_chunk_size_is_zero",
+        _VALUE,
+        "'chunk_size'",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _ADJACENCY,
+            4,
+            2,
+            chunk_size=0,
+        ),
     ),
 ]
 
@@ -1890,6 +2047,24 @@ _VALID_CASES = [
     ),
     _Valid(
         "PackedLinear",
+        "from_hop_two_source_hop_bias_false",
+        lambda: kpnn2.PackedLinear.from_hop(
+            _TWO_SOURCE_HOP,
+            False,
+            identity=_LAYERED.fingerprint,
+            generator=_generator(),
+        ),
+    ),
+    _Valid(
+        "PackedLinear",
+        "from_adjacency_wide_node",
+        lambda: kpnn2.PackedLinear.from_adjacency(
+            _adjacency(widths={"a": 2}),
+            generator=_generator(),
+        ),
+    ),
+    _Valid(
+        "PackedLinear",
         "transpose_flags_false",
         lambda: _PACKED.transpose(
             bias=False,
@@ -1917,6 +2092,21 @@ _VALID_CASES = [
             bias=False,
             batch_first=False,
             add_self_loops=True,
+        ),
+    ),
+    _Valid(
+        "PackedMultiheadAttention",
+        "from_adjacency_numpy_sizes_and_flags_flipped",
+        lambda: kpnn2.PackedMultiheadAttention.from_adjacency(
+            _ADJACENCY,
+            np.int64(4),
+            np.uint8(2),
+            dropout=1,
+            bias=False,
+            batch_first=False,
+            add_self_loops=True,
+            chunk_size=np.int64(1),
+            generator=_generator(),
         ),
     ),
     _Valid(

@@ -299,12 +299,19 @@ at the repo root. `python -m build` needs `-o out/dist`.
 ## Docs tutorials
 
 Feedforward-example, skip-edges, and layered vs adjacency
-use `PackedLinear` on hops. `MaskedLinear(hop.to_mask())`
-is the dense hatch. Cyclic graph and time-series stay on
-`AdjacencySpec`. `docs/packed_linear.md` is the PackedLinear
-page (including the reparse hatch). The transformer example
-is the `PackedMultiheadAttention` walkthrough. Do not
-sprinkle that class through feedforward-example.
+use `PackedLinear.from_hop(hop)` on hops.
+`MaskedLinear(hop.to_mask())` is the dense hatch. Cyclic
+graph and time-series stay on `AdjacencySpec`.
+`docs/packed_linear.md` is the PackedLinear page (including
+the reparse hatch). The transformer example is the
+`PackedMultiheadAttention` walkthrough. Do not sprinkle that
+class through feedforward-example.
+
+Docs build packed layers from a spec with `from_hop` /
+`from_adjacency`, never with a hand-written index
+constructor call. That constructor appears only in the
+"Building from indices" section of `docs/packed_linear.md`
+and in docstrings, for pairs that come from no spec.
 
 Notebooks must be valid nbformat v4. Stream outputs need
 `name` (`stdout` / `stderr`).

@@ -1197,7 +1197,7 @@ def parse_layered(  # numpydoc ignore=PR06
     --------
     parse_adjacency : Pack the same table into one state vector;
         allows cycles and self-loops. Has no ``ranks`` argument.
-    PackedLinear : Apply one hop from its packed indices.
+    PackedLinear.from_hop : Build the layer for one hop.
     gather_hop_inputs : Build one hop's input from the saved layer
         tensors.
 

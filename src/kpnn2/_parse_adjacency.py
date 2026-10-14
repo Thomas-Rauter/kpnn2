@@ -208,9 +208,10 @@ def parse_adjacency(  # numpydoc ignore=PR06
     --------
     parse_layered : Rank a DAG into one incoming mask per layer;
         rejects cycles and self-loops.
-    PackedLinear : One trainable weight per packed edge, for large
-        node counts.
-    PackedMultiheadAttention : Score only the packed pairs.
+    PackedLinear.from_adjacency : One trainable weight per packed
+        edge, for large node counts.
+    PackedMultiheadAttention.from_adjacency : Score only the
+        packed pairs.
 
     Notes
     -----

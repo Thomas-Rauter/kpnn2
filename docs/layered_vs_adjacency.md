@@ -98,8 +98,8 @@ for index, hop in enumerate(spec.hops):
 `self.acts` is `nn.ModuleList([nn.ReLU() for _ in spec.hops])`.
 The output hop stays linear.
 
-`self.hops[index]` is `PackedLinear` on that hop's packed
-indices. `MaskedLinear(hop.to_mask())` is the dense hatch.
+`self.hops[index]` is `PackedLinear.from_hop(hop)` for that
+hop. `MaskedLinear(hop.to_mask())` is the dense hatch.
 [Feedforward example](feedforward-example.ipynb) writes that module.
 [Skip edges](skip-edges.ipynb) shows why gather raises if a
 source layer was never stored.
@@ -147,7 +147,7 @@ a time-series [knowledge-primed neural network](concepts.md#kpnn)
 
 This toy is small, so `MaskedLinear` is appropriate; for large
 node counts and RAM see [PackedLinear](packed_linear.md). The
-same packed indices can feed `PackedMultiheadAttention`
+same spec can feed `PackedMultiheadAttention.from_adjacency()`
 (`chunk_size` when live-pair gathers strain RAM); that
 walkthrough is the
 [Transformer example](transformer-example.ipynb).

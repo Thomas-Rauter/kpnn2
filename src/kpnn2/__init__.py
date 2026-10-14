@@ -8,12 +8,14 @@ ranks a DAG into a ``LayeredSpec``, one ``Hop`` per layer whose
 packed indices carry every edge entering it, skips included,
 while ``parse_adjacency`` puts every node in one state vector
 with packed edge indices (``AdjacencySpec``). That packed layout
-allows cycles and self-loops; a DAG is valid too. Use
-``PackedLinear`` on hop indices or on an ``AdjacencySpec``, or
+allows cycles and self-loops; a DAG is valid too. Build
+``PackedLinear.from_hop(hop)`` or
+``PackedLinear.from_adjacency(spec)``, or
 ``MaskedLinear(hop.to_mask())`` / ``MaskedLinear(spec.to_mask())``
-for the dense path. Those packed indices can also feed
-``PackedMultiheadAttention``; that is a contraction primitive
-you assemble, not a compiler and not a ready-made Transformer.
+for the dense path. An ``AdjacencySpec`` can also feed
+``PackedMultiheadAttention.from_adjacency(spec, ...)``; that is a
+contraction primitive you assemble, not a compiler and not a
+ready-made Transformer.
 
 It is not a graph compiler: there is no ready-made model object
 and no training loop.

@@ -108,7 +108,8 @@ class Hop:
         indices address.
     scatter_hop_outputs : Splits that concatenated axis back
         onto source layers.
-    PackedLinear : Applies one hop from the packed indices.
+    PackedLinear.from_hop : Builds the layer that applies this
+        hop.
     PackedLinear.transpose : Tied decode of this hop.
     MaskedLinear : Applies one hop after ``to_mask()``.
     Skip : Metadata for the edges in this hop that span layers.
@@ -415,9 +416,9 @@ class LayeredSpec:
     Depth-ranked wiring for one knowledge-primed network: every
     node sits at a layer, and one ``Hop`` per layer after the
     first holds every edge entering it, skips included, as packed
-    indices. Build one ``PackedLinear`` per hop, and use the name
-    tuples to label tensors. It is structure only — no
-    ``nn.Module``, no parameters — and there is no stored mask.
+    indices. Build one ``PackedLinear.from_hop(hop)`` per hop, and
+    use the name tuples to label tensors. It is structure only —
+    no ``nn.Module``, no parameters — and there is no stored mask.
     ``AdjacencySpec`` is the shared-state packed alternative.
 
     Parameters
@@ -474,8 +475,7 @@ class LayeredSpec:
         tensors produced so far.
     scatter_hop_outputs : Splits a transposed hop's output back
         onto those source layers.
-    PackedLinear : Consumes ``hops[i].source_index`` /
-        ``target_index`` as one layer.
+    PackedLinear.from_hop : Builds one layer from ``hops[i]``.
     PackedLinear.transpose : Tied decode of that hop.
     MaskedLinear : Consumes ``hops[i].to_mask()`` as one layer.
 

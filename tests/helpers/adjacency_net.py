@@ -36,12 +36,8 @@ class AdjacencyNet(nn.Module):
         self.spec = spec
         self.n_steps = n_steps
         self.relu = relu
-        n_nodes = len(spec.nodes)
-        self.core = PackedLinear(
-            spec.source_index,
-            spec.target_index,
-            n_nodes,
-            n_nodes,
+        self.core = PackedLinear.from_adjacency(
+            spec,
             bias=bias,
         )
         self.step_states: list[torch.Tensor] = []

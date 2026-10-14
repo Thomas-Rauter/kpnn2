@@ -34,11 +34,8 @@ class LayeredNet(nn.Module):
         layers = []
         for hop in spec.hops:
             layers.append(
-                PackedLinear(
-                    hop.source_index,
-                    hop.target_index,
-                    hop.out_features,
-                    hop.in_features,
+                PackedLinear.from_hop(
+                    hop,
                     bias=bias,
                     identity=spec.fingerprint,
                 )

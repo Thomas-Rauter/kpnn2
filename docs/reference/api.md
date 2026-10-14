@@ -40,9 +40,9 @@ Returned by the parsers. Frozen dataclasses; densify with
 | Name | Description |
 | --- | --- |
 | [`LayeredSpec`][kpnn2.LayeredSpec] | A DAG as named layers and packed hops; not a ready-made model. |
-| [`Hop`][kpnn2.Hop] | Incoming packed wiring of one layer; pass its indices to `PackedLinear`. |
+| [`Hop`][kpnn2.Hop] | Incoming packed wiring of one layer; pass it to `PackedLinear.from_hop()`. |
 | [`Skip`][kpnn2.Skip] | Record of an edge that jumps layers; already a packed pair of its hop. |
-| [`AdjacencySpec`][kpnn2.AdjacencySpec] | Every node in one state vector, with packed edges; the general packed layout. |
+| [`AdjacencySpec`][kpnn2.AdjacencySpec] | Every node in one state vector, with packed edges; pass it to `PackedLinear.from_adjacency()`. |
 
 </div>
 

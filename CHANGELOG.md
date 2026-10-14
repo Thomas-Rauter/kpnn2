@@ -64,6 +64,11 @@ semantic versioning.
   layer (layered only), width, in- and out-degree, and counts
   of ancestors, descendants, and input ancestors, in unit
   order.
+- `PackedLinear.from_hop(hop)`, `PackedLinear.from_adjacency(spec)`,
+  and `PackedMultiheadAttention.from_adjacency(spec, embed_dim,
+  num_heads)`: build the layer from a spec, so source and target
+  indices cannot be swapped by hand. They are the recommended
+  path; the index constructors stay for pairs from no spec.
 
 
 ## [0.2.0] - 23. September 2026

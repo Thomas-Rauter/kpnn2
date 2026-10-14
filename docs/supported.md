@@ -7,9 +7,9 @@ can build that way.
 
 | Type | Supported | What to use                                                                                                                                                                                                             |
 | --- |-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Feedforward | Yes       | `parse_layered` (optional `widths=` to give a node several units), `PackedLinear`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
-| Cyclic | Yes       | `parse_adjacency`, `PackedLinear` or `MaskedLinear(spec.to_mask())`, loop you own → [Cyclic graph example](cyclic-graph-example.ipynb)                                                                                  |
-| Transformer | Yes       | `parse_adjacency` + `PackedMultiheadAttention`; encoder / FFN / head are yours → [Transformer example](transformer-example.ipynb)                                                                                       |
+| Feedforward | Yes       | `parse_layered` (optional `widths=` to give a node several units), `PackedLinear.from_hop`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
+| Cyclic | Yes       | `parse_adjacency`, `PackedLinear.from_adjacency` or `MaskedLinear(spec.to_mask())`, loop you own → [Cyclic graph example](cyclic-graph-example.ipynb)                                                                                  |
+| Transformer | Yes       | `parse_adjacency` + `PackedMultiheadAttention.from_adjacency`; encoder / FFN / head are yours → [Transformer example](transformer-example.ipynb)                                                                                       |
 | Sequence RNN / GRU / LSTM | Yes, see [Sequence models](#sequence-models) | `parse_adjacency` + `MaskedLinear` / `PackedLinear` as the maps; you write the time loop (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) → [Time-series example](time-series-example.ipynb)                                       |
 | Graph NN | No, see [Why not a GNN?](#why-not-a-gnn) | Knowledge-primed GNNs are a natural edgelist model in [PyG](https://pyg.org/).                                                                                                                                          |
 | Convolutional NN | No        | No sparsely connected support. Build it yourself in PyTorch (`nn.Conv1d` / `nn.Conv2d` / `nn.Conv3d`)                                                                                                                   |
@@ -33,8 +33,9 @@ yours:
    time;
    `parse_layered()` is DAG-only and rejects both.
 2. One map, shared across steps:
-   `MaskedLinear(spec.to_mask())`, or `PackedLinear` when `n` is
-   large, since `to_mask()` allocates `(n, n)`.
+   `MaskedLinear(spec.to_mask())`, or
+   `PackedLinear.from_adjacency(spec)` when `n` is large, since
+   `to_mask()` allocates `(n, n)`.
 3. In your `forward()`, loop over time `t`. Register
    `torch.as_tensor(spec.input_index)` as a buffer and write
    `x_t` with `index_copy` into the

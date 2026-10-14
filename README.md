@@ -122,7 +122,8 @@ for layer in spec.layer_nodes:
 
 Each [hop](https://thomas-rauter.github.io/kpnn2/latest/concepts/#hop)
 — the edges entering one layer — becomes one `PackedLinear`, which
-stores one weight per edge. Without
+stores one weight per edge; `PackedLinear.from_hop()` builds it
+from the hop. Without
 [skip edges](https://thomas-rauter.github.io/kpnn2/latest/concepts/#skip-edge),
 each hop reads only the layer before it, so `nn.Sequential` is
 enough. With them, a hop also reads earlier layers, and
@@ -134,19 +135,13 @@ graph refuse to load.
 ```python
 hop_0, hop_1 = spec.hops
 model = nn.Sequential(
-    kpnn2.PackedLinear(
-        hop_0.source_index,
-        hop_0.target_index,
-        hop_0.out_features,
-        hop_0.in_features,
+    kpnn2.PackedLinear.from_hop(
+        hop_0,
         identity=spec.fingerprint,
     ),
     nn.Tanh(),
-    kpnn2.PackedLinear(
-        hop_1.source_index,
-        hop_1.target_index,
-        hop_1.out_features,
-        hop_1.in_features,
+    kpnn2.PackedLinear.from_hop(
+        hop_1,
         identity=spec.fingerprint,
     ),
 )

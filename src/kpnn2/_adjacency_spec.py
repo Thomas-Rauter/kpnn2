@@ -16,7 +16,7 @@ from ._layout import (
     resolve_node_name,
     resolve_node_names,
 )
-from ._validate import as_name_list
+from ._validate import as_name_list, describe
 
 
 @dataclass(frozen=True)
@@ -85,10 +85,11 @@ class AdjacencySpec:
         ``target`` edgelist; the only supported constructor.
     LayeredSpec : Depth-ranked sibling layout, one incoming packed
         hop per layer, rejecting cycles and self-loops.
-    PackedLinear : Consumes ``source_index`` and ``target_index``
-        as they are, with one weight per edge and no ``(n, n)``.
-    PackedMultiheadAttention : Scores only those same packed
-        pairs, for an attention update instead of a linear one.
+    PackedLinear.from_adjacency : One weight per edge of this
+        spec, with no ``(n, n)``.
+    PackedMultiheadAttention.from_adjacency : Scores only those
+        same packed pairs, for an attention update instead of a
+        linear one.
     align_inputs : Column index that puts named features onto
         ``input_nodes``.
 
@@ -863,3 +864,29 @@ class AdjacencySpec:
         from ._serialize import spec_fingerprint
 
         return spec_fingerprint(self)
+
+
+def require_adjacency_spec(
+    spec: object,
+    fix: str,
+) -> None:
+    """
+    Raise unless ``spec`` is an ``AdjacencySpec``.
+
+    Parameters
+    ----------
+    spec : object
+        The ``spec`` argument of the caller.
+    fix : str
+        Sentence that ends the message and says what to pass.
+
+    Raises
+    ------
+    Kpnn2Error
+        If ``spec`` is any other type, a ``LayeredSpec`` or a
+        ``Hop`` included.
+    """
+    if not isinstance(spec, AdjacencySpec):
+        raise Kpnn2Error(
+            f"'spec' must be an AdjacencySpec. Got {describe(spec)}. {fix}"
+        )

@@ -11,6 +11,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from ._adjacency_spec import AdjacencySpec, require_adjacency_spec
 from ._constraint import (
     as_constraint,
     check_constraint_shape,
@@ -24,6 +25,7 @@ from ._identity import (
     wiring_mismatch,
 )
 from ._packed_index import as_packed_pairs, digest_matches
+from ._spec import Hop, require_hop
 from ._validate import as_bool, as_positive_int, check_layer_input
 
 _INDEX_DIGEST_KEY = "index_digest"
@@ -85,6 +87,12 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     when that rectangle or square strains RAM. On an
     ``AdjacencySpec``, input nodes have no incoming edges, so
     writing inputs into the state each step is the caller's job.
+
+    Build it with ``from_hop`` on a hop or ``from_adjacency`` on
+    an ``AdjacencySpec``: both read the indices and widths off
+    the spec, so source and target cannot be swapped by hand.
+    The constructor below takes packed indices directly, for
+    pairs that come from no spec; ``transpose`` builds on it.
 
     Parameters
     ----------
@@ -212,11 +220,10 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     --------
     MaskedLinear : Dense ``(out_features, in_features)`` weight;
         the GEMM hatch when that rectangle fits.
-    Hop : Supplies per-layer ``source_index`` / ``target_index``
-        on a ``LayeredSpec``.
-    AdjacencySpec : Supplies graph-wide ``source_index`` /
-        ``target_index``; this layer takes those tuples, not the
-        spec object.
+    Hop : One layer's packed edges on a ``LayeredSpec``; pass it
+        to ``from_hop``.
+    AdjacencySpec : Graph-wide packed edges; pass it to
+        ``from_adjacency``.
     PackedMultiheadAttention : Attention over the same packed
         pairs, when the update is a contraction rather than one
         scalar per edge.
@@ -305,17 +312,13 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     ...     }
     ... )
     >>> spec = kpnn2.parse_adjacency(edgelist)
-    >>> n = spec.state_dim
-    >>> core = kpnn2.PackedLinear(
-    ...     spec.source_index,
-    ...     spec.target_index,
-    ...     n,
-    ...     n,
+    >>> core = kpnn2.PackedLinear.from_adjacency(
+    ...     spec,
     ...     identity=spec.fingerprint,
     ... )
     >>> core.in_features, core.out_features, core.nnz
     (4, 4, 4)
-    >>> state = torch.zeros(2, n)
+    >>> state = torch.zeros(2, spec.state_dim)
     >>> state[:, spec.input_index] = torch.ones(2, 1)
     >>> relu = torch.nn.ReLU()
     >>> state = relu(core(state))
@@ -324,23 +327,14 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
     >>> tuple(state[:, spec.output_index].shape)
     (2, 1)
 
-    A layered hop uses the same constructor on that hop's
-    packed indices:
+    The constructor takes packed indices that come from no spec,
+    here two inputs feeding one output:
 
-    >>> layered = kpnn2.parse_layered(
-    ...     pd.DataFrame(
-    ...         {
-    ...             "source": ["A", "H", "A"],
-    ...             "target": ["H", "C", "C"],
-    ...         }
-    ...     )
-    ... )
-    >>> hop = layered.hops[1]
     >>> layer = kpnn2.PackedLinear(
-    ...     hop.source_index,
-    ...     hop.target_index,
-    ...     hop.out_features,
-    ...     hop.in_features,
+    ...     [0, 1],
+    ...     [0, 0],
+    ...     1,
+    ...     2,
     ... )
     >>> layer.nnz
     2
@@ -417,6 +411,198 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
             )
         self.constraint = constraint_module
         self.reset_parameters(generator)
+
+    @classmethod
+    def from_hop(
+        cls,
+        hop: Hop,
+        bias: bool = True,
+        *,
+        identity: str | None = None,
+        constraint: nn.Module | None = None,
+        generator: torch.Generator | None = None,
+    ) -> "PackedLinear":
+        """
+        Build the layer that applies one hop of a ``LayeredSpec``.
+
+        The recommended way to build a ``PackedLinear`` on a hop.
+        It reads the packed indices and both widths off ``hop``,
+        so source and target cannot be swapped by hand. A swap
+        passes the constructor's range checks whenever the
+        swapped indices still fit, always when
+        ``out_features == in_features``, and every edge then runs
+        backwards. The result is the layer the constructor builds
+        from
+        ``hop.source_index``, ``hop.target_index``,
+        ``hop.out_features``, and ``hop.in_features``, with the
+        same init draws. It keeps no reference to ``hop``.
+
+        Parameters
+        ----------
+        hop : Hop
+            One entry of ``spec.hops`` from ``parse_layered``.
+        bias : bool, default=True
+            Same as the ``PackedLinear`` constructor.
+        identity : str or None, default=None
+            Same as the ``PackedLinear`` constructor. A ``Hop``
+            does not carry the spec's fingerprint, so pass
+            ``spec.fingerprint`` here yourself.
+        constraint : torch.nn.Module or None, default=None
+            Same as the ``PackedLinear`` constructor.
+        generator : torch.Generator or None, default=None
+            Same as the ``PackedLinear`` constructor.
+
+        Returns
+        -------
+        PackedLinear
+            New layer with ``in_features == hop.in_features``,
+            ``out_features == hop.out_features``, and one weight
+            per live edge of ``hop``, in the hop's packed order.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``hop`` is not a ``Hop`` (a ``LayeredSpec`` or an
+            ``AdjacencySpec`` included), or if the constructor
+            rejects ``bias``, ``identity``, ``constraint``, or
+            ``generator``.
+
+        See Also
+        --------
+        PackedLinear.from_adjacency : The same on an
+            ``AdjacencySpec``.
+        gather_hop_inputs : Builds the tensor this layer reads.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> spec = kpnn2.parse_layered(
+        ...     pd.DataFrame(
+        ...         {
+        ...             "source": ["A", "H", "A"],
+        ...             "target": ["H", "C", "C"],
+        ...         }
+        ...     )
+        ... )
+        >>> layer = kpnn2.PackedLinear.from_hop(
+        ...     spec.hops[1],
+        ...     identity=spec.fingerprint,
+        ... )
+        >>> layer.out_features, layer.in_features, layer.nnz
+        (1, 2, 2)
+        """
+        require_hop(
+            hop,
+            "hop",
+        )
+        return cls(
+            hop.source_index,
+            hop.target_index,
+            hop.out_features,
+            hop.in_features,
+            bias,
+            identity=identity,
+            constraint=constraint,
+            generator=generator,
+        )
+
+    @classmethod
+    def from_adjacency(
+        cls,
+        spec: AdjacencySpec,
+        bias: bool = True,
+        *,
+        identity: str | None = None,
+        constraint: nn.Module | None = None,
+        generator: torch.Generator | None = None,
+    ) -> "PackedLinear":
+        """
+        Build the layer that maps an ``AdjacencySpec`` state onto itself.
+
+        The recommended way to build a ``PackedLinear`` on an
+        ``AdjacencySpec``. It reads the packed indices off
+        ``spec`` and uses ``spec.state_dim`` as both widths, so
+        source and target cannot be swapped by hand. On this
+        square layout a swap is always silent: the constructor
+        accepts it and every edge runs backwards. The result is
+        the layer the constructor builds from
+        ``spec.source_index``, ``spec.target_index``,
+        ``spec.state_dim``, and ``spec.state_dim``, with the same
+        init draws. It never allocates ``(n, n)`` and keeps no
+        reference to ``spec``.
+
+        Parameters
+        ----------
+        spec : AdjacencySpec
+            Spec from ``parse_adjacency``.
+        bias : bool, default=True
+            Same as the ``PackedLinear`` constructor.
+        identity : str or None, default=None
+            Same as the ``PackedLinear`` constructor. Not filled
+            in from ``spec``: pass ``spec.fingerprint`` yourself,
+            as on ``from_hop``.
+        constraint : torch.nn.Module or None, default=None
+            Same as the ``PackedLinear`` constructor.
+        generator : torch.Generator or None, default=None
+            Same as the ``PackedLinear`` constructor.
+
+        Returns
+        -------
+        PackedLinear
+            New layer with ``in_features == out_features ==
+            spec.state_dim`` and one weight per live unit pair of
+            ``spec``, in the spec's packed order.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``spec`` is not an ``AdjacencySpec`` (a
+            ``LayeredSpec`` or a ``Hop`` included), or if the
+            constructor rejects ``bias``, ``identity``,
+            ``constraint``, or ``generator``.
+
+        See Also
+        --------
+        PackedLinear.from_hop : The same on one hop of a
+            ``LayeredSpec``.
+        PackedMultiheadAttention.from_adjacency : Attention over
+            the same packed pairs.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> spec = kpnn2.parse_adjacency(
+        ...     pd.DataFrame(
+        ...         {
+        ...             "source": ["x", "a", "b", "a"],
+        ...             "target": ["a", "b", "a", "y"],
+        ...         }
+        ...     )
+        ... )
+        >>> core = kpnn2.PackedLinear.from_adjacency(
+        ...     spec,
+        ...     identity=spec.fingerprint,
+        ... )
+        >>> core.in_features, core.out_features, core.nnz
+        (4, 4, 4)
+        """
+        require_adjacency_spec(
+            spec,
+            "Build one with parse_adjacency(). On a LayeredSpec, "
+            "call PackedLinear.from_hop(hop) for each hop.",
+        )
+        return cls(
+            spec.source_index,
+            spec.target_index,
+            spec.state_dim,
+            spec.state_dim,
+            bias,
+            identity=identity,
+            constraint=constraint,
+            generator=generator,
+        )
 
     def reset_parameters(
         self,

@@ -107,8 +107,7 @@ later prompt asks.
    positions in the state vector. Neither constructs an
    `nn.Module`.
 3. **Build:** The user writes a PyTorch `nn.Module` using one
-   `PackedLinear(hop.source_index, hop.target_index,
-   hop.out_features, hop.in_features)` per hop,
+   `PackedLinear.from_hop(hop)` per hop,
    `gather_hop_inputs(saved, hop)` to assemble that hop's input,
    and their own activations, norms, loops, and heads.
    `PackedLinear.transpose()` is the tied decoder map (same
@@ -117,10 +116,10 @@ later prompt asks.
    output back onto source layers.
    `MaskedLinear(hop.to_mask())` densifies and remains valid for
    small graphs. On an `AdjacencySpec` the large-n path is
-   `PackedLinear(spec.source_index, spec.target_index, n, n)`
-   with `n = spec.state_dim`; that never allocates `(n, n)`.
-   The same packed indices can feed
-   `PackedMultiheadAttention`. `MaskedLinear(spec.to_mask())`
+   `PackedLinear.from_adjacency(spec)`; that never allocates
+   `(n, n)`. The same spec can feed
+   `PackedMultiheadAttention.from_adjacency(spec, embed_dim,
+   num_heads)`. `MaskedLinear(spec.to_mask())`
    densifies and remains valid for small graphs. The
    update (loop, attention, head) is the user's `forward()`.
 4. **Align:** `align_inputs()` maps feature names onto
@@ -238,7 +237,8 @@ later prompt asks.
 - **Not a time machine.** `parse_adjacency` accepts cycles and
   self-loops, but nothing here unrolls time, picks a step count, or
   re-injects inputs between steps. The loop is user `forward()`
-  over `PackedLinear(...)` or `MaskedLinear(spec.to_mask())`.
+  over `PackedLinear.from_adjacency(spec)` or
+  `MaskedLinear(spec.to_mask())`.
   Do not add `MaskedRNN` / `MaskedGRU` / `MaskedLSTM`.
   `parse_layered` stays DAG-only and still raises `Kpnn2Error`
   on a cycle.
@@ -375,8 +375,8 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
 | `AdjacencySpec` | Frozen structural dataclass (nodes, packed edge indices; no stored square) |
 | `MaskedLinear` | `nn.Module`: masked linear layer |
-| `PackedLinear` | `nn.Module`: one trainable scalar per live edge |
-| `PackedMultiheadAttention` | `nn.Module`: packed multi-head attention on live edgelist pairs |
+| `PackedLinear` | `nn.Module`: one trainable scalar per live edge; build with `from_hop` / `from_adjacency` |
+| `PackedMultiheadAttention` | `nn.Module`: packed multi-head attention on live edgelist pairs; build with `from_adjacency` |
 | `gather_hop_inputs` | Saved layer tensors + `Hop` → that hop's input tensor |
 | `scatter_hop_outputs` | Concatenated hop axis → per-source-layer tensors |
 | `align_inputs` | Feature names → `int64` column index |
@@ -677,8 +677,7 @@ concatenated axis; `column_offsets` only walks source layers.
   `(out_features, in_features)` float32 rectangle on every call.
   Mutating it does not change the hop.
 - `copy.deepcopy` succeeds and copies the index tuples.
-- `PackedLinear(hop.source_index, hop.target_index,
-  hop.out_features, hop.in_features)` never densifies.
+- `PackedLinear.from_hop(hop)` never densifies.
   `MaskedLinear(hop.to_mask())` stores an independent copy.
 
 ### `Skip` records
@@ -1090,7 +1089,7 @@ adjacency_spec.to_mask() -> torch.Tensor
 The spec does **not** store a square. `to_mask()` is the only
 way to build the old dense mask so
 `MaskedLinear(spec.to_mask())` still works. The large-n path
-is `PackedLinear` on the packed indices and never allocates
+is `PackedLinear.from_adjacency(spec)` and never allocates
 `(n, n)`.
 
 - Every call allocates a new dense `float32` tensor of shape
@@ -1125,12 +1124,7 @@ on access: that would silently allocate.
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
 n = spec.state_dim
-core = kpnn2.PackedLinear(
-    spec.source_index,
-    spec.target_index,
-    n,
-    n,
-)
+core = kpnn2.PackedLinear.from_adjacency(spec)
 # MaskedLinear(spec.to_mask()) densifies; valid for small graphs
 
 col = kpnn2.align_inputs(df.columns, spec)
@@ -1164,13 +1158,7 @@ class Core(torch.nn.Module):
         n_steps,
     ):
         super().__init__()
-        n = spec.state_dim
-        self.core = kpnn2.PackedLinear(
-            spec.source_index,
-            spec.target_index,
-            n,
-            n,
-        )
+        self.core = kpnn2.PackedLinear.from_adjacency(spec)
         self.register_buffer(
             "input_index",
             torch.as_tensor(spec.input_index),
@@ -1647,6 +1635,60 @@ as `layer(x)`); not a subclass. Not a full model. One
 trainable scalar per live edge; not `torch.sparse`; forward
 is `index_add` on ordinary dense tensors.
 
+Build it from a spec with one of two class methods. They are
+the recommended path, and the one docs and tutorials show:
+
+```text
+PackedLinear.from_hop(
+    hop,
+    bias=True,
+    *,
+    identity=None,
+    constraint=None,
+    generator=None,
+)
+PackedLinear.from_adjacency(
+    spec,
+    bias=True,
+    *,
+    identity=None,
+    constraint=None,
+    generator=None,
+)
+```
+
+- `from_hop` reads `hop.source_index`, `hop.target_index`,
+  `hop.out_features`, and `hop.in_features`.
+  `from_adjacency` reads `spec.source_index`,
+  `spec.target_index`, and `spec.state_dim` as both widths.
+  Each returns exactly the layer the constructor builds from
+  those values: same buffers, same `index_digest`, same init
+  draws. Neither keeps a reference to the spec or hop.
+- Why they exist: a hand-written constructor call can swap
+  `source_index` and `target_index`. When the swapped
+  indices still fit the bounds (always on an
+  `AdjacencySpec`, and on any hop with
+  `out_features == in_features`), the constructor accepts
+  them and every edge runs backwards, silently. Reading the
+  fields off the spec removes that mistake. They are
+  alternate constructors, not a convenience wrapper: they
+  decide nothing the four-argument call does not.
+- `bias`, `identity`, `constraint`, and `generator` pass
+  through unchanged. `identity` is never filled in from the
+  spec: a `Hop` carries no fingerprint, so both methods
+  leave `identity=spec.fingerprint` to the caller.
+- `from_hop` takes only a `Hop`; `from_adjacency` takes only
+  an `AdjacencySpec`. Anything else raises `Kpnn2Error`, and
+  the `from_adjacency` message points a `LayeredSpec` at
+  `from_hop`.
+- Do not add a `from_spec` dispatcher over both, a method
+  that builds every hop of a `LayeredSpec` at once (that is a
+  model container), or `MaskedLinear.from_hop`
+  (`MaskedLinear(hop.to_mask())` already takes one object).
+
+The constructor takes the packed indices directly. It is the
+base for `transpose()` and for pairs that come from no spec:
+
 ```text
 PackedLinear(
     source_index,
@@ -1756,9 +1798,11 @@ PackedLinear(
 
   Never allocate `(out, in)`. Never scatter into a dense
   `(out, in)` matrix in forward. Never import
-  `torch.sparse`. Never take a dense mask or an
-  `AdjacencySpec`. `x` is an ordinary dense activation
-  tensor, not a sparse host feature matrix.
+  `torch.sparse`. Never take a dense mask. The constructor
+  takes packed indices, not a spec; `from_hop` and
+  `from_adjacency` read them off one and never densify.
+  `x` is an ordinary dense activation tensor, not a sparse
+  host feature matrix.
 - **Degree-aware init:** `fan_in` for output row `j` is
   the number of packed edges with `target_index == j`
   (`bincount`, `minlength=out_features`). Each live edge
@@ -1805,19 +1849,16 @@ Typical construction:
 
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
-core = kpnn2.PackedLinear(
-    spec.source_index,
-    spec.target_index,
-    spec.state_dim,
-    spec.state_dim,
+core = kpnn2.PackedLinear.from_adjacency(
+    spec,
     identity=spec.fingerprint,
 )
 ```
 
 `MaskedLinear(spec.to_mask())` remains valid for small
-graphs. The same constructor on a hop is
-`PackedLinear(hop.source_index, hop.target_index,
-hop.out_features, hop.in_features)`. `PackedLinear` does
+graphs. On a hop it is
+`PackedLinear.from_hop(hop, identity=spec.fingerprint)`.
+`PackedLinear` does
 not add model capacity relative to `MaskedLinear`: dead
 edges already did not affect training. `MaskedLinear` is
 the better kernel when the dense rectangle fits (GEMM).
@@ -1945,8 +1986,52 @@ Transformer block and not a full model. Scores exist only
 for live `(source, target)` pairs: query = target, key /
 value = source. Forward never allocates an `(n, n)` or
 `(L, S)` score matrix and does not import `torch.sparse`.
-This module does not take an `AdjacencySpec`; pass packed
-indices (typically from `parse_adjacency`).
+
+Build it from an `AdjacencySpec` with the class method below.
+It is the recommended path, and the one docs and tutorials
+show:
+
+```text
+PackedMultiheadAttention.from_adjacency(
+    spec,
+    embed_dim,
+    num_heads,
+    *,
+    dropout=0.0,
+    bias=True,
+    batch_first=True,
+    add_self_loops=False,
+    identity=None,
+    generator=None,
+    chunk_size=None,
+)
+```
+
+- Reads `spec.source_index` (keys), `spec.target_index`
+  (queries), and `spec.state_dim` as both `query_features`
+  and `key_features`. Returns exactly the layer the
+  constructor builds from those values: same buffers, same
+  `index_digest`, same init draws. Keeps no reference to the
+  spec.
+- Why it exists: on this square layout a hand-written swap
+  of `source_index` and `target_index` always passes the
+  bounds, and every node then attends along reversed edges,
+  silently. Reading the fields off the spec removes that
+  mistake.
+- Every option after `num_heads` is keyword-only and passes
+  through unchanged. `kdim` / `vdim` are left out: they
+  exist on the constructor for `nn.MultiheadAttention`
+  call-site parity and can only equal `embed_dim`.
+  `identity` is not filled in from the spec, as on
+  `PackedLinear.from_adjacency`.
+- Takes only an `AdjacencySpec`; anything else, a
+  `LayeredSpec` or a `Hop` included, raises `Kpnn2Error`.
+  There is no `from_hop`: a hop rectangle is not a square
+  attention graph.
+
+The constructor takes packed indices directly, for pairs that
+come from no spec, such as a bipartite query/key map with
+`query_features != key_features`:
 
 ```text
 PackedMultiheadAttention(
@@ -2108,8 +2193,10 @@ forward(
 - Never allocate `(n, n)` or `(L, S)`. Never import
   `torch.sparse`. `chunk_size` does not change that:
   it only slices live-pair gathers. Never take a dense
-  mask or an `AdjacencySpec`. `query` / `key` / `value`
-  are ordinary dense activation tensors.
+  mask. The constructor takes packed indices, not a spec;
+  `from_adjacency` reads them off one and never densifies.
+  `query` / `key` / `value` are ordinary dense activation
+  tensors.
 - `extra_repr` reports `query_features`,
   `key_features`, `embed_dim`, `num_heads`, `nnz`,
   `dropout`, `batch_first`, `add_self_loops`, and
@@ -2136,12 +2223,8 @@ Typical construction:
 
 ```python
 spec = kpnn2.parse_adjacency(edgelist)
-n = spec.state_dim
-attn = kpnn2.PackedMultiheadAttention(
-    spec.source_index,
-    spec.target_index,
-    n,
-    n,
+attn = kpnn2.PackedMultiheadAttention.from_adjacency(
+    spec,
     embed_dim,
     num_heads,
     identity=spec.fingerprint,
@@ -2729,11 +2812,8 @@ class Net(nn.Module):
         self.spec = spec
         self.hops = nn.ModuleList(
             [
-                kpnn2.PackedLinear(
-                    hop.source_index,
-                    hop.target_index,
-                    hop.out_features,
-                    hop.in_features,
+                kpnn2.PackedLinear.from_hop(
+                    hop,
                     identity=spec.fingerprint,
                 )
                 for hop in spec.hops
@@ -2835,8 +2915,7 @@ There is no graph compiler and no ready-made model. Write ordinary
 PyTorch:
 
 1. `spec = kpnn2.parse_layered(edgelist)`
-2. `kpnn2.PackedLinear(hop.source_index, hop.target_index,
-   hop.out_features, hop.in_features,
+2. `kpnn2.PackedLinear.from_hop(hop,
    identity=spec.fingerprint)` for each `hop` in `spec.hops`.
    `MaskedLinear(hop.to_mask())` is the dense hatch.
 3. In `forward()`, keep a `saved` dict of layer index → tensor,

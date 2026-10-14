@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ._adjacency_spec import AdjacencySpec, require_adjacency_spec
 from ._errors import Kpnn2Error, internal_error
 from ._generator import as_generator, run_preserving_default_rng
 from ._identity import (
@@ -1016,11 +1017,17 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     Prior knowledge decides which node may attend to which: the
     query at an edge's target sees only the keys at its sources.
     Reach for it instead of masking ``nn.MultiheadAttention``,
-    whose mask costs an ``(n, n)`` matrix. Build it from
-    ``parse_adjacency`` indices and wrap it in your own encoder.
-    Defaults differ from MHA: ``batch_first=True`` and
-    ``need_weights=False``. ``True`` returns packed per-edge
-    weights, not a dense ``(L, S)`` matrix.
+    whose mask costs an ``(n, n)`` matrix. Build it with
+    ``from_adjacency`` on a ``parse_adjacency`` spec and wrap it
+    in your own encoder. Defaults differ from MHA:
+    ``batch_first=True`` and ``need_weights=False``. ``True``
+    returns packed per-edge weights, not a dense ``(L, S)``
+    matrix.
+
+    ``from_adjacency`` reads the indices and sequence lengths off
+    the spec, so query and key cannot be swapped by hand. The
+    constructor below takes packed indices directly, for pairs
+    that come from no spec, such as a bipartite query/key map.
 
     Parameters
     ----------
@@ -1196,8 +1203,8 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         trainable scalar per edge rather than a contraction.
     MaskedLinear : Dense ``(out, in)`` weight; the default layer
         whenever that square fits.
-    AdjacencySpec : Supplies ``source_index`` / ``target_index``;
-        this layer takes those tuples, not the spec object.
+    AdjacencySpec : Graph-wide packed edges; pass it to
+        ``from_adjacency``.
     torch.nn.MultiheadAttention : Dense equivalent, and the
         reference for call shape, heads, and training.
 
@@ -1257,12 +1264,8 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     ...     }
     ... )
     >>> spec = kpnn2.parse_adjacency(edgelist)
-    >>> n = spec.state_dim
-    >>> attn = kpnn2.PackedMultiheadAttention(
-    ...     spec.source_index,
-    ...     spec.target_index,
-    ...     n,
-    ...     n,
+    >>> attn = kpnn2.PackedMultiheadAttention.from_adjacency(
+    ...     spec,
     ...     embed_dim=8,
     ...     num_heads=2,
     ...     add_self_loops=True,
@@ -1270,7 +1273,7 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     ... )
     >>> attn.nnz, attn.head_dim
     (8, 4)
-    >>> tokens = torch.randn(2, n, 8)
+    >>> tokens = torch.randn(2, spec.state_dim, 8)
     >>> output, weights = attn(tokens, tokens, tokens)
     >>> tuple(output.shape)
     (2, 4, 8)
@@ -1424,6 +1427,124 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         else:
             run_preserving_default_rng(_init_projections)
         self.reset_parameters(generator)
+
+    @classmethod
+    def from_adjacency(  # numpydoc ignore=PR06
+        cls,
+        spec: AdjacencySpec,
+        embed_dim: int,
+        num_heads: int,
+        *,
+        dropout: float = 0.0,
+        bias: bool = True,
+        batch_first: bool = True,
+        add_self_loops: bool = False,
+        identity: str | None = None,
+        generator: torch.Generator | None = None,
+        chunk_size: int | None = None,
+    ) -> "PackedMultiheadAttention":
+        """
+        Build attention over the nodes of an ``AdjacencySpec``.
+
+        The recommended way to build this layer on an
+        ``AdjacencySpec``: one token per unit of the state vector,
+        and the query at each edge's target attends to the key at
+        its source. It reads the packed indices off ``spec`` and
+        uses ``spec.state_dim`` as both sequence lengths, so the
+        query and key sides cannot be swapped by hand. On this
+        square layout a swap is always silent: the constructor
+        accepts it and every node attends along reversed edges.
+        The result is the layer the constructor builds from
+        ``spec.source_index``, ``spec.target_index``,
+        ``spec.state_dim``, ``spec.state_dim``, ``embed_dim``, and
+        ``num_heads``, with the same init draws. It keeps no
+        reference to ``spec``. Options after ``num_heads`` are
+        keyword-only; ``kdim`` and ``vdim``, which can only equal
+        ``embed_dim``, are left out.
+
+        Parameters
+        ----------
+        spec : AdjacencySpec
+            Spec from ``parse_adjacency``.
+        embed_dim : int or numpy integer
+            Same as the ``PackedMultiheadAttention`` constructor.
+        num_heads : int or numpy integer
+            Same as the ``PackedMultiheadAttention`` constructor.
+        dropout : float, default=0.0
+            Same as the ``PackedMultiheadAttention`` constructor.
+        bias : bool, default=True
+            Same as the ``PackedMultiheadAttention`` constructor.
+        batch_first : bool, default=True
+            Same as the ``PackedMultiheadAttention`` constructor.
+        add_self_loops : bool, default=False
+            Same as the ``PackedMultiheadAttention`` constructor.
+        identity : str or None, default=None
+            Same as the ``PackedMultiheadAttention`` constructor.
+            Not filled in from ``spec``: pass
+            ``spec.fingerprint`` yourself.
+        generator : torch.Generator or None, default=None
+            Same as the ``PackedMultiheadAttention`` constructor.
+        chunk_size : int, numpy integer, or None, default=None
+            Same as the ``PackedMultiheadAttention`` constructor.
+
+        Returns
+        -------
+        PackedMultiheadAttention
+            New layer with ``query_features == key_features ==
+            spec.state_dim``.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``spec`` is not an ``AdjacencySpec`` (a
+            ``LayeredSpec`` or a ``Hop`` included), or if the
+            constructor rejects any other argument.
+
+        See Also
+        --------
+        PackedLinear.from_adjacency : One trainable scalar per
+            edge on the same packed pairs.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> import kpnn2
+        >>> spec = kpnn2.parse_adjacency(
+        ...     pd.DataFrame(
+        ...         {
+        ...             "source": ["x", "a", "b", "a"],
+        ...             "target": ["a", "b", "a", "y"],
+        ...         }
+        ...     )
+        ... )
+        >>> attn = kpnn2.PackedMultiheadAttention.from_adjacency(
+        ...     spec,
+        ...     embed_dim=8,
+        ...     num_heads=2,
+        ...     identity=spec.fingerprint,
+        ... )
+        >>> attn.query_features, attn.key_features, attn.nnz
+        (4, 4, 4)
+        """
+        require_adjacency_spec(
+            spec,
+            "Build one with parse_adjacency().",
+        )
+        return cls(
+            spec.source_index,
+            spec.target_index,
+            spec.state_dim,
+            spec.state_dim,
+            embed_dim,
+            num_heads,
+            dropout=dropout,
+            bias=bias,
+            batch_first=batch_first,
+            add_self_loops=add_self_loops,
+            identity=identity,
+            generator=generator,
+            chunk_size=chunk_size,
+        )
 
     def reset_parameters(
         self,

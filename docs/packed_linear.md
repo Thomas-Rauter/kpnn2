@@ -6,17 +6,13 @@ has. Use it on a [`Hop`](concepts.md#hop) — everything entering
 one layer — or on an `AdjacencySpec` when the dense rectangle
 `MaskedLinear(to_mask())` would strain RAM.
 
-On a `LayeredSpec`, a hop's
+On a `LayeredSpec`, build one layer per hop with
+`PackedLinear.from_hop()`. It reads the hop's
 [packed indices](concepts.md#packed-indices) — two parallel lists,
-one entry per unit pair — go straight into the constructor:
+one entry per unit pair — and both widths off the hop:
 
 ```python
-layer = kpnn2.PackedLinear(
-    hop.source_index,
-    hop.target_index,
-    hop.out_features,
-    hop.in_features,
-)
+layer = kpnn2.PackedLinear.from_hop(hop)
 ```
 
 Nothing upstream changes: `gather_hop_inputs` still concatenates
@@ -28,15 +24,11 @@ On an `AdjacencySpec` every node shares one
 [state vector](concepts.md#state-vector), a single vector over
 all nodes, so `MaskedLinear(spec.to_mask())` is an `(n, n)`
 parameter. The packed form is one scalar per live unit pair (one
-per named edge at width 1):
+per named edge at width 1), and `PackedLinear.from_adjacency()`
+builds it:
 
 ```python
-core = kpnn2.PackedLinear(
-    spec.source_index,
-    spec.target_index,
-    spec.state_dim,
-    spec.state_dim,
-)
+core = kpnn2.PackedLinear.from_adjacency(spec)
 ```
 
 Small cyclic graphs may stay on `MaskedLinear(spec.to_mask())`.
@@ -75,7 +67,7 @@ as one GEMM.
 
 ## Construction
 
-The two constructor calls at the top of this page are the whole
+The two calls at the top of this page are the whole
 setup. On a hop, `layer` from the first call reads the
 concatenated source axis that `gather_hop_inputs()` builds, and
 returns the pre-activation tensor:
@@ -116,13 +108,43 @@ state = self.act(core(state))
 new tensor. A step that Captum should hook is an
 `nn.Identity`.
 
-The same packed indices can feed
-[`PackedMultiheadAttention`](reference/PackedMultiheadAttention.md),
+The same spec can feed
+[`PackedMultiheadAttention.from_adjacency()`](reference/PackedMultiheadAttention.md),
 a different primitive: attention on live pairs, not one scalar
 per edge. That layer's training RAM is pair gathers, not an
 `(n, n)` weight; pass `chunk_size` there when `nnz` is large.
 The [Transformer example](transformer-example.ipynb) is that
 walkthrough.
+
+## Building from indices
+
+`from_hop()` and `from_adjacency()` call the `PackedLinear`
+constructor with the spec's packed indices and widths, so the
+layer they return is the one the constructor builds. To wire a
+layer from index lists that come from no spec, call the
+constructor yourself with your own `source_index`,
+`target_index`, and the two widths:
+
+```python
+layer = kpnn2.PackedLinear(
+    source_index,
+    target_index,
+    out_features,
+    in_features,
+)
+```
+
+Pair `i` feeds input column `source_index[i]` into output row
+`target_index[i]`. `out_features` comes before `in_features`, as
+in the `(out, in)` shape of a dense weight, not in the
+`nn.Linear` order.
+
+On a spec, use the class methods. If you swap `source_index` and
+`target_index` by hand, the constructor raises only when a
+swapped index falls out of range. On an `AdjacencySpec`, and on
+any hop with as many outputs as inputs, none does: the layer
+builds, trains, and runs every edge backwards. The class methods
+read both lists off the spec, so they cannot be swapped.
 
 ## Tied transpose
 
@@ -137,11 +159,8 @@ through a [keep-mask](#pruning-during-training), or a gate you
 train, changes both layers. `tie=False` copies both instead.
 
 ```python
-enc = kpnn2.PackedLinear(
-    hop.source_index,
-    hop.target_index,
-    hop.out_features,
-    hop.in_features,
+enc = kpnn2.PackedLinear.from_hop(
+    hop,
     bias=False,
 )
 dec = enc.transpose()
@@ -206,11 +225,8 @@ class PositiveEdges(torch.nn.Module):
         return magnitude + torch.log(-torch.expm1(-magnitude))
 
 
-core = kpnn2.PackedLinear(
-    hop.source_index,
-    hop.target_index,
-    hop.out_features,
-    hop.in_features,
+core = kpnn2.PackedLinear.from_hop(
+    hop,
     constraint=PositiveEdges(),
 )
 ```
@@ -276,11 +292,8 @@ mask = torch.zeros(nnz, dtype=torch.bool)
 mask[list(packed)] = True
 values = torch.zeros(nnz)
 values[list(packed)] = 1.5
-core = kpnn2.PackedLinear(
-    spec.source_index,
-    spec.target_index,
-    spec.state_dim,
-    spec.state_dim,
+core = kpnn2.PackedLinear.from_adjacency(
+    spec,
     constraint=FreezeSlots(
         mask,
         values,
@@ -323,11 +336,8 @@ hop_index, packed = spec.edge_location(
     "H",
 )
 hop = spec.hops[hop_index]
-core = kpnn2.PackedLinear(
-    hop.source_index,
-    hop.target_index,
-    hop.out_features,
-    hop.in_features,
+core = kpnn2.PackedLinear.from_hop(
+    hop,
     identity=spec.fingerprint,
     constraint=KeepMask(
         len(hop.source_index),
@@ -408,18 +418,12 @@ The example below does steps 1, 2, 3, and 5 on an
 ```python
 old_spec = kpnn2.parse_adjacency(old_edgelist)
 new_spec = kpnn2.parse_adjacency(new_edgelist)
-old_core = kpnn2.PackedLinear(
-    old_spec.source_index,
-    old_spec.target_index,
-    old_spec.state_dim,
-    old_spec.state_dim,
+old_core = kpnn2.PackedLinear.from_adjacency(
+    old_spec,
     identity=old_spec.fingerprint,
 )
-new_core = kpnn2.PackedLinear(
-    new_spec.source_index,
-    new_spec.target_index,
-    new_spec.state_dim,
-    new_spec.state_dim,
+new_core = kpnn2.PackedLinear.from_adjacency(
+    new_spec,
     identity=new_spec.fingerprint,
 )
 old_edges = set(

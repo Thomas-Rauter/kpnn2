@@ -372,11 +372,8 @@ class Net(nn.Module):
         self.spec = spec
         self.lins = nn.ModuleList(
             [
-                kpnn2.PackedLinear(
-                    hop.source_index,
-                    hop.target_index,
-                    hop.out_features,
-                    hop.in_features,
+                kpnn2.PackedLinear.from_hop(
+                    hop,
                     identity=spec.fingerprint,
                 )
                 for hop in spec.hops
