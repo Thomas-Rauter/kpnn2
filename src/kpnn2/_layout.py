@@ -16,9 +16,9 @@ fields and values the parsers computed. Public entry points
 validate caller-supplied names before they ask a ``Layout``, so
 an inconsistent layout or a failed lookup here is a kpnn2 bug and
 raises through ``internal_error``. ``resolve_edge_names``,
-``resolve_node_name``, and ``resolve_node_names`` are the
-exception: they check caller-supplied names and raise
-``Kpnn2Error``.
+``resolve_edge_pairs``, ``resolve_node_name``, and
+``resolve_node_names`` are the exception: they check
+caller-supplied names and raise ``Kpnn2Error``.
 """
 
 from collections.abc import Container, Iterable, Iterator, Sequence
@@ -493,6 +493,78 @@ def resolve_edge_names(
                 f"No edge {source_name} -> {target_name}. {problem}"
             )
     return source_name, target_name
+
+
+def resolve_edge_pairs(
+    sources: Sequence[str],
+    targets: Sequence[str],
+    known_names: Iterable[str],
+    known_edges: Container[tuple[str, str]],
+    listed_in: str,
+) -> list[tuple[str, str]]:
+    """
+    Match several named edges the way parse matches node names.
+
+    The many-edge form of ``resolve_edge_names``: edge ``i`` is
+    ``sources[i] -> targets[i]``. Checks, in order: equal lengths;
+    every name as ``resolve_node_names`` checks it (an empty name,
+    then every unknown name in one message); then every pair that
+    is not a named edge, each once, sorted, in one message.
+
+    Parameters
+    ----------
+    sources
+        Source node name of each edge, already ``str``, in order.
+    targets
+        Target node name of each edge, already ``str``, same order.
+    known_names
+        Node names that exist on the spec.
+    known_edges
+        ``(source, target)`` pairs of the spec's named edges.
+    listed_in
+        The spec field a caller reads for the valid names, such
+        as ``"spec.nodes"``, quoted in the unknown-name message.
+
+    Returns
+    -------
+    list of tuple of (str, str)
+        ``(source, target)`` of each edge, in order. Repeats are
+        kept.
+
+    Raises
+    ------
+    Kpnn2Error
+        If the lengths differ, a name is empty, a name is not in
+        ``known_names``, or a pair is not in ``known_edges``.
+    """
+    if len(sources) != len(targets):
+        raise Kpnn2Error(
+            "'sources' and 'targets' must have the same length: edge i "
+            f"is sources[i] -> targets[i]. Got {len(sources)} source(s) "
+            f"and {len(targets)} target(s)."
+        )
+    resolve_node_names(
+        [*sources, *targets],
+        known_names,
+        listed_in,
+    )
+    pairs = list(
+        zip(
+            sources,
+            targets,
+            strict=True,
+        )
+    )
+    missing = sorted({pair for pair in pairs if pair not in known_edges})
+    if missing:
+        listed = ", ".join(
+            f"{source} -> {target}" for source, target in missing
+        )
+        raise Kpnn2Error(
+            f"No edge(s): {listed}. Valid edges are the rows of "
+            "spec.to_edgelist()."
+        )
+    return pairs
 
 
 def resolve_node_name(

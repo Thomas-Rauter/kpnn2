@@ -13,6 +13,7 @@ from ._layout import (
     build_layout,
     hop_axis_layouts,
     resolve_edge_names,
+    resolve_edge_pairs,
     resolve_node_name,
     resolve_node_names,
 )
@@ -501,8 +502,9 @@ class LayeredSpec:
     width 1 and longest-path. ``to_dict()`` omits ``"ranks"``
     when compacted layers equal longest-path on the same edges.
     Pickle and ``torch.save`` of the dataclass are not.
-    ``edge_location`` finds packed slots of a named edge; it is
-    not a constraint. A hard freeze of those slots is
+    ``edge_location`` finds packed slots of a named edge, and
+    ``edge_index`` those of several edges of one hop, in order;
+    neither is a constraint. A hard freeze of those slots is
     ``torch.where`` inside ``constraint=``. ``node_units`` and
     ``hop_units`` map a named node to its contiguous unit slice
     on a layer tensor or a hop source axis. ``unit_index`` gives
@@ -724,6 +726,182 @@ class LayeredSpec:
         if located is None:
             raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
         return located
+
+    def edge_index(
+        self,
+        sources: object,
+        targets: object,
+        *,
+        hop: Hop,
+    ) -> tuple[int, ...]:
+        """
+        Return every packed slot of the named edges of one hop, in order.
+
+        Edge ``i`` is ``sources[i] -> targets[i]``, and every edge
+        must enter ``hop``'s target layer. Each edge contributes
+        all of its slots, in the order ``edge_location`` gives
+        them, in edge order. The slots index ``hop.source_index``
+        / ``hop.target_index`` and the ``weight`` of
+        ``PackedLinear.from_hop(hop)``, so a value you keep per
+        edge on your own table, such as a sign, a prior flag, or
+        an edge type, lands on its slots without a loop, and a
+        per-slot tensor such as a trained weight reads back in
+        your table's order. At width 1, position ``i`` belongs to
+        edge ``i``; an edge between nodes of widths ``k_source``
+        and ``k_target`` contributes ``k_source * k_target``
+        entries. ``edge_location`` gives the slots and the hop of
+        one edge. ``AdjacencySpec.edge_index`` is the same rule
+        on the state vector, which has no hops.
+
+        Parameters
+        ----------
+        sources : sequence of str
+            Source node name of each edge, in the order to index:
+            a list, a tuple, a one-dimensional numpy array, a
+            ``pandas.Series`` or ``pandas.Index``, or another
+            ordered iterable. Each name is matched after
+            ``str(...)``, same as parse. ``sources`` is not
+            modified.
+        targets : sequence of str
+            Target node name of each edge, same length and order
+            as ``sources``, and accepted in the same forms.
+            ``targets`` is not modified.
+        hop : Hop
+            A hop from ``spec.hops``: the hop whose slots to
+            index. It is never inferred from the edges.
+
+        Returns
+        -------
+        tuple of int
+            Packed slots of the named edges in ``hop``, in order.
+            ``()`` when there are no edges.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``sources`` or ``targets`` is a tensor, a ``str``,
+            ``bytes``, a set, a mapping, not one-dimensional, or
+            not iterable; if ``hop`` is not a ``Hop`` of this
+            spec; if the lengths differ; if a name is empty; if a
+            name is not a node; if a pair is not an edge; or if an
+            edge is in another hop. One message lists every
+            unknown name, one every missing edge, and one every
+            edge in another hop with its hop.
+
+        Notes
+        -----
+        This is identity into one hop's packed slots: it takes no
+        tensor and no values. Index with
+        ``torch.as_tensor(index, dtype=torch.int64)``. The
+        ``dtype`` is needed because ``torch.as_tensor(())`` is
+        float32 and fails as an index.
+
+        Edges of several hops need one call per hop, because each
+        hop has its own slots. ``edge_location`` gives the hop of
+        an edge: the one into its target's layer.
+
+        With a wide node, one value per edge has to be repeated
+        across that edge's slots, ``len(spec.edge_location(source,
+        target)[1])`` of them. A repeated edge repeats its slots.
+        Reading through a repeated slot is safe. Writing through
+        one is your concern: ``index_copy`` through repeated slots
+        is ambiguous, while ``index_add`` sums.
+
+        Examples
+        --------
+        The hop into ``C`` carries the adjacent edge ``H -> C``
+        and the skip ``A -> C``:
+
+        >>> import pandas as pd
+        >>> import torch
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H", "A"],
+        ...         "target": ["H", "C", "C"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_layered(edgelist)
+        >>> spec.edge_index(["H", "A"], ["C", "C"], hop=spec.hops[1])
+        (1, 0)
+
+        A sign kept on your own table lands on its slots:
+
+        >>> signs = pd.DataFrame(
+        ...     {
+        ...         "source": ["H", "A"],
+        ...         "target": ["C", "C"],
+        ...         "sign": [-1.0, 1.0],
+        ...     }
+        ... )
+        >>> hop = spec.hops[1]
+        >>> index = torch.as_tensor(
+        ...     spec.edge_index(
+        ...         signs["source"],
+        ...         signs["target"],
+        ...         hop=hop,
+        ...     ),
+        ...     dtype=torch.int64,
+        ... )
+        >>> sign = torch.zeros(len(hop.source_index))
+        >>> sign[index] = torch.tensor(signs["sign"].tolist())
+        >>> sign.tolist()
+        [1.0, -1.0]
+
+        An edge out of a node of width 3 gives its whole block:
+
+        >>> wide = kpnn2.parse_layered(
+        ...     edgelist,
+        ...     widths={"H": 3},
+        ... )
+        >>> wide.edge_index(["H", "A"], ["C", "C"], hop=wide.hops[1])
+        (1, 2, 3, 0)
+        """
+        source_names = as_name_list(
+            sources,
+            "sources",
+            "source node names",
+        )
+        target_names = as_name_list(
+            targets,
+            "targets",
+            "target node names",
+        )
+        require_spec_hop(
+            hop,
+            self.hops,
+            "hop",
+        )
+        hop_index = self.hops.index(hop)
+        locations, known_names = self._edge_locations()
+        pairs = resolve_edge_pairs(
+            source_names,
+            target_names,
+            known_names,
+            locations,
+            "spec.layer_nodes",
+        )
+        elsewhere = sorted(
+            {
+                (*pair, locations[pair][0])
+                for pair in pairs
+                if locations[pair][0] != hop_index
+            }
+        )
+        if elsewhere:
+            listed = ", ".join(
+                f"{source} -> {target} (spec.hops[{other}])"
+                for source, target, other in elsewhere
+            )
+            raise Kpnn2Error(
+                f"Edge(s) not in spec.hops[{hop_index}]: {listed}. Call "
+                "edge_index once per hop; edge_location gives the hop of "
+                "an edge."
+            )
+        slots: list[int] = []
+        for pair in pairs:
+            slots.extend(locations[pair][1])
+        return tuple(slots)
 
     def _edge_locations(
         self,

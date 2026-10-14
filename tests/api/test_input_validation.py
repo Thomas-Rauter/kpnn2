@@ -692,6 +692,116 @@ _LAYERED_SPEC_CASES = [
     ),
     _Bad(
         "LayeredSpec",
+        "edge_index_sources_is_an_int",
+        _TYPE,
+        "Unsupported sources type",
+        lambda: _LAYERED.edge_index(
+            5,
+            ["C"],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_targets_is_a_set",
+        _TYPE,
+        "'targets' must be a sequence of target node names, not a set",
+        lambda: _LAYERED.edge_index(
+            ["A"],
+            {"C"},
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_sources_is_a_matrix",
+        _SHAPE,
+        "'sources' must be one-dimensional",
+        lambda: _LAYERED.edge_index(
+            np.array([["A"]]),
+            ["C"],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_hop_is_an_int",
+        _TYPE,
+        "'hop' must be a Hop from spec.hops",
+        lambda: _LAYERED.edge_index(
+            ["A"],
+            ["C"],
+            hop=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_hop_from_another_spec",
+        _SEMANTIC,
+        "'hop' must match an entry of spec.hops",
+        lambda: _LAYERED.edge_index(
+            ["A"],
+            ["C"],
+            hop=_OTHER_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_lengths_differ",
+        _SHAPE,
+        "'sources' and 'targets' must have the same length",
+        lambda: _LAYERED.edge_index(
+            ["A", "H"],
+            ["C"],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_empty_name",
+        _SEMANTIC,
+        "Node name is empty",
+        lambda: _LAYERED.edge_index(
+            ["A"],
+            [""],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_unknown_names",
+        _SEMANTIC,
+        "Unknown node name(s): P, Q",
+        lambda: _LAYERED.edge_index(
+            ["Q", "A"],
+            ["C", "P"],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_absent_edges",
+        _SEMANTIC,
+        "No edge(s): C -> A, C -> H",
+        lambda: _LAYERED.edge_index(
+            ["C", "A", "C"],
+            ["H", "C", "A"],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_edge_in_another_hop",
+        _SEMANTIC,
+        "Edge(s) not in spec.hops[1]: A -> H (spec.hops[0])",
+        lambda: _LAYERED.edge_index(
+            ["A", "A"],
+            ["C", "H"],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
         "from_dict_payload_not_a_dict",
         _TYPE,
         "'payload'",
@@ -831,6 +941,76 @@ _ADJACENCY_SPEC_CASES = [
         _SEMANTIC,
         "Unknown node name(s): p, q",
         lambda: _ADJACENCY.unit_index(["q", "a", "p", "q"]),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_targets_is_an_int",
+        _TYPE,
+        "Unsupported targets type",
+        lambda: _ADJACENCY.edge_index(
+            ["a"],
+            5,
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_sources_is_a_mapping",
+        _TYPE,
+        "'sources' must be a sequence of source node names, not a mapping",
+        lambda: _ADJACENCY.edge_index(
+            {"a": "b"},
+            ["b"],
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_targets_is_a_matrix",
+        _SHAPE,
+        "'targets' must be one-dimensional",
+        lambda: _ADJACENCY.edge_index(
+            ["a"],
+            np.array([["b"]]),
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_lengths_differ",
+        _SHAPE,
+        "'sources' and 'targets' must have the same length",
+        lambda: _ADJACENCY.edge_index(
+            ["a"],
+            ["b", "a"],
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_empty_name",
+        _SEMANTIC,
+        "Node name is empty",
+        lambda: _ADJACENCY.edge_index(
+            [""],
+            ["b"],
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_unknown_names",
+        _SEMANTIC,
+        "Unknown node name(s): p, q",
+        lambda: _ADJACENCY.edge_index(
+            ["q", "a"],
+            ["b", "p"],
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_absent_edges",
+        _SEMANTIC,
+        "No edge(s): x -> b, x -> y",
+        lambda: _ADJACENCY.edge_index(
+            ["x", "a", "x", "x"],
+            ["y", "b", "b", "y"],
+        ),
     ),
     _Bad(
         "AdjacencySpec",
@@ -1949,6 +2129,40 @@ _VALID_CASES = [
         lambda: _LAYERED.unit_index(
             ["H", "H"],
             layer=np.int64(1),
+        ),
+    ),
+    _Valid(
+        "AdjacencySpec",
+        "edge_index_empty_lists",
+        lambda: _ADJACENCY.edge_index(
+            [],
+            [],
+        ),
+    ),
+    _Valid(
+        "AdjacencySpec",
+        "edge_index_repeated_edge_from_series",
+        lambda: _ADJACENCY.edge_index(
+            pd.Series(["a", "a"]),
+            pd.Series(["b", "b"]),
+        ),
+    ),
+    _Valid(
+        "LayeredSpec",
+        "edge_index_empty_lists",
+        lambda: _LAYERED.edge_index(
+            [],
+            [],
+            hop=_TWO_SOURCE_HOP,
+        ),
+    ),
+    _Valid(
+        "LayeredSpec",
+        "edge_index_every_edge_of_a_hop",
+        lambda: _LAYERED.edge_index(
+            ["A", "H"],
+            ["C", "C"],
+            hop=_TWO_SOURCE_HOP,
         ),
     ),
     _Valid(

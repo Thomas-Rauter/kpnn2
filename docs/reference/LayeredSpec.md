@@ -3,6 +3,7 @@
       members:
         - to_edgelist
         - edge_location
+        - edge_index
         - node_units
         - hop_units
         - unit_index

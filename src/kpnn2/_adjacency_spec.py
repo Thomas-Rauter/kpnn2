@@ -13,6 +13,7 @@ from ._layout import (
     build_layout,
     dense_mask_from_indices,
     resolve_edge_names,
+    resolve_edge_pairs,
     resolve_node_name,
     resolve_node_names,
 )
@@ -124,8 +125,9 @@ class AdjacencySpec:
     included. ``to_edgelist()`` round-trips at width 1. Pickle
     and ``torch.save`` of the
     dataclass are not. ``edge_location`` finds packed slots of
-    a named edge; it is not a constraint. A hard freeze of
-    those slots is ``torch.where`` inside ``constraint=``.
+    a named edge, and ``edge_index`` those of several edges, in
+    order; neither is a constraint. A hard freeze of those
+    slots is ``torch.where`` inside ``constraint=``.
     ``node_table`` counts each node's edges and the nodes
     that reach it or that it reaches.
 
@@ -576,6 +578,143 @@ class AdjacencySpec:
         if not packed:
             raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
         return packed
+
+    def edge_index(
+        self,
+        sources: object,
+        targets: object,
+    ) -> tuple[int, ...]:
+        """
+        Return every packed slot of the named edges, in order.
+
+        Edge ``i`` is ``sources[i] -> targets[i]``. Each edge
+        contributes all of its slots, in the order
+        ``edge_location`` gives them, in edge order. The slots
+        index ``source_index`` / ``target_index`` and the
+        ``weight`` of a ``PackedLinear`` built from this spec, so
+        a value you keep per edge on your own table, such as a
+        sign, a prior flag, or an edge type, lands on its slots
+        without a loop, and a per-slot tensor such as a trained
+        weight reads back in your table's order. At width 1,
+        position ``i`` belongs to edge ``i``; an edge between
+        nodes of widths ``k_source`` and ``k_target`` contributes
+        ``k_source * k_target`` entries. ``edge_location`` gives
+        the slots of one edge. ``LayeredSpec.edge_index`` is the
+        same rule on one hop and also takes ``hop=``.
+
+        Parameters
+        ----------
+        sources : sequence of str
+            Source node name of each edge, in the order to index:
+            a list, a tuple, a one-dimensional numpy array, a
+            ``pandas.Series`` or ``pandas.Index``, or another
+            ordered iterable. Each name is matched after
+            ``str(...)``, same as parse. ``sources`` is not
+            modified.
+        targets : sequence of str
+            Target node name of each edge, same length and order
+            as ``sources``, and accepted in the same forms.
+            ``targets`` is not modified.
+
+        Returns
+        -------
+        tuple of int
+            Packed slots of the named edges, in order. ``()`` when
+            there are no edges.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``sources`` or ``targets`` is a tensor, a ``str``,
+            ``bytes``, a set, a mapping, not one-dimensional, or
+            not iterable; if their lengths differ; if a name is
+            empty; if a name is not a node; or if a pair is not an
+            edge. One message lists every unknown name, and one
+            lists every missing edge.
+
+        Notes
+        -----
+        This is identity into the packed slots: it takes no
+        tensor and no values. Index with
+        ``torch.as_tensor(index, dtype=torch.int64)``. The
+        ``dtype`` is needed because ``torch.as_tensor(())`` is
+        float32 and fails as an index.
+
+        With a wide node, one value per edge has to be repeated
+        across that edge's slots, ``len(spec.edge_location(source,
+        target))`` of them. A repeated edge repeats its slots.
+        Reading through a repeated slot is safe. Writing through
+        one is your concern: ``index_copy`` through repeated slots
+        is ambiguous, while ``index_add`` sums.
+
+        Examples
+        --------
+        At width 1, each edge gives its row in ``to_edgelist()``:
+
+        >>> import pandas as pd
+        >>> import torch
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_adjacency(edgelist)
+        >>> spec.to_edgelist().values.tolist()
+        [['a', 'b'], ['a', 'y'], ['b', 'a'], ['x', 'a']]
+        >>> spec.edge_index(["x", "b"], ["a", "a"])
+        (3, 2)
+
+        A sign kept on your own table lands on its slots:
+
+        >>> signs = pd.DataFrame(
+        ...     {
+        ...         "source": ["b", "a"],
+        ...         "target": ["a", "b"],
+        ...         "sign": [-1.0, 1.0],
+        ...     }
+        ... )
+        >>> index = torch.as_tensor(
+        ...     spec.edge_index(signs["source"], signs["target"]),
+        ...     dtype=torch.int64,
+        ... )
+        >>> sign = torch.zeros(len(spec.source_index))
+        >>> sign[index] = torch.tensor(signs["sign"].tolist())
+        >>> sign.tolist()
+        [1.0, 0.0, -1.0, 0.0]
+
+        An edge into a node of width 3 gives its whole block:
+
+        >>> wide = kpnn2.parse_adjacency(
+        ...     edgelist,
+        ...     widths={"b": 3},
+        ... )
+        >>> wide.edge_index(["x", "a"], ["a", "b"])
+        (7, 0, 1, 2)
+        """
+        source_names = as_name_list(
+            sources,
+            "sources",
+            "source node names",
+        )
+        target_names = as_name_list(
+            targets,
+            "targets",
+            "target node names",
+        )
+        locations, known_names = self._edge_locations()
+        pairs = resolve_edge_pairs(
+            source_names,
+            target_names,
+            known_names,
+            locations,
+            "spec.nodes",
+        )
+        slots: list[int] = []
+        for pair in pairs:
+            slots.extend(locations[pair])
+        return tuple(slots)
 
     def _edge_locations(
         self,

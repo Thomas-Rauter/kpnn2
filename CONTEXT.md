@@ -177,7 +177,8 @@ later prompt asks.
   user convenience on top of the spec, not a missing
   primitive: keep extra columns on the caller's DataFrame,
   parse `source`/`target` only, locate slots with
-  `edge_location`, then apply ordinary PyTorch. A hard
+  `edge_location` (one edge) or `edge_index` (a whole
+  column of edges), then apply ordinary PyTorch. A hard
   freeze is a `constraint=` module that `torch.where`-
   replaces those slots in forward. That is what holds the
   live-edge value: AdamW's decoupled weight decay and SGD
@@ -285,10 +286,10 @@ are. It does not own mixed per-edge signs, freeze flags, or
 initial numerical values. Those appear in published KPNNs
 and are not blocked: the user keeps them on their own table
 and implements them with standard PyTorch together with
-`constraint=` and `edge_location`. A hard freeze is
-`torch.where` inside that `constraint=` module. A loss
-barrier is a soft prior. Do not treat a gradient hook as a
-freeze. Shipping that as parse columns or spec fields would
+`constraint=` and `edge_location` / `edge_index`. A hard
+freeze is `torch.where` inside that `constraint=` module. A
+loss barrier is a soft prior. Do not treat a gradient hook
+as a freeze. Shipping that as parse columns or spec fields would
 be convenience, not a necessity, and would make the public
 contract heavier. Do not add it. See **What kpnn2 is NOT**.
 
@@ -345,6 +346,7 @@ Division of labor:
 | `scatter_hop_outputs` (split that axis onto source layers) | kpnn2 |
 | `PackedLinear.transpose` (tied packed `W.T`) | kpnn2 |
 | Named node → unit slice (`node_units` / `hop_units`); named nodes → unit index (`unit_index`) | kpnn2 |
+| Named edge → packed slots (`edge_location`); named edges → slot index (`edge_index`) | kpnn2 |
 | Spec → per-node graph counts (`node_table`) | kpnn2 |
 | Feature names → column index (`align_inputs`) | kpnn2 |
 | Apply that index on host X (`X[:, col]`) | User |
@@ -425,8 +427,9 @@ column. A uniform per-entry map belongs on `MaskedLinear` /
 `PackedLinear` as `constraint=` (one `nn.Module` over the
 whole tensor). Mixed signs and frozen live-edge values are
 the caller's: keep those columns on the DataFrame, parse
-connectivity only, locate slots with `edge_location`, and
-`torch.where`-replace frozen slots inside `constraint=`.
+connectivity only, locate slots with `edge_location` or
+`edge_index`, and `torch.where`-replace frozen slots inside
+`constraint=`.
 A loss barrier is a soft prior; a gradient hook is not a
 freeze. First-class support is convenience, not a
 necessity; do not add those columns.
@@ -763,6 +766,48 @@ Missing pair, empty names, or a name that is not a node:
 To copy weights onto a new prior, look up the same named
 edge on **both** specs. See **Reparse hatch**.
 
+### `LayeredSpec.edge_index()`
+
+```python
+layered_spec.edge_index(sources, targets, *, hop) -> tuple[int, ...]
+```
+
+Every packed slot of each named edge `sources[i] -> targets[i]`
+of one hop, in edge order, each edge's slots in the stored order
+`edge_location` gives, as Python `int`s into `hop.source_index`
+/ `target_index` and `PackedLinear.from_hop(hop).weight`. It is
+the many-edge form of `edge_location`, as `unit_index` is of
+`node_units`, so `spec.edge_index([s], [t], hop=spec.hops[i])
+== spec.edge_location(s, t)[1]` for the edge's hop `i`, and the
+edges of a hop in `to_edgelist()` row order give
+`tuple(range(len(hop.source_index)))`. It is for values the
+caller keeps per edge on their own table (signs, prior flags,
+edge types, initial values) and for per-slot tensors read back
+by edge, instead of a loop over `edge_location`, where
+`edge_location(s, t)[1][0]` silently takes one slot of a wide
+edge.
+
+- `hop` is required and keyword-only, and is never inferred from
+  the edges. It is a `Hop` that compares equal to one entry of
+  `spec.hops`, the same check as `hop_units` (`require_spec_hop`).
+- `sources` and `targets` take the `names` checks of
+  `unit_index` (`as_name_list`, nouns "source node names" and
+  "target node names"), and must have the same length. A repeated
+  edge repeats its slots; no edges give `()`.
+- Order of checks: `sources` type, `targets` type, `hop`, lengths,
+  an empty name, names that are not nodes (all listed in one
+  message, pointing at `spec.layer_nodes`), pairs that are not
+  edges (all listed, sorted, pointing at `spec.to_edgelist()`),
+  then edges in another hop, all listed, sorted, each with its
+  hop: `Edge(s) not in spec.hops[1]: c -> y (spec.hops[2]).
+  Call edge_index once per hop; edge_location gives the hop of
+  an edge.`
+- It returns positions, not values: one value per edge on a wide
+  edge is the caller's repeat across `len(edge_location(s,
+  t)[1])` slots. It takes no tensor or data and stores no
+  policy. Stored fields, `to_dict()`, and `fingerprint` do not
+  change.
+
 ### `LayeredSpec.node_units()` / `hop_units()`
 
 ```python
@@ -1060,6 +1105,23 @@ inside `constraint=` to hold a value), not on the spec.
 
 To copy weights onto a new prior, look up the same named
 edge on **both** specs. See **Reparse hatch**.
+
+### `AdjacencySpec.edge_index()`
+
+```python
+adjacency_spec.edge_index(sources, targets) -> tuple[int, ...]
+```
+
+Same contract as `LayeredSpec.edge_index()` on the packed state
+arrays, without `hop`: every slot of each named edge
+`sources[i] -> targets[i]`, in edge order, into
+`spec.source_index` / `target_index` and
+`PackedLinear.from_adjacency(spec).weight`.
+`spec.edge_index([s], [t]) == spec.edge_location(s, t)`, and
+every row of `to_edgelist()`, in order, gives
+`tuple(range(len(spec.source_index)))`. Cycle edges and
+self-loops are ordinary edges here. Unknown names point at
+`spec.nodes`.
 
 ### `AdjacencySpec.node_table()`
 
@@ -2745,7 +2807,9 @@ Width 1 stays numerically identical.
   `source_nodes` with a unit index.
   `LayeredSpec.edge_location` and `AdjacencySpec.edge_location`
   are that lookup for callers: a named edge to packed weight
-  slots. They are identity, not constraints. Callers who
+  slots. `edge_index` on both specs is the many-edge form (one
+  hop on a `LayeredSpec`), built from the same cached map. They
+  are identity, not constraints. Callers who
   need mixed signs or frozen values index these slots in
   their own `constraint=` module (`torch.where` to hold a
   value); do not store that policy on the spec.
@@ -2802,7 +2866,8 @@ nothing kpnn2 stores or returns holds a numpy integer; `bool`,
 
 An argument whose items are matched by position (packed
 `source_index` / `target_index`, `dims`, `coords` values, the
-`names` of `align_inputs` and of both `unit_index` methods)
+`names` of `align_inputs` and of both `unit_index` methods,
+the `sources` / `targets` of both `edge_index` methods)
 rejects a set or a mapping: a set has
 no order, and a mapping would be read as its keys.
 
