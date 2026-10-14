@@ -53,10 +53,13 @@ def align_inputs(
     """
     Return an integer index that orders features to spec inputs.
 
-    Feature-table labels rarely match the input-node order the
-    parsed edgelist fixes. This returns a 1-D ``int64`` index
-    into the caller's feature axis so that axis can be gathered
-    into that order. It does not take the matrix, copy sample
+    The columns of a feature table rarely come in the order of
+    ``spec.input_nodes``, which the parsed edgelist fixes. The
+    model reads columns by position, not by name, so a column
+    in the wrong place feeds the wrong input node without any
+    error. This returns a 1-D ``int64`` index into the caller's
+    feature axis; indexing that axis with it puts the columns in
+    input-node order. It does not take the matrix, copy sample
     rows, or densify. Apply the index on whatever holds X:
     ``X[:, col]`` for numpy, scipy CSR/CSC, AnnData ``.X`` in
     those formats, or a tensor; ``df.to_numpy()[:, col]`` for
@@ -64,23 +67,24 @@ def align_inputs(
     integer column indexing; convert first. Input nodes always
     have width 1, so the index has one position per input node.
     Call it after parsing, once, instead of hand-ordering
-    columns. DataFrames, tensors, and matrices are rejected.
+    columns. Pass the names, not the data: DataFrames, tensors,
+    and matrices are rejected.
 
     Parameters
     ----------
     names : sequence of labels
-        Feature-axis labels, in the order they currently sit on
-        the matrix: ``df.columns``, ``adata.var_names``, a
-        one-dimensional numpy array, or a list. The annotated
-        type is ``object`` so a DataFrame or tensor is not
-        treated as valid names; those are rejected at runtime.
-        Labels are matched after ``str(...)``, the conversion
-        edgelist node names go through, so an integer label
-        ``1`` matches node ``"1"``. Names that are not graph
-        nodes are ignored. A name of a hidden or output node
-        raises, because the model computes that node and would
-        never read the column. Neither ``names`` nor the matrix
-        is modified.
+        The feature names, one per column, in the order the
+        columns sit in your data: ``df.columns``,
+        ``adata.var_names``, a 1-D numpy array, or a list. The
+        annotated type is ``object`` because a DataFrame or
+        tensor passed here by mistake is rejected at runtime.
+        Names are compared to node names as text, after the
+        same ``str(...)`` conversion edgelist nodes go through,
+        so an integer ``1`` matches node ``"1"``. Names that
+        are not graph nodes are ignored, so extra columns are
+        fine. A name of a hidden or output node raises, because
+        the model computes that node and would never read the
+        column. Neither ``names`` nor the matrix is modified.
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
@@ -124,9 +128,6 @@ def align_inputs(
 
     Notes
     -----
-    PyTorch never sees feature names. Passing a hand-stacked
-    array into the model can silently wire the wrong features if
-    the column order differs, which is what this guards against.
     Call it for every feature table, including one whose columns
     already follow ``spec.input_nodes``: it is the one check
     that the data match the graph's input nodes by name.

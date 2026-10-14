@@ -94,6 +94,7 @@ not_in_nav: |
 hooks:
   - dev/docs_notebooks.py
   - dev/docs_readme_urls.py
+  - dev/docs_signatures.py
 
 plugins:
   - search
