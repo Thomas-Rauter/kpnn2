@@ -310,7 +310,10 @@ silently dropping those edges.
 to a 1-D `int64` column index. It does not take the matrix or
 return a data tensor. A DataFrame, tensor, string, bytes,
 mapping, set, AnnData-like object, or a matrix (`ndim != 1`)
-raises `Kpnn2Error`. The index has one position per input
+raises `Kpnn2Error`. So does a missing input name, and a
+feature named like a hidden or output node; one case leaves
+the gene layer out of an edgelist whose nodes carry gene
+symbols. The index has one position per input
 node on both layouts, because the parsers reject an input
 wider than 1. On an `AdjacencySpec` it still needs scatter
 into the state vector.

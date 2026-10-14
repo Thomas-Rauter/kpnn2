@@ -69,10 +69,11 @@ for numpy, scipy CSR/CSC, AnnData `.X` in those formats, or
 a tensor; `df.to_numpy()[:, col]` for a DataFrame). COO-style
 sparse layouts need a format that supports integer column
 indexing. Input nodes are always width 1, so the index has
-one position per input node. Pre-ordered dense tensors already
-skip `align_inputs`. A caller with sparse host X applies the
-index on the sparse layout, then densifies only each row
-block.
+one position per input node. It is the one guard that the data
+match the graph's input nodes by name, so docs call it for
+every feature table, including one whose columns already look
+ordered. A caller with sparse host X applies the index on the
+sparse layout, then densifies only each row block.
 
 Do not add AnnData, scipy sparse, a densifying `align_inputs`,
 minibatching, or device-copy helpers to this package unless a
@@ -124,10 +125,10 @@ later prompt asks.
    update (loop, attention, head) is the user's `forward()`.
 4. **Align:** `align_inputs()` maps feature names onto
    `spec.input_nodes` as a 1-D `int64` column index. Apply
-   it on the host matrix (`X[:, col]`). Pre-ordered dense
-   tensors go straight to the model. Sparse host matrices
-   stay sparse until each row block is densified; see
-   **Locked contrasts**.
+   it on the host matrix (`X[:, col]`), for every table,
+   including one whose columns already look ordered. Sparse
+   host matrices stay sparse until each row block is
+   densified; see **Locked contrasts**.
 5. **Train:** The user owns loss, optimizer, and the training loop.
 6. **Map attributions:** `map_node_attributions()` labels a tensor
    at one LayeredSpec layer (`layer=`, or `hop_output=` for what
@@ -482,7 +483,12 @@ on.
 - **Input nodes:** in-degree 0. Sorted alphabetically.
   Stored in `spec.input_nodes`. These are also the feature-axis
   order `align_inputs` indexes into, and the column order of
-  `MaskedLinear` on hop 0.
+  `MaskedLinear` on hop 0. The edgelist therefore starts at the
+  measured features: one input node per feature column, named
+  like it. No hop produces layer 0; the aligned feature columns
+  fill it. A measured feature must not share a name with a
+  computed node (`STAT3_gene` vs `STAT3`), because one name is
+  one node; `align_inputs` raises on such a name.
 - **Output nodes:** out-degree 0. Sorted alphabetically.
   Stored in `spec.output_nodes`. Early outputs (terminals whose
   depth is not the maximum depth) **are allowed**. They remain in
@@ -2236,8 +2242,22 @@ keeps slot `i` as the same edge.
 ## `align_inputs(names, spec)`
 
 `spec` is a `LayeredSpec` **or** an `AdjacencySpec`. Only
-`spec.input_nodes` is read (and, for a `LayeredSpec`,
+`spec.input_nodes`, `spec.hidden_nodes`, and
+`spec.output_nodes` are read (and, for a `LayeredSpec`,
 `layer_widths[0]`). Anything else raises `Kpnn2Error`.
+
+It is the guard between data and graph, so docs call it for
+every feature table, including one whose columns already look
+ordered. Input nodes are not declared, so the guard rests on
+names: the edgelist starts at the measured features, and a
+measured feature never shares a name with a computed node
+(`STAT3_gene` for the gene, `STAT3` for the transcription
+factor node). Under that rule, an edgelist that starts at a
+computed layer raises as missing names, and a feature merged
+with a computed node raises as a computed-node name. With
+shared names, an edgelist that starts at a computed layer can
+match feature columns; that case is caught only when a
+computed node downstream also shares a feature name.
 
 Returns a 1-D `numpy.ndarray` of dtype `int64`, length
 `width`. It is a column index into the caller's feature
@@ -2280,11 +2300,27 @@ state = state.index_copy(
 - Required labels: `spec.input_nodes` (any order).
 - Match labels after converting them to strings (so an integer
   label `1` can match string node id `"1"`).
-- Extra names are ignored.
-- Missing required names: `Kpnn2Error`.
+- Names that are not graph nodes are ignored.
 - Duplicate labels (including after string conversion):
   `Kpnn2Error`. The message names the unique duplicated labels
-  after `str(...)`, sorted, comma-separated.
+  after `str(...)`, sorted, comma-separated. Checked first.
+- Missing required names: `Kpnn2Error`. The message names them,
+  sorted, comma-separated, and says how many input nodes were
+  found ("Found 1 of 2 input nodes").
+- A name of a hidden or output node: `Kpnn2Error`. The model
+  computes that node and would never read the column, and one
+  name is one node, so that feature has no input node of its
+  own. The message names each match with its role, sorted
+  (`C (output), H (hidden)`). There is no opt-out: rename the
+  measured feature's node, or drop the column from the table
+  before taking its names. The message names a label column
+  named like an output node as an example of the second fix.
+- Missing and computed-node names raise in one message. It
+  states the role rule (input nodes have no incoming edge, so
+  the edgelist starts at the measured features, named like
+  their columns), then the fix for each finding. The
+  missing-name fix says not to fit the width with a dense
+  layer in front of the model.
 - Accepted: a 1-D sequence of labels (`df.columns`,
   `adata.var_names`, a numpy array, a list). The annotated
   type is `object` so a DataFrame or tensor is rejected at
@@ -2297,8 +2333,8 @@ state = state.index_copy(
   (for example `data.columns`).
 - `torch.Tensor`: `Kpnn2Error`. The message must say that
   `names` is a tensor and that the feature names that label
-  that axis are required. Pre-ordered dense tensors go
-  **straight to the model**.
+  that axis are required, even when its columns already
+  follow `spec.input_nodes`.
 - A string, bytes, mapping, set, AnnData-like object
   (`var_names` and `X`), or a matrix (`ndim != 1`):
   `Kpnn2Error`. The string message must say that `names` is
@@ -2815,8 +2851,8 @@ PyTorch:
    The output hop stays linear. Store the tensor later hops
    should read.
 5. `col = kpnn2.align_inputs(names, spec)` then `X[:, col]`
-   on the host matrix. Pre-ordered dense tensors skip this.
-   Sparse host X is the caller's loop (apply the index, then
+   on the host matrix, for every table. Sparse host X is the
+   caller's loop (apply the index, then
    row block → densify → device).
 6. Run Captum (or another method) yourself; then
    `map_node_attributions(...)`

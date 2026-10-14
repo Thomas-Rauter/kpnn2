@@ -13,8 +13,27 @@ from ._validate import as_name_list, require_spec
 
 _TENSOR_NOT_ACCEPTED_MSG = (
     "'names' is a tensor; pass the feature names that "
-    "label that axis. A tensor whose columns already follow "
-    "spec.input_nodes goes straight to the model."
+    "label that axis, even when its columns already follow "
+    "spec.input_nodes."
+)
+_INPUT_ROLE_RULE = (
+    "Input nodes are the edgelist nodes with no incoming edge, "
+    "so the edgelist starts at the measured features, and each "
+    "input node is named like its feature column."
+)
+_MISSING_FIX = (
+    "Add the missing feature columns, or give a computed node "
+    "with no incoming edge its parents in the edgelist. Do not "
+    "fit the width with a dense layer in front of the model: it "
+    "discards the prior wiring from the features."
+)
+_COMPUTED_FIX = (
+    "Give each measured feature its own input node, named "
+    "differently from every computed node (for example "
+    "STAT3_gene for the gene and STAT3 for the transcription "
+    "factor). A column you do not feed, such as a label column "
+    "named like an output node, belongs out of the table before "
+    "you take its names."
 )
 _DATAFRAME_NOT_ACCEPTED_MSG = (
     "'names' is a DataFrame; pass the feature names "
@@ -57,8 +76,11 @@ def align_inputs(
         treated as valid names; those are rejected at runtime.
         Labels are matched after ``str(...)``, the conversion
         edgelist node names go through, so an integer label
-        ``1`` matches node ``"1"``. Extra names are ignored.
-        Neither ``names`` nor the matrix is modified.
+        ``1`` matches node ``"1"``. Names that are not graph
+        nodes are ignored. A name of a hidden or output node
+        raises, because the model computes that node and would
+        never read the column. Neither ``names`` nor the matrix
+        is modified.
     spec : LayeredSpec or AdjacencySpec
         Parsed edgelist whose ``input_nodes`` — the in-degree-0
         nodes, alphabetically sorted — fix both the required
@@ -82,9 +104,14 @@ def align_inputs(
         ``AdjacencySpec``; ``names`` is a DataFrame, tensor,
         string, bytes, mapping, set, AnnData-like object, or a
         matrix (ndim ≠ 1); ``names`` is not a sequence of
-        labels; required names are missing or duplicated
-        (including after ``str`` conversion; the message names
-        the unique duplicated labels, sorted, comma-separated).
+        labels; labels are duplicated (including after ``str``
+        conversion; the message names the unique duplicated
+        labels, sorted, comma-separated); required names are
+        missing (the message names them, sorted, and counts the
+        input nodes found); or a name matches a hidden or output
+        node (the message names each with its role, sorted).
+        Missing names and computed-node names are reported in
+        one message.
 
     See Also
     --------
@@ -100,8 +127,26 @@ def align_inputs(
     PyTorch never sees feature names. Passing a hand-stacked
     array into the model can silently wire the wrong features if
     the column order differs, which is what this guards against.
-    A tensor whose columns already follow ``spec.input_nodes``
-    needs no alignment and goes straight to the model. AnnData,
+    Call it for every feature table, including one whose columns
+    already follow ``spec.input_nodes``: it is the one check
+    that the data match the graph's input nodes by name.
+
+    Input nodes are not declared; they are the nodes with no
+    incoming edge. The edgelist therefore starts at the measured
+    features, one input node per feature column, named like that
+    column. Name measured features so no computed node shares a
+    name, for example ``STAT3_gene`` for the gene and ``STAT3``
+    for the transcription factor node. Then an edgelist that
+    starts at the first computed layer, which makes those
+    computed nodes inputs, raises here as missing names. One
+    name is one node, so a feature named like a hidden or output
+    node has no input node of its own, and that raises too. With
+    shared names, such as transcription factor nodes named by
+    gene symbol beside a table of every gene, an edgelist that
+    starts at a computed layer can match feature columns and
+    pass.
+
+    AnnData,
     numpy matrices, and scipy sparse matrices are not accepted
     as ``names``; pass the labels that sit on that axis and
     apply the index on the matrix. scipy CSR/CSC and AnnData
@@ -123,7 +168,8 @@ def align_inputs(
 
     Examples
     --------
-    Extra names are ignored and remaining columns are reordered:
+    Names that are not graph nodes are ignored, and the rest are
+    reordered:
 
     >>> import numpy as np
     >>> import pandas as pd
@@ -177,6 +223,15 @@ def align_inputs(
     >>> state.tolist()
     [[0.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.5, 0.0]]
 
+    A feature named like a node the model computes raises,
+    because its column would never be read:
+
+    >>> computed = ["A", "H"]
+    >>> kpnn2.align_inputs(computed, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    Kpnn2Error: Feature names match node(s) the model computes, ...
+
     A tensor is not accepted; pass the names that label it:
 
     >>> t = torch.tensor([[0.5], [1.5]])
@@ -201,18 +256,56 @@ def align_inputs(
             f"{labels_str}."
         )
 
-    missing = [name for name in spec.input_nodes if name not in label_counts]
-    if missing:
-        missing_str = ", ".join(sorted(missing))
-        raise Kpnn2Error(
-            f"Feature names are missing required name(s): {missing_str}."
-        )
+    _require_input_roles(
+        set(label_counts),
+        spec,
+    )
 
     position = {label: index for index, label in enumerate(labels)}
     return np.array(
         [position[name] for name in spec.input_nodes],
         dtype=np.int64,
     )
+
+
+def _require_input_roles(
+    labels: set[str],
+    spec: LayeredSpec | AdjacencySpec,
+) -> None:
+    """
+    Raise ``Kpnn2Error`` unless ``labels`` fit the node roles.
+
+    Every input node must be a label, and no label may name a
+    hidden or output node, whose column the model would never
+    read. Both findings go into one message.
+    """
+    missing = [name for name in spec.input_nodes if name not in labels]
+    roles = {name: "hidden" for name in spec.hidden_nodes}
+    roles.update({name: "output" for name in spec.output_nodes})
+    computed = sorted(labels & roles.keys())
+    if not missing and not computed:
+        return
+
+    parts = []
+    if missing:
+        found = len(spec.input_nodes) - len(missing)
+        parts.append(
+            "Feature names are missing required name(s): "
+            f"{', '.join(sorted(missing))}. Found {found} of "
+            f"{len(spec.input_nodes)} input nodes."
+        )
+    if computed:
+        matched = ", ".join(f"{name} ({roles[name]})" for name in computed)
+        parts.append(
+            "Feature names match node(s) the model computes, so "
+            f"their columns would never be read: {matched}."
+        )
+    parts.append(_INPUT_ROLE_RULE)
+    if missing:
+        parts.append(_MISSING_FIX)
+    if computed:
+        parts.append(_COMPUTED_FIX)
+    raise Kpnn2Error(" ".join(parts))
 
 
 def _labels_from_names(names: object) -> list[str]:

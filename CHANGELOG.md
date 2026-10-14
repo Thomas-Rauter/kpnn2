@@ -8,6 +8,11 @@ semantic versioning.
 
 ### Changed
 
+- `align_inputs` raises `Kpnn2Error` when a feature name matches
+  a hidden or output node, whose column the model would never
+  read. Its missing-name message counts the input nodes found
+  and explains that the edgelist starts at the measured
+  features.
 - `PackedMultiheadAttention` with a positive `chunk_size`
   checks on every call that each query's softmax sums to 1
   (0 only for a query without a finite live score) and its

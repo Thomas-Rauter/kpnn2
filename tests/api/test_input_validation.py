@@ -1512,6 +1512,13 @@ _ALIGN_CASES = [
         "required name(s): A",
         lambda: _align(["H"]),
     ),
+    _Bad(
+        "align_inputs",
+        "names_name_a_computed_node",
+        _SEMANTIC,
+        "never be read: H (hidden)",
+        lambda: _align(["A", "H"]),
+    ),
 ]
 
 _MAP_CASES = [

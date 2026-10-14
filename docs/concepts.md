@@ -72,11 +72,46 @@ A parser splits nodes into three groups by degree, alphabetical
 within each:
 
 - **input nodes** have in-degree 0. This is the feature-axis
-  order `align_inputs()` indexes into.
+  order `align_inputs()` indexes into. You do not declare them,
+  so the edgelist starts at your measured features: one input
+  node per feature column, named like that column. Leave the
+  features out and your first computed nodes become the inputs.
 - **output nodes** have out-degree 0. A terminal node that sits
   below maximum depth still counts, so this is not the same tuple
   as the last layer.
 - **hidden nodes** are neither.
+
+One name is one node. To feed a measurement of an entity that is
+also a computed node, give the measurement its own name:
+`STAT3_gene` for the gene's expression, `STAT3` for the
+transcription factor node. `align_inputs()` raises on a feature
+named like a hidden or output node, because the model would
+never read that column.
+
+To rename every measured gene, add the suffix in two places: on
+the gene side of the gene → transcription factor rows when you
+build the edgelist, and on the feature names you align. Here
+`tf_targets` holds one transcription factor–target gene pair per
+row, `expression` is your samples × genes table, and `spec` is
+the parse of the full edgelist:
+
+```python
+gene_rows = pd.DataFrame(
+    {
+        "source": tf_targets["gene"] + "_gene",
+        "target": tf_targets["tf"],
+    }
+)
+col = kpnn2.align_inputs(
+    expression.columns + "_gene",
+    spec,
+)
+```
+
+A label column named like an output node raises for the same
+reason. If one `table` holds the features and a `label` column,
+align `table.drop(columns="label").columns` and index that same
+reduced table.
 
 ## DAG
 
@@ -125,7 +160,8 @@ alone: the weights mean nothing without the wiring they belong to.
 
 A depth in a `LayeredSpec`. Layer 0 is the inputs, and
 `spec.layer_nodes[i]` is the names at depth `i`, alphabetical.
-There are always at least two layers.
+There are always at least two layers. No hop produces layer 0:
+the feature columns that `align_inputs()` selects fill it.
 
 Depth is the longest path from the inputs by default.
 `parse_layered(..., ranks=)` overrides that when nodes belong at

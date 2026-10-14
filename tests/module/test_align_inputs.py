@@ -180,6 +180,178 @@ def test_align_inputs_rejects_missing_name():
         )
 
 
+def test_align_inputs_missing_message_counts_found_inputs():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Feature names are missing required name(s): B. Found 1 "
+            "of 2 input nodes. Input nodes are the edgelist nodes with "
+            "no incoming edge, so the edgelist starts at the measured "
+            "features, and each input node is named like its feature "
+            "column. Add the missing feature columns, or give a "
+            "computed node with no incoming edge its parents in the "
+            "edgelist. Do not fit the width with a dense layer in "
+            "front of the model: it discards the prior wiring from "
+            "the features."
+        ),
+    ):
+        align_inputs(
+            ["A", "unused"],
+            spec,
+        )
+
+
+@pytest.mark.parametrize(
+    ("names", "listed"),
+    [
+        pytest.param(
+            ["A", "B", "H"],
+            "H (hidden)",
+            id="hidden",
+        ),
+        pytest.param(
+            ["C", "A", "B"],
+            "C (output)",
+            id="output",
+        ),
+        pytest.param(
+            ["H", "C", "B", "A"],
+            "C (output), H (hidden)",
+            id="both_sorted",
+        ),
+    ],
+)
+def test_align_inputs_rejects_names_of_computed_nodes(
+    names,
+    listed,
+):
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Feature names match node(s) the model computes, so their "
+            f"columns would never be read: {listed}."
+        ),
+    ) as caught:
+        align_inputs(
+            names,
+            spec,
+        )
+
+    message = str(caught.value)
+    assert "missing" not in message
+    assert "STAT3_gene" in message
+    assert "label column named like an output node" in message
+
+
+def test_align_inputs_reports_missing_and_computed_together():
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Feature names are missing required name(s): B. Found 1 "
+            "of 2 input nodes. Feature names match node(s) the model "
+            "computes, so their columns would never be read: "
+            "H (hidden)."
+        ),
+    ) as caught:
+        align_inputs(
+            ["A", "H"],
+            spec,
+        )
+
+    message = str(caught.value)
+    assert "dense layer" in message
+    assert "STAT3_gene" in message
+
+
+def test_align_inputs_rejects_computed_node_on_adjacency_spec():
+    spec = _tiny_adjacency_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("would never be read: K (hidden)."),
+    ):
+        align_inputs(
+            ["A", "B", "K"],
+            spec,
+        )
+
+
+def test_align_inputs_rejects_edgelist_that_starts_at_computed_layer():
+    """
+    TF nodes named by gene symbol, gene layer left out.
+    """
+    genes = ["CD3E", "IRF1", "STAT3", "ZAP70"]
+    edgelist = pd.DataFrame(
+        {
+            "source": ["IRF1", "STAT3"],
+            "target": ["ZAP70", "ZAP70"],
+        }
+    )
+    spec = parse_layered(edgelist)
+    assert spec.input_nodes == ("IRF1", "STAT3")
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("would never be read: ZAP70 (output)."),
+    ):
+        align_inputs(
+            genes,
+            spec,
+        )
+
+
+def test_align_inputs_rejects_feature_merged_with_hidden_node():
+    """
+    Gene STAT3 and TF STAT3 share one name, so one hidden node.
+    """
+    genes = ["CD3E", "IL2", "STAT3"]
+    edgelist = pd.DataFrame(
+        {
+            "source": ["IL2", "STAT3", "CD3E"],
+            "target": ["STAT3", "IRF1", "IRF1"],
+        }
+    )
+    spec = parse_layered(edgelist)
+    assert spec.hidden_nodes == ("STAT3",)
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("would never be read: STAT3 (hidden)."),
+    ):
+        align_inputs(
+            genes,
+            spec,
+        )
+
+
+def test_align_inputs_accepts_distinct_names_for_measured_features():
+    genes = ["CD3E_gene", "IL2_gene", "STAT3_gene"]
+    edgelist = pd.DataFrame(
+        {
+            "source": ["IL2_gene", "STAT3_gene", "CD3E_gene", "STAT3"],
+            "target": ["STAT3", "IRF1", "IRF1", "IRF1"],
+        }
+    )
+    spec = parse_layered(edgelist)
+    col = align_inputs(
+        genes,
+        spec,
+    )
+    assert spec.input_nodes == ("CD3E_gene", "IL2_gene", "STAT3_gene")
+    assert col.tolist() == [0, 1, 2]
+
+
+def test_align_inputs_leaves_names_unchanged_when_it_raises():
+    spec = _tiny_spec()
+    names = ["A", "H"]
+    with pytest.raises(Kpnn2Error):
+        align_inputs(
+            names,
+            spec,
+        )
+    assert names == ["A", "H"]
+
+
 def _tensor_reject_cases():
     return [
         pytest.param(
@@ -722,8 +894,8 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
         pytest.param(
             torch.tensor([1]),
             "'names' is a tensor; pass the feature names that label "
-            "that axis. A tensor whose columns already follow "
-            "spec.input_nodes goes straight to the model.",
+            "that axis, even when its columns already follow "
+            "spec.input_nodes.",
             id="tensor",
         ),
         pytest.param(

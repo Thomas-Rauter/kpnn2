@@ -507,7 +507,8 @@ catches a mistake that would not show up in the loss.
 - **Input columns are matched by name.** `align_inputs()` finds
   each input node's column in your feature table. A reordered
   table, or one with extra columns, still lines up. A missing or
-  duplicated name raises.
+  duplicated name raises, and so does a column named like a node
+  the model computes, whose values would never be read.
 - **Checkpoints refuse a different prior.** Each sparse layer saves
   a digest of its wiring and, with `identity=spec.fingerprint`, the
   fingerprint of the named prior. A mismatch raises instead of
