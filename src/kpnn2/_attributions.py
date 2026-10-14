@@ -146,6 +146,19 @@ def map_node_attributions(  # numpydoc ignore=PR06
         ``.to_dataframe(name="score").reset_index()`` for a long
         table, or ``.to_pandas()`` for a 2-D wide table.
 
+        Units of a wide node share its edges, so the spec gives
+        them no names of their own. On an axis with a wide node
+        the ``node`` index is not unique. ``da.sel(node=name)``
+        returns all units of that node, and a fold you choose,
+        such as ``da.groupby("node").mean()``, gives one score
+        per node, sorted by name. Selecting a list of names,
+        ``reindex``, and aligning with an array whose ``node``
+        index differs raise in xarray, even for width-1 names.
+        Select several names with
+        ``da.sel(node=da["node"].isin(names))``. Two arrays with
+        the same ``node`` index combine unit by unit, by
+        position. With every node at width 1 the index is unique.
+
     Raises
     ------
     Kpnn2Error
@@ -302,6 +315,34 @@ def map_node_attributions(  # numpydoc ignore=PR06
     ... )
     >>> skip_da["node"].values.tolist()
     ['A', 'H']
+
+    A wide node's name repeats once per unit. ``sel`` takes one
+    name; pick several with ``isin``, and fold units yourself:
+
+    >>> fan = pd.DataFrame(
+    ...     {
+    ...         "source": ["A", "A", "A", "H1", "H2", "H3"],
+    ...         "target": ["H1", "H2", "H3", "C", "C", "C"],
+    ...     }
+    ... )
+    >>> fan_spec = kpnn2.parse_layered(
+    ...     fan,
+    ...     widths={"H1": 2},
+    ... )
+    >>> fan_da = kpnn2.map_node_attributions(
+    ...     attributions=torch.tensor([[1.0, 2.0, 3.0, 4.0]]),
+    ...     spec=fan_spec,
+    ...     layer=1,
+    ... )
+    >>> fan_da["node"].values.tolist()
+    ['H1', 'H1', 'H2', 'H3']
+    >>> fan_da.sel(node="H1").values.tolist()
+    [[1.0, 2.0]]
+    >>> picked = fan_da.sel(node=fan_da["node"].isin(["H1", "H3"]))
+    >>> picked["node"].values.tolist()
+    ['H1', 'H1', 'H3']
+    >>> fan_da.groupby("node").sum().values.tolist()
+    [[3.0, 3.0, 4.0]]
 
     On an ``AdjacencySpec`` there are no layers: omit ``layer``,
     ``hop_input``, and ``hop_output`` and the whole state vector

@@ -745,6 +745,59 @@ def test_map_node_attributions_repeats_wide_layered_names():
         )
 
 
+def test_map_node_attributions_wide_axis_selection_contract():
+    """
+    Pin what the Returns section says about a non-unique index.
+    """
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "A", "A", "K", "H", "B"],
+            "target": ["K", "H", "B", "C", "C", "C"],
+        }
+    )
+    spec = parse_layered(
+        edgelist,
+        widths={"H": 3},
+    )
+    assert spec.layer_nodes[1] == ("B", "H", "K")
+    scores = torch.tensor(
+        [
+            [1.0, 2.0, 3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0, 9.0, 10.0],
+        ]
+    )
+    da = map_node_attributions(
+        scores,
+        spec,
+        1,
+    )
+
+    assert da["node"].values.tolist() == ["B", "H", "H", "H", "K"]
+    np.testing.assert_allclose(
+        da.sel(node="H").values,
+        [[2.0, 3.0, 4.0], [7.0, 8.0, 9.0]],
+    )
+    picked = da.sel(node=da["node"].isin(["B", "K"]))
+    assert picked["node"].values.tolist() == ["B", "K"]
+    folded = da.groupby("node").mean()
+    assert folded["node"].values.tolist() == ["B", "H", "K"]
+    np.testing.assert_allclose(
+        folded.values,
+        [[1.0, 3.0, 5.0], [6.0, 8.0, 10.0]],
+    )
+    with pytest.raises(pd.errors.InvalidIndexError):
+        da.sel(node=["B", "K"])
+    with pytest.raises(ValueError):
+        da.reindex(node=["B", "K"])
+    with pytest.raises(ValueError):
+        da + da.isel(node=[0, 4])
+    reversed_h = da.isel(node=[0, 3, 2, 1, 4])
+    np.testing.assert_allclose(
+        (da - reversed_h).sel(node="H").values,
+        [[-2.0, 0.0, 2.0], [-2.0, 0.0, 2.0]],
+    )
+
+
 def _skip_spec():
     edgelist = pd.DataFrame(
         {

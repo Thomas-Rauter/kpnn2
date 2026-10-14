@@ -2522,6 +2522,19 @@ concat_layouts(
 ).unit_names()
 ```
 
+**Wide nodes keep repeated names.** Every unit of a wide node is
+labelled with the node's name, in unit order, and has no label
+of its own. The units share the node's edges, so the spec gives
+them no separate meaning. A score per node is a fold the caller
+picks (sum or mean over the units; a sum grows with width), not
+this function's job. Do not add a per-unit `unit` coordinate, a
+`(name, unit)` MultiIndex on `node`, or unique strings such as
+`"H#0"`. A non-index coordinate takes no part in xarray
+alignment, so it fixes nothing. A MultiIndex makes a width-1
+`sel` 2-D, renames the dim to `unit` after a `sel`, and cannot
+be written to netCDF. Node names are arbitrary strings, so no
+separator is safe.
+
 - `attributions`: `torch.Tensor`, or a non-empty tuple/list of
   equal-shaped tensors (stacked on a new `step` axis).
 - `layer`: `int` or numpy integer index into `spec.layer_nodes`
@@ -2550,6 +2563,16 @@ concat_layouts(
   unit-name rule on the concatenated source layers),
   `spec.state_dim` for an `AdjacencySpec`. That axis gets
   those names as its coordinate, in order.
+- With a wide node on the axis the `node` index is not unique.
+  `da.sel(node=name)` returns all units of that node, and
+  `da.groupby("node")` folds them (result sorted by name).
+  Selecting a list of names, `reindex`, and
+  aligning with an array whose `node` index differs raise in
+  xarray, even for width-1 names. Several names:
+  `da.sel(node=da["node"].isin(names))`. Two arrays with the
+  same `node` index combine unit by unit, by position. With
+  every node at width 1 the index is unique. The docstring
+  Returns section states this.
 - Default dims: 1-D → `(node,)`; 2-D → `(observation, node)`; a
   stacked sequence of 2-D tensors → `(step, observation, node)`.
   Rank 3+ (except that stacked default) requires `dims=` containing
