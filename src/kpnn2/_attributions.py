@@ -80,9 +80,9 @@ def map_node_attributions(  # numpydoc ignore=PR06
         one unit each.
     layer : int or numpy integer, optional
         0-based depth into ``spec.layer_nodes``, index 0 being the
-        input layer, whose names label the node axis; the index
-        itself is attached as a scalar ``layer`` coordinate, an
-        ``int`` even when a numpy integer was passed.
+        input layer, whose names label the node axis; the
+        ``layer`` coordinate repeats the index on every unit, the
+        same for a numpy integer as for an ``int``.
         ``LayeredSpec`` only, and mutually exclusive with
         ``hop_input`` and ``hop_output``.
     hop_input : Hop, optional
@@ -91,22 +91,23 @@ def map_node_attributions(  # numpydoc ignore=PR06
         ``gather_hop_inputs`` returns, length ``hop.in_features``,
         with unit names (a wide node's name repeats). Captum layer
         methods score this side only with
-        ``attribute_to_layer_input=True``. No ``layer`` coordinate
-        is attached; that axis is not one depth. ``LayeredSpec``
-        only, and mutually exclusive with ``layer`` and
-        ``hop_output``.
+        ``attribute_to_layer_input=True``. The ``layer``
+        coordinate gives each unit the depth of its source layer,
+        so a skip hop's axis holds several depths.
+        ``LayeredSpec`` only, and mutually exclusive with
+        ``layer`` and ``hop_output``.
     hop_output : Hop, optional
         A ``Hop`` that equals one entry of ``spec.hops``. Labels
         what that hop's module returns: layer ``hop.target_layer``,
         length ``hop.out_features``. This is the side Captum layer
         methods score by default. The result is the same as
-        ``layer=hop.target_layer``, scalar ``layer`` coordinate
+        ``layer=hop.target_layer``, ``layer`` coordinate
         included. ``LayeredSpec`` only, and mutually exclusive with
         ``layer`` and ``hop_input``.
     axis : {"inputs"} or None, optional
         ``"inputs"`` labels the model-input axis and nothing
         else. On a ``LayeredSpec`` that is ``layer=0``,
-        including the scalar ``layer`` coordinate, and it is
+        including the ``layer`` coordinate, and it is
         mutually exclusive with ``layer``, ``hop_input``, and
         ``hop_output``. On an ``AdjacencySpec`` the names are
         the input units in ``spec.input_index`` order, length
@@ -135,16 +136,20 @@ def map_node_attributions(  # numpydoc ignore=PR06
         The values and shape of the (stacked) tensor, carrying the
         spec's node names as the ``node`` coordinate in spec order
         (a name repeats once per unit when that node is wider
-        than 1), and a scalar ``layer`` coordinate when ``layer``
-        or ``hop_output`` was passed, and when ``axis="inputs"``
-        is passed on a ``LayeredSpec``. A ``hop_input`` mapping,
-        and ``axis="inputs"`` on an ``AdjacencySpec``, have no
-        ``layer`` coordinate. ``bfloat16`` scores are stored as
-        ``float32``: NumPy has no bfloat16 dtype, and every
-        bfloat16 value fits in float32, so the scores are
-        unchanged. Other dtypes are kept. Use
-        ``.to_dataframe(name="score").reset_index()`` for a long
-        table, or ``.to_pandas()`` for a 2-D wide table.
+        than 1). On a ``LayeredSpec`` it also carries ``layer``,
+        an ``int64`` coordinate along ``node`` that holds each
+        unit's depth in ``spec.layer_nodes``: one depth repeated
+        for ``layer``, ``hop_output``, and ``axis="inputs"``, and
+        each unit's source layer for ``hop_input``. It stays
+        with its units when you concatenate results along
+        ``node``. Read one depth with ``int(da["layer"][0])``. An
+        ``AdjacencySpec`` result has no ``layer`` coordinate.
+        ``bfloat16`` scores are stored as ``float32``: NumPy has
+        no bfloat16 dtype, and every bfloat16 value fits in
+        float32, so the scores are unchanged. Other dtypes are
+        kept. Use ``.to_dataframe(name="score").reset_index()``
+        for a long table, or ``.to_pandas()`` for a 2-D wide
+        table.
 
         Units of a wide node share its edges, so the spec gives
         them no names of their own. On an axis with a wide node
@@ -257,8 +262,8 @@ def map_node_attributions(  # numpydoc ignore=PR06
     ['C']
     >>> da.sel(node="C").values.tolist()
     [0.5, 1.0]
-    >>> int(da.coords["layer"])
-    2
+    >>> da["layer"].values.tolist()
+    [2]
 
     Both sides of a hop can have the same width. Here ``hops[0]``
     reads ``A``, ``B`` and writes ``H1``, ``H2``, so one
@@ -283,8 +288,8 @@ def map_node_attributions(  # numpydoc ignore=PR06
     ... )
     >>> out_da["node"].values.tolist()
     ['H1', 'H2']
-    >>> int(out_da.coords["layer"])
-    1
+    >>> out_da["layer"].values.tolist()
+    [1, 1]
     >>> in_da = kpnn2.map_node_attributions(
     ...     attributions=hop_scores,
     ...     spec=square_spec,
@@ -292,11 +297,12 @@ def map_node_attributions(  # numpydoc ignore=PR06
     ... )
     >>> in_da["node"].values.tolist()
     ['A', 'B']
-    >>> "layer" in in_da.coords
-    False
+    >>> in_da["layer"].values.tolist()
+    [0, 0]
 
     A skip hop reads several layers, so its input axis is those
-    layers concatenated (width ``hop.in_features``):
+    layers concatenated (width ``hop.in_features``), and
+    ``layer`` gives each unit its own depth:
 
     >>> skip_edges = pd.DataFrame(
     ...     {
@@ -315,6 +321,25 @@ def map_node_attributions(  # numpydoc ignore=PR06
     ... )
     >>> skip_da["node"].values.tolist()
     ['A', 'H']
+    >>> skip_da["layer"].values.tolist()
+    [0, 1]
+
+    Concatenated along ``node``, each unit keeps its depth:
+
+    >>> import xarray as xr
+    >>> top_da = kpnn2.map_node_attributions(
+    ...     attributions=torch.tensor([[0.3]]),
+    ...     spec=skip_spec,
+    ...     layer=2,
+    ... )
+    >>> both = xr.concat(
+    ...     [skip_da, top_da],
+    ...     dim="node",
+    ... )
+    >>> both["node"].values.tolist()
+    ['A', 'H', 'C']
+    >>> both["layer"].values.tolist()
+    [0, 1, 2]
 
     A wide node's name repeats once per unit. ``sel`` takes one
     name; pick several with ``isin``, and fold units yourself:
@@ -379,7 +404,7 @@ def map_node_attributions(  # numpydoc ignore=PR06
     >>> "layer" in input_scores.coords
     False
     """
-    layout, layer_coord = _resolve_node_layout(
+    layout, unit_layers = _resolve_node_layout(
         spec,
         layer,
         hop_input,
@@ -405,7 +430,7 @@ def map_node_attributions(  # numpydoc ignore=PR06
         tensor=tensor,
         dim_names=dim_names,
         names=names,
-        layer=layer_coord,
+        unit_layers=unit_layers,
         coords=coords,
     )
     values = tensor.detach().cpu()
@@ -426,17 +451,17 @@ def _resolve_node_layout(
     hop_input: Hop | None,
     hop_output: Hop | None,
     axis: str | None,
-) -> tuple[Layout, int | None]:
+) -> tuple[Layout, tuple[int, ...] | None]:
     """
-    Return the ``node`` axis layout and the ``layer`` coordinate.
+    Return the ``node`` axis layout and each unit's depth.
 
     The layout supplies both the expected axis length and the
-    per-unit names, so a node owning several units would label
-    each of them. The coordinate is the depth when ``layer`` or
-    ``hop_output`` is given, and ``None`` for an
-    ``AdjacencySpec`` or a hop input axis, neither of which is
-    one depth. ``axis="inputs"`` on a ``LayeredSpec`` is layer
-    0. On an ``AdjacencySpec`` it is the input units only.
+    per-unit names, so a node owning several units labels each
+    of them. On a ``LayeredSpec`` the depths repeat one layer
+    (``layer``, ``hop_output.target_layer``, or 0 for
+    ``axis="inputs"``), or follow ``hop_input.source_layers``
+    unit by unit. An ``AdjacencySpec`` has no depths and gives
+    ``None``; its ``axis="inputs"`` is the input units only.
     """
     if axis is not None and (not isinstance(axis, str) or axis != "inputs"):
         raise Kpnn2Error(
@@ -469,10 +494,15 @@ def _resolve_node_layout(
                 f"Got {', '.join(given)}."
             )
         if hop_input is not None:
-            return _layout_for_hop_input(
-                spec,
+            require_spec_hop(
                 hop_input,
-            ), None
+                spec.hops,
+                "hop_input",
+            )
+            return _layered_axis(
+                spec,
+                hop_input.source_layers,
+            )
         if hop_output is not None:
             require_spec_hop(
                 hop_output,
@@ -481,18 +511,15 @@ def _resolve_node_layout(
             )
             layer = hop_output.target_layer
         if axis == "inputs":
-            return build_layout(
-                spec.layer_nodes[0],
-                spec.layer_widths[0],
-            ), 0
+            layer = 0
         layer = as_layer_index(
             layer,
             len(spec.layer_nodes),
         )
-        return build_layout(
-            spec.layer_nodes[layer],
-            spec.layer_widths[layer],
-        ), layer
+        return _layered_axis(
+            spec,
+            (layer,),
+        )
     if layer is not None or hop_input is not None or hop_output is not None:
         raise Kpnn2Error(
             "'layer', 'hop_input', and 'hop_output' do not apply "
@@ -509,27 +536,32 @@ def _resolve_node_layout(
     ), None
 
 
-def _layout_for_hop_input(
+def _layered_axis(
     spec: LayeredSpec,
-    hop: Hop,
-) -> Layout:
+    layers: tuple[int, ...],
+) -> tuple[Layout, tuple[int, ...]]:
     """
-    Concatenate source-layer layouts of one hop on the spec.
+    Lay ``layers`` of ``spec`` end to end, with each unit's depth.
+
+    One layer is a ``layer`` axis. Several, in order, are the
+    source axis of a hop that reads more than one layer.
     """
-    require_spec_hop(
-        hop,
-        spec.hops,
-        "hop_input",
+    layouts = [
+        build_layout(
+            spec.layer_nodes[i],
+            spec.layer_widths[i],
+        )
+        for i in layers
+    ]
+    depths = tuple(
+        i
+        for i, layout in zip(
+            layers,
+            layouts,
+        )
+        for _ in range(layout.n_units)
     )
-    return concat_layouts(
-        [
-            build_layout(
-                spec.layer_nodes[i],
-                spec.layer_widths[i],
-            )
-            for i in hop.source_layers
-        ]
-    )
+    return concat_layouts(layouts), depths
 
 
 def _as_tensor(
@@ -663,15 +695,16 @@ def _build_coords(
     tensor: torch.Tensor,
     dim_names: tuple[str, ...],
     names: list[str],
-    layer: int | None,
+    unit_layers: tuple[int, ...] | None,
     coords: Mapping[str, Sequence] | None,
 ) -> dict[str, object]:
     """
     Build xarray coordinates, with ``node`` fixed from the spec.
 
-    The scalar ``layer`` coordinate is added only when ``layer`` is
-    not ``None``; an ``AdjacencySpec`` or hop-source result
-    carries no such coordinate.
+    ``layer`` runs along ``node``, one depth per unit, so it stays
+    with its units when arrays are concatenated along ``node``.
+    It is added only when ``unit_layers`` is not ``None``; an
+    ``AdjacencySpec`` result carries no such coordinate.
     """
     extra: dict[str, Sequence] = {}
     if coords is not None:
@@ -708,8 +741,14 @@ def _build_coords(
             coord_map[dim] = labels
         else:
             coord_map[dim] = np.arange(size)
-    if layer is not None:
-        coord_map[_LAYER_COORD] = layer
+    if unit_layers is not None:
+        coord_map[_LAYER_COORD] = (
+            _NODE_DIM,
+            np.asarray(
+                unit_layers,
+                dtype=np.int64,
+            ),
+        )
     return coord_map
 
 

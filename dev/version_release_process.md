@@ -229,7 +229,9 @@ gh release create "v$VERSION" -t "kpnn2 v$VERSION" -F RELEASE_NOTES.md
 ```
 
 Open the release page and check that the notes render and the
-changelog link works.
+changelog link works. The release will also trigger Zenodo to store a
+copy of the version under the same doi of the previous versions, so
+also check Zenodo that this worked.
 
 ## If the release run fails
 

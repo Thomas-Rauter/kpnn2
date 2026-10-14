@@ -107,7 +107,7 @@ def test_integrated_gradients_maps_input_node_order() -> None:
     expected_nodes = list(spec.layer_nodes[0])
     assert expected_nodes == list(spec.input_nodes)
     assert mapped["node"].values.tolist() == expected_nodes
-    assert int(mapped.coords["layer"]) == 0
+    assert mapped["layer"].values.tolist() == [0] * len(expected_nodes)
 
     table = mapped.to_pandas()
     raw = attributions.detach().cpu().numpy()
@@ -161,7 +161,7 @@ def test_synthetic_captum_tensor_maps_hidden_layer_names() -> None:
     )
 
     assert mapped["node"].values.tolist() == names
-    assert int(mapped.coords["layer"]) == layer
+    assert mapped["layer"].values.tolist() == [layer] * len(names)
     table = mapped.to_pandas()
     raw = values.numpy()
     for column, name in enumerate(names):
@@ -247,7 +247,7 @@ def test_layer_conductance_hop_output_names_dead_hidden_node() -> None:
     )
 
     assert mapped["node"].values.tolist() == ["H1", "H2"]
-    assert int(mapped.coords["layer"]) == hop.target_layer
+    assert mapped["layer"].values.tolist() == [hop.target_layer] * 2
     table = mapped.to_pandas()
     assert max_abs_scores(table, ("H1",))["H1"] <= DEAD_TOLERANCE
     assert median_abs_scores(table, ("H2",))["H2"] > LIVE_FLOOR
@@ -277,7 +277,7 @@ def test_layer_conductance_hop_input_names_dead_input() -> None:
     )
 
     assert mapped["node"].values.tolist() == ["A", "B"]
-    assert "layer" not in mapped.coords
+    assert mapped["layer"].values.tolist() == [0, 0]
     table = mapped.to_pandas()
     assert max_abs_scores(table, ("A",))["A"] <= DEAD_TOLERANCE
     assert median_abs_scores(table, ("B",))["B"] > LIVE_FLOOR

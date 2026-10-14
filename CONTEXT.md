@@ -2473,10 +2473,10 @@ never chooses the axis.
 
 | Spec | Given | Result |
 |------|-------|--------|
-| `LayeredSpec` | `layer=int` | Names from `unit_names` of that layer (a wide node's name repeats); scalar `layer` coordinate attached |
-| `LayeredSpec` | `hop_output=Hop` | Same as `layer=hop.target_layer`: the layer that hop's module **writes**, length `hop.out_features`, scalar `layer` coordinate attached |
-| `LayeredSpec` | `hop_input=Hop` | Concatenated **source-unit** names of that hop (what its module **reads**), length `hop.in_features`. **No** `layer` coordinate (this axis is not one depth). |
-| `LayeredSpec` | `axis="inputs"` | Same result as `layer=0`: input-layer unit names, scalar `layer` coordinate `0` |
+| `LayeredSpec` | `layer=int` | Names from `unit_names` of that layer (a wide node's name repeats); `layer` coordinate repeats the index on every unit |
+| `LayeredSpec` | `hop_output=Hop` | Same as `layer=hop.target_layer`: the layer that hop's module **writes**, length `hop.out_features`, `layer` coordinate `hop.target_layer` on every unit |
+| `LayeredSpec` | `hop_input=Hop` | Concatenated **source-unit** names of that hop (what its module **reads**), length `hop.in_features`. `layer` coordinate gives each unit its source layer (a skip hop's axis holds several depths). |
+| `LayeredSpec` | `axis="inputs"` | Same result as `layer=0`: input-layer unit names, `layer` coordinate `0` on every unit |
 | `LayeredSpec` | none | `Kpnn2Error`: need one of `layer`, `hop_input`, `hop_output`, or `axis="inputs"` |
 | `LayeredSpec` | two or more | `Kpnn2Error`: pass exactly one; the message names what was given |
 | `AdjacencySpec` | none | Unit names from `spec.nodes` and `node_widths` (a wide node's name repeats); **no** `layer` coordinate |
@@ -2535,16 +2535,35 @@ alignment, so it fixes nothing. A MultiIndex makes a width-1
 be written to netCDF. Node names are arbitrary strings, so no
 separator is safe.
 
+**`layer` is per unit.** On every `LayeredSpec` result `layer` is
+an `int64` coordinate along `node`: each unit's depth in
+`spec.layer_nodes`. It repeats one depth for `layer`,
+`hop_output`, and `axis="inputs"`, and follows
+`hop.source_layers` unit by unit for `hop_input`. A coordinate
+along `node` is concatenated with its units by `xr.concat`
+along `node` under every `coords` / `compat` setting, so each
+unit keeps its depth. Do not make it scalar: under
+`coords="minimal"`, the default xarray announces, `xr.concat`
+along `node` keeps the first array's scalar for every unit,
+and it does so under any setting when another array lacks the
+coordinate. Units of other depths are then mislabelled without
+an error. For the same reason do not drop it from `hop_input`.
+Read one depth with
+`int(da["layer"][0])`. An `AdjacencySpec` result still has no
+`layer` coordinate.
+
 - `attributions`: `torch.Tensor`, or a non-empty tuple/list of
   equal-shaped tensors (stacked on a new `step` axis).
 - `layer`: `int` or numpy integer index into `spec.layer_nodes`
-  (0-based), stored as scalar coordinate `layer` (an `int`, so a
-  numpy `layer` gives the same result). `LayeredSpec` only,
-  mutually exclusive with `hop_input` and `hop_output`.
+  (0-based), repeated on every unit in the `layer` coordinate
+  (`int64`, so a numpy `layer` gives the same result).
+  `LayeredSpec` only, mutually exclusive with `hop_input` and
+  `hop_output`.
 - `hop_output`: a `Hop` equal to one of `spec.hops`. Labels the
   layer that hop's module returns, `hop.target_layer`, length
-  `hop.out_features`, with the scalar `layer` coordinate; the
-  result is identical to `layer=hop.target_layer`. That return
+  `hop.out_features`, with `layer` coordinate
+  `hop.target_layer` on every unit; the result is identical to
+  `layer=hop.target_layer`. That return
   is the pre-activation tensor. Captum layer methods
   (`LayerConductance` and the rest) score this side by
   default. `LayeredSpec` only, mutually exclusive with `layer`
@@ -2553,8 +2572,9 @@ separator is safe.
   concatenated source axis of that hop (`gather_hop_inputs`
   output / hop-module input; Captum with
   `attribute_to_layer_input=True`), length `hop.in_features`.
-  No `layer` coordinate. `LayeredSpec` only, mutually exclusive
-  with `layer` and `hop_output`.
+  The `layer` coordinate gives each unit its source layer.
+  `LayeredSpec` only, mutually exclusive with `layer` and
+  `hop_output`.
 - The `node` axis length must equal the number of named units:
   `spec.layer_dims[layer]` when `layer` is given (names from
   `layout.unit_names()`, so a wide node's name repeats `k`

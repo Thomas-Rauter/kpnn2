@@ -52,6 +52,12 @@ semantic versioning.
   `align_inputs` returns one column per input node and no
   longer repeats columns. Give each measurement its own input
   node.
+- `map_node_attributions` gives every `LayeredSpec` result a
+  `layer` coordinate along `node`, one `int64` depth per unit;
+  `hop_input` results get each unit's source layer. It was a
+  scalar, absent for `hop_input`, and `xr.concat` along `node`
+  could give units of other layers the first array's depth.
+  Read one depth with `int(da["layer"][0])`.
 
 ### Added
 

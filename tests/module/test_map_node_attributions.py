@@ -59,7 +59,9 @@ def test_map_node_attributions_uses_layer_node_names():
     assert isinstance(da, xr.DataArray)
     assert da.dims == ("observation", "node")
     assert da["node"].values.tolist() == ["E", "H"]
-    assert int(da.coords["layer"]) == 1
+    assert da["layer"].dims == ("node",)
+    assert da["layer"].dtype == np.int64
+    assert da["layer"].values.tolist() == [1, 1]
     assert da.sel(node="E").values.tolist() == pytest.approx([0.1, 0.3])
     assert da.sel(node="H").values.tolist() == pytest.approx([0.2, 0.4])
 
@@ -634,7 +636,7 @@ def test_map_node_attributions_layered_inputs_axis_matches_layer_zero():
         by_layer,
     )
     assert by_axis["node"].values.tolist() == ["A", "B"]
-    assert int(by_axis.coords["layer"]) == 0
+    assert by_axis["layer"].values.tolist() == [0, 0]
 
 
 def test_map_node_attributions_rejects_inputs_axis_with_layer():
@@ -825,10 +827,65 @@ def test_map_node_attributions_names_skip_hop_source_axis():
     assert da["node"].values.tolist() == list(hop.source_nodes)
     assert hop.in_features == len(hop.source_nodes)
     assert da.shape[-1] == hop.in_features
-    assert "layer" not in da.coords
+    assert da["layer"].dims == ("node",)
+    assert da["layer"].values.tolist() == [0, 1]
     assert "layer" not in da.dims
     assert da.sel(node="A").item() == pytest.approx(0.1)
     assert da.sel(node="H").item() == pytest.approx(0.2)
+
+
+@pytest.mark.parametrize(
+    "concat_kwargs",
+    [
+        pytest.param(
+            {
+                "coords": "different",
+                "compat": "equals",
+            },
+            id="different_equals",
+        ),
+        pytest.param(
+            {
+                "coords": "minimal",
+                "compat": "override",
+            },
+            id="minimal_override",
+        ),
+    ],
+)
+def test_map_node_attributions_layer_survives_concat(concat_kwargs):
+    """
+    Each unit keeps its depth when results join along ``node``.
+
+    A scalar ``layer`` lost it: ``xr.concat`` kept the first
+    array's value for every unit, and ``minimal`` is the default
+    xarray announces.
+    """
+    spec = _skip_spec()
+    inputs = map_node_attributions(
+        torch.zeros(2, 1),
+        spec,
+        0,
+    )
+    skip_input = map_node_attributions(
+        torch.zeros(2, 2),
+        spec,
+        hop_input=spec.hops[1],
+    )
+    top = map_node_attributions(
+        torch.zeros(2, 1),
+        spec,
+        2,
+    )
+
+    joined = xr.concat(
+        [inputs, skip_input, top],
+        dim="node",
+        **concat_kwargs,
+    )
+
+    assert joined["node"].values.tolist() == ["A", "A", "H", "C"]
+    assert joined["layer"].values.tolist() == [0, 0, 1, 2]
 
 
 def test_map_node_attributions_repeats_wide_hop_source_names():
@@ -864,7 +921,8 @@ def test_map_node_attributions_repeats_wide_hop_source_names():
     assert da.shape[-1] == hop.in_features
     assert hop.in_features != len(hop.source_nodes)
     assert list(hop.source_nodes) == ["A", "H"]
-    assert "layer" not in da.coords
+    assert hop.source_layers == (1, 2)
+    assert da["layer"].values.tolist() == [1, 1, 2, 2, 2]
 
 
 @pytest.mark.parametrize(
@@ -1038,7 +1096,7 @@ def test_map_node_attributions_hop_output_names_target_layer():
             by_layer,
         )
         assert hop.target_layer == index + 1
-        assert int(by_hop.coords["layer"]) == index + 1
+        assert by_hop["layer"].values.tolist() == [index + 1] * width
         assert by_hop["node"].values.tolist() == list(
             spec.layer_nodes[index + 1]
         )
@@ -1075,8 +1133,8 @@ def test_map_node_attributions_same_width_sides_name_differently():
 
     assert output_side["node"].values.tolist() == ["H1", "H2"]
     assert input_side["node"].values.tolist() == ["A", "B"]
-    assert int(output_side.coords["layer"]) == 1
-    assert "layer" not in input_side.coords
+    assert output_side["layer"].values.tolist() == [1, 1]
+    assert input_side["layer"].values.tolist() == [0, 0]
     torch.testing.assert_close(
         torch.as_tensor(output_side.values),
         scores,
@@ -1107,7 +1165,7 @@ def test_map_node_attributions_hop_output_repeats_wide_names():
     )
 
     assert da["node"].values.tolist() == ["H", "H", "H"]
-    assert int(da.coords["layer"]) == 1
+    assert da["layer"].values.tolist() == [1, 1, 1]
 
 
 def test_map_node_attributions_has_no_sideless_hop_keyword():

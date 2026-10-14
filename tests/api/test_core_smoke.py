@@ -65,7 +65,7 @@ def test_core_smoke():
     )
     assert list(da["node"].values) == list(spec.layer_nodes[1])
     assert int(da.sizes["observation"]) == 2
-    assert int(da.coords["layer"]) == 1
+    assert da["layer"].values.tolist() == [1] * len(spec.layer_nodes[1])
 
     caught = None
     try:
