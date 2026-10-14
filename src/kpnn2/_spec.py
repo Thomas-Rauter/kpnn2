@@ -11,6 +11,7 @@ from torch import Tensor
 from ._errors import Kpnn2Error
 from ._layout import (
     build_layout,
+    edges_by_slot,
     hop_axis_layouts,
     resolve_edge_names,
     resolve_edge_pairs,
@@ -505,7 +506,9 @@ class LayeredSpec:
     ``edge_location`` finds packed slots of a named edge, and
     ``edge_index`` those of several edges of one hop, in order;
     neither is a constraint. A hard freeze of those slots is
-    ``torch.where`` inside ``constraint=``. ``node_units`` and
+    ``torch.where`` inside ``constraint=``. ``slot_table`` goes
+    the other way and names the edge of every slot of every
+    hop. ``node_units`` and
     ``hop_units`` map a named node to its contiguous unit slice
     on a layer tensor or a hop source axis. ``unit_index`` gives
     every unit of several named nodes of one layer, in order, as
@@ -902,6 +905,123 @@ class LayeredSpec:
         for pair in pairs:
             slots.extend(locations[pair][1])
         return tuple(slots)
+
+    def slot_table(self) -> pd.DataFrame:
+        """
+        Return the named edge of every packed slot, hop by hop.
+
+        One row per packed slot of every hop. The rows of hop
+        ``i`` are in the order of ``hops[i].source_index`` and of
+        the ``weight`` of ``PackedLinear.from_hop(hops[i])``, and
+        the hops follow ``hops``. Per-slot tensors such as trained
+        weights, one per hop joined with ``torch.cat`` in hop
+        order, therefore get their edge names by assignment as a
+        numpy array. At width 1 a slot is a named edge,
+        and the rows of one hop are that hop's rows of
+        ``to_edgelist()``. An edge between nodes of widths
+        ``k_source`` and ``k_target`` fills
+        ``k_source * k_target`` rows, one per unit pair, all with
+        the same names. ``edge_index`` goes the other way, from
+        named edges of one hop to their slots.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Index levels ``hop``, the index into ``hops``, and
+            ``slot``, the index into that hop's ``source_index``,
+            both ``int64``. Columns ``source`` and ``target``: the
+            names of the edge that owns the slot.
+
+        See Also
+        --------
+        edge_index : Slots of named edges of one hop, in order.
+        edge_location : Hop and slots of one named edge.
+        to_edgelist : One row per named edge.
+
+        Notes
+        -----
+        The table is computed on each call and is a new DataFrame
+        each time, so changing it does not change this spec.
+        ``table.loc[i]`` is hop ``i``, indexed by slot. The units
+        of a row are ``hops[hop].source_index[slot]`` on the hop's
+        source axis and ``hops[hop].target_index[slot]`` on its
+        target layer. To get one value per named edge on a wide
+        spec, group the rows by ``["source", "target"]``.
+
+        Examples
+        --------
+        A chain plus a skip. The hop into ``C`` holds both of its
+        edges:
+
+        >>> import pandas as pd
+        >>> import torch
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "H", "A"],
+        ...         "target": ["H", "C", "C"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_layered(edgelist)
+        >>> table = spec.slot_table()
+        >>> table
+                 source target
+        hop slot
+        0   0         A      H
+        1   0         A      C
+            1         H      C
+
+        Per-hop tensors, here standing in for each layer's
+        ``effective_weight().detach()``, name their values once
+        joined in hop order:
+
+        >>> weights = [torch.tensor([0.5]), torch.tensor([-1.0, 2.0])]
+        >>> table["weight"] = torch.cat(weights).numpy()
+        >>> table.loc[1]
+             source target  weight
+        slot
+        0         A      C    -1.0
+        1         H      C     2.0
+        """
+        locations, _ = self._edge_locations()
+        by_hop: list[list[tuple[tuple[str, str], tuple[int, ...]]]] = [
+            [] for _ in self.hops
+        ]
+        for edge, (hop_index, slots) in locations.items():
+            by_hop[hop_index].append(
+                (
+                    edge,
+                    slots,
+                )
+            )
+        hop_column: list[int] = []
+        slot_column: list[int] = []
+        edges: list[tuple[str, str]] = []
+        for hop_index, hop in enumerate(self.hops):
+            hop_edges = edges_by_slot(
+                by_hop[hop_index],
+                len(hop.source_index),
+            )
+            hop_column.extend([hop_index] * len(hop_edges))
+            slot_column.extend(range(len(hop_edges)))
+            edges.extend(hop_edges)
+        return pd.DataFrame(
+            edges,
+            columns=["source", "target"],
+            index=pd.MultiIndex.from_arrays(
+                [
+                    pd.Index(
+                        hop_column,
+                        dtype="int64",
+                    ),
+                    pd.Index(
+                        slot_column,
+                        dtype="int64",
+                    ),
+                ],
+                names=["hop", "slot"],
+            ),
+        )
 
     def _edge_locations(
         self,

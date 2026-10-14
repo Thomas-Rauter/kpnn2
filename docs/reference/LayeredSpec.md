@@ -4,6 +4,7 @@
         - to_edgelist
         - edge_location
         - edge_index
+        - slot_table
         - node_units
         - hop_units
         - unit_index

@@ -12,6 +12,7 @@ from ._layout import (
     Layout,
     build_layout,
     dense_mask_from_indices,
+    edges_by_slot,
     resolve_edge_names,
     resolve_edge_pairs,
     resolve_node_name,
@@ -128,6 +129,8 @@ class AdjacencySpec:
     a named edge, and ``edge_index`` those of several edges, in
     order; neither is a constraint. A hard freeze of those
     slots is ``torch.where`` inside ``constraint=``.
+    ``slot_table`` goes the other way and names the edge of
+    every slot.
     ``node_table`` counts each node's edges and the nodes
     that reach it or that it reaches.
 
@@ -715,6 +718,105 @@ class AdjacencySpec:
         for pair in pairs:
             slots.extend(locations[pair])
         return tuple(slots)
+
+    def slot_table(self) -> pd.DataFrame:
+        """
+        Return the named edge of every packed slot, in slot order.
+
+        One row per packed slot, in the order of ``source_index``
+        and of the ``weight`` of ``PackedLinear.from_adjacency``
+        on this spec, so a per-slot tensor such as a trained
+        weight gets its edge names by assignment as a numpy
+        array: ``table["weight"] = weight.detach().numpy()``.
+        At width 1 a slot is a named edge, and the rows are the
+        rows of ``to_edgelist()``. An edge between nodes of
+        widths ``k_source`` and ``k_target`` fills
+        ``k_source * k_target`` rows, one per unit pair, all with
+        the same names. ``edge_index`` goes the other way, from
+        named edges to their slots.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Index ``slot``: ``0`` to ``len(source_index) - 1``,
+            ``int64``. Columns ``source`` and ``target``: the
+            names of the edge that owns the slot.
+
+        See Also
+        --------
+        edge_index : Slots of named edges, in order.
+        to_edgelist : One row per named edge.
+
+        Notes
+        -----
+        The table is computed on each call and is a new DataFrame
+        each time, so changing it does not change this spec. The
+        units of slot ``i`` are ``source_index[i]`` and
+        ``target_index[i]``. To get one value per named edge on a
+        wide spec, group the rows by ``["source", "target"]``.
+
+        Examples
+        --------
+        Four edges, one slot each:
+
+        >>> import pandas as pd
+        >>> import torch
+        >>> import kpnn2
+        >>> edgelist = pd.DataFrame(
+        ...     {
+        ...         "source": ["x", "a", "b", "a"],
+        ...         "target": ["a", "b", "a", "y"],
+        ...     }
+        ... )
+        >>> spec = kpnn2.parse_adjacency(edgelist)
+        >>> table = spec.slot_table()
+        >>> table
+             source target
+        slot
+        0         a      b
+        1         a      y
+        2         b      a
+        3         x      a
+
+        A per-slot tensor, here standing in for
+        ``layer.effective_weight().detach()``, names its values:
+
+        >>> weight = torch.tensor([0.5, -1.0, 2.0, 0.25])
+        >>> table["weight"] = weight.numpy()
+        >>> table.loc[table["target"] == "a"]
+             source target  weight
+        slot
+        2         b      a    2.00
+        3         x      a    0.25
+
+        With ``b`` three units wide, ``a -> b`` and ``b -> a``
+        fill three rows each:
+
+        >>> wide = kpnn2.parse_adjacency(
+        ...     edgelist,
+        ...     widths={"b": 3},
+        ... )
+        >>> wide.slot_table().groupby(["source", "target"]).size()
+        source  target
+        a       b         3
+                y         1
+        b       a         3
+        x       a         1
+        dtype: int64
+        """
+        locations, _ = self._edge_locations()
+        edges = edges_by_slot(
+            locations.items(),
+            len(self.source_index),
+        )
+        return pd.DataFrame(
+            edges,
+            columns=["source", "target"],
+            index=pd.RangeIndex(
+                len(edges),
+                name="slot",
+            ),
+        )
 
     def _edge_locations(
         self,

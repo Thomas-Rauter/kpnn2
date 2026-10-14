@@ -8,6 +8,7 @@
         - to_mask
         - edge_location
         - edge_index
+        - slot_table
         - node_table
         - to_dict
         - from_dict

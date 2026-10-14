@@ -71,6 +71,9 @@ semantic versioning.
   (signs, prior flags) land on their slots without a loop over
   `edge_location`. `LayeredSpec.edge_index(sources, targets,
   hop=)` indexes one hop.
+- `slot_table()` on both specs: the source and target name of
+  every packed slot, hop by hop on `LayeredSpec`, so trained
+  weights and per-slot scores get edge names by assignment.
 - `node_table()` on both specs: one row per node with its
   layer (layered only), width, in- and out-degree, and counts
   of ancestors, descendants, and input ancestors, in unit

@@ -347,6 +347,7 @@ Division of labor:
 | `PackedLinear.transpose` (tied packed `W.T`) | kpnn2 |
 | Named node → unit slice (`node_units` / `hop_units`); named nodes → unit index (`unit_index`) | kpnn2 |
 | Named edge → packed slots (`edge_location`); named edges → slot index (`edge_index`) | kpnn2 |
+| Packed slots → named edges (`slot_table`) | kpnn2 |
 | Spec → per-node graph counts (`node_table`) | kpnn2 |
 | Feature names → column index (`align_inputs`) | kpnn2 |
 | Apply that index on host X (`X[:, col]`) | User |
@@ -808,6 +809,44 @@ edge.
   policy. Stored fields, `to_dict()`, and `fingerprint` do not
   change.
 
+### `LayeredSpec.slot_table()`
+
+```python
+layered_spec.slot_table() -> pandas.DataFrame
+```
+
+The named edge of every packed slot of every hop, so a per-slot
+tensor (trained weights, per-slot scores) gets edge names by
+assignment instead of a loop over `edge_location`. Rows run hop
+by hop in `hops` order, and within a hop in slot order, the
+order of `hops[i].source_index` and of
+`PackedLinear.from_hop(hops[i]).weight`. So the per-hop
+weights joined with `torch.cat` in hop order give one value per
+row; assign them as a numpy array, because pandas warns on a
+tensor. `to_edgelist().assign(...)` lines up only for a single
+hop at width 1.
+
+- The index has two `int64` levels, `hop` (index into `hops`)
+  and `slot` (index into that hop's `source_index`). The
+  columns are exactly `source` then `target`, the names of the
+  edge that owns the slot. `table.loc[i]` is hop `i`, indexed by
+  slot.
+- At width 1 a slot is a named edge, and the rows of hop `i` are
+  that hop's rows of `to_edgelist()`, in the same order. An edge
+  `A→B` fills `k_A * k_B` rows with the same names, one per unit
+  pair, target-unit outer and source-unit inner as stored. A row
+  carries no unit columns: its units are
+  `hops[hop].source_index[slot]` and `target_index[slot]`.
+  Folding the rows of one edge (`groupby(["source", "target"])`)
+  is the caller's.
+- The rows of one edge are its `edge_location` slots, and
+  `edge_index` on them gives the same slots: the table inverts
+  the same cached map, and `edges_by_slot` checks with
+  `internal_error` that every slot has exactly one owning edge.
+- Computed on each call and returned as a new DataFrame; nothing
+  is stored on the spec. Stored fields, `to_dict()`, and
+  `fingerprint` do not change.
+
 ### `LayeredSpec.node_units()` / `hop_units()`
 
 ```python
@@ -1122,6 +1161,19 @@ every row of `to_edgelist()`, in order, gives
 `tuple(range(len(spec.source_index)))`. Cycle edges and
 self-loops are ordinary edges here. Unknown names point at
 `spec.nodes`.
+
+### `AdjacencySpec.slot_table()`
+
+```python
+adjacency_spec.slot_table() -> pandas.DataFrame
+```
+
+Same contract as `LayeredSpec.slot_table()` on the packed state
+arrays, without `hop`: the index is one `int64` level, `slot`,
+`0` to `len(spec.source_index) - 1`, in the order of
+`source_index` and of `PackedLinear.from_adjacency(spec).weight`.
+At width 1 the rows are the rows of `to_edgelist()`, in order.
+Cycle edges and self-loops are ordinary rows.
 
 ### `AdjacencySpec.node_table()`
 
@@ -2808,7 +2860,10 @@ Width 1 stays numerically identical.
   `LayeredSpec.edge_location` and `AdjacencySpec.edge_location`
   are that lookup for callers: a named edge to packed weight
   slots. `edge_index` on both specs is the many-edge form (one
-  hop on a `LayeredSpec`), built from the same cached map. They
+  hop on a `LayeredSpec`), built from the same cached map.
+  `slot_table` on both specs inverts that map
+  (`edges_by_slot`, which checks that every slot has exactly
+  one owning edge), so the three never disagree. They
   are identity, not constraints. Callers who
   need mixed signs or frozen values index these slots in
   their own `constraint=` module (`torch.where` to hold a

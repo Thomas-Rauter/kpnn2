@@ -2174,6 +2174,27 @@ _VALID_CASES = [
         ).node_table(),
     ),
     _Valid(
+        "LayeredSpec",
+        "slot_table_with_widths_and_ranks",
+        lambda: _layered(
+            widths={"H": 2},
+            ranks={"A": 0, "H": 1, "C": 2},
+        ).slot_table(),
+    ),
+    _Valid(
+        "AdjacencySpec",
+        "slot_table_with_a_self_loop",
+        lambda: kpnn2.parse_adjacency(
+            pd.DataFrame(
+                {
+                    "source": ["x", "a", "a"],
+                    "target": ["a", "a", "y"],
+                }
+            ),
+            widths={"a": 2},
+        ).slot_table(),
+    ),
+    _Valid(
         "AdjacencySpec",
         "node_table_with_a_self_loop",
         lambda: kpnn2.parse_adjacency(

@@ -444,6 +444,61 @@ def packed_indices_for_named_edge(
     return tuple(indices)
 
 
+def edges_by_slot(
+    slots_of_edge: Iterable[tuple[tuple[str, str], Sequence[int]]],
+    n_slots: int,
+) -> list[tuple[str, str]]:
+    """
+    Return the named edge that owns each packed slot, in slot order.
+
+    The inverse of a map from named edge to its packed slots, such
+    as a spec's edge-location cache. Every slot in
+    ``range(n_slots)`` must belong to exactly one named edge; a
+    table that labels weights by slot would otherwise name a
+    weight after the wrong edge.
+
+    Parameters
+    ----------
+    slots_of_edge
+        ``((source, target), slots)`` for every named edge of one
+        packed array.
+    n_slots
+        Length of that packed array.
+
+    Returns
+    -------
+    list of tuple of (str, str)
+        ``(source, target)`` of slot ``i`` at position ``i``.
+
+    Raises
+    ------
+    AssertionError
+        From ``internal_error``, if a slot is out of range, owned
+        by two edges, or owned by none.
+    """
+    owners: list[tuple[str, str] | None] = [None] * n_slots
+    for edge, slots in slots_of_edge:
+        for slot in slots:
+            if slot < 0 or slot >= n_slots:
+                raise internal_error(
+                    f"edge {edge[0]} -> {edge[1]} owns slot {slot}, out of "
+                    f"the packed range [0, {n_slots})"
+                )
+            if owners[slot] is not None:
+                raise internal_error(
+                    f"packed slot {slot} is owned by two named edges"
+                )
+            owners[slot] = edge
+    edges: list[tuple[str, str]] = []
+    for slot, owner in enumerate(owners):
+        if owner is None:
+            raise internal_error(
+                f"packed slot {slot} is owned by no named edge"
+            )
+        edges.append(owner)
+    return edges
+
+
 def resolve_edge_names(
     source: object,
     target: object,
