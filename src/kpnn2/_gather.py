@@ -16,10 +16,31 @@ def gather_hop_inputs(
     hop: Hop,
 ) -> torch.Tensor:
     """
-    Concatenate the saved layer tensors one hop reads, in source-column order.
+    Build one hop's input from the layer activations you saved.
 
-    A hop's source columns are whole source layers laid side by
-    side, so the tensor feeding ``PackedLinear`` or
+    Without skip edges, each layer reads only the layer directly
+    below it, so one module's output is the next module's input.
+    A skip edge breaks that chain: its source sits two or more
+    layers below its target. kpnn2 still applies every edge into
+    a layer with one module, the one built from that layer's hop
+    (``PackedLinear.from_hop(hop)`` or
+    ``MaskedLinear(hop.to_mask())``). That module therefore needs
+    every layer its target's parents sit in, at once and as one
+    tensor. This function builds that tensor. It does no
+    arithmetic; it only arranges tensors you already have.
+
+    Take ``A`` and ``B`` feeding ``H``, ``H`` feeding ``C``, and
+    the skip ``A -> C``. Layer 0 is ``[A, B]``, layer 1 is
+    ``[H]``, and the hop into ``C`` reads both, so its input is
+    the three columns ``[A, B, H]``: whole layers, laid side by
+    side in depth order. ``B`` is among them although there is
+    no edge ``B -> C``. The hop says which layers to read, in
+    which order, and how many units wide each must be. Without
+    skip edges, every hop reads a single layer, and that layer
+    is the input as it stands.
+
+    Precisely, a hop's source columns are whole source layers
+    laid side by side, so the tensor feeding ``PackedLinear`` or
     ``MaskedLinear`` on that hop is those layers concatenated.
     Call it between hops, keeping every layer you produce in
     ``saved``; a forgotten layer raises rather than dropping the
@@ -86,10 +107,9 @@ def gather_hop_inputs(
     inject values into the previous layer, and does not pick
     skip sources by name. Columns that are not edges stay in the
     concatenated tensor; ``PackedLinear`` never reads them, and
-    ``MaskedLinear(hop.to_mask())`` zeros them. With the skip
-    ``A -> C`` reaching past layer 1, layer 0 ``[A, B]`` and
-    layer 1 ``[H]`` gather to ``[A, B, H]``, and the ``A -> C``
-    weight is the packed pair whose source column is ``A``.
+    ``MaskedLinear(hop.to_mask())`` zeros them. In the
+    ``[A, B, H]`` example above, the ``A -> C`` weight is the
+    packed pair whose source column is ``A``.
 
     An ``AdjacencySpec`` has no hops and is not accepted; in
     that layout every edge is already a packed index pair.
@@ -209,15 +229,38 @@ def scatter_hop_outputs(
     hop: Hop,
 ) -> dict[int, torch.Tensor]:
     """
-    Split a hop's concatenated source axis back onto source layers.
+    Split a tensor laid out like one hop's input back into its layers.
 
-    Inverse of ``gather_hop_inputs`` for that axis. The encoder
-    concatenates whole source layers; a tied decoder
-    (``PackedLinear.transpose``) emits the same concatenated
-    width. This splits it. It does not take a ``saved`` dict
-    and does not add into one: return the pieces and add them
-    yourself, because two reversed hops may write the same
-    earlier layer.
+    ``gather_hop_inputs`` lays the layers a hop reads side by
+    side; this function cuts such a tensor apart again. You need
+    it when a model runs a hop backwards, as the decoder of a
+    tied autoencoder does. ``PackedLinear.transpose`` gives the
+    layer built from a hop its reverse map, from the hop's
+    target layer back onto the hop's input. On a hop that reads
+    several layers, that output is those layers glued together,
+    and the decoder can continue layer by layer only once each
+    piece is filed under its own depth. This function makes the
+    cut and returns the pieces keyed by depth. Like the gather,
+    it does no arithmetic.
+
+    Take ``A`` and ``B`` feeding ``H``, ``H`` feeding ``C``, and
+    the skip ``A -> C``. The hop into ``C`` reads layer 0
+    ``[A, B]`` and layer 1 ``[H]``, so its transposed layer maps
+    ``C`` to the three columns ``[A, B, H]``, and this splits
+    them into ``{0: [A, B], 1: [H]}``. Going forward, layer 0
+    feeds two hops, the one into ``H`` and the one into ``C``.
+    Going backward, it therefore receives a piece from each, and
+    the transpose of a layer read twice is the sum of the two.
+    That is why this returns pieces instead of writing them
+    anywhere: the adding stays in your code.
+
+    Precisely, this is the inverse of ``gather_hop_inputs`` for
+    that axis. The encoder concatenates whole source layers; a
+    tied decoder (``PackedLinear.transpose``) emits the same
+    concatenated width. This splits it. It does not take a
+    ``saved`` dict and does not add into one: return the pieces
+    and add them yourself, because two reversed hops may write
+    the same earlier layer.
 
     Parameters
     ----------

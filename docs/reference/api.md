@@ -22,7 +22,7 @@ Names you call or construct.
 | [`PackedLinear`][kpnn2.PackedLinear] | Linear layer with one weight per live edge, not a dense matrix. |
 | [`PackedMultiheadAttention`][kpnn2.PackedMultiheadAttention] | Attention that scores only live edgelist pairs, not a full matrix. |
 | [`gather_hop_inputs`][kpnn2.gather_hop_inputs] | Build the input for one hop from the layer activations you saved. |
-| [`scatter_hop_outputs`][kpnn2.scatter_hop_outputs] | Split a hop's concatenated source axis back onto source layers. |
+| [`scatter_hop_outputs`][kpnn2.scatter_hop_outputs] | Split a tensor laid out like one hop's input back into its layers. |
 | [`align_inputs`][kpnn2.align_inputs] | Feature names → column index so the wiring matches. |
 | [`map_node_attributions`][kpnn2.map_node_attributions] | Attach spec node names to an attribution tensor you already computed. |
 | [`aggregate_node_attributions`][kpnn2.aggregate_node_attributions] | Reduce mapped node scores with a registered method (default `rauter_mangano_2026` is not yet implemented). |
