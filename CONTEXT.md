@@ -2087,7 +2087,8 @@ PackedMultiheadAttention(
   `(seq, embed)` ignores this flag. Must be a `bool`.
 - `add_self_loops`: if `True`, OR missing `(i, i)`
   pairs into the module buffers when
-  `query_features == key_features`. Caller index
+  `query_features == key_features`, appended after the
+  given pairs in node order. Caller index
   objects are not mutated. Existing self-loops are
   kept, not duplicated. If
   `query_features != key_features`, raise
@@ -2173,7 +2174,9 @@ forward(
   length is the module `nnz`, including
   pairs OR-ed by `add_self_loops`; zip with
   `source_index` / `target_index`, not `to_edgelist()`,
-  when that flag added pairs.
+  when that flag added pairs. In training mode with
+  `dropout > 0` the returned weights are the ones after
+  dropout, as the mix used them.
 - `query`, `key`, and `value` are required; `key` is
   not defaulted to `query`.
 - `attn_mask` must be `None` (the edgelist is the
@@ -2235,6 +2238,22 @@ Do not name this a Transformer. Do not add
 `parse_attention`. Do not reuse a hop rectangle as a square
 attention matrix. Do not fold this layer into
 `PackedLinear` or `MaskedLinear`.
+
+The attention recipe is fixed: four projections,
+dot-product scores scaled by `1 / sqrt(head_dim)`, and a
+softmax over each query's live keys. That is the standard
+`nn.MultiheadAttention` recipe, and it is enough while
+transformer KPNNs are new research. The layer does not
+support variants that change the recipe itself: rotary
+embeddings or QK-norm between projection and score,
+additive GAT-style scores, grouped-query heads, or `kdim` /
+`vdim` other than `embed_dim`. If that research direction
+starts to need them, the composable path is a public packed
+kernel, the analogue of
+`torch.nn.functional.scaled_dot_product_attention`, built
+on the private kernels in `_packed_multihead_attention.py`.
+Prefer that kernel to new flags on this class. It is not
+planned now.
 
 ---
 

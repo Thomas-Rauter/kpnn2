@@ -617,6 +617,69 @@ def test_packed_weights_sum_to_one_per_live_query():
         )
 
 
+def test_training_weights_are_returned_after_dropout():
+    torch.manual_seed(42)
+    spec = parse_adjacency(_tiny_edgelist())
+    n = len(spec.nodes)
+    layer = PackedMultiheadAttention.from_adjacency(
+        spec,
+        8,
+        2,
+        dropout=0.5,
+    )
+    pin_projections_identity(layer)
+    x = torch.randn(
+        4,
+        n,
+        8,
+    )
+    layer.eval()
+    _, plain = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    layer.train()
+    output, dropped = layer(
+        x,
+        x,
+        x,
+        need_weights=True,
+        average_attn_weights=False,
+    )
+    kept = dropped != 0
+    assert bool(kept.any())
+    assert bool((~kept).any())
+    torch.testing.assert_close(
+        dropped[kept],
+        plain[kept] * 2.0,
+    )
+    values = shape_heads(
+        x,
+        2,
+    )[:, layer.source_index]
+    mixed = torch.zeros_like(
+        shape_heads(
+            x,
+            2,
+        )
+    ).index_add_(
+        1,
+        layer.target_index,
+        dropped.unsqueeze(-1) * values,
+    )
+    torch.testing.assert_close(
+        output,
+        mixed.reshape(
+            4,
+            n,
+            8,
+        ),
+    )
+
+
 def test_attn_mask_not_none_raises():
     torch.manual_seed(42)
     layer = PackedMultiheadAttention(

@@ -1012,95 +1012,159 @@ def _packed_attention_chunked(
 
 class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     """
-    Multi-head attention restricted to the live edges of a named edgelist.
+    Multi-head attention in which each node attends only to its sources.
 
-    Prior knowledge decides which node may attend to which: the
-    query at an edge's target sees only the keys at its sources.
-    Reach for it instead of masking ``nn.MultiheadAttention``,
-    whose mask costs an ``(n, n)`` matrix. Build it with
-    ``from_adjacency`` on a ``parse_adjacency`` spec and wrap it
-    in your own encoder. Defaults differ from MHA:
-    ``batch_first=True`` and ``need_weights=False``. ``True``
-    returns packed per-edge weights, not a dense ``(L, S)``
-    matrix.
+    Prior knowledge decides who may attend to whom; the data
+    decides how much. Every node is one token, a vector of
+    ``embed_dim`` numbers that stands for the node inside your
+    model. For each node, the layer looks at the nodes with an
+    edge into it (its sources), weighs them by how well their
+    tokens match its own, and returns a weighted mix of what they
+    pass on. The weights are recomputed for every sample: with a
+    gene-regulatory prior, a target gene can weigh its regulators
+    differently in each cell, depending on their state and its
+    own. Two nodes without an edge exchange nothing in this layer.
 
-    ``from_adjacency`` reads the indices and sequence lengths off
-    the spec, so query and key cannot be swapped by hand. The
-    constructor below takes packed indices directly, for pairs
-    that come from no spec, such as a bipartite query/key map.
+    Information flows along the edge arrow, from source to target,
+    as in ``PackedLinear``. In attention terms, the target asks and
+    its sources answer. The target's token gives a *query* (what it
+    looks for). Each source's token gives a *key* (what it offers
+    to be matched against) and a *value* (what it passes on). Each
+    query-key pair, that is, each live edge, gets a score. A
+    softmax over the edges into one node turns their scores into
+    weights that are non-negative and sum to 1, so the sources
+    compete: a higher weight for one leaves less for the others.
+    ``num_heads`` such weightings run side by side, each on its own
+    slice of the channels, so different heads can weigh the same
+    sources differently.
+
+    Compare ``PackedLinear``, which learns one weight per edge,
+    fixed after training and the same for every sample. Here
+    nothing is learned per edge. The learned parameters are four
+    ``embed_dim x embed_dim`` projections shared by every node and
+    edge (``q_proj``, ``k_proj``, ``v_proj``, ``out_proj``), so
+    their number does not depend on the graph. The graph only
+    decides which pairs are scored.
+
+    One call moves information one edge along the graph: a node's
+    output depends only on its own token and those of its direct
+    sources. Stack layers in your own encoder to reach nodes
+    further upstream. This layer is that one building block, not a
+    Transformer. You build the tokens (for example a projection of
+    each measured value plus a learned embedding per node) and
+    write the rest around the layer: normalization, residual
+    connections, a feed-forward network, and the readout.
+
+    Masking ``nn.MultiheadAttention`` with the graph computes the
+    same mix for every node that has a source. But it scores every
+    pair of tokens, an ``(n, n)`` matrix per head and sample (400
+    million scores for 20,000 nodes), and then discards the pairs
+    without an edge. This layer scores only the live edges, so its
+    memory and time grow with their number, ``nnz``, rather than
+    with ``n`` squared.
+
+    Build it with ``from_adjacency`` on a ``parse_adjacency`` spec:
+    one token per node (per unit, when ``widths=`` gives a node
+    several). It reads the indices and sequence lengths off the
+    spec, so the query and key sides cannot be swapped by hand. The
+    constructor below takes packed indices directly, for pairs that
+    come from no spec, such as a bipartite map in which pathway
+    tokens (queries) attend to gene tokens (keys).
+
+    Call it like ``nn.MultiheadAttention`` (it is not a subclass):
+    ``layer(query, key, value)``, passing the same tokens three
+    times for attention within one graph. Two defaults differ from
+    MHA: ``batch_first=True`` and ``need_weights=False``. With
+    ``need_weights=True`` the layer returns one weight per live
+    edge, not a dense ``(L, S)`` matrix.
 
     Parameters
     ----------
     source_index : torch.Tensor, numpy.ndarray, or sequence of int
+        Where each live edge starts. Entry ``i`` is the position in
+        ``key`` / ``value`` of the token that edge ``i`` reads
+        from, and must satisfy ``0 <= source_index < key_features``.
         1-D integer indices of length ``nnz >= 1``: an integer
-        tensor, an integer numpy array, or a sequence of ``int``
-        or numpy integers. A set or a mapping is rejected, since
+        tensor, an integer numpy array, or a sequence of ``int`` or
+        numpy integers. A set or a mapping is rejected, since
         entries pair up by position, and so is a complex tensor.
-        Entry ``i`` is the key / value position of live edge
-        ``i``, and must satisfy
-        ``0 <= source_index < key_features``. Copied to an int64
-        buffer, so later writes to the argument do not reach
-        this layer.
+        Copied to an int64 buffer, so later writes to the argument
+        do not reach this layer.
     target_index : torch.Tensor, numpy.ndarray, or sequence of int
-        1-D integer indices of the same length, in the same forms
-        as ``source_index``. Entry ``i`` is the query position of
-        live edge ``i``, and must satisfy
-        ``0 <= target_index < query_features``. The two arrays
-        are paired position by position and must not repeat a
-        ``(source, target)`` pair.
+        Where each live edge ends. Entry ``i`` is the position in
+        ``query`` of the token that attends along edge ``i``, and
+        must satisfy ``0 <= target_index < query_features``. Same
+        length and forms as ``source_index``. The two arrays are
+        paired position by position and must not repeat a
+        ``(source, target)`` pair. Their shared order is the order
+        of the per-edge weights ``forward`` returns; pairs added by
+        ``add_self_loops`` follow at the end.
     query_features : int or numpy integer
-        Sequence length of ``query``, that is, how many query
-        positions the packed indices address. Positive integer,
-        stored as ``int``.
+        How many tokens attend: the sequence length of ``query``.
+        Positive integer, stored as ``int``.
     key_features : int or numpy integer
-        Sequence length of ``key`` / ``value``. Positive integer,
-        stored as ``int``. Equal to ``query_features`` for a
-        self-attention graph over one node set; smaller or larger
-        for a bipartite query/key map.
+        How many tokens can be attended to: the sequence length of
+        ``key`` / ``value``. Positive integer, stored as ``int``.
+        Equal to ``query_features`` for attention within one node
+        set; smaller or larger for a bipartite query/key map.
     embed_dim : int or numpy integer
-        Model width of ``query`` / ``key`` / ``value`` and of the
-        output. Positive integer, divisible by ``num_heads``,
-        stored as ``int``.
+        How many numbers describe each token: the width of
+        ``query``, ``key``, ``value``, and the output. A wider
+        token can carry more about its node, and the four
+        projections hold ``4 * embed_dim**2`` weights. Positive
+        integer, divisible by ``num_heads``, stored as ``int``.
     num_heads : int or numpy integer
-        Number of attention heads, a positive integer stored as
-        ``int``. Each head attends over the same live pairs with
-        ``embed_dim // num_heads`` channels.
+        How many attention patterns run side by side. Each head
+        scores the same live edges from its own
+        ``embed_dim // num_heads`` channels, so it can weigh a
+        node's sources differently from the other heads. The heads'
+        mixes are joined and passed through ``out_proj``. Positive
+        integer, stored as ``int``.
     dropout : float, default=0.0
-        Dropout probability applied to the packed attention
-        weights in training mode only; ``0.0`` disables it.
-        Must be finite and in ``[0, 1]``, the range torch
-        accepts; integers ``0`` and ``1`` are accepted,
-        ``bool`` is rejected.
+        Regularization on the edge weights, in training mode only:
+        each weight is zeroed with this probability and the rest
+        are scaled by ``1 / (1 - dropout)``, so the model cannot
+        lean on any single edge. ``0.0`` disables it. Must be
+        finite and in ``[0, 1]``, the range torch accepts; integers
+        ``0`` and ``1`` are accepted, ``bool`` is rejected.
     bias : bool, default=True
-        Whether the four projections learn a bias. ``False``
-        makes them pure linear maps. Must be a ``bool``.
+        Whether the four projections learn an additive bias.
+        ``False`` makes them pure linear maps. Must be a ``bool``.
     kdim : int, numpy integer, or None, default=None
-        Key embed width. Must be ``None`` or an ``int`` or numpy
-        integer equal to ``embed_dim`` (``True`` is rejected even
-        when ``embed_dim`` is 1); kept for
-        ``nn.MultiheadAttention`` call-site parity, not to
-        support a differing width.
+        Exists so code written for ``nn.MultiheadAttention`` runs
+        unchanged; keys of a different width are not supported.
+        Must be ``None`` or an ``int`` or numpy integer equal to
+        ``embed_dim`` (``True`` is rejected even when ``embed_dim``
+        is 1).
     vdim : int, numpy integer, or None, default=None
-        Value embed width, under the same restriction as
-        ``kdim``.
+        Same as ``kdim``, for the values.
     batch_first : bool, default=True
-        Layout of batched tensors: ``(..., seq, embed_dim)`` when
-        ``True`` (kpnn2 sample-major), ``(seq, batch, embed_dim)``
-        when ``False`` (the ``nn.MultiheadAttention`` layout).
-        Unbatched 2-D ``(seq, embed)`` ignores this flag. Must
-        be a ``bool``.
+        Where the batch axis sits. ``True`` (kpnn2 sample-major):
+        batched tensors are ``(..., seq, embed_dim)``. ``False``
+        (the ``nn.MultiheadAttention`` layout): batched tensors are
+        ``(seq, batch, embed_dim)``. Unbatched 2-D
+        ``(seq, embed_dim)`` ignores this flag. Must be a ``bool``.
     add_self_loops : bool, default=False
-        If ``True``, OR any missing ``(i, i)`` pair into the
-        module buffers, so every query keeps its own token as a
-        key. Existing self-loops are kept, not duplicated, and
-        the caller's index objects are not mutated. Requires
+        Let every token also attend to itself. Without a self-loop,
+        a node's own token shapes how it weighs its sources
+        (through its query) but is not part of the mix, and a node
+        with no incoming edge, such as an input node of an
+        ``AdjacencySpec``, mixes to zeros. With ``True``, any
+        missing ``(i, i)`` pair is added to this layer's index
+        buffers, after the given pairs. Existing self-loops are
+        kept, not duplicated, and the caller's index objects are
+        not mutated. The graph itself is not changed: other layers
+        built from the same spec do not see these pairs. Requires
         ``query_features == key_features``. Must be a ``bool``.
     identity : str or None, default=None
-        Opaque checkpoint identity, typically
-        ``spec.fingerprint``. Stored in ``state_dict`` next to
-        ``index_digest`` as a 1-D CPU ``uint8`` tensor of the
-        UTF-8 bytes. ``load_state_dict`` compares it with the
-        checkpoint's identity:
+        Labels the graph this layer belongs to, so
+        ``load_state_dict`` refuses a checkpoint labeled for
+        another graph, even one with the same index pattern, such
+        as a graph with a renamed node. Typically
+        ``spec.fingerprint``. An opaque string, stored in
+        ``state_dict`` next to ``index_digest`` as a 1-D CPU
+        ``uint8`` tensor of the UTF-8 bytes. ``load_state_dict``
+        compares it with the checkpoint's identity:
 
         - the checkpoint has no identity: it loads, even with
           ``strict=True``
@@ -1111,68 +1175,73 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         ``None`` means this layer does not claim an identity, so
         it loads only checkpoints saved without one.
     generator : torch.Generator or None, default=None
-        Isolated RNG for Xavier-uniform on the four
-        projections. ``None`` uses the default torch
+        A reproducible start without touching the global random
+        state: the Xavier-uniform draws for the four projections
+        use this generator. ``None`` uses the default torch
         generator and keeps today's path: ``nn.Linear``
-        kaiming-init then Xavier on that global stream.
-        When set, those ``nn.Linear`` constructors do not
-        advance the global stream. Not stored on the module;
-        pass it again to ``reset_parameters`` to replay. Do
-        not pass a seed integer.
+        kaiming-init then Xavier on that global stream. When set,
+        those ``nn.Linear`` constructors do not advance the global
+        stream. Not stored on the module; pass it again to
+        ``reset_parameters`` to replay. Do not pass a seed
+        integer.
     chunk_size : int, numpy integer, or None, default=None
-        How many live edges to gather at once in the packed
-        softmax and mix. ``None`` gathers all live pairs at
-        once. A positive int uses chunked live pairs: softmax
-        is still over every live key of a query, but pair
-        gathers are slices of that many edges and those
-        gathers are rematerialized in backward. With a
-        positive int, forward and backward check on every
-        call that each query's packed softmax sums to 1 (to 0
-        only when no live key scores above ``-inf``: none left
-        after padding, or every score overflowed) and that its
-        gradient sums to 0, and raise ``AssertionError`` (a
-        kpnn2 bug) if not; each check waits for the device
-        once. A numpy integer is stored as ``int``. ``bool``
-        and values other than ``None`` or a positive integer
-        raise ``Kpnn2Error``. Not stored on the module
-        ``state_dict`` or in ``index_digest``.
+        Memory control for large graphs; it does not change what
+        is computed. ``None`` gathers all live edges at once. A
+        positive int processes them in slices of that many edges,
+        so training holds less memory, at the cost of time: the
+        softmax is still over every live key of a query, but the
+        pair gathers are slices, and backward recomputes them. With
+        a positive int, forward and backward also check on every
+        call that each query's packed softmax sums to 1 (to 0 only
+        when no live key scores above ``-inf``: none left after
+        padding, or every score overflowed) and that its gradient
+        sums to 0, and raise ``AssertionError`` (a kpnn2 bug) if
+        not; each check waits for the device once. A numpy integer
+        is stored as ``int``. ``bool`` and values other than
+        ``None`` or a positive integer raise ``Kpnn2Error``. Not
+        stored in ``state_dict`` or ``index_digest``, so a
+        checkpoint loads into a layer with another ``chunk_size``.
 
     Attributes
     ----------
     query_features : int
-        Sequence length of ``query``.
+        Number of tokens that attend (sequence length of
+        ``query``).
     key_features : int
-        Sequence length of ``key`` / ``value``.
+        Number of tokens that can be attended to (sequence length
+        of ``key`` / ``value``).
     embed_dim : int
-        Model width.
+        Token width.
     num_heads : int
         Number of attention heads.
     head_dim : int
-        ``embed_dim // num_heads``.
+        Channels per head, ``embed_dim // num_heads``.
     nnz : int
-        Number of live edges, counting any pair added by
+        Number of live edges scored, counting any pair added by
         ``add_self_loops``.
     dropout : float
-        Dropout probability on packed attention weights.
+        Dropout probability on the edge weights.
     batch_first : bool
         Layout flag; default ``True``.
     add_self_loops : bool
-        Whether missing self-loops were OR-ed at construction.
+        Whether missing self-loops were added at construction.
     source_index : torch.Tensor
-        Int64 buffer of key / value positions, length ``nnz``.
-        **Treat it as read-only:** like any PyTorch buffer it can
-        be written to, and doing so rewires the layer without
-        reinitializing it. Rebuild from the edgelist instead.
+        Int64 buffer: the key / value position of each live edge,
+        length ``nnz``. **Treat it as read-only:** like any
+        PyTorch buffer it can be written to, and doing so rewires
+        the layer without reinitializing it. Rebuild from the
+        edgelist instead.
     target_index : torch.Tensor
-        Int64 buffer of query positions, length ``nnz``,
-        read-only in the same sense.
+        Int64 buffer: the query position of each live edge, length
+        ``nnz``, read-only in the same sense.
     q_proj, k_proj, v_proj, out_proj : nn.Linear
-        Four separate ``embed_dim -> embed_dim`` projections, not
-        a fused ``in_proj_weight``.
+        The four learned ``embed_dim -> embed_dim`` projections
+        (query, key, value, and output): separate layers, not a
+        fused ``in_proj_weight``.
     identity : str | None
         The constructor ``identity``, or ``None``.
     chunk_size : int | None
-        Edge-chunk length, or ``None`` for all live pairs.
+        Edge-chunk length, or ``None`` for all live edges at once.
 
     Raises
     ------
@@ -1199,8 +1268,9 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
 
     See Also
     --------
-    PackedLinear : Same packed pairs when the update is one
-        trainable scalar per edge rather than a contraction.
+    PackedLinear : Same packed pairs, but one trained weight per
+        edge, the same for every sample, instead of attention
+        weights computed per sample.
     MaskedLinear : Dense ``(out, in)`` weight; the default layer
         whenever that square fits.
     AdjacencySpec : Graph-wide packed edges; pass it to
@@ -1210,19 +1280,43 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
 
     Notes
     -----
-    The mix is a softmax over each query's live keys only, formed
-    edge by edge, so no ``(n, n)`` or ``(L, S)`` score matrix is
-    allocated and ``torch.sparse`` is not imported; cost scales
-    with ``nnz``, not with ``query_features * key_features``.
-    ``chunk_size=None`` (the default) gathers all live pairs at
-    once. A positive ``chunk_size`` gathers chunked live pairs
+    One forward pass, for one sample and one head with
+    ``d = embed_dim // num_heads`` channels:
+
+    1. Project every token: ``q = q_proj(query)``,
+       ``k = k_proj(key)``, ``v = v_proj(value)``, each split into
+       ``num_heads`` slices of ``d`` channels.
+    2. Score each live edge ``e`` from source ``s`` to target
+       ``t``: ``score[e] = dot(q[t], k[s]) / sqrt(d)``.
+    3. Turn the scores of the edges into each target into weights
+       with a softmax over those edges only. Keys masked by
+       ``key_padding_mask`` take no part. In training mode,
+       ``dropout`` then zeroes weights at random and scales the
+       rest by ``1 / (1 - dropout)``.
+    4. Mix: ``mixed[t]`` is the sum of ``weight[e] * v[s]`` over
+       the edges ``e`` into ``t``.
+    5. Join the heads' slices of ``mixed`` back into ``embed_dim``
+       channels and apply ``out_proj``.
+
+    A query with no live keys, because it has no incoming edge and
+    no self-loop or because ``key_padding_mask`` removed all of
+    them, mixes to zeros rather than NaN, so its output is the bias
+    of ``out_proj`` (zeros when ``bias=False``). Input nodes of an
+    ``AdjacencySpec`` are exactly that case unless
+    ``add_self_loops=True``. With it, an input node's only key is
+    itself, so its softmax weight is 1 and it passes on its own
+    value.
+
+    No ``(n, n)`` or ``(L, S)`` score matrix is ever allocated and
+    ``torch.sparse`` is not imported; cost scales with ``nnz``, not
+    with ``query_features * key_features``. ``chunk_size=None``
+    (the default) gathers all live pairs at once, and training
+    keeps those ``(..., nnz, heads, head_dim)`` gathers for
+    backward. A positive ``chunk_size`` gathers chunked live pairs
     and rematerializes those ``(..., chunk, heads, head_dim)``
-    tensors in backward so training does not save a full
-    ``(..., nnz, heads, head_dim)`` gather. Packed softmax
-    ``(..., nnz, heads)`` is still stored. A query with no live
-    keys (and none added by ``add_self_loops``) mixes to zeros
-    rather than NaN, then still goes through ``out_proj``. Input
-    nodes of an ``AdjacencySpec`` are exactly that case.
+    tensors in backward, so training does not save a full
+    ``(..., nnz, heads, head_dim)`` gather. The packed softmax
+    ``(..., nnz, heads)`` is still stored.
 
     ``forward`` documents the accepted layouts, packed
     ``need_weights``, ``attn_mask`` / ``is_causal``, and
@@ -1234,25 +1328,26 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     ``forward`` disables it and casts query, key, and value to
     the parameter dtype. They must be floating-point tensors; an
     integer, ``bool``, or complex input raises instead of being
-    cast. Cast the module with
-    ``.to(dtype=...)`` (or ``.half()`` / ``.double()``)
-    instead. ``state_dict`` adds
-    ``index_digest``, a 1-D CPU ``uint8`` tensor of length 32:
-    the SHA-256 of the packed indices plus ``query_features``,
-    ``key_features``, ``embed_dim``, and ``num_heads``, so a
-    reshape or a different head split cannot collide. It is not
-    a registered buffer, and a missing digest is not an error,
-    even with ``strict=True``. ``identity`` is stored the same
-    way when the constructor was given one: a rename that
-    leaves the packed index pattern unchanged is caught when
-    callers pass ``spec.fingerprint``. ``chunk_size`` is not
-    part of ``state_dict`` or ``index_digest``. ``copy.deepcopy``
-    works.
+    cast. Cast the module with ``.to(dtype=...)`` (or ``.half()``
+    / ``.double()``) instead.
+
+    ``state_dict`` adds ``index_digest``, a 1-D CPU ``uint8``
+    tensor of length 32: the SHA-256 of the packed indices plus
+    ``query_features``, ``key_features``, ``embed_dim``, and
+    ``num_heads``, so a reshape or a different head split cannot
+    collide. It is not a registered buffer, and a missing digest
+    is not an error, even with ``strict=True``. ``identity`` is
+    stored the same way when the constructor was given one: a
+    rename that leaves the packed index pattern unchanged is
+    caught when callers pass ``spec.fingerprint``. ``chunk_size``
+    is not part of ``state_dict`` or ``index_digest``.
+    ``copy.deepcopy`` works.
 
     Examples
     --------
-    An input feeding a two-node feedback core plus one output,
-    attended as one four-token sequence:
+    An input ``x`` feeds a two-node feedback loop between ``a`` and
+    ``b``, which feeds an output ``y``. All four nodes form one
+    four-token sequence:
 
     >>> import pandas as pd
     >>> import torch
@@ -1279,6 +1374,10 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     (2, 4, 8)
     >>> weights is None
     True
+
+    With ``need_weights=True`` each sample gets one weight per live
+    edge: the four graph edges, then the four added self-loops.
+
     >>> _, packed = attn(
     ...     tokens,
     ...     tokens,
@@ -1287,6 +1386,19 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
     ... )
     >>> tuple(packed.shape)
     (2, 8)
+    >>> for s, t in zip(
+    ...     attn.source_index.tolist(),
+    ...     attn.target_index.tolist(),
+    ... ):
+    ...     print(spec.nodes[s], "->", spec.nodes[t])
+    a -> b
+    a -> y
+    b -> a
+    x -> a
+    a -> a
+    b -> b
+    x -> x
+    y -> y
     """
 
     source_index: torch.Tensor
@@ -1698,45 +1810,110 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         is_causal: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
-        Packed multi-head attention; drop-in call shape vs MHA.
+        Let each query attend to its live keys and mix their values.
 
-        ``query`` last dim is ``embed_dim``; sequence length is
-        ``query_features``. ``key`` and ``value`` last dim is
-        ``embed_dim``; sequence length is ``key_features``. All
-        three must be floating-point tensors; an integer,
-        ``bool``, or complex one raises ``Kpnn2Error`` rather
-        than being cast to the parameter dtype.
+        For attention within one graph, pass the same tokens as
+        ``query``, ``key``, and ``value``: every node then attends
+        to its sources. Pass different tensors when queries and
+        keys are different token sets, as in a bipartite map built
+        with the constructor. The arguments are those of
+        ``nn.MultiheadAttention.forward``, so an encoder written
+        for it can call this layer; the class docstring lists the
+        differences.
 
-        With ``batch_first=True`` (the default), tensors are
-        ``(..., seq, embed_dim)``, including unbatched 2-D
-        ``(seq, embed)`` and batched 3-D
-        ``(batch, seq, embed)``. With ``batch_first=False``,
-        unbatched 2-D is still ``(seq, embed)``; batched 3-D is
-        ``(seq, batch, embed)``, transposed to batch-first for
-        the packed kernel and transposed back.
+        With ``batch_first=True`` (the default), ``query``,
+        ``key``, and ``value`` are ``(..., seq, embed_dim)``:
+        unbatched 2-D ``(seq, embed_dim)``, batched 3-D
+        ``(batch, seq, embed_dim)``, or more leading axes. With
+        ``batch_first=False``, unbatched 2-D is still
+        ``(seq, embed_dim)``; batched 3-D is
+        ``(seq, batch, embed_dim)``, transposed to batch-first for
+        the packed kernel and transposed back. The batch axes of
+        all three must match.
 
-        Always returns a 2-tuple. ``need_weights`` defaults to
-        ``False``, and then the second entry is ``None``. If
-        ``need_weights`` is ``True``, the second entry is the
-        packed per-edge softmax, aligned with
-        ``source_index`` / ``target_index``, not MHA's dense
-        ``(L, S)`` map. With ``average_attn_weights=True``
-        (the default) the head axis is averaged, shape
-        ``(..., nnz)``. With ``False``, shape
-        ``(..., nnz, num_heads)``. Batch layout follows the
-        output (including ``batch_first``). This path does
-        not allocate ``(L, S)``. ``need_weights`` and
-        ``average_attn_weights`` must be ``bool``; any other
-        value raises ``Kpnn2Error``.
+        Parameters
+        ----------
+        query : torch.Tensor
+            The tokens that attend: ``query_features`` of them
+            along the sequence axis, each ``embed_dim`` wide. Must
+            be floating-point; an integer, ``bool``, or complex
+            tensor raises ``Kpnn2Error`` rather than being cast to
+            the parameter dtype.
+        key : torch.Tensor
+            The tokens matched against the queries:
+            ``key_features`` of them along the sequence axis, each
+            ``embed_dim`` wide. Floating-point, like ``query``.
+            Required; it is not defaulted to ``query``.
+        value : torch.Tensor
+            What each key position passes on, in the shape of
+            ``key`` and usually the same tensor. Floating-point,
+            like ``query``.
+        key_padding_mask : torch.Tensor or None, default=None
+            Keys to leave out of a given sample, for example a
+            feature that sample did not measure: ``True`` means
+            ignore that key. Its edges drop out of the softmax, so
+            each query's remaining sources share the whole weight.
+            A boolean tensor of shape ``(S,)`` unbatched or
+            ``(N, S)`` batched, where ``S = key_features``; with
+            more leading axes, the same ones as the batch-first
+            ``query``. The batch axes come first even when
+            ``batch_first=False``. Applied in packed space, without
+            allocating ``(n, n)``. Copied onto the scores' device
+            and kept boolean. A float mask raises ``Kpnn2Error``.
+        need_weights : bool, default=False
+            Also return the weight of every live edge, for example
+            to draw edge thickness on the prior graph. Must be a
+            ``bool``.
+        attn_mask : torch.Tensor or None, default=None
+            Must be ``None``: the edgelist is the mask. Kept so that
+            calls written for ``nn.MultiheadAttention`` still run.
+        average_attn_weights : bool, default=True
+            With ``need_weights=True``: ``True`` averages the
+            weights over the heads, ``False`` keeps one per head.
+            Must be a ``bool``.
+        is_causal : bool, default=False
+            Must be ``False``. Kept so that calls written for
+            ``nn.MultiheadAttention`` still run.
 
-        ``attn_mask`` must be ``None``. ``is_causal`` must be
-        ``False``. ``key_padding_mask`` is ``None`` or a
-        boolean mask: ``True`` means ignore that key. Shape
-        ``(S,)`` unbatched or ``(N, S)`` batched. Applied in
-        packed space; does not allocate ``(n, n)``. Copied
-        onto the scores' device; stays boolean. Float
-        padding masks raise ``Kpnn2Error``. After padding, a
-        query with no remaining keys stays zeros, not NaN.
+        Returns
+        -------
+        output : torch.Tensor
+            The updated tokens, one per query position, in the
+            shape and layout of ``query``. A query with no live
+            keys left mixes to zeros, not NaN, before
+            ``out_proj``.
+        weights : torch.Tensor or None
+            ``None`` unless ``need_weights=True``. Then the
+            softmax weight of every live edge, in the order of
+            ``source_index`` / ``target_index``, not
+            ``nn.MultiheadAttention``'s dense ``(L, S)`` map; this
+            path does not allocate ``(L, S)``. Shape
+            ``(..., nnz)`` averaged over heads, or
+            ``(..., nnz, num_heads)`` per head, with the batch axes
+            placed as in ``output``: ``(nnz, batch)`` or
+            ``(nnz, batch, num_heads)`` when ``batch_first=False``
+            and the input is batched. The weights into one query
+            sum to 1, or to 0 when it has no live key. In training
+            mode with ``dropout > 0`` they are the weights after
+            dropout, as the mix used them; call ``eval()`` first to
+            read the plain softmax. ``nnz`` counts the pairs added
+            by ``add_self_loops``, so zip the weights with this
+            layer's ``source_index`` / ``target_index``, not with
+            ``to_edgelist()``.
+
+        Raises
+        ------
+        Kpnn2Error
+            If ``query``, ``key``, or ``value`` is not a
+            floating-point tensor of at least 2 dimensions with
+            last axis ``embed_dim`` and the sequence length above;
+            if their batch axes differ; if a batched input is not
+            3-D under ``batch_first=False``; if
+            ``key_padding_mask`` is not a boolean tensor of the
+            shape above; if ``need_weights`` or
+            ``average_attn_weights`` is not a ``bool``; if
+            ``attn_mask`` is not ``None``; or if ``is_causal`` is
+            not ``False``.
         """
         need_weights = as_bool(
             need_weights,
