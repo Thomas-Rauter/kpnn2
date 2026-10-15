@@ -63,6 +63,7 @@ nav:
       - Why kpnn2: why_kpnn2.md
       - Concepts: concepts.md
       - Layered vs. Adjacency: layered_vs_adjacency.md
+      - Unrolling a cycle: unrolling-a-cycle.ipynb
       - Skip edges: skip-edges.ipynb
       - Mapping attributions: map-node-attributions.ipynb
       - Network bias: network-bias.ipynb
