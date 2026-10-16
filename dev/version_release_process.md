@@ -81,13 +81,17 @@ green on `main`.
 ## 3. TestPyPI dry run
 
 1. Activate the venv and put the TestPyPI token into this shell
-   only. `read -rs` keeps the token out of your shell history:
-   paste it (it starts with `pypi-`) and press Enter.
+   only. Run the block below as written. `read` then waits with
+   no echo: paste the token (it starts with `pypi-`) and press
+   Enter. Do not put the token on the `read` line. That line
+   names the variable, and a token is not a variable name.
+   `read -rs` keeps the token out of your shell history.
 
     ```bash
     source .venv/bin/activate
     export TWINE_USERNAME="__token__"
-    read -rs TWINE_PASSWORD
+    read -rsp "TestPyPI token: " TWINE_PASSWORD
+    echo
     export TWINE_PASSWORD
     ```
 

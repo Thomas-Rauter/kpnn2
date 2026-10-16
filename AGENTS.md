@@ -262,6 +262,18 @@ docs. Do not execute it in CI or with
 in `dev/version_release_process.md`, which is the whole
 release procedure. Install from TestPyPI with `--no-deps`.
 
+`dev/version_release_process.md` is the source of that
+procedure. `dev/version_release_process.pdf` is the copy
+the maintainer reads. After any edit to the Markdown,
+regenerate the PDF in the same change:
+
+```
+python dev/build_release_process_pdf.py
+```
+
+The script needs the `docs` extra and a local Chrome or
+Chromium.
+
 `dev/paper_fit/` compares kpnn2 with published KPNN code
 in agent sessions the user starts by hand. It is not
 pytest (outside `testpaths`), not CI, and not docs.
