@@ -137,6 +137,10 @@ plugins:
         remove_input_tags:
           - remove-input
       ignore_h1_titles: true
+      # The plugin default is "", which loads no MathJax. Its notebook
+      # template configures MathJax 2, so the URL must stay on 2.x.
+      custom_mathjax_url: "https://cdnjs.cloudflare.com/ajax/libs/\
+        mathjax/2.7.7/latest.js?config=TeX-AMS_CHTML-full,Safe"
 
 markdown_extensions:
   - abbr
