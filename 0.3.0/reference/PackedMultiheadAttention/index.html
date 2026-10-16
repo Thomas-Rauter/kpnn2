@@ -1,0 +1,3256 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Turn a named edgelist into sparsely connected PyTorch layers you assemble yourself.
+">
+      
+      
+      
+        <link rel="canonical" href="https://thomas-rauter.github.io/kpnn2/0.3.0/reference/PackedMultiheadAttention/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../figures/kpnn2_logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>PackedMultiheadAttention - kpnn2</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#kpnn2.PackedMultiheadAttention" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="kpnn2" class="md-header__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="../../figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            kpnn2
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PackedMultiheadAttention
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="kpnn2" class="md-nav__button md-logo" aria-label="kpnn2" data-md-component="logo">
+      
+  <img src="../../figures/kpnn2_logo.svg" alt="logo">
+
+    </a>
+    kpnn2
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Thomas-Rauter/kpnn2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Thomas-Rauter/kpnn2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../supported/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supported architectures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../feedforward-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedforward example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Additional examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cyclic-graph-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cyclic graph example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../time-series-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time-series example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../transformer-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transformer example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How it works
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../why_kpnn2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why kpnn2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../layered_vs_adjacency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layered vs. Adjacency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unrolling-a-cycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unrolling a cycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skip-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Skip edges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../map-node-attributions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mapping attributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../network-bias/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network bias
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packed_linear/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PackedLinear
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how_we_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How we test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../literature/fortelny-bock-2020/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fortelny and Bock 2020
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../citing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(source_index)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        source_index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(target_index)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        target_index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(query_features)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        query_features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(key_features)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        key_features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(embed_dim)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        embed_dim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(num_heads)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        num_heads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(dropout)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dropout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(bias)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bias
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(kdim)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        kdim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(vdim)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vdim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(batch_first)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        batch_first
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(add_self_loops)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_self_loops
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(identity)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        identity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(generator)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention(chunk_size)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        chunk_size
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods:
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods:">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_adjacency
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="from_adjacency">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(spec)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(embed_dim)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        embed_dim
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(num_heads)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        num_heads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(dropout)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dropout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(bias)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bias
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(batch_first)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        batch_first
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(add_self_loops)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_self_loops
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(identity)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        identity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(generator)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.from_adjacency(chunk_size)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        chunk_size
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.reset_parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reset_parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="reset_parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.reset_parameters(generator)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        forward
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="forward">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(query)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        query
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(key)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(value)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        value
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(key_padding_mask)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        key_padding_mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(need_weights)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        need_weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(attn_mask)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        attn_mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(average_attn_weights)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        average_attn_weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kpnn2.PackedMultiheadAttention.forward(is_causal)" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_causal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h1 id="kpnn2.PackedMultiheadAttention" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">PackedMultiheadAttention</span>
+
+
+<a href="#kpnn2.PackedMultiheadAttention" class="headerlink" title="Permanent link">&para;</a></h1>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">PackedMultiheadAttention</span><span class="p">(</span>
+    <span class="n">source_index</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+    <span class="n">target_index</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+    <span class="n">query_features</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">key_features</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">embed_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_heads</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">kdim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">vdim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_first</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">add_self_loops</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">identity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="torch.nn.Module">Module</span></code></p>
+
+
+
+        <p>Multi-head attention in which each node attends only to its sources.</p>
+<p>Prior knowledge decides who may attend to whom; the data
+decides how much. Every node is one token, a vector of
+<code>embed_dim</code> numbers that stands for the node inside your
+model. For each node, the layer looks at the nodes with an
+edge into it (its sources), weighs them by how well their
+tokens match its own, and returns a weighted mix of what they
+pass on. The weights are recomputed for every sample: with a
+gene-regulatory prior, a target gene can weigh its regulators
+differently in each cell, depending on their state and its
+own. Two nodes without an edge exchange nothing in this layer.</p>
+<p>Information flows along the edge arrow, from source to target,
+as in <code>PackedLinear</code>. In attention terms, the target asks and
+its sources answer. The target's token gives a <em>query</em> (what it
+looks for). Each source's token gives a <em>key</em> (what it offers
+to be matched against) and a <em>value</em> (what it passes on). Each
+query-key pair, that is, each live edge, gets a score. A
+softmax over the edges into one node turns their scores into
+weights that are non-negative and sum to 1, so the sources
+compete: a higher weight for one leaves less for the others.
+<code>num_heads</code> such weightings run side by side, each on its own
+slice of the channels, so different heads can weigh the same
+sources differently.</p>
+<p>Compare <code>PackedLinear</code>, which learns one weight per edge,
+fixed after training and the same for every sample. Here
+nothing is learned per edge. The learned parameters are four
+<code>embed_dim x embed_dim</code> projections shared by every node and
+edge (<code>q_proj</code>, <code>k_proj</code>, <code>v_proj</code>, <code>out_proj</code>), so
+their number does not depend on the graph. The graph only
+decides which pairs are scored.</p>
+<p>One call moves information one edge along the graph: a node's
+output depends only on its own token and those of its direct
+sources. Stack layers in your own encoder to reach nodes
+further upstream. This layer is that one building block, not a
+Transformer. You build the tokens (for example a projection of
+each measured value plus a learned embedding per node) and
+write the rest around the layer: normalization, residual
+connections, a feed-forward network, and the readout.</p>
+<p>Masking <code>nn.MultiheadAttention</code> with the graph computes the
+same mix for every node that has a source. But it scores every
+pair of tokens, an <code>(n, n)</code> matrix per head and sample (400
+million scores for 20,000 nodes), and then discards the pairs
+without an edge. This layer scores only the live edges, so its
+memory and time grow with their number, <code>nnz</code>, rather than
+with <code>n</code> squared.</p>
+<p>Build it with <code>from_adjacency</code> on a <code>parse_adjacency</code> spec:
+one token per node (per unit, when <code>widths=</code> gives a node
+several). It reads the indices and sequence lengths off the
+spec, so the query and key sides cannot be swapped by hand. The
+constructor below takes packed indices directly, for pairs that
+come from no spec, such as a bipartite map in which pathway
+tokens (queries) attend to gene tokens (keys).</p>
+<p>Call it like <code>nn.MultiheadAttention</code> (it is not a subclass):
+<code>layer(query, key, value)</code>, passing the same tokens three
+times for attention within one graph. Two defaults differ from
+MHA: <code>batch_first=True</code> and <code>need_weights=False</code>. With
+<code>need_weights=True</code> the layer returns one weight per live
+edge, not a dense <code>(L, S)</code> matrix.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(source_index)" class="doc doc-heading doc-heading-parameter">                  <code>source_index</code>
+<a href="#kpnn2.PackedMultiheadAttention(source_index)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>torch.Tensor, numpy.ndarray, or sequence of int</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Where each live edge starts. Entry <code>i</code> is the position in
+<code>key</code> / <code>value</code> of the token that edge <code>i</code> reads
+from, and must satisfy <code>0 &lt;= source_index &lt; key_features</code>.
+1-D integer indices of length <code>nnz &gt;= 1</code>: an integer
+tensor, an integer numpy array, or a sequence of <code>int</code> or
+numpy integers. A set or a mapping is rejected, since
+entries pair up by position, and so is a complex tensor.
+Copied to an int64 buffer, so later writes to the argument
+do not reach this layer.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(target_index)" class="doc doc-heading doc-heading-parameter">                  <code>target_index</code>
+<a href="#kpnn2.PackedMultiheadAttention(target_index)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>torch.Tensor, numpy.ndarray, or sequence of int</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Where each live edge ends. Entry <code>i</code> is the position in
+<code>query</code> of the token that attends along edge <code>i</code>, and
+must satisfy <code>0 &lt;= target_index &lt; query_features</code>. Same
+length and forms as <code>source_index</code>. The two arrays are
+paired position by position and must not repeat a
+<code>(source, target)</code> pair. Their shared order is the order
+of the per-edge weights <code>forward</code> returns; pairs added by
+<code>add_self_loops</code> follow at the end.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(query_features)" class="doc doc-heading doc-heading-parameter">                  <code>query_features</code>
+<a href="#kpnn2.PackedMultiheadAttention(query_features)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int or numpy integer</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How many tokens attend: the sequence length of <code>query</code>.
+Positive integer, stored as <code>int</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(key_features)" class="doc doc-heading doc-heading-parameter">                  <code>key_features</code>
+<a href="#kpnn2.PackedMultiheadAttention(key_features)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int or numpy integer</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How many tokens can be attended to: the sequence length of
+<code>key</code> / <code>value</code>. Positive integer, stored as <code>int</code>.
+Equal to <code>query_features</code> for attention within one node
+set; smaller or larger for a bipartite query/key map.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(embed_dim)" class="doc doc-heading doc-heading-parameter">                  <code>embed_dim</code>
+<a href="#kpnn2.PackedMultiheadAttention(embed_dim)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int or numpy integer</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How many numbers describe each token: the width of
+<code>query</code>, <code>key</code>, <code>value</code>, and the output. A wider
+token can carry more about its node, and the four
+projections hold <code>4 * embed_dim**2</code> weights. Positive
+integer, divisible by <code>num_heads</code>, stored as <code>int</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(num_heads)" class="doc doc-heading doc-heading-parameter">                  <code>num_heads</code>
+<a href="#kpnn2.PackedMultiheadAttention(num_heads)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int or numpy integer</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How many attention patterns run side by side. Each head
+scores the same live edges from its own
+<code>embed_dim // num_heads</code> channels, so it can weigh a
+node's sources differently from the other heads. The heads'
+mixes are joined and passed through <code>out_proj</code>. Positive
+integer, stored as <code>int</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(dropout)" class="doc doc-heading doc-heading-parameter">                  <code>dropout</code>
+<a href="#kpnn2.PackedMultiheadAttention(dropout)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Regularization on the edge weights, in training mode only:
+each weight is zeroed with this probability and the rest
+are scaled by <code>1 / (1 - dropout)</code>, so the model cannot
+lean on any single edge. <code>0.0</code> disables it. Must be
+finite and in <code>[0, 1]</code>, the range torch accepts; integers
+<code>0</code> and <code>1</code> are accepted, <code>bool</code> is rejected.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(bias)" class="doc doc-heading doc-heading-parameter">                  <code>bias</code>
+<a href="#kpnn2.PackedMultiheadAttention(bias)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the four projections learn an additive bias.
+<code>False</code> makes them pure linear maps. Must be a <code>bool</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(kdim)" class="doc doc-heading doc-heading-parameter">                  <code>kdim</code>
+<a href="#kpnn2.PackedMultiheadAttention(kdim)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int, numpy integer, or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Exists so code written for <code>nn.MultiheadAttention</code> runs
+unchanged; keys of a different width are not supported.
+Must be <code>None</code> or an <code>int</code> or numpy integer equal to
+<code>embed_dim</code> (<code>True</code> is rejected even when <code>embed_dim</code>
+is 1).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(vdim)" class="doc doc-heading doc-heading-parameter">                  <code>vdim</code>
+<a href="#kpnn2.PackedMultiheadAttention(vdim)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int, numpy integer, or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as <code>kdim</code>, for the values.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(batch_first)" class="doc doc-heading doc-heading-parameter">                  <code>batch_first</code>
+<a href="#kpnn2.PackedMultiheadAttention(batch_first)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Where the batch axis sits. <code>True</code> (kpnn2 sample-major):
+batched tensors are <code>(..., seq, embed_dim)</code>. <code>False</code>
+(the <code>nn.MultiheadAttention</code> layout): batched tensors are
+<code>(seq, batch, embed_dim)</code>. Unbatched 2-D
+<code>(seq, embed_dim)</code> ignores this flag. Must be a <code>bool</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(add_self_loops)" class="doc doc-heading doc-heading-parameter">                  <code>add_self_loops</code>
+<a href="#kpnn2.PackedMultiheadAttention(add_self_loops)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Let every token also attend to itself. Without a self-loop,
+a node's own token shapes how it weighs its sources
+(through its query) but is not part of the mix, and a node
+with no incoming edge, such as an input node of an
+<code>AdjacencySpec</code>, mixes to zeros. With <code>True</code>, any
+missing <code>(i, i)</code> pair is added to this layer's index
+buffers, after the given pairs. Existing self-loops are
+kept, not duplicated, and the caller's index objects are
+not mutated. The graph itself is not changed: other layers
+built from the same spec do not see these pairs. Requires
+<code>query_features == key_features</code>. Must be a <code>bool</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(identity)" class="doc doc-heading doc-heading-parameter">                  <code>identity</code>
+<a href="#kpnn2.PackedMultiheadAttention(identity)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code><span title="str">str</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Labels the graph this layer belongs to, so
+<code>load_state_dict</code> refuses a checkpoint labeled for
+another graph, even one with the same index pattern, such
+as a graph with a renamed node. Typically
+<code>spec.fingerprint</code>. An opaque string, stored in
+<code>state_dict</code> next to <code>index_digest</code> as a 1-D CPU
+<code>uint8</code> tensor of the UTF-8 bytes. <code>load_state_dict</code>
+compares it with the checkpoint's identity:</p>
+<ul>
+<li>the checkpoint has no identity: it loads, even with
+  <code>strict=True</code></li>
+<li>it has this layer's identity: it loads</li>
+<li>it has another identity, or this layer's identity is
+  <code>None</code>: <code>Kpnn2Error</code>, and no weights are loaded</li>
+</ul>
+<p><code>None</code> means this layer does not claim an identity, so
+it loads only checkpoints saved without one.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(generator)" class="doc doc-heading doc-heading-parameter">                  <code>generator</code>
+<a href="#kpnn2.PackedMultiheadAttention(generator)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code><span title="torch.Generator">Generator</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A reproducible start without touching the global random
+state: the Xavier-uniform draws for the four projections
+use this generator. <code>None</code> uses the default torch
+generator and keeps today's path: <code>nn.Linear</code>
+kaiming-init then Xavier on that global stream. When set,
+those <code>nn.Linear</code> constructors do not advance the global
+stream. Not stored on the module; pass it again to
+<code>reset_parameters</code> to replay. Do not pass a seed
+integer.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h2 id="kpnn2.PackedMultiheadAttention(chunk_size)" class="doc doc-heading doc-heading-parameter">                  <code>chunk_size</code>
+<a href="#kpnn2.PackedMultiheadAttention(chunk_size)" class="headerlink" title="Permanent link">&para;</a></h2>            </td>
+            <td>
+                  <code>int, numpy integer, or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Memory control for large graphs; it does not change what
+is computed. <code>None</code> gathers all live edges at once. A
+positive int processes them in slices of that many edges,
+so training holds less memory, at the cost of time: the
+softmax is still over every live key of a query, but the
+pair gathers are slices, and backward recomputes them. With
+a positive int, forward and backward also check on every
+call that each query's packed softmax sums to 1 (to 0 only
+when no live key scores above <code>-inf</code>: none left after
+padding, or every score overflowed) and that its gradient
+sums to 0, and raise <code>AssertionError</code> (a kpnn2 bug) if
+not; each check waits for the device once. A numpy integer
+is stored as <code>int</code>. <code>bool</code> and values other than
+<code>None</code> or a positive integer raise <code>Kpnn2Error</code>. Not
+stored in <code>state_dict</code> or <code>index_digest</code>, so a
+checkpoint loads into a layer with another <code>chunk_size</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.query_features">query_features</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of tokens that attend (sequence length of
+<code>query</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.key_features">key_features</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of tokens that can be attended to (sequence length
+of <code>key</code> / <code>value</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.embed_dim">embed_dim</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Token width.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.num_heads">num_heads</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of attention heads.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.head_dim">head_dim</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Channels per head, <code>embed_dim // num_heads</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.nnz">nnz</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of live edges scored, counting any pair added by
+<code>add_self_loops</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.dropout">dropout</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dropout probability on the edge weights.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.batch_first">batch_first</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Layout flag; default <code>True</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.add_self_loops">add_self_loops</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether missing self-loops were added at construction.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.source_index">source_index</span></code></td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Int64 buffer: the key / value position of each live edge,
+length <code>nnz</code>. <strong>Treat it as read-only:</strong> like any
+PyTorch buffer it can be written to, and doing so rewires
+the layer without reinitializing it. Rebuild from the
+edgelist instead.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.target_index">target_index</span></code></td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Int64 buffer: the query position of each live edge, length
+<code>nnz</code>, read-only in the same sense.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.q_proj, k_proj, v_proj, out_proj">q_proj, k_proj, v_proj, out_proj</span></code></td>
+            <td>
+                  <code><span title="torch.nn.Linear">Linear</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The four learned <code>embed_dim -&gt; embed_dim</code> projections
+(query, key, value, and output): separate layers, not a
+fused <code>in_proj_weight</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.identity">identity</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The constructor <code>identity</code>, or <code>None</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="kpnn2.PackedMultiheadAttention.chunk_size">chunk_size</span></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Edge-chunk length, or <code>None</code> for all live edges at once.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Kpnn2Error (kpnn2._errors.Kpnn2Error)" href="../Kpnn2Error/#kpnn2.Kpnn2Error">Kpnn2Error</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>At construction, if the indices are empty, not 1-D
+integers, mismatched in length, out of range, or
+duplicated as <code>(source, target)</code> pairs; if the sizes
+are not positive integers; if <code>embed_dim</code> is not divisible
+by <code>num_heads</code>; if <code>dropout</code> is a <code>bool</code>, not a
+number, NaN, or outside <code>[0, 1]</code>; if <code>bias</code>,
+<code>batch_first</code>, or <code>add_self_loops</code> is not a
+<code>bool</code>; if <code>kdim</code> / <code>vdim</code> are neither <code>None</code>
+nor an integer equal to <code>embed_dim</code>; if
+<code>add_self_loops</code> is set when
+<code>query_features != key_features</code>; if <code>identity</code> is
+neither a <code>str</code> nor <code>None</code>; if <code>generator</code> is
+neither a <code>torch.Generator</code> nor <code>None</code>; or if
+<code>chunk_size</code> is neither <code>None</code> nor a positive
+integer. From
+<code>load_state_dict</code>, when the checkpoint carries an index
+digest or identity that does not match this layer, in
+which case the weights are not loaded. <code>forward</code>
+documents its own rejected arguments.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>PackedLinear : Same packed pairs, but one trained weight per
+    edge, the same for every sample, instead of attention
+    weights computed per sample.
+MaskedLinear : Dense <code>(out, in)</code> weight; the default layer
+    whenever that square fits.
+AdjacencySpec : Graph-wide packed edges; pass it to
+    <code>from_adjacency</code>.
+torch.nn.MultiheadAttention : Dense equivalent, and the
+    reference for call shape, heads, and training.</p>
+</details>
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>One forward pass, for one sample and one head with
+<code>d = embed_dim // num_heads</code> channels:</p>
+<ol>
+<li>Project every token: <code>q = q_proj(query)</code>,
+   <code>k = k_proj(key)</code>, <code>v = v_proj(value)</code>, each split into
+   <code>num_heads</code> slices of <code>d</code> channels.</li>
+<li>Score each live edge <code>e</code> from source <code>s</code> to target
+   <code>t</code>: <code>score[e] = dot(q[t], k[s]) / sqrt(d)</code>.</li>
+<li>Turn the scores of the edges into each target into weights
+   with a softmax over those edges only. Keys masked by
+   <code>key_padding_mask</code> take no part. In training mode,
+   <code>dropout</code> then zeroes weights at random and scales the
+   rest by <code>1 / (1 - dropout)</code>.</li>
+<li>Mix: <code>mixed[t]</code> is the sum of <code>weight[e] * v[s]</code> over
+   the edges <code>e</code> into <code>t</code>.</li>
+<li>Join the heads' slices of <code>mixed</code> back into <code>embed_dim</code>
+   channels and apply <code>out_proj</code>.</li>
+</ol>
+<p>A query with no live keys, because it has no incoming edge and
+no self-loop or because <code>key_padding_mask</code> removed all of
+them, mixes to zeros rather than NaN, so its output is the bias
+of <code>out_proj</code> (zeros when <code>bias=False</code>). Input nodes of an
+<code>AdjacencySpec</code> are exactly that case unless
+<code>add_self_loops=True</code>. With it, an input node's only key is
+itself, so its softmax weight is 1 and it passes on its own
+value.</p>
+<p>No <code>(n, n)</code> or <code>(L, S)</code> score matrix is ever allocated and
+<code>torch.sparse</code> is not imported; cost scales with <code>nnz</code>, not
+with <code>query_features * key_features</code>. <code>chunk_size=None</code>
+(the default) gathers all live pairs at once, and training
+keeps those <code>(..., nnz, heads, head_dim)</code> gathers for
+backward. A positive <code>chunk_size</code> gathers chunked live pairs
+and rematerializes those <code>(..., chunk, heads, head_dim)</code>
+tensors in backward, so training does not save a full
+<code>(..., nnz, heads, head_dim)</code> gather. The packed softmax
+<code>(..., nnz, heads)</code> is still stored.</p>
+<p><code>forward</code> documents the accepted layouts, packed
+<code>need_weights</code>, <code>attn_mask</code> / <code>is_causal</code>, and
+<code>key_padding_mask</code>.</p>
+<p>Index buffers stay integer after <code>.half()</code> / bfloat16 /
+<code>.double()</code>; projection weights follow the module floating
+dtype like <code>nn.Linear</code>. <code>torch.autocast</code> is unsupported:
+<code>forward</code> disables it and casts query, key, and value to
+the parameter dtype. They must be floating-point tensors; an
+integer, <code>bool</code>, or complex input raises instead of being
+cast. Cast the module with <code>.to(dtype=...)</code> (or <code>.half()</code>
+/ <code>.double()</code>) instead.</p>
+<p><code>state_dict</code> adds <code>index_digest</code>, a 1-D CPU <code>uint8</code>
+tensor of length 32: the SHA-256 of the packed indices plus
+<code>query_features</code>, <code>key_features</code>, <code>embed_dim</code>, and
+<code>num_heads</code>, so a reshape or a different head split cannot
+collide. It is not a registered buffer, and a missing digest
+is not an error, even with <code>strict=True</code>. <code>identity</code> is
+stored the same way when the constructor was given one: a
+rename that leaves the packed index pattern unchanged is
+caught when callers pass <code>spec.fingerprint</code>. <code>chunk_size</code>
+is not part of <code>state_dict</code> or <code>index_digest</code>.
+<code>copy.deepcopy</code> works.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <p>An input <code>x</code> feeds a two-node feedback loop between <code>a</code> and
+<code>b</code>, which feeds an output <code>y</code>. All four nodes form one
+four-token sequence:</p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">kpnn2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">edgelist</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">"source"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="s2">"target"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">}</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_adjacency</span><span class="p">(</span><span class="n">edgelist</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">attn</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedMultiheadAttention</span><span class="o">.</span><span class="n">from_adjacency</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">embed_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">num_heads</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">add_self_loops</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">identity</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">attn</span><span class="o">.</span><span class="n">nnz</span><span class="p">,</span> <span class="n">attn</span><span class="o">.</span><span class="n">head_dim</span>
+<span class="go">(8, 4)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokens</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">state_dim</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">attn</span><span class="p">(</span><span class="n">tokens</span><span class="p">,</span> <span class="n">tokens</span><span class="p">,</span> <span class="n">tokens</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">tuple</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">(2, 4, 8)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span>
+<span class="go">True</span>
+</code></pre></div>
+    <p>With <code>need_weights=True</code> each sample gets one weight per live
+edge: the four graph edges, then the four added self-loops.</p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">_</span><span class="p">,</span> <span class="n">packed</span> <span class="o">=</span> <span class="n">attn</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tokens</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">tokens</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">tokens</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">need_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">tuple</span><span class="p">(</span><span class="n">packed</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">(2, 8)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">attn</span><span class="o">.</span><span class="n">source_index</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+<span class="gp">... </span>    <span class="n">attn</span><span class="o">.</span><span class="n">target_index</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+<span class="gp">... </span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">s</span><span class="p">],</span> <span class="s2">"-&gt;"</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">t</span><span class="p">])</span>
+<span class="go">a -&gt; b</span>
+<span class="go">a -&gt; y</span>
+<span class="go">b -&gt; a</span>
+<span class="go">x -&gt; a</span>
+<span class="go">a -&gt; a</span>
+<span class="go">b -&gt; b</span>
+<span class="go">x -&gt; x</span>
+<span class="go">y -&gt; y</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+<h2 id="kpnn2.PackedMultiheadAttention-functions">Methods:<a href="#kpnn2.PackedMultiheadAttention-functions" class="headerlink" title="Permanent link">&para;</a></h2>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kpnn2.PackedMultiheadAttention.from_adjacency" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">from_adjacency</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">from_adjacency</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">:</span> <span class="n">AdjacencySpec</span><span class="p">,</span>
+    <span class="n">embed_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_heads</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">batch_first</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">add_self_loops</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">identity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PackedMultiheadAttention</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build attention over the nodes of an <code>AdjacencySpec</code>.</p>
+<p>This is the recommended way to build this layer on an
+<code>AdjacencySpec</code>: one token per unit of the state vector,
+and the query at each edge's target attends to the key at
+its source. It reads the packed indices off <code>spec</code> and
+uses <code>spec.state_dim</code> as both sequence lengths, so the
+query and key sides cannot be swapped by hand. On this
+square layout a hand-written swap is always silent: the
+constructor accepts it and every node attends along
+reversed edges. The result is the layer the constructor
+builds from <code>spec.source_index</code>, <code>spec.target_index</code>,
+<code>spec.state_dim</code>, <code>spec.state_dim</code>, <code>embed_dim</code>, and
+<code>num_heads</code>, with the same init draws. It keeps no
+reference to <code>spec</code>. Options after <code>num_heads</code> are
+keyword-only; <code>kdim</code> and <code>vdim</code>, which can only equal
+<code>embed_dim</code>, are left out.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(spec)" class="doc doc-heading doc-heading-parameter">                  <code>spec</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(spec)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="AdjacencySpec
+
+
+  
+      dataclass
+   (kpnn2._adjacency_spec.AdjacencySpec)" href="../AdjacencySpec/#kpnn2.AdjacencySpec">AdjacencySpec</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Spec from <code>parse_adjacency</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(embed_dim)" class="doc doc-heading doc-heading-parameter">                  <code>embed_dim</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(embed_dim)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code>int or numpy integer</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(num_heads)" class="doc doc-heading doc-heading-parameter">                  <code>num_heads</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(num_heads)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code>int or numpy integer</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(dropout)" class="doc doc-heading doc-heading-parameter">                  <code>dropout</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(dropout)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(bias)" class="doc doc-heading doc-heading-parameter">                  <code>bias</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(bias)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(batch_first)" class="doc doc-heading doc-heading-parameter">                  <code>batch_first</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(batch_first)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(add_self_loops)" class="doc doc-heading doc-heading-parameter">                  <code>add_self_loops</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(add_self_loops)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(identity)" class="doc doc-heading doc-heading-parameter">                  <code>identity</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(identity)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="str">str</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.
+Not filled in from <code>spec</code>: pass
+<code>spec.fingerprint</code> yourself.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(generator)" class="doc doc-heading doc-heading-parameter">                  <code>generator</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(generator)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Generator">Generator</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.from_adjacency(chunk_size)" class="doc doc-heading doc-heading-parameter">                  <code>chunk_size</code>
+<a href="#kpnn2.PackedMultiheadAttention.from_adjacency(chunk_size)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code>int, numpy integer, or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Same as the <code>PackedMultiheadAttention</code> constructor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="PackedMultiheadAttention (kpnn2._packed_multihead_attention.PackedMultiheadAttention)" href="#kpnn2.PackedMultiheadAttention">PackedMultiheadAttention</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>New layer with <code>query_features == key_features ==
+spec.state_dim</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Kpnn2Error (kpnn2._errors.Kpnn2Error)" href="../Kpnn2Error/#kpnn2.Kpnn2Error">Kpnn2Error</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>spec</code> is not an <code>AdjacencySpec</code> (a
+<code>LayeredSpec</code> or a <code>Hop</code> included), or if the
+constructor rejects any other argument.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>PackedLinear.from_adjacency : One trainable scalar per
+    edge on the same packed pairs.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">kpnn2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">parse_adjacency</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">{</span>
+<span class="gp">... </span>            <span class="s2">"source"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">],</span>
+<span class="gp">... </span>            <span class="s2">"target"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="p">}</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">attn</span> <span class="o">=</span> <span class="n">kpnn2</span><span class="o">.</span><span class="n">PackedMultiheadAttention</span><span class="o">.</span><span class="n">from_adjacency</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">embed_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">num_heads</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">identity</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">attn</span><span class="o">.</span><span class="n">query_features</span><span class="p">,</span> <span class="n">attn</span><span class="o">.</span><span class="n">key_features</span><span class="p">,</span> <span class="n">attn</span><span class="o">.</span><span class="n">nnz</span>
+<span class="go">(4, 4, 4)</span>
+</code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kpnn2.PackedMultiheadAttention.reset_parameters" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">reset_parameters</span>
+
+
+<a href="#kpnn2.PackedMultiheadAttention.reset_parameters" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">reset_parameters</span><span class="p">(</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Xavier-uniform projections, like <code>nn.MultiheadAttention</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.reset_parameters(generator)" class="doc doc-heading doc-heading-parameter">                  <code>generator</code>
+<a href="#kpnn2.PackedMultiheadAttention.reset_parameters(generator)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Generator">Generator</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Isolated RNG for the four Xavier draws. <code>None</code>
+uses the default torch generator. Not stored on
+the module. Biases, when present, are zeroed and
+do not consume the generator.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kpnn2.PackedMultiheadAttention.forward" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">forward</span>
+
+
+<a href="#kpnn2.PackedMultiheadAttention.forward" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">forward</span><span class="p">(</span>
+    <span class="n">query</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">key</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">key_padding_mask</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">need_weights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">attn_mask</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">average_attn_weights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">is_causal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Let each query attend to its live keys and mix their values.</p>
+<p>For attention within one graph, pass the same tokens as
+<code>query</code>, <code>key</code>, and <code>value</code>: every node then attends
+to its sources. Pass different tensors when queries and
+keys are different token sets, as in a bipartite map built
+with the constructor. The arguments are those of
+<code>nn.MultiheadAttention.forward</code>, so an encoder written
+for it can call this layer; the class docstring lists the
+differences.</p>
+<p>With <code>batch_first=True</code> (the default), <code>query</code>,
+<code>key</code>, and <code>value</code> are <code>(..., seq, embed_dim)</code>:
+unbatched 2-D <code>(seq, embed_dim)</code>, batched 3-D
+<code>(batch, seq, embed_dim)</code>, or more leading axes. With
+<code>batch_first=False</code>, unbatched 2-D is still
+<code>(seq, embed_dim)</code>; batched 3-D is
+<code>(seq, batch, embed_dim)</code>, transposed to batch-first for
+the packed kernel and transposed back. The batch axes of
+all three must match.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(query)" class="doc doc-heading doc-heading-parameter">                  <code>query</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(query)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The tokens that attend: <code>query_features</code> of them
+along the sequence axis, each <code>embed_dim</code> wide. Must
+be floating-point; an integer, <code>bool</code>, or complex
+tensor raises <code>Kpnn2Error</code> rather than being cast to
+the parameter dtype.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(key)" class="doc doc-heading doc-heading-parameter">                  <code>key</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(key)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The tokens matched against the queries:
+<code>key_features</code> of them along the sequence axis, each
+<code>embed_dim</code> wide. Floating-point, like <code>query</code>.
+Required; it is not defaulted to <code>query</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(value)" class="doc doc-heading doc-heading-parameter">                  <code>value</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(value)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>What each key position passes on, in the shape of
+<code>key</code> and usually the same tensor. Floating-point,
+like <code>query</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(key_padding_mask)" class="doc doc-heading doc-heading-parameter">                  <code>key_padding_mask</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(key_padding_mask)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Keys to leave out of a given sample, for example a
+feature that sample did not measure: <code>True</code> means
+ignore that key. Its edges drop out of the softmax, so
+each query's remaining sources share the whole weight.
+A boolean tensor of shape <code>(S,)</code> unbatched or
+<code>(N, S)</code> batched, where <code>S = key_features</code>; with
+more leading axes, the same ones as the batch-first
+<code>query</code>. The batch axes come first even when
+<code>batch_first=False</code>. Applied in packed space, without
+allocating <code>(n, n)</code>. Copied onto the scores' device
+and kept boolean. A float mask raises <code>Kpnn2Error</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(need_weights)" class="doc doc-heading doc-heading-parameter">                  <code>need_weights</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(need_weights)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Also return the weight of every live edge, for example
+to draw edge thickness on the prior graph. Must be a
+<code>bool</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(attn_mask)" class="doc doc-heading doc-heading-parameter">                  <code>attn_mask</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(attn_mask)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Must be <code>None</code>: the edgelist is the mask. Kept so that
+calls written for <code>nn.MultiheadAttention</code> still run.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(average_attn_weights)" class="doc doc-heading doc-heading-parameter">                  <code>average_attn_weights</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(average_attn_weights)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>With <code>need_weights=True</code>: <code>True</code> averages the
+weights over the heads, <code>False</code> keeps one per head.
+Must be a <code>bool</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+<h4 id="kpnn2.PackedMultiheadAttention.forward(is_causal)" class="doc doc-heading doc-heading-parameter">                  <code>is_causal</code>
+<a href="#kpnn2.PackedMultiheadAttention.forward(is_causal)" class="headerlink" title="Permanent link">&para;</a></h4>            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Must be <code>False</code>. Kept so that calls written for
+<code>nn.MultiheadAttention</code> still run.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>output</code></td>            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The updated tokens, one per query position, in the
+shape and layout of <code>query</code>. A query with no live
+keys left mixes to zeros, not NaN, before
+<code>out_proj</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>weights</code></td>            <td>
+                  <code><span title="torch.Tensor">Tensor</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>None</code> unless <code>need_weights=True</code>. Then the
+softmax weight of every live edge, in the order of
+<code>source_index</code> / <code>target_index</code>, not
+<code>nn.MultiheadAttention</code>'s dense <code>(L, S)</code> map; this
+path does not allocate <code>(L, S)</code>. Shape
+<code>(..., nnz)</code> averaged over heads, or
+<code>(..., nnz, num_heads)</code> per head, with the batch axes
+placed as in <code>output</code>: <code>(nnz, batch)</code> or
+<code>(nnz, batch, num_heads)</code> when <code>batch_first=False</code>
+and the input is batched. The weights into one query
+sum to 1, or to 0 when it has no live key. In training
+mode with <code>dropout &gt; 0</code> they are the weights after
+dropout, as the mix used them; call <code>eval()</code> first to
+read the plain softmax. <code>nnz</code> counts the pairs added
+by <code>add_self_loops</code>, so zip the weights with this
+layer's <code>source_index</code> / <code>target_index</code>, not with
+<code>to_edgelist()</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Kpnn2Error (kpnn2._errors.Kpnn2Error)" href="../Kpnn2Error/#kpnn2.Kpnn2Error">Kpnn2Error</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>query</code>, <code>key</code>, or <code>value</code> is not a
+floating-point tensor of at least 2 dimensions with
+last axis <code>embed_dim</code> and the sequence length above;
+if their batch axes differ; if a batched input is not
+3-D under <code>batch_first=False</code>; if
+<code>key_padding_mask</code> is not a boolean tensor of the
+shape above; if <code>need_weights</code> or
+<code>average_attn_weights</code> is not a <code>bool</code>; if
+<code>attn_mask</code> is not <code>None</code>; or if <code>is_causal</code> is
+not <code>False</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "content.code.copy", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
