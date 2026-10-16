@@ -4,7 +4,7 @@ Notable API and core changes only. This project follows
 semantic versioning.
 
 
-## [Unreleased]
+## [0.3.0] - 16. Oktober 2026
 
 ### Changed
 
