@@ -3290,7 +3290,7 @@ CHANGELOG.md                  # notable API / core only; see below
 docs/
   reference/                  # api.md + one page per public name
     aggregation/              # one page per method; not public names
-  why_kpnn2.md                # KPNNs; vs. custom PyTorch; checks
+  why_kpnn2.md                # evidence for Home's three reasons
   supported.md                # architecture-family support; why not a GNN
   packed_linear.md            # PackedLinear; tutorials use it on hops
   how_we_test.md              # test overview; scientific + technical
@@ -3402,10 +3402,10 @@ too short to define anything.
 | `docs/includes/abbreviations.md` | What do the letters mean? | GEMM, GNN |
 | Docstring → `docs/reference/` | What is the exact contract? | `Hop.source_layers` |
 
-**Concepts page.** Ordered by the pipeline (graph → edgelist →
-node → DAG → parser → spec → layer → hop → skip edge → packed
-indices → live edge → state vector → attribution → KPNN), never
-alphabetically: the terms are a dependency chain, not a set. One
+**Concepts page.** Ordered by the pipeline (graph → prior →
+edgelist → node → DAG → parser → spec → layer → hop → skip edge →
+packed indices → live edge → state vector → attribution → KPNN),
+never alphabetically: the terms are a dependency chain, not a set. One
 `##` per term so every entry is a link target. It carries the
 concept; the docstring carries the contract.
 
@@ -3418,7 +3418,7 @@ term twice on one page.
 first-use: their opening paragraphs are deliberately
 pre-terminology, so links start after them, not at a term's
 literal first mention. In `README.md` they start at the quick
-start; in `docs/why_kpnn2.md`, after the building-blocks list.
+start; in `docs/why_kpnn2.md`, at its first `##` section.
 
 **A gloss is a handhold, not a definition** — just enough that a
 reader does not stall ("an edge the graph actually has", "one

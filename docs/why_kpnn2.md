@@ -1,101 +1,75 @@
 # Why kpnn2
 
-This page explains why `kpnn2` exists: the kind of model it is for,
-what goes wrong when you build that model in plain PyTorch, and
-what the package checks for you. To build a first model instead,
-start with the [quick start](index.md#quick-start).
+[Home](index.md#why-it-exists) gives three reasons to use `kpnn2`.
+This page gives the evidence for each one, after a short background
+on what a knowledge-primed network needs from PyTorch:
 
-Deep neural networks are accurate predictors but opaque ones. Their
-hidden units carry no names: a unit deep inside a trained network
-has no meaning outside the model, so attribution methods, which
-score how much each input or unit contributes to a prediction, can
-say which units matter but not what they are. For scientific use
-this is a serious limitation, because a prediction can be checked against
-data, but only a mechanism can be tested by experiment. One line of
-work in interpretable machine learning therefore builds meaning
-into the architecture itself, so that the internal units of a
-network correspond to entities a scientist already knows by name.
+- **Built on, not rebuilt.** [Building blocks](#building-blocks)
+  lists the parts you start from and where each one is shown.
+- **Less code, less to get wrong.**
+  [Why not custom PyTorch?](#why-not-custom-pytorch) builds one
+  network both ways.
+- **Checked for correctness.**
+  [Checks where names meet tensor positions](#checks-where-names-meet-tensor-positions)
+  lists every check.
 
-![Left: a cell-surface receptor signals through kinases and transcription factors to genes. Right: the same wiring as a sparse neural network, with input nodes at the bottom, named hidden nodes in between, and one output node at the top.](figures/KPNNs_explained.png)
+To build a first model instead, start with the
+[quick start](index.md#quick-start).
 
-**Figure 1.** From a biological network (left) to a knowledge-primed
-neural network (right). Every node of the network is a named entity
-from the prior; the arrow marks the direction of information flow.
+## What a KPNN needs from PyTorch
 
-A [knowledge-primed neural network](concepts.md#kpnn) (KPNN)
-achieves this by encoding prior knowledge as a graph. Every node of
-the network stands for a named entity, and an edge exists only
-where the prior records a relationship between two entities.
+A [knowledge-primed neural network](concepts.md#kpnn) (KPNN) takes
+its wiring from a [prior](concepts.md#prior) — what you take as
+known before training. In the form that
+[Fortelny and Bock (2020)](https://doi.org/10.1186/s13059-020-02100-5)
+introduced, shown in [Figure 1 on Home](index.md#what-it-is), the
+network runs against the direction of signaling. Gene expression
+enters at the input nodes, passes through transcription factors and
+kinases in the hidden layers, and reaches the receptor at the
+output node.
+
 Connections the prior does not contain are absent rather than
-merely small, so sparsity, which elsewhere in deep learning serves
-speed or memory, here carries the meaning of the model. Figure 1
-shows the entity-based form introduced by
-[Fortelny and Bock (2020)](https://doi.org/10.1186/s13059-020-02100-5).
-On the left, a cell-surface receptor signals through kinases to
-transcription factors, which regulate genes. On the right, the same
-wiring becomes a neural network that runs against the direction of
-signaling: gene expression enters at the input nodes, passes
-through transcription factors and kinases in the hidden layers, and
-reaches the receptor at the output node. Because each hidden node
-stands for a specific protein, an attribution score on that node
-says how much the trained model relies on that protein's unit,
-rather than on an anonymous one.
-Related models, also called visible or biologically informed neural
-networks, derive the graph from pathway databases or ontologies,
-such as P-NET, which is built on a hierarchy of Reactome pathways
-([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).
-Nothing in the construction is specific to biology: any domain whose
-entities have stable names and known relationships can be modeled
-the same way.
+merely small. So sparsity, which elsewhere in deep learning serves
+speed or memory, here carries the meaning of the model.
 
-PyTorch can express such networks, but its standard components do
-not. `nn.Linear` connects every unit of one layer to every unit of
-the next (Figure 2a); a KPNN connects only the pairs its prior
-names, and many of its edges skip layers (Figure 2b). The common
-workaround multiplies each weight matrix by a fixed 0/1 mask.
-Deriving those masks is a parsing problem in its own right: nodes
-must be sorted into layers, edges that skip layers routed to the
-correct inputs, and the column order of every layer fixed; all of
-it must be redone whenever the prior changes. The more serious
-difficulty is less visible. A KPNN reports its results by name, yet
-inside the model a name is only an integer position, and nothing in
-PyTorch checks that the two still agree. When they drift apart,
-after a database update, with a feature table in a different column
-order, or on reloading a checkpoint, the model still trains and the
-loss looks normal, but the score reported for one gene belongs to
-another. Such an error raises no exception and leaves no trace in
-the metrics. Because published models have typically been
-implemented with code written for one architecture, each new
-project rebuilds this machinery and meets these pitfalls anew.
+Related models, also called visible or biologically informed neural
+networks, take the prior from pathway databases or ontologies.
+P-NET, for example, is built on a hierarchy of Reactome pathways
+([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).
+
+PyTorch can express such networks, but its standard layers do not.
+`nn.Linear` connects every unit of one layer to every unit of the
+next (Figure 1a). A KPNN connects only the pairs its prior names,
+and many of its edges skip layers: these
+[skip edges](concepts.md#skip-edge) are dashed in Figure 1b. The
+common workaround multiplies each weight matrix by a fixed 0/1 mask
+that you derive from the prior yourself.
 
 ![(a) Every input connects to every hidden unit, and every hidden unit to the output. (b) Only the listed edges exist, and three dashed edges skip a layer.](figures/dense_vs_sparse.png)
 
-**Figure 2.** (a) Dense adjacent layers, the usual PyTorch case.
+**Figure 1.** (a) Dense adjacent layers, the usual PyTorch case.
 (b) A sparsely connected network with skip edges (dashed), the same
 graph as on the [Edges that skip layers](skip-edges.ipynb) page.
 
-`kpnn2` resolves this by separating what the prior determines from
-what the modeler decides. The prior determines which connections
-exist and what each node is called, and `kpnn2` handles exactly
-that part. It derives the connectivity from a named edgelist once,
-keeps every node name attached to its tensor position from parsing
-to attribution, and checks that correspondence wherever names and
-positions meet: when the prior is parsed, when input columns are
-aligned, when a checkpoint is loaded, and when attribution scores
-are labeled. Everything else, including activations, normalization,
-dropout, output heads, losses, optimizers, the training loop, and
-the choice of attribution method, stays in ordinary PyTorch code
-that you write. The package provides building blocks, not a
-finished model: there is no model compiler and no ready-made
-network, so the model remains plain PyTorch that can be read,
-changed, and extended like any other.
+Deriving the masks turns names into positions: each node becomes
+an index, and each edge a cell of a mask. Nothing in PyTorch
+checks later that names and positions still agree. When they drift
+apart — after a database update, with a reordered feature table, or
+on reloading a checkpoint — the model still trains, and its
+[attributions](concepts.md#attribution) land on the wrong names.
 
-In practice, `kpnn2` provides four kinds of building blocks:
+## Building blocks
+
+Published KPNN code is typically written for one architecture, so
+each new project rebuilds the parsing, the masks, and the checks.
+`kpnn2` provides them as tested parts of four kinds:
 
 - **Parsers.** `parse_layered()` sorts an acyclic prior into layers
-  and keeps each edge that skips layers in the layer it feeds.
-  `parse_adjacency()` places all nodes in a single vector, which
-  allows feedback loops and self-loops.
+  and gives every layer after the inputs one
+  [hop](concepts.md#hop) — every edge that enters it, skip edges
+  included. `parse_adjacency()` places all nodes in one
+  [state vector](concepts.md#state-vector), which allows feedback
+  loops and self-loops.
 - **Sparse layers.** `PackedLinear` (one trainable weight per
   edge), `MaskedLinear` (a masked dense matrix for small graphs),
   and `PackedMultiheadAttention` (attention restricted to the
@@ -110,35 +84,18 @@ In practice, `kpnn2` provides four kinds of building blocks:
   [Checks where names meet tensor positions](#checks-where-names-meet-tensor-positions)
   lists each check.
 
-## Core workflow
+The tutorials show them at work:
+[Edges that skip layers](skip-edges.ipynb) for skip edges,
+[Cyclic graph example](cyclic-graph-example.ipynb) for feedback
+loops, and [Transformer example](transformer-example.ipynb) for
+attention. [Supported architectures](supported.md) lists the model
+families they cover. [How we test](how_we_test.md) describes the
+tests behind them.
 
-[**Terminology**](concepts.md) defines the terms these steps use.
-
-1. Define a model architecture as an edgelist with named `source`
-   and `target` [nodes](concepts.md#node).
-2. Parse it. For a
-   [directed acyclic graph](concepts.md#dag) (DAG) you want
-   as layers, call `parse_layered()`. It returns a `LayeredSpec`
-   with one packed [hop](concepts.md#hop) per layer — a hop
-   being everything entering one layer. For cycles, or for one
-   shared [state vector](concepts.md#state-vector) over all
-   nodes, call `parse_adjacency()`. It returns an `AdjacencySpec`
-   whose edges are [packed indices](concepts.md#packed-indices).
-   A DAG is valid for both, so the layout is your choice.
-3. Write an `nn.Module` with one `PackedLinear` per hop in
-   `spec.hops`, and feed each one `gather_hop_inputs(saved, hop)`.
-   [Skip edges](concepts.md#skip-edge), whose endpoints are
-   more than one layer apart, already sit inside those hops, so
-   there is nothing extra to call. `MaskedLinear(hop.to_mask())`
-   is the dense hatch for small graphs.
-4. Align feature names with `align_inputs()`, then index the
-   host matrix.
-5. Train with ordinary PyTorch.
-6. Optionally run Captum (or another method) yourself, then label a
-   layer tensor with `map_node_attributions()` (returns xarray).
-7. Optionally fold those scores with `aggregate_node_attributions()`.
-8. A checkpoint is `spec.to_dict()` plus `state_dict`, not
-   weights alone.
+Everything else — activations, output heads, losses, the training
+loop, and the attribution method — stays in PyTorch code you
+write. There is no model compiler and no ready-made network, so the
+model stays plain PyTorch that you can read, change, and extend.
 
 ## Why not custom PyTorch?
 
@@ -164,7 +121,7 @@ the same point in a full example.
 <img class="figure-full" src="../figures/custom_pytorch_pathway.png" alt="Genes feed transcription factors, then kinases, then cellular processes, and finally one phenotype node; three dashed edges skip a layer.">
 </div>
 
-**Figure 3.** A sparse pathway prior: genes feeding transcription
+**Figure 2.** A sparse pathway prior: genes feeding transcription
 factors, kinases, cellular processes and a phenotype. Solid edges
 connect adjacent layers; dashed edges skip one. Both snippets
 below build this network from the same edgelist.
@@ -409,9 +366,8 @@ model = Net(spec)
 Both columns are correct. They build the same network, and both
 reject the same six malformed edgelists. The left one is several
 times longer, and it covers only the model: aligning input
-columns, saving checkpoints, and naming
-[attributions](concepts.md#attribution) still lie ahead, each
-with bookkeeping of its own.
+columns, saving checkpoints, and naming attributions still lie
+ahead, each with bookkeeping of its own.
 
 Much of that length is not the model but the checks the masks
 depend on. A missing node name silently adds a node, a duplicated
@@ -423,7 +379,7 @@ thought of. The failure below is one they did not.
 ### A checkpoint that loads the wrong wiring
 
 Train the left model and save its `state_dict`. Months later, a
-new database release revises one interaction in Figure 3:
+new database release revises one interaction in Figure 2:
 `gene_n3` now regulates `tf_stat` instead of `tf_nfkb`. No node
 changes layer, so every tensor keeps its shape. Rerun the left
 column on the new prior and reload the checkpoint:
@@ -479,7 +435,12 @@ stops with `Kpnn2Error`.
 Each failure like this one is fixable once you have seen it. The
 hard part is seeing all of them in advance: this one needs a
 prior update and a reload to appear, and neither column's code
-hints at it. That is what `kpnn2` is for. It owns the mapping
+hints at it.
+[Three mistakes in hand-written code](how_we_test.md#three-mistakes-in-hand-written-code)
+on How we test shows three more, each a few lines of plain PyTorch
+that run without an error.
+
+That is what `kpnn2` is for. It owns the mapping
 from node names to tensor positions (layers, packed edges, input
 columns, checkpoints, attribution labels), so the checks on that
 mapping are written and tested once, in one place, instead of
@@ -497,6 +458,16 @@ catches a mistake that would not show up in the loss.
   `" A"` from a CSV with `", "` separators, which would otherwise
   split one node into two. `parse_layered()` also rejects cycles
   and self-loops.
+- **Per-node settings name real nodes.** A `widths=` or `ranks=`
+  entry for a node the edgelist lacks raises, so a misspelled name
+  cannot go unnoticed.
+- **Output nodes are confirmed by name.** A node whose onward rows
+  are missing from the edgelist has no outgoing edge, so it becomes
+  an output node, and a model that reads every output node reads it
+  as a prediction. Pass the output nodes you read as `outputs=`,
+  and both parsers raise on any other node without an outgoing
+  edge. Without `outputs=`, a parse with more than one output node
+  warns.
 - **Edges that skip layers stay in the wiring.** Such an edge is
   part of the layer it feeds, so that layer's input width includes
   it, and `gather_hop_inputs()` raises when an earlier layer it
@@ -512,7 +483,7 @@ catches a mistake that would not show up in the loss.
   loading;
   [A checkpoint that loads the wrong wiring](#a-checkpoint-that-loads-the-wrong-wiring)
   shows what the hand-written version does.
-- **Attribution scores are labeled from the parsed graph.**
+- **Attributions are labeled from the parsed graph.**
   `map_node_attributions()` names every position of a layer tensor
   and raises when the tensor's width does not match that layer.
 

@@ -12,6 +12,7 @@ instead of redefining. This page carries the concept; the
 | Term | In one line |
 |------|-------------|
 | [Graph](#graph) | Named nodes and the directed edges between them |
+| [Prior](#prior) | The graph as knowledge you assume before training |
 | [Edgelist](#edgelist) | That graph as a `source` / `target` table |
 | [Node](#node) | One named entity, one unit by default |
 | [Directed acyclic graph](#dag) (DAG) | A graph with no feedback loop |
@@ -28,9 +29,9 @@ instead of redefining. This page carries the concept; the
 
 ## Graph
 
-The named nodes and the directed edges between them. This is the
-prior: the wiring you already believe in before training, which
-`kpnn2` turns into an architecture.
+The named nodes and the directed edges between them: the wiring
+`kpnn2` turns into an architecture. Taken as domain knowledge, the
+graph is the [prior](#prior).
 
 **Named graph** is the emphatic form, used where the point is that
 the nodes carry domain names rather than positions, so a score on a
@@ -41,6 +42,23 @@ never a graph as *data* in the GNN sense, where each node carries a
 feature vector and the batch is graphs. Here the graph is the
 architecture and the batch is samples. See
 [Why not a GNN?](supported.md#why-not-a-gnn).
+
+## Prior
+
+The graph as domain knowledge: the entities and the relationships
+between them that you take as known before training, often from
+databases or the literature. Prior and graph are the same wiring.
+These docs say prior where its source matters, for example when a
+later database release revises it.
+
+`kpnn2` treats the prior as a hard constraint. An edge the prior
+lacks cannot affect a prediction, so training learns how strongly
+each edge of the prior acts and cannot add an edge.
+
+A prior is an assumption, not a finding. An attribution describes
+how the trained model uses the prior it was given, not whether the
+prior is right. [Rewired prior](how_we_test.md#rewired-prior) is
+the test that a broken prior breaks the fit.
 
 ## Edgelist
 
