@@ -269,6 +269,58 @@ later prompt asks.
   Host-sparse scipy CSR in a caller loop does not violate
   this bullet.
 
+### Related packages
+
+People who know these packages ask why kpnn2 exists. Each
+entry says what the package is, where it overlaps, and how
+kpnn2 differs.
+
+**deepstruct** (`https://github.com/innvariant/deepstruct`,
+PyPI `deepstruct`; Stier & Granitzer, *Software Impacts* 11,
+2022). It builds PyTorch networks from graphs and turns
+trained networks back into graphs, for research on pruning,
+architecture search, and whether a network's structure
+changes its accuracy.
+
+Overlap: both turn a DAG into masked linear layers, both put
+a node in the layer of its longest path from the sources, and
+both allow skip edges. Its `MaskedLinearLayer` computes
+`F.linear(x, weight * mask, bias)`, the same kernel as
+`MaskedLinear`.
+
+The difference: deepstruct asks how much the shape of a
+network matters, so the graph is the variable and its nodes
+are anonymous. kpnn2 asks what each named node does in a
+network that prior knowledge wired. In deepstruct 0.10.0:
+
+- **No names.** Nodes must be integers. There is no input
+  alignment by name and no attribution mapping.
+- **The graph is only the hidden part.** `MaskedDeepDAN`
+  adds an unmasked layer from every input feature to the
+  first graph layer, and another from the last graph layer
+  to the outputs. Every feature reaches every source node,
+  so no graph node is one measured feature. In kpnn2 the
+  input nodes are the measured features, aligned by name,
+  and their edges are as sparse as the rest.
+- **Ready-made models.** `MaskedDeepFFN` and `MaskedDeepDAN`
+  fix the forward (ReLU, optional LayerNorm). kpnn2 is not
+  a compiler; the user writes `forward()`.
+- **Skip edges are separate layers.** Each connected pair of
+  layers gets its own masked layer and bias. Each is
+  activated on its own and the results are summed:
+  `relu(main) + relu(skip)`. A node's output is then not
+  one activation of all its parents. In kpnn2 a skip parent
+  is a packed pair of the target's hop (see **Skip
+  connections**).
+- **The graph is meant to change.** It is a networkx
+  `DiGraph`, masks are recomputed from weight magnitude, and
+  pruning methods ship with the package. kpnn2's topology
+  is frozen after parse (**Not a mutable graph** above).
+
+Its last release is 0.10.0 (2023-01-18). It requires
+`torch ^1.7` (below 2.0) and `networkx ^2.0`, so it does not
+install next to a current torch.
+
 ---
 
 ## Package philosophy
