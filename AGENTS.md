@@ -274,6 +274,18 @@ python dev/build_release_process_pdf.py
 The script needs the `docs` extra and a local Chrome or
 Chromium.
 
+To share the website as one PDF, for example for review
+before a release:
+
+```
+python dev/build_website_pdf.py
+```
+
+It writes gitignored `out/kpnn2_docs.pdf` from the working
+tree with the notebooks' stored outputs, leaves
+`mkdocs.yml` unchanged, and needs the same `docs` extra
+and Chrome.
+
 `dev/paper_fit/` compares kpnn2 with published KPNN code
 in agent sessions the user starts by hand. It is not
 pytest (outside `testpaths`), not CI, and not docs.

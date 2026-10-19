@@ -58,6 +58,8 @@ docs = [
     "mkdocstrings[python]",
     "mkdocs-jupyter",
     "mkdocs-include-markdown-plugin",
+    # Only dev/build_website_pdf.py uses it; mkdocs.yml does not.
+    "mkdocs-print-site-plugin",
     "pymdown-extensions",
     "nbconvert",
     "ipykernel",
