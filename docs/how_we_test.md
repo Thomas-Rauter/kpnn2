@@ -1,11 +1,39 @@
 # How we test
 
-`kpnn2` turns a named edgelist into the wiring of a neural net.
-A bug that drops a [skip edge](concepts.md#skip-edge), lets an
-edge outside the edgelist influence a prediction, or mislabels an
-[attribution](concepts.md#attribution) axis is a scientific error,
-not only a software bug. The test suite is
+`kpnn2` builds interpretable neural networks in PyTorch from a
+graph of named entities, with checks that every
+[attribution](concepts.md#attribution) is reported under the right
+name. This page explains those checks.
+
+The tests guard against three mistakes. Each one leaves a model
+that trains and gives attributions without an error, so it would
+end up in your results. Figure 1 shows them on the graph from
+Figure 2 on [Home](index.md#how-it-works):
+
+- **An edge goes missing.** `protein_d → outcome` is a
+  [skip edge](concepts.md#skip-edge): it skips the hidden layer.
+  Code that connects each layer only to the next has no place for
+  it and drops it.
+- **An edge appears that the graph does not have.** A weight from
+  `protein_a` to `protein_f` lets `protein_a` affect `protein_f`,
+  although the edgelist has no such row.
+- **An attribution gets the wrong name.** An attribution method
+  returns a table of numbers with one column per node and no
+  names. If the names go onto the columns in the wrong order, the
+  attributions of `protein_e` are reported as those of
+  `protein_f`.
+
+<img class="figure-full" src="../figures/silent_mistakes.svg" alt="Three copies of the Home graph. (a) The dashed skip edge from protein_d to outcome is grey and crossed out. (b) A thick red edge from protein_a to protein_f, which the edgelist does not have. (c) Two attribution tables with the same values: under the right names protein_e is dark and protein_f pale, and with the names swapped protein_f is dark.">
+
+**Figure 1.** Three mistakes on the graph from Home, none of which
+raises an error. In (c) the model relies on `protein_e`, but with
+the names swapped the report says `protein_f`.
+
+Each of these changes the conclusion, not only the code, so it is
+a scientific error and not only a software bug. The test suite is
 built around that.
+[Three mistakes in hand-written code](#three-mistakes-in-hand-written-code)
+shows how each one comes about.
 
 This page is an overview of **what the tests claim**, not a
 catalog of every `test_*` function. It has three parts: the
@@ -24,6 +52,121 @@ A separate, frozen notebook repeats one published simulation
 with these primitives:
 [Fortelny and Bock, 2020](literature/fortelny-bock-2020.ipynb).
 That page is not part of the test suite.
+
+## Three mistakes in hand-written code
+
+Each mistake takes a few lines of plain PyTorch, and each runs
+without an error. The examples build the network of Figure 1 by
+hand. `edgelist` holds its seven rows, and `torch`, `nn` (from
+`torch`), and `pandas` as `pd` are imported.
+
+### An edge goes missing
+
+A common way to build a sparsely connected network is one 0/1
+mask per pair of neighboring layers. This code writes the layers
+by hand and fills each mask from the edgelist:
+
+```python
+layers = [
+    ["protein_a", "protein_b", "protein_c", "protein_d"],
+    ["protein_e", "protein_f"],
+    ["outcome"],
+]
+masks = []
+for sources, targets in zip(
+    layers[:-1],
+    layers[1:],
+):
+    mask = torch.zeros(
+        len(targets),
+        len(sources),
+    )
+    for source, target in zip(
+        edgelist["source"],
+        edgelist["target"],
+    ):
+        if source in sources and target in targets:
+            mask[targets.index(target), sources.index(source)] = 1
+    masks.append(mask)
+```
+
+`protein_d` is in the first layer and `outcome` in the third, so
+the row `protein_d → outcome` matches neither pair of layers. The
+two masks hold six of the seven edges, and nothing reports the
+seventh.
+
+`parse_layered()` puts each edge into the [hop](concepts.md#hop)
+of its target, so `protein_d → outcome` sits in the hop into
+`outcome`, next to the edges from `protein_e` and `protein_f`. The
+tests check that the hops together hold every row of the edgelist
+and that a skip edge drives its target on its own: see
+[Edges that are not in the graph](#edges-that-are-not-in-the-graph)
+and [Technical correctness](#technical-correctness).
+
+### An edge appears
+
+To use the masks, this code zeroes the absent edges of each
+`nn.Linear` once, before training:
+
+```python
+hidden = nn.Linear(
+    4,
+    2,
+)
+with torch.no_grad():
+    hidden.weight *= masks[0]
+```
+
+The weight of `protein_a → protein_f` starts at zero, but its
+gradient is usually not zero, so the first optimizer step moves
+it. After training, `protein_a` affects `protein_f` through an
+edge the edgelist does not have, and nothing in the training run
+shows it.
+
+`MaskedLinear` applies its mask in every forward pass, so a
+blocked weight stays at zero under SGD with momentum, Adam, and
+AdamW. `PackedLinear` has no weight for an absent edge at all.
+[Edges that are not in the graph](#edges-that-are-not-in-the-graph)
+and the `MaskedLinear` checks under
+[Technical correctness](#technical-correctness) pin both.
+
+### An attribution gets the wrong name
+
+This version takes the hidden layer from the edgelist instead of
+writing it by hand: each node in the order it first appears as a
+target. The masks are built in that order, as in the first
+example:
+
+```python
+targets = edgelist["target"].unique()
+hidden_nodes = [node for node in targets if node != "outcome"]
+```
+
+After training, `attributions` holds what an attribution method
+returned for the hidden layer: one row per sample and one column
+per hidden unit, in the order of `hidden_nodes`. The code names
+the columns from a sorted list:
+
+```python
+table = pd.DataFrame(
+    attributions.numpy(),
+    columns=sorted(hidden_nodes),
+)
+```
+
+On the edgelist of Figure 1 both orders are `protein_e`,
+`protein_f`, so the names are right. If a later release of the
+edgelist lists the rows of `protein_f` first, `hidden_nodes`
+becomes `protein_f`, `protein_e`, and the sorted names stay as
+they were. The attributions of `protein_e` then appear under
+`protein_f`. Code that gave the right names when it was written
+gives the wrong ones, and nothing fails.
+
+The parsers sort the nodes of each layer alphabetically, so the
+row order of the edgelist does not move a unit, and
+`map_node_attributions()` reads the names from the same spec the
+layers were built from. [Name mapping](#name-mapping) checks that
+the names land on the right columns.
 
 ## Two kinds of correctness
 
@@ -182,7 +325,7 @@ directly.
 
 Pinned in
 [`tests/module/test_hop_forward.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_hop_forward.py).
-[Skip edges](skip-edges.ipynb) is the design.
+[Edges that skip layers](skip-edges.ipynb) is the design.
 
 ### Unrolled adjacency
 
@@ -250,7 +393,7 @@ Pinned in
 [`tests/controls/test_captum_mapping.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/controls/test_captum_mapping.py)
 and
 [`tests/module/test_map_node_attributions.py`](https://github.com/Thomas-Rauter/kpnn2/blob/main/tests/module/test_map_node_attributions.py).
-[Mapping attributions](map-node-attributions.ipynb) is the
+[Attributions by node name](map-node-attributions.ipynb) is the
 workflow.
 
 ## Technical correctness

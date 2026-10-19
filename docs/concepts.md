@@ -1,4 +1,4 @@
-# Concepts
+# Terminology
 
 The vocabulary these docs use, in the order the pipeline uses it:
 a **graph**, written as an **edgelist**, goes through a **parser**
@@ -160,7 +160,7 @@ inspects the graph to pick for you: the layout is your choice.
   [state vector](#state-vector) and returns an `AdjacencySpec`:
   no layers, cycles allowed.
 
-[Layered vs. Adjacency](layered_vs_adjacency.md) is the full
+[Layered vs. unlayered](layered_vs_adjacency.md) is the full
 comparison.
 
 ## Spec
@@ -175,7 +175,7 @@ the training loop stay yours.
 
 The word *graph* stops here. What comes out of the parser is a
 chosen layout of that graph, not the graph itself, which is why
-[Layered vs. Adjacency](layered_vs_adjacency.md) is a real
+[Layered vs. unlayered](layered_vs_adjacency.md) is a real
 decision rather than something the package infers.
 
 A checkpoint is `spec.to_dict()` plus `state_dict`, not weights
@@ -229,7 +229,8 @@ is every unit pair of the block. `spec.skips` is metadata that
 says which prior edges span layers; a forward pass never reads
 it, and it is empty when no edge skips.
 
-[Skip edges](skip-edges.ipynb) works this through on a real graph.
+[Edges that skip layers](skip-edges.ipynb) works this through on a
+real graph.
 
 ## Packed indices
 
@@ -301,8 +302,9 @@ does not run Captum.
 The reason this is worth a term: in a dense network only the input
 features have names, so attribution stops at the inputs. On a named
 graph the hidden nodes have names too, so the same methods score
-the internal entities. [Mapping attributions](map-node-attributions.ipynb)
-is the naming rule in detail.
+the internal entities.
+[Attributions by node name](map-node-attributions.ipynb) is the
+naming rule in detail.
 
 ## KPNN
 

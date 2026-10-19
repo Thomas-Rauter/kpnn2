@@ -1,6 +1,7 @@
 """
-Turn a named edgelist into sparsely connected PyTorch layers
-you assemble yourself.
+Build interpretable neural networks in PyTorch from a graph of
+named entities, with checks that every attribution is reported
+under the right name.
 
 ``kpnn2`` turns a source/target edgelist into a spec so you write
 ordinary PyTorch. Pick the layout yourself: ``parse_layered``

@@ -1,4 +1,4 @@
-# PackedLinear
+# PackedLinear: one weight per edge
 
 `PackedLinear` stores one trainable scalar per
 [live edge](concepts.md#live-edge) — an edge the graph actually
@@ -33,7 +33,7 @@ core = kpnn2.PackedLinear.from_adjacency(spec)
 
 Small cyclic graphs may stay on `MaskedLinear(spec.to_mask())`.
 
-[Layered vs. Adjacency](layered_vs_adjacency.md) is the layout
+[Layered vs. unlayered](layered_vs_adjacency.md) is the layout
 split. [Feedforward example](feedforward-example.ipynb) uses
 packed hops. [Cyclic graph example](cyclic-graph-example.ipynb)
 is the shared-state path.

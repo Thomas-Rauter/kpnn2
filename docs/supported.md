@@ -112,5 +112,6 @@ knowledge graph. There are knowledge-primed GNN papers; this
 project will not wrap or replace PyG for them.
 
 Same edgelist, different hypothesis about the data-generating
-process. `kpnn2` is the PyTorch side of that split: sparsely
-connected layers you assemble yourself.
+process. `kpnn2` is the PyTorch side of that split: it builds
+interpretable neural networks from a graph of named entities, with
+checks that every attribution is reported under the right name.

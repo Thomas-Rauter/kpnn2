@@ -24,45 +24,110 @@
 [![PyPI - License](https://img.shields.io/pypi/l/kpnn2?labelColor=555)](https://pypi.org/project/kpnn2/)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/kpnn2?labelColor=555&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGZpbGwtcnVsZT0iZXZlbm9kZCIgaGVpZ2h0PSIzNjguNTY4IiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbWl0ZXJsaW1pdD0iMS41IiB2aWV3Qm94PSIxMzguOTk4IDExMi4wNzkgMzE3LjMxMCAzNjguNTY4IiB3aWR0aD0iMzE3LjMxMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3Mi41OSAtNjMuMjA5KSI%2BPHBhdGggZD0ibTY3My40MSAyMzYuMDE2LTY0LjI3MSA4LjI1MnYyODEuMzU3aDY0LjI3NnoiIGZpbGw9IiNmZmNhMWUiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjExIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMzY1IC0uMzcyNzUgLjIyMTE1IC4wODA5MyAtNDIzLjA4NiA0NTcuNDQ4KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIuMzUiIHRyYW5zZm9ybT0ibWF0cml4KDMuOTMzNTkgLTEuNDM4MzcgMCAuNTMwODQgLTIyNjYuNDMgMTA4Ny45NCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iLjYyIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjk2MDQgLS43MTY4NSAuMjIxNiAuMDc5MjcgLTExMTguNTUgNjM5LjMzOSkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMzc3NWE4IiBzdHJva2U9IiNkMWUzZjIiIHN0cm9rZS13aWR0aD0iMS4xNSIgdHJhbnNmb3JtPSJtYXRyaXgoMS4wMjI4MSAtLjM3NCAwIDEuMDU2OTUgLTQzMC43NzMgMjE0LjE3OCkiLz48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMS4xNyIgdHJhbnNmb3JtPSJtYXRyaXgoLS45NzQ5OSAtLjM0OTI0IDAgMS4wNTY5NSA3ODYuMTk0IDE5OS4yMDgpIi8%2BPHBhdGggZD0ibTYwOS4xMzkgMjQ0LjI2OGg2NC4yNzZ2MjgxLjM1N2gtNjQuMjc2eiIgZmlsbD0iI2VmZWVlYSIgc3Ryb2tlPSIjZDhkOGQ4IiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTc0OTkgLS4zNTY1MiAwIC4yNjg4NSA3ODYuMTk0IDYxOC4zNTUpIi8%2BPGcgc3Ryb2tlPSIjZDFlM2YyIj48cGF0aCBkPSJtNjA5LjEzOSAyNDQuMjY4aDY0LjI3NnYyODEuMzU3aC02NC4yNzZ6IiBmaWxsPSIjMmY2NDkwIiBzdHJva2Utd2lkdGg9IjEuNDQiIHRyYW5zZm9ybT0ibWF0cml4KC0uOTY4MzQgLS4zNTQwOSAwIC41MzA3NyA3MTkuNDgzIDQyNy41KSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS4yIiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgMS4wNTY5NSAtMzExLjg5MiAxNzAuNDkyKSIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMzNzc1YTgiIHN0cm9rZS13aWR0aD0iMS40MyIgdHJhbnNmb3JtPSJtYXRyaXgoLjk3NDIgLS4zNTYyMyAwIC41MzA4NCAtNDYzLjc0NCA0MjguNzYxKSIvPjxwYXRoIGQ9Im02Ny41NzUgMzkzLjE2MSA2Mi4xMjEgMjIuNDY1IDE4OC43MDgtNjguMjk5bS0xMjUuMTY1LTI5LjE0MSAxMjQuNzMyLTQ1LjYwMiIgZmlsbD0ibm9uZSIvPjwvZz48cGF0aCBkPSJtMzE4LjQwNCAzNDcuMzI3IDYzLjkzOS0yMy4yMDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2Q3YzViMiIvPjxwYXRoIGQ9Im02MDkuMTM5IDI0NC4yNjhoNjQuMjc2djI4MS4zNTdoLTY0LjI3NnoiIGZpbGw9IiMyZjY0OTAiIHN0cm9rZT0iI2QxZTNmMiIgc3Ryb2tlLXdpZHRoPSIxLjE2IiB0cmFuc2Zvcm09Im1hdHJpeCguOTY3ODggLS4zNTI0NCAuMjIxMTUgLjA4MDkzIC01NzYuMTY4IDUxMy41ODMpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZmYiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzgyNiAtLjQwMjQgLjA1NDk0IC44NjE0IC0yOTUuMzYzIDMwNC45MzQpIi8%2BPHBhdGggZD0ibTE5NS43ODYgMTk4LjEyNSA2MS42OTYgMjIuMTI2IiBmaWxsPSJub25lIiBzdHJva2U9IiNkMWUzZjIiLz48cGF0aCBkPSJtNjczLjQxNSAyNDQuMjY4aC02NC4yNzZsLjAxOCAyODIuNDA1IDY0LjI1OC0xLjA0OHoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjM3IiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAyMjgxIC0uMzc0IDAgLjUyODQzIC00MzAuNzczIDQ5MS45ODMpIi8%2BPHBhdGggZD0ibTY3My40MTUgMjQ0LjI2OGgtNjQuMjc2bC4wMDEgMjgxLjc1OCA2NC4yNzUtLjQwMXoiIGZpbGw9IiNmZmQyNDEiIHN0cm9rZT0iI2Q3YzViMiIgc3Ryb2tlLXdpZHRoPSIxLjQ4IiB0cmFuc2Zvcm09Im1hdHJpeCguOTM1NTQgLS4zNDIxIDAgLjUyNzQzIC0zMTEuODkyIDQ0OC44MjIpIi8%2BPGNpcmNsZSBjeD0iNjM3LjUxNyIgY3k9IjI2MC4wMDEiIGZpbGw9IiNmZWZkZmQiIHI9IjE1LjcxIiB0cmFuc2Zvcm09Im1hdHJpeCguNzcwNzQgLS4zOTYzIC4wNTE1NiAuODA4MzIgLTIwNS45MTYgNTA5LjQxMSkiLz48cGF0aCBkPSJtMTkyLjQxMiA0NjguMDU5IDEyNi4wMjgtNDUuOTc3IiBmaWxsPSJub25lIiBzdHJva2U9IiNkN2M1YjIiLz48L2c%2BPC9zdmc%2B)](https://pypi.org/project/kpnn2/)
 
-Turn a named edgelist into sparsely connected PyTorch layers
-you assemble yourself.
+Build interpretable neural networks in PyTorch from a graph of
+named entities, with checks that every attribution is reported
+under the right name.
 
-`kpnn2` builds sparsely connected PyTorch networks from a graph of
-named nodes, as Figure 1 shows. Each node of the graph becomes a
-unit of the network, and each edge becomes a connection, including
-edges that skip layers. Pairs of nodes without an edge stay
-unconnected.
+## What it is
 
-![Left: a six-row edgelist and a data table with one row per input plus an output row. Middle: the same graph as a network, two signal inputs feeding hidden_signal and two noise inputs feeding hidden_noise, both feeding output. Right: the bar for hidden_signal is many times longer than the bar for hidden_noise.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_overview.png)
+The hidden neurons of a standard neural network have no meaning
+outside the model. An attribution method can say which neurons a
+prediction relied on, but not what those neurons stand for.
 
-**Figure 1.** You provide a graph and data with named features.
-`kpnn2` turns the graph into sparsely connected PyTorch layers, you
-train them, and `kpnn2` labels the attribution scores by node name.
+A knowledge-primed neural network (KPNN) is built from a graph of
+known entities, such as proteins and the interactions between
+them, as Figure 1 shows. Every neuron belongs to one entity, and
+two neurons are connected only where the graph has an edge
+([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5)).
+The attributions of a KPNN therefore name proteins, not anonymous
+neurons.
 
-The core of `kpnn2` is keeping node and edge names attached to the
-right tensor positions. Inside PyTorch, a node is only a position
-in a tensor, and nothing checks that the position still belongs to
-the same name after the graph changes, the feature columns are
-reordered, or a checkpoint is reloaded. When names and positions
-drift apart, training still runs and the loss looks normal, but
-scores are reported under the wrong names. `kpnn2` ties every node
-to its units and every edge to its weight, from the edgelist to the
-attribution scores, and raises an error when they no longer match:
-when the graph is parsed, when input columns are aligned, when a
-checkpoint is loaded, and when scores are labeled.
+![Left: a network of known interactions, from a receptor through kinases and transcription factors to genes. Right: the same wiring as a neural network, with input nodes at the bottom, hidden nodes in between, and one output node at the top.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/KPNNs_explained.png)
 
-Networks whose nodes are known entities and whose edges are known
-relationships between them are called knowledge-primed neural
-networks (KPNNs). Biology has many, with genes, transcription
-factors, kinases, and pathways as nodes, for example
-[Fortelny and Bock (2020)](https://doi.org/10.1186/s13059-020-02100-5).
-The idea is not specific to biology: any domain whose entities have
-names and known relationships, such as chemistry, works the same
-way. Figure 1 and the quick start use a small graph with generic
-names, in which four inputs feed two hidden nodes that feed one
-output. When each sample is its own graph, use a graph
-neural network instead; see
+**Figure 1.** From a network of known interactions (left) to a
+knowledge-primed neural network with the same wiring (right).
+
+`kpnn2` builds such networks in PyTorch from an edgelist, a table
+of edges between named entities. Any domain whose entities have
+names and known relationships works the same way. When each sample
+is its own graph, use a graph neural network instead; see
 [Why not a GNN?](https://thomas-rauter.github.io/kpnn2/latest/supported/#why-not-a-gnn).
+
+## Why it exists
+
+> **"A Scientist's Nightmare: Software Problem Leads to Five
+> Retractions"**
+>
+> In 2006 a structural biology lab retracted five papers,
+> including papers in Science. An in-house program had swapped
+> two columns of data, which inverted the protein structures the
+> papers reported. Nothing crashed and the results looked
+> plausible. Other labs had built on the wrong structures for
+> five years before another group's structure disagreed.
+> ([Miller, 2006](https://doi.org/10.1126/science.314.5807.1856))
+
+A knowledge-primed network has the same weak spot. Inside PyTorch
+a protein is only column 17 of a table of numbers. If your code
+puts it in the wrong column, or the order changes later, the model
+still trains and the loss looks normal, but the attributions land
+on the wrong proteins. `kpnn2` aims to prevent that.
+
+Three reasons to use it:
+
+- **Checked for correctness.** `kpnn2` builds the wiring from the
+  edgelist, so you write no masks or indices by hand. It matches
+  input columns by name, refuses a checkpoint with different
+  wiring, and rejects an attribution tensor of the wrong width. Its
+  tests check that only edges in the edgelist can affect a
+  prediction;
+  [How we test](https://thomas-rauter.github.io/kpnn2/latest/how_we_test/)
+  also lists what they do not prove.
+- **Less code, less to get wrong.** In the side-by-side example in
+  [Why not custom PyTorch?](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#why-not-custom-pytorch),
+  one network takes 36 lines with `kpnn2` and 162 in hand-written
+  PyTorch, and the hand-written version does not yet align columns,
+  check checkpoints, or label attributions. Every line you do not
+  write is one where a column cannot slip.
+- **Built on, not rebuilt.** `kpnn2` provides tested layouts and
+  layers for skip edges, feedback loops, and attention limited to
+  the graph's edges. You start from them instead of designing and
+  validating your own, and spend your time on the new question.
+
+[**Why kpnn2**](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/)
+makes the full case and lists every check.
+
+## How it works
+
+Each row of the edgelist is one edge, from a `source` node to a
+`target` node. `kpnn2` parses the edgelist, you build the network
+in PyTorch from the result and train it, and `kpnn2` labels the
+attributions with node names (Figure 2). `kpnn2` provides building
+blocks, not a finished model: activations, losses, the training
+loop, and the attribution method stay your own PyTorch code.
+
+![Left: a seven-row edgelist of generic proteins, and a data table with one row per input protein plus an outcome row. Middle: the same graph as a network, in which protein_a and protein_b feed protein_e, protein_c and protein_d feed protein_f, both feed outcome, and a dashed edge from protein_d to outcome passes under the hidden layer. Right: a table of attributions with one row per hidden protein, dark for protein_e and pale for protein_f in every sample.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/kpnn2_overview.png)
+
+**Figure 2.** The edgelist, the data, the network, and the
+attributions all use the same node names. Here the attributions
+show a model that relies on `protein_e` in every sample and hardly
+on `protein_f`.
+
+By default, `parse_layered()` places each node in a layer by the
+longest path that reaches it from an input. An edge that spans
+more than one layer, such as the dashed edge in Figure 2, is a
+skip edge. In the edgelist it is one more row, and in the network
+it gets its own learned weight from the earlier layer: no relay
+neurons are added in between, and it is not a residual
+connection. A graph with feedback loops has no layers.
+`parse_adjacency()` keeps every node in one vector, and your
+`forward()` applies the same connections for as many steps as you
+choose.
+
+[Layered vs. unlayered](https://thomas-rauter.github.io/kpnn2/latest/layered_vs_adjacency/)
+and the other How it works pages explain how the network is
+built, and
+[Attributions by node name](https://thomas-rauter.github.io/kpnn2/latest/map-node-attributions/)
+explains how the attributions get their names.
 
 ## Installation
 
@@ -74,11 +139,13 @@ pip install kpnn2
 
 ## Quick start
 
-This example builds the model in Figure 1. The labels depend only
-on `input_signal_1` and `input_signal_2`, so a model that learned
-the task should rely on `hidden_signal` and not on `hidden_noise`.
-The last step uses Captum (`pip install captum`), which `kpnn2`
-does not depend on.
+This example builds a model from a small simulated graph, trains
+it, and reads its attributions by node name. In the graph, four
+inputs feed two hidden nodes that feed one output. The labels
+depend only on `input_signal_1` and `input_signal_2`, so a model
+that learned the task should rely on `hidden_signal` and not on
+`hidden_noise`. The last step uses Captum (`pip install captum`),
+which `kpnn2` does not depend on.
 
 ### 1. Write the graph as an edgelist
 
@@ -128,7 +195,7 @@ from the hop. Without
 each hop reads only the layer before it, so `nn.Sequential` is
 enough. With them, a hop also reads earlier layers, and
 `gather_hop_inputs()` assembles its input; see
-[Skip edges](https://thomas-rauter.github.io/kpnn2/latest/skip-edges/).
+[Edges that skip layers](https://thomas-rauter.github.io/kpnn2/latest/skip-edges/).
 `identity=spec.fingerprint` makes a checkpoint from a different
 graph refuse to load.
 
@@ -200,8 +267,8 @@ for _ in range(200):
 
 Run any attribution method on the trained model, then label its
 output with `map_node_attributions()`. Here Captum's
-`LayerConductance` scores the hidden layer, and the mean absolute
-score per node summarizes it.
+`LayerConductance` computes attributions for the hidden layer, and
+the mean absolute attribution per node summarizes them.
 
 ```python
 from captum.attr import LayerConductance
@@ -210,12 +277,12 @@ conductance = LayerConductance(
     model,
     model[0],
 )
-scores = kpnn2.map_node_attributions(
+attributions = kpnn2.map_node_attributions(
     conductance.attribute(x),
     spec,
     hop_output=hop_0,
 )
-print(abs(scores).mean("observation").to_pandas().round(2))
+print(abs(attributions).mean("observation").to_pandas().round(2))
 ```
 
 ```text
@@ -230,29 +297,6 @@ The
 [Feedforward example](https://thomas-rauter.github.io/kpnn2/latest/feedforward-example/)
 goes further, with a held-out test set, input-level attributions,
 and a control that moves the signal to the other branch.
-
-## Key features
-
-- **Names stay attached.** Every tensor position keeps its node
-  name from the edgelist to the attribution scores, and `kpnn2`
-  checks the match at every step; see
-  [Checks where names meet tensor positions](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#checks-where-names-meet-tensor-positions).
-- **Mistakes raise instead of running silently.** A reordered
-  feature table is realigned by name, and a checkpoint trained on a
-  different graph refuses to load; see
-  [A checkpoint that loads the wrong wiring](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#a-checkpoint-that-loads-the-wrong-wiring).
-- **One call instead of a hand-written parser.** `parse_layered()`
-  replaces the layer sorting, mask building, and skip-edge
-  bookkeeping; see
-  [Why not custom PyTorch?](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#why-not-custom-pytorch)
-- **Plain PyTorch.** There is no compiler and no ready-made model:
-  activations, losses, training, and the attribution method stay
-  your code. Cyclic, recurrent, and attention models work too; see
-  [Supported architectures](https://thomas-rauter.github.io/kpnn2/latest/supported/).
-
-[**Why kpnn2**](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/)
-makes the full case, with a side-by-side against hand-written
-PyTorch.
 
 ## Next steps
 

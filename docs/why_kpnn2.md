@@ -72,7 +72,7 @@ project rebuilds this machinery and meets these pitfalls anew.
 
 **Figure 2.** (a) Dense adjacent layers, the usual PyTorch case.
 (b) A sparsely connected network with skip edges (dashed), the same
-graph as on the [Skip edges](skip-edges.ipynb) page.
+graph as on the [Edges that skip layers](skip-edges.ipynb) page.
 
 `kpnn2` resolves this by separating what the prior determines from
 what the modeler decides. The prior determines which connections
@@ -112,7 +112,7 @@ In practice, `kpnn2` provides four kinds of building blocks:
 
 ## Core workflow
 
-[**Concepts**](concepts.md) defines the terms these steps use.
+[**Terminology**](concepts.md) defines the terms these steps use.
 
 1. Define a model architecture as an edgelist with named `source`
    and `target` [nodes](concepts.md#node).
@@ -157,7 +157,7 @@ concatenated input all change with it.
 The edgelist stays the only description of the graph, skip edges
 arrive already packed into the hops that read them, and
 `align_inputs()` matches input names rather than positions.
-[**Skip edges**](skip-edges.ipynb) works through
+[**Edges that skip layers**](skip-edges.ipynb) works through
 the same point in a full example.
 
 <div>

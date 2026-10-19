@@ -1,4 +1,4 @@
-# Layered vs. Adjacency
+# Layered vs. unlayered
 
 `kpnn2` has two [parsers](concepts.md#parser), and the one you
 call fixes the shape of everything you build afterwards.
@@ -6,7 +6,7 @@ call fixes the shape of everything you build afterwards.
 returns a `LayeredSpec`; `parse_adjacency()` puts
 every node in one [state vector](concepts.md#state-vector), a
 single vector over all nodes, and returns an
-`AdjacencySpec`.
+`AdjacencySpec`, which has no layers.
 The same `source` / `target` edgelist goes through either one,
 and a [directed acyclic graph](concepts.md#dag) (DAG) is valid
 for both, so the layout is your choice. Only
@@ -51,8 +51,8 @@ Each layer after the first owns one hop, holding all of that
 layer's incoming edges. `hops[0]` is the packed hop into `H`;
 `hops[1]` is the hop into `C`, which reads both earlier layers
 because the skip makes `A` a parent of `C` alongside `H`.
-[Skip edges](skip-edges.ipynb) is the algorithm for that extra
-source layer.
+[Edges that skip layers](skip-edges.ipynb) is the algorithm for
+that extra source layer.
 
 `parse_adjacency()` ranks nothing. `spec.nodes` gives the
 state-vector order, `A`, `C`, `H`, alphabetically. Edges become
@@ -101,8 +101,8 @@ The output hop stays linear.
 `self.hops[index]` is `PackedLinear.from_hop(hop)` for that
 hop. `MaskedLinear(hop.to_mask())` is the dense hatch.
 [Feedforward example](feedforward-example.ipynb) writes that module.
-[Skip edges](skip-edges.ipynb) shows why gather raises if a
-source layer was never stored.
+[Edges that skip layers](skip-edges.ipynb) shows why gather raises
+if a source layer was never stored.
 
 On an `AdjacencySpec` there is one square multiply. Aligned
 inputs do not fit the state vector: `align_inputs()` returns

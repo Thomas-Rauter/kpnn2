@@ -117,3 +117,25 @@
   border-bottom: 2px solid
     var(--md-default-fg-color--lightest);
 }
+
+/* Collapsed setup cells in notebooks (javascripts/hide_input.js):
+   a plain grey bar, not Material's admonition-style details. */
+.md-typeset details.hidden-setup {
+  border-color: var(--md-default-fg-color--lighter);
+  box-shadow: none;
+}
+
+.md-typeset details.hidden-setup > summary {
+  background-color: var(--md-code-bg-color);
+  font-weight: 400;
+  padding-left: 0.6rem;
+}
+
+.md-typeset details.hidden-setup > summary::before {
+  display: none;
+}
+
+/* The tag label that nbconvert prints above a tagged cell. */
+.md-typeset details.hidden-setup .celltoolbar {
+  display: none;
+}

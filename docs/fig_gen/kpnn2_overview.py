@@ -5,11 +5,15 @@ The PNG is 4× 96 dpi, so it stays sharp on PyPI, which cannot
 show the SVG from a relative path.
 
 Inputs on the left (a named edgelist and a data table), the
-sparsely connected model in the middle, scores per named node on
-the right. The graph and node names are the README example's,
-and the bar lengths follow the scores that example prints. The
-data cells are texture, not the example's values; only the
-output row follows the example's labelling rule.
+network in the middle, attributions per named hidden node on the
+right. The two outer panels mirror each other: names go in, and
+names come out. The proteins are generic, and the graph is not the
+README quick start's: the figure shows the workflow, and the quick
+start runs it on its own simulated graph. One edge skips a layer
+and is drawn dashed. The cells are schematic, not values from a
+run: the data cells are texture, and the attribution rows show a
+model that relies on one hidden protein in every sample and hardly
+on the other.
 """
 
 import random
@@ -22,93 +26,95 @@ _FONT = "Liberation Sans, sans-serif"
 _PNG_DPI = 384
 
 # User units are PostScript points, so font-size 9 is 9 pt.
-_WIDTH = 620.0
-_HEIGHT = 218.0
+_WIDTH = 656.0
+_HEIGHT = 226.0
 _TITLE_SIZE = 10.5
 _TEXT_SIZE = 8.5
 _NOTE_SIZE = 7.5
 _STROKE = 0.9
 _ARROW = 4.5
 _FLOW_ARROW = 7.0
+_SKIP_DASH = "3 2"
 _ACCENT = "#ee4c2c"
 _GREY = "#6b6b6b"
 _RULE = "#9a9a9a"
 
 EDGES = [
-    ("input_signal_1", "hidden_signal"),
-    ("input_signal_2", "hidden_signal"),
-    ("input_noise_1", "hidden_noise"),
-    ("input_noise_2", "hidden_noise"),
-    ("hidden_signal", "output"),
-    ("hidden_noise", "output"),
+    ("protein_a", "protein_e"),
+    ("protein_b", "protein_e"),
+    ("protein_c", "protein_f"),
+    ("protein_d", "protein_f"),
+    ("protein_e", "outcome"),
+    ("protein_f", "outcome"),
+    ("protein_d", "outcome"),
 ]
-# Mean absolute conductance the README example prints.
-SCORES = {
-    "hidden_signal": 4.90,
-    "hidden_noise": 0.39,
-}
+# protein_d is an input and outcome sits two layers above it.
+SKIP_EDGES = {("protein_d", "outcome")}
 
 # Left column: the edgelist table and the data table.
 _LEFT_X = 16.0
-_TARGET_X = 98.0
+_TARGET_X = 80.0
 _TABLE_TITLE_Y = 24.0
 _TABLE_HEAD_Y = 42.0
 _ROW_STEP = 12.0
-_DATA_TITLE_Y = 136.0
-_DATA_TOP = 146.0
+_DATA_TITLE_Y = 146.0
+_DATA_TOP = 156.0
 _CELL = 9.0
 _CELL_STEP = 11.0
-_CELLS_X = 84.0
+_CELLS_X = 64.0
 _N_SAMPLES = 6
 _DATA_ROWS = [
-    "input_signal_1",
-    "input_signal_2",
-    "input_noise_1",
-    "input_noise_2",
+    "protein_a",
+    "protein_b",
+    "protein_c",
+    "protein_d",
 ]
+_OUTPUT = "outcome"
 
 # Middle column: the network, one pill per named node.
-_MODEL_CX = 334.0
+_MODEL_CX = 338.0
 _PILL_H = 15.0
+_PILL_W = 52.0
 _INPUT_CX = 243.0
-_INPUT_W = 74.0
 _HIDDEN_CX = 349.0
-_HIDDEN_W = 72.0
 _OUT_CX = 433.0
-_OUT_W = 48.0
 _NODE_Y = {
-    "input_signal_1": 70.0,
-    "input_signal_2": 94.0,
-    "input_noise_1": 140.0,
-    "input_noise_2": 164.0,
-    "hidden_signal": 82.0,
-    "hidden_noise": 152.0,
-    "output": 117.0,
+    "protein_a": 70.0,
+    "protein_b": 94.0,
+    "protein_c": 140.0,
+    "protein_d": 164.0,
+    "protein_e": 82.0,
+    "protein_f": 152.0,
+    "outcome": 117.0,
 }
-_NODE_X = {
-    "input_signal_1": (_INPUT_CX, _INPUT_W),
-    "input_signal_2": (_INPUT_CX, _INPUT_W),
-    "input_noise_1": (_INPUT_CX, _INPUT_W),
-    "input_noise_2": (_INPUT_CX, _INPUT_W),
-    "hidden_signal": (_HIDDEN_CX, _HIDDEN_W),
-    "hidden_noise": (_HIDDEN_CX, _HIDDEN_W),
-    "output": (_OUT_CX, _OUT_W),
+_NODE_CX = {
+    "protein_a": _INPUT_CX,
+    "protein_b": _INPUT_CX,
+    "protein_c": _INPUT_CX,
+    "protein_d": _INPUT_CX,
+    "protein_e": _HIDDEN_CX,
+    "protein_f": _HIDDEN_CX,
+    "outcome": _OUT_CX,
 }
+# The skip edge curves under the hidden layer to this depth.
+_SKIP_LOW = 200.0
 
-# Right column: one bar per named hidden node.
-_BARS_LABEL_X = 554.0
-_BARS_X = 560.0
-_BAR_MAX = 44.0
-_BAR_H = 11.0
-_BARS_Y = {
-    "hidden_signal": 100.0,
-    "hidden_noise": 124.0,
+# Right column: one row of cells per named hidden node. Each row
+# keeps one level across samples, so one protein reads as relied
+# on and the other as hardly used.
+_ATTR_X = 508.0
+_ATTR_CELLS_X = 548.0
+_ATTR_TOP = 106.0
+_ATTR_LEVELS = {
+    "protein_e": 1.45,
+    "protein_f": 0.15,
 }
+_ATTR_JITTER = 0.1
 
 # Flow arrows between the columns.
 _FLOW_Y = 117.0
 _FLOW_1 = (160.0, 198.0)
-_FLOW_2 = (466.0, 494.0)
+_FLOW_2 = (468.0, 498.0)
 
 
 def _text(
@@ -128,6 +134,23 @@ def _text(
     )
 
 
+def _title(
+    x: float,
+    y: float,
+    text: str,
+    *,
+    anchor: str = "start",
+) -> str:
+    return _text(
+        x,
+        y,
+        text,
+        size=_TITLE_SIZE,
+        anchor=anchor,
+        weight="700",
+    )
+
+
 def _hline(
     x1: float,
     x2: float,
@@ -136,6 +159,18 @@ def _hline(
     return (
         f'  <line x1="{x1:g}" y1="{y:g}" x2="{x2:g}" y2="{y:g}" '
         f'stroke="{_RULE}" stroke-width="0.6"/>'
+    )
+
+
+def _cell(
+    x: float,
+    y: float,
+    fill: str,
+) -> str:
+    return (
+        f'  <rect x="{x:g}" y="{y:g}" width="{_CELL:g}" '
+        f'height="{_CELL:g}" fill="{fill}" stroke="#000" '
+        f'stroke-width="0.4"/>'
     )
 
 
@@ -162,12 +197,10 @@ def _marker(
 
 def _edgelist_table() -> list[str]:
     parts = [
-        _text(
+        _title(
             _LEFT_X,
             _TABLE_TITLE_Y,
             "Your graph, as an edgelist",
-            size=_TITLE_SIZE,
-            weight="700",
         ),
         _text(
             _LEFT_X,
@@ -183,7 +216,7 @@ def _edgelist_table() -> list[str]:
         ),
         _hline(
             _LEFT_X,
-            _TARGET_X + 56.0,
+            _TARGET_X + 48.0,
             _TABLE_HEAD_Y + 3.5,
         ),
     ]
@@ -206,13 +239,6 @@ def _edgelist_table() -> list[str]:
     return parts
 
 
-def _data_values() -> list[list[float]]:
-    rng = random.Random(42)
-    return [
-        [rng.gauss(0.0, 1.0) for _ in range(_N_SAMPLES)] for _ in _DATA_ROWS
-    ]
-
-
 def _grey(value: float) -> str:
     # Map roughly -2..2 onto light..dark grey.
     level = max(0.0, min(1.0, (value + 2.0) / 4.0))
@@ -220,21 +246,27 @@ def _grey(value: float) -> str:
     return f"#{shade:02x}{shade:02x}{shade:02x}"
 
 
+def _tint(value: float) -> str:
+    # Map roughly 0..1.6 onto a pale tint..the full accent colour.
+    level = 0.12 + 0.88 * max(0.0, min(1.0, value / 1.6))
+    accent = [int(_ACCENT[i : i + 2], 16) for i in (1, 3, 5)]
+    red, green, blue = (round(255 - (255 - c) * level) for c in accent)
+    return f"#{red:02x}{green:02x}{blue:02x}"
+
+
 def _data_table() -> list[str]:
-    values = _data_values()
+    rng = random.Random(42)
     parts = [
-        _text(
+        _title(
             _LEFT_X,
             _DATA_TITLE_Y,
             "Your data, by name",
-            size=_TITLE_SIZE,
-            weight="700",
         ),
     ]
-    rows = [*_DATA_ROWS, "output"]
+    rows = [*_DATA_ROWS, _OUTPUT]
     for row, name in enumerate(rows):
         top = _DATA_TOP + _CELL_STEP * row
-        if name == "output":
+        if name == _OUTPUT:
             top += 3.0
         parts.append(
             _text(
@@ -245,28 +277,26 @@ def _data_table() -> list[str]:
             )
         )
         for sample in range(_N_SAMPLES):
-            if name == "output":
-                # The README example labels a sample 1 when the
-                # two signal inputs sum above zero.
-                label = values[0][sample] + values[1][sample] > 0
-                fill = "#000" if label else "#fff"
+            if name == _OUTPUT:
+                fill = "#000" if rng.random() < 0.5 else "#fff"
             else:
-                fill = _grey(values[row][sample])
-            x = _CELLS_X + _CELL_STEP * sample
+                fill = _grey(rng.gauss(0.0, 1.0))
             parts.append(
-                f'  <rect x="{x:g}" y="{top:g}" width="{_CELL:g}" '
-                f'height="{_CELL:g}" fill="{fill}" stroke="#000" '
-                f'stroke-width="0.4"/>'
+                _cell(
+                    _CELLS_X + _CELL_STEP * sample,
+                    top,
+                    fill,
+                )
             )
     return parts
 
 
 def _pill(name: str) -> str:
-    cx, width = _NODE_X[name]
+    cx = _NODE_CX[name]
     cy = _NODE_Y[name]
     return (
-        f'  <rect x="{cx - width / 2:g}" y="{cy - _PILL_H / 2:g}" '
-        f'width="{width:g}" height="{_PILL_H:g}" '
+        f'  <rect x="{cx - _PILL_W / 2:g}" y="{cy - _PILL_H / 2:g}" '
+        f'width="{_PILL_W:g}" height="{_PILL_H:g}" '
         f'rx="{_PILL_H / 2:g}" fill="#fff" stroke="#000" '
         f'stroke-width="{_STROKE:g}"/>\n'
         f'  <text x="{cx:g}" y="{cy + 3.0:g}" '
@@ -279,11 +309,9 @@ def _edge(
     source: str,
     target: str,
 ) -> str:
-    source_cx, source_w = _NODE_X[source]
-    target_cx, target_w = _NODE_X[target]
-    x1 = source_cx + source_w / 2
+    x1 = _NODE_CX[source] + _PILL_W / 2
     y1 = _NODE_Y[source]
-    x2 = target_cx - target_w / 2
+    x2 = _NODE_CX[target] - _PILL_W / 2
     y2 = _NODE_Y[target]
     length = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
     end_x = x2 - (x2 - x1) / length * _ARROW
@@ -296,32 +324,51 @@ def _edge(
     )
 
 
+def _skip_edge(
+    source: str,
+    target: str,
+) -> str:
+    # Curve under the hidden layer into the bottom of the target, so
+    # the edge reads as passing the layer it skips. The last control
+    # point sits straight below the end, so the arrow points up.
+    x1 = _NODE_CX[source] + _PILL_W / 2
+    y1 = _NODE_Y[source]
+    x2 = _NODE_CX[target]
+    y2 = _NODE_Y[target] + _PILL_H / 2 + _ARROW
+    return (
+        f'  <path d="M {x1:g} {y1:g} C {x1 + 60.0:g} {_SKIP_LOW:g} '
+        f'{x2:g} {_SKIP_LOW:g} {x2:g} {y2:g}" fill="none" '
+        f'stroke="#000" stroke-width="{_STROKE:g}" '
+        f'stroke-dasharray="{_SKIP_DASH}" '
+        f'marker-end="url(#edge-arrow)"/>'
+    )
+
+
 def _model() -> list[str]:
     parts = [
-        _text(
+        _title(
             _MODEL_CX,
             _TABLE_TITLE_Y,
-            "Sparsely connected PyTorch model",
-            size=_TITLE_SIZE,
+            "Your network, in PyTorch",
             anchor="middle",
-            weight="700",
         ),
         _text(
             _MODEL_CX,
             _TABLE_TITLE_Y + 13.0,
-            "one unit per node, connected only along the edges",
+            "one neuron per node, connected only along the edges",
             size=_NOTE_SIZE,
             anchor="middle",
             fill=_GREY,
         ),
     ]
-    parts += [
-        _edge(
-            source,
-            target,
+    for source, target in EDGES:
+        draw = _skip_edge if (source, target) in SKIP_EDGES else _edge
+        parts.append(
+            draw(
+                source,
+                target,
+            )
         )
-        for source, target in EDGES
-    ]
     parts += [_pill(name) for name in _NODE_Y]
     return parts
 
@@ -348,53 +395,40 @@ def _flow(
     ]
 
 
-def _bars() -> list[str]:
-    top = min(_BARS_Y.values())
+def _attributions() -> list[str]:
+    rng = random.Random(7)
     parts = [
-        _text(
-            _BARS_X - 2.0,
+        _title(
+            _ATTR_X,
             _TABLE_TITLE_Y,
-            "Scores by name",
-            size=_TITLE_SIZE,
-            anchor="middle",
-            weight="700",
+            "Your attributions, by name",
         ),
         _text(
-            _BARS_X - 2.0,
+            _ATTR_X,
             _TABLE_TITLE_Y + 13.0,
-            "how much the model relies",
+            "one value per hidden node and sample",
             size=_NOTE_SIZE,
-            anchor="middle",
             fill=_GREY,
         ),
-        _text(
-            _BARS_X - 2.0,
-            _TABLE_TITLE_Y + 23.0,
-            "on each hidden node",
-            size=_NOTE_SIZE,
-            anchor="middle",
-            fill=_GREY,
-        ),
-        f'  <line x1="{_BARS_X:g}" y1="{top - 6.0:g}" '
-        f'x2="{_BARS_X:g}" y2="{max(_BARS_Y.values()) + _BAR_H + 6.0:g}" '
-        f'stroke="#000" stroke-width="0.6"/>',
     ]
-    largest = max(SCORES.values())
-    for name, y in _BARS_Y.items():
-        width = _BAR_MAX * SCORES[name] / largest
+    for row, (name, level) in enumerate(_ATTR_LEVELS.items()):
+        top = _ATTR_TOP + _CELL_STEP * row
         parts.append(
             _text(
-                _BARS_LABEL_X,
-                y + _BAR_H - 3.0,
+                _ATTR_X,
+                top + _CELL - 1.5,
                 name,
                 size=_NOTE_SIZE,
-                anchor="end",
             )
         )
-        parts.append(
-            f'  <rect x="{_BARS_X:g}" y="{y:g}" width="{width:.2f}" '
-            f'height="{_BAR_H:g}" fill="{_ACCENT}"/>'
-        )
+        for sample in range(_N_SAMPLES):
+            parts.append(
+                _cell(
+                    _ATTR_CELLS_X + _CELL_STEP * sample,
+                    top,
+                    _tint(abs(rng.gauss(level, _ATTR_JITTER))),
+                )
+            )
     return parts
 
 
@@ -431,7 +465,7 @@ def svg_text() -> str:
                 *_FLOW_2,
                 "attribution",
             ),
-            *_bars(),
+            *_attributions(),
             "</svg>",
             "",
         ]

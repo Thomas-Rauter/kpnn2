@@ -18,8 +18,9 @@ Do not pin a package version number in this file; it lives in
 
 ## One-sentence summary
 
-Turn a named edgelist into sparsely connected PyTorch layers
-you assemble yourself.
+Build interpretable neural networks in PyTorch from a graph of
+named entities, with checks that every attribution is reported
+under the right name.
 
 ---
 

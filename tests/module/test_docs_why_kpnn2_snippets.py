@@ -10,7 +10,9 @@ without complaint and brings the old masks with it, while the
 ``kpnn2`` module refuses it. Editing either block re-runs it here.
 Renaming or moving the section, dropping a column label, or changing
 the number of fenced blocks fails these tests rather than silently
-skipping them.
+skipping them. The line counts ``README.md`` quotes for the two
+blocks are pinned too, so editing a block fails until the README
+numbers follow.
 
 The snippets read ``pathway_prior.csv``, a file that does not exist in
 the repo: it stands for the reader's own prior. The fixture writes it
@@ -33,6 +35,7 @@ from kpnn2 import Kpnn2Error, parse_layered
 
 _REPO = Path(__file__).resolve().parents[2]
 _PAGE = _REPO / "docs" / "why_kpnn2.md"
+_README = _REPO / "README.md"
 _FIG_GEN = _REPO / "docs" / "fig_gen" / "custom_pytorch_pathway.py"
 
 _HEADING = "## Why not custom PyTorch?"
@@ -55,6 +58,12 @@ _NUMBER_WORDS = {
 }
 
 _GOOD = [("a", "h"), ("b", "h"), ("h", "c")]
+
+# "takes 36 lines with `kpnn2` and 162 in hand-written PyTorch", read
+# as (kpnn2 lines, hand-written lines).
+_LINE_COUNTS = re.compile(
+    r"takes (\d+) lines with `kpnn2` and (\d+) in hand-written PyTorch"
+)
 
 # "`gene_n3` now regulates `tf_stat` instead of `tf_nfkb`", read as
 # (source, new target, old target).
@@ -211,6 +220,31 @@ def test_prose_names_the_number_of_rejected_edgelists() -> None:
     assert claimed == len(_REJECTED), (
         f"{_PAGE.name} claims {match.group(1)} rejected edge lists, "
         f"but {len(_REJECTED)} are pinned here."
+    )
+
+
+def _code_lines(code: str) -> int:
+    """Count the lines of a block that are not blank."""
+    return sum(1 for line in code.splitlines() if line.strip())
+
+
+def test_readme_states_the_line_counts_of_both_columns() -> None:
+    flat = re.sub(r"\s+", " ", _README.read_text())
+    match = _LINE_COUNTS.search(flat)
+    assert match, (
+        "README.md no longer states the line counts of the comparison "
+        "as 'takes N lines with `kpnn2` and M in hand-written PyTorch'; "
+        "update this test or the prose."
+    )
+    columns = _columns()
+    shown = {
+        "kpnn2": int(match.group(1)),
+        "Custom PyTorch": int(match.group(2)),
+    }
+    counted = {label: _code_lines(code) for label, code in columns.items()}
+    assert shown == counted, (
+        f"README.md states {shown}, but the {_PAGE.name} blocks have "
+        f"{counted} non-blank lines."
     )
 
 

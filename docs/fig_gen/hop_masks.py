@@ -1,4 +1,4 @@
-"""Generate the Skip edges hop-mask schematic.
+"""Generate the hop-mask schematic of Edges that skip layers.
 
 Writes ``docs/figures/hop_masks.svg``.
 """

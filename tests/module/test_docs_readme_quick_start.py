@@ -6,14 +6,12 @@ that no longer works. A ``text`` block right after a code block is
 that block's printed output and is compared with what the code
 prints: words exactly, numbers within a small tolerance, so a torch
 release that moves the last digit does not fail the suite. The
-claims around the code are pinned too: the trained model relies on
-``hidden_signal`` far more than on ``hidden_noise``, and Figure 1
-draws the scores the page shows.
+claim around the code is pinned too: the trained model relies on
+``hidden_signal`` far more than on ``hidden_noise``.
 
 The last block imports Captum, which is in the ``dev`` extra.
 """
 
-import ast
 import contextlib
 import io
 import math
@@ -27,7 +25,6 @@ import torch
 
 _REPO = Path(__file__).resolve().parents[2]
 _README = _REPO / "README.md"
-_FIG_GEN = _REPO / "docs" / "fig_gen" / "kpnn2_overview.py"
 
 _HEADING = "## Quick start"
 # A code block, and the text block that shows its output if one
@@ -63,12 +60,6 @@ def _blocks() -> list[tuple[str, str]]:
 
 def _scores(output: str) -> dict[str, float]:
     return {name: float(value) for name, value in _SCORE_LINE.findall(output)}
-
-
-def _shown_scores() -> dict[str, float]:
-    shown = _blocks()[-1][1]
-    assert shown, "The last quick-start block shows no output."
-    return _scores(shown)
 
 
 @pytest.fixture(scope="module")
@@ -120,18 +111,3 @@ def test_trained_model_relies_on_hidden_signal(printed: list[str]) -> None:
     scores = _scores(printed[-1])
     assert set(scores) == {"hidden_noise", "hidden_signal"}
     assert scores["hidden_signal"] > _MIN_RATIO * scores["hidden_noise"]
-
-
-def test_figure_draws_the_scores_the_page_shows() -> None:
-    tree = ast.parse(_FIG_GEN.read_text())
-    drawn = None
-    for node in tree.body:
-        if (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == "SCORES"
-        ):
-            drawn = ast.literal_eval(node.value)
-    assert drawn is not None, f"No SCORES assignment in {_FIG_GEN}"
-    assert drawn == _shown_scores()
