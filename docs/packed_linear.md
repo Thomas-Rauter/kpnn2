@@ -239,6 +239,138 @@ softplus it pulls edges toward `ln 2`, not toward 0. Give a
 constrained layer `weight_decay=0` in its param group and add a
 penalty on `layer.effective_weight()` to the loss instead.
 
+## Signed edges
+
+Some priors give each edge a sign: activating or inhibiting. To
+hold those signs while training, keep a `sign` column on your
+edgelist, map it onto packed slots with `edge_index()`, and apply
+it in a `constraint=` module. If every edge is positive,
+`PositiveEdges` above is enough.
+
+Parsers read only `source` and `target`, so the column stays on
+your table. Here `edgelist` is the table you parsed into `spec`
+with `parse_layered()`. Its `sign` column holds 1 for an
+activating edge, −1 for an inhibiting one, and 0 where the prior
+gives no sign. The rows whose target is in the hop's target layer
+are that hop's edges:
+
+```python
+hop = spec.hops[0]
+targets = spec.layer_nodes[hop.target_layer]
+rows = edgelist[edgelist["target"].isin(targets)]
+slots = spec.edge_index(
+    rows["source"],
+    rows["target"],
+    hop=hop,
+)
+sign = torch.zeros(len(hop.source_index))
+sign[list(slots)] = torch.as_tensor(
+    rows["sign"].to_numpy(),
+    dtype=torch.float32,
+)
+```
+
+At width 1 each row has one slot. With `widths=`,
+`edge_index()` returns `k_source * k_target` slots per edge, one
+after another, so repeat each sign that many times.
+
+`SignedEdges` multiplies a softplus of `weight` by the sign and
+leaves the slots with sign 0 free. Its `right_inverse` is the one
+from `PositiveEdges`, so every edge starts at the degree-aware
+scale with its sign applied:
+
+```python
+class SignedEdges(torch.nn.Module):
+    def __init__(
+        self,
+        sign,
+    ):
+        super().__init__()
+        self.register_buffer(
+            "sign",
+            sign,
+        )
+
+    def forward(
+        self,
+        weight,
+    ):
+        signed = self.sign * torch.nn.functional.softplus(weight)
+        return torch.where(
+            self.sign == 0,
+            weight,
+            signed,
+        )
+
+    def right_inverse(
+        self,
+        weight,
+    ):
+        magnitude = weight.abs().clamp_min(1e-6)
+        inverse = magnitude + torch.log(-torch.expm1(-magnitude))
+        return torch.where(
+            self.sign == 0,
+            weight,
+            inverse,
+        )
+
+
+core = kpnn2.PackedLinear.from_hop(
+    hop,
+    constraint=SignedEdges(sign),
+)
+```
+
+No optimizer step can flip a signed edge, because `forward()`
+recomputes `sign * softplus(weight)` on every call. A sign holds
+one edge, not a path: two inhibiting edges in a row raise the
+output. An inhibition that depends on the input, such as a
+repressor that gates an activator, is not a map on weights. Write
+it in your own `forward()`.
+
+Edges run in the direction of computation, which can be the
+reverse of the biology. A KPNN that reads gene expression into
+transcription factors has the row `gene → TF`, while the
+regulation runs from the factor to the gene. Keep the
+regulation's sign on that row. A gene the factor represses gets
+−1, so higher expression of that gene lowers the factor node's
+pre-activation: under the prior, a repressed target is high when
+the factor is inactive.
+
+To combine signs with a [keep-mask](#pruning-during-training),
+put both maps in one module. `torch.nn.Sequential` chains two
+constraints in `forward()` but has no `right_inverse`. Then
+`reset_parameters()` stores the raw draw and softplus runs on top
+of it, as with a bare `nn.Softplus()`. A subclass keeps the
+inverse:
+
+```python
+class SignedKeepMask(SignedEdges):
+    def __init__(
+        self,
+        sign,
+    ):
+        super().__init__(sign)
+        self.register_buffer(
+            "keep",
+            torch.ones_like(sign),
+        )
+
+    def forward(
+        self,
+        weight,
+    ):
+        return super().forward(weight) * self.keep
+```
+
+`keep` is all ones at init, so the inherited `right_inverse`
+still inverts the whole map.
+
+On `MaskedLinear`, write the signs into an
+`(out_features, in_features)` buffer at
+`[hop.target_index, hop.source_index]`. `constraint=` still runs
+before the connectivity mask.
+
 ## Frozen live edges
 
 Some priors fix individual edge values. `constraint=` is where
