@@ -140,12 +140,12 @@ pip install kpnn2
 ## Quick start
 
 This example builds a model from a small simulated graph, trains
-it, and reads its attributions by node name. In the graph, four
-inputs feed two hidden nodes that feed one output. The labels
-depend only on `input_signal_1` and `input_signal_2`, so a model
-that learned the task should rely on `hidden_signal` and not on
-`hidden_noise`. The last step uses Captum (`pip install captum`),
-which `kpnn2` does not depend on.
+it, and reads its
+[attributions](https://thomas-rauter.github.io/kpnn2/latest/concepts/#attribution)
+by node name. Because the data are simulated, you know in advance
+which node the model should rely on, and you can check that the
+attributions agree. The last step uses Captum
+(`pip install captum`), which `kpnn2` does not depend on.
 
 ### 1. Write the graph as an edgelist
 
@@ -184,6 +184,22 @@ for layer in spec.layer_nodes:
 ('hidden_noise', 'hidden_signal')
 ('output',)
 ```
+
+In Figure 3, the graph splits into a signal branch and a noise
+branch that meet only at `output`.
+
+![The quick-start graph from left to right. In a box labeled signal branch, input_signal_1 and input_signal_2 feed hidden_signal. In a box labeled noise branch, input_noise_1 and input_noise_2 feed hidden_noise. Both hidden nodes feed output.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/quick_start_graph.png)
+
+**Figure 3.** The quick-start graph: inputs on the left, the hidden
+layer in the middle, and `output` on the right.
+
+Step 3 computes the labels from the two signal inputs only. The
+signal branch therefore carries the information the model needs to
+make its prediction, so a model that learned the task should rely
+on `hidden_signal` and give it a high attribution. The two noise
+inputs are random numbers unrelated to the labels. The noise branch
+carries nothing the prediction can use, so `hidden_noise` should
+get a very low attribution.
 
 ### 2. Build the model in PyTorch
 
@@ -292,7 +308,15 @@ hidden_signal    4.90
 dtype: float32
 ```
 
-The trained model relies on `hidden_signal`, as the labels require.
+Figure 4 plots these scores: the trained model relies on
+`hidden_signal` and hardly on `hidden_noise`, as the labels
+require.
+
+![Horizontal bar chart of the mean absolute attribution per hidden node. The bar for hidden_signal is long, the bar for hidden_noise is short.](https://raw.githubusercontent.com/Thomas-Rauter/kpnn2/main/docs/figures/quick_start_attributions.png)
+
+**Figure 4.** Mean absolute attribution per hidden node in the
+trained model, from the run above.
+
 The
 [Feedforward example](https://thomas-rauter.github.io/kpnn2/latest/feedforward-example/)
 goes further, with a held-out test set, input-level attributions,
