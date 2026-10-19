@@ -113,6 +113,21 @@ reason. If one `table` holds the features and a `label` column,
 align `table.drop(columns="label").columns` and index that same
 reduced table.
 
+A feedback loop that returns to a measured entity ends at its
+computed node, never at its input node. If the prior has a loop
+between the transcription factor `STAT3` and its target gene
+`SOCS3`, write the rows `SOCS3_gene → SOCS3`, `SOCS3 → STAT3`, and
+`STAT3 → SOCS3`. `SOCS3_gene` stays an input, and the loop runs
+through `SOCS3`.
+
+An edge into `SOCS3_gene` would make it a hidden node, and
+`align_inputs()` would raise on its column. A cyclic model also
+writes the measured values into the input nodes before every step,
+so an edge into one could only compute a value that the next write
+overwrites. The measurement stays fixed, and the feedback changes
+the computed node. [Cyclic graph example](cyclic-graph-example.ipynb)
+parses this graph and counts the steps it needs.
+
 ## DAG
 
 A directed acyclic graph: no path leads from a node back to itself.
