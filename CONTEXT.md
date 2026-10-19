@@ -528,11 +528,13 @@ never a declaration: roles stay inferred, and a spec parsed with
 - Otherwise, output nodes missing from `outputs=` raise
   `Kpnn2Error` naming them and every node with no directed path to
   a declared output (sorted), with the fix: drop the rows whose
-  target is one of those and parse again. The kept rows then have
-  exactly the declared outputs as nodes with no outgoing edge.
-  They parse unless no input node reaches a declared output,
-  which only a cycle no input feeds allows on `parse_adjacency`;
-  then the parse raises for having no input node.
+  target is one of those and parse again, with those nodes also
+  cut from `widths=` and `ranks=`, which raise on an unknown name.
+  The kept rows have exactly the declared outputs as nodes with no
+  outgoing edge. They parse unless no input node reaches a
+  declared output, which only a cycle no input feeds allows on
+  `parse_adjacency`; then the parse raises for having no input
+  node.
 - `from_dict` runs no confirmation and never warns: it rebuilds a
   spec that was parsed before.
 

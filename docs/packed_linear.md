@@ -522,7 +522,9 @@ concatenated source axes, and `skips`. Pass the same `widths=`,
 Removing a node's last outgoing edge makes it an output node. With
 `outputs=`, the reparse raises and names that node and every node
 with no path left to your outputs; drop the rows whose target is
-one of them. Without it, the extra output node only warns.
+one of them. Drop those nodes from `widths=` and `ranks=` too,
+because both raise on a node the edgelist no longer has. Without
+`outputs=`, the extra output node only warns.
 
 After the new parse:
 
