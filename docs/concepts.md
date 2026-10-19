@@ -81,6 +81,16 @@ within each:
   as the last layer.
 - **hidden nodes** are neither.
 
+Out-degree 0 cannot tell an output you read from a node whose
+onward rows the edgelist lacks, such as a transcription factor that
+no pathway row continues from. Both are output nodes, so a head
+that reads every output node reads both. To confirm the outputs you
+read, pass them as `outputs=` to
+[`parse_layered()`][kpnn2.parse_layered] or
+[`parse_adjacency()`][kpnn2.parse_adjacency]. Any other node with no
+outgoing edge then raises, and the message names the rows to drop.
+Without `outputs=`, a parse with more than one output node warns.
+
 One name is one node. To feed a measurement of an entity that is
 also a computed node, give the measurement its own name:
 `STAT3_gene` for the gene's expression, `STAT3` for the

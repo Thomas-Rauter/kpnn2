@@ -23,7 +23,10 @@ def _tiny_spec():
             "target": ["H", "E", "C"],
         }
     )
-    return parse_layered(edgelist)
+    return parse_layered(
+        edgelist,
+        outputs=["C", "E"],
+    )
 
 
 def _tiny_adjacency_spec():

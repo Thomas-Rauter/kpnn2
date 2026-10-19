@@ -16,8 +16,8 @@ Names you call or construct.
 
 | Name | Description |
 | --- | --- |
-| [`parse_layered`][kpnn2.parse_layered] | Parse a source/target edgelist into a `LayeredSpec` (DAG only; optional `widths=`, `ranks=`). |
-| [`parse_adjacency`][kpnn2.parse_adjacency] | Parse a source/target edgelist into an `AdjacencySpec` (packed layout; cycles allowed). |
+| [`parse_layered`][kpnn2.parse_layered] | Parse a source/target edgelist into a `LayeredSpec` (DAG only; optional `widths=`, `ranks=`, `outputs=`). |
+| [`parse_adjacency`][kpnn2.parse_adjacency] | Parse a source/target edgelist into an `AdjacencySpec` (packed layout; cycles allowed; optional `widths=`, `outputs=`). |
 | [`MaskedLinear`][kpnn2.MaskedLinear] | Linear layer that keeps only the connections in a fixed mask. |
 | [`PackedLinear`][kpnn2.PackedLinear] | Linear layer with one weight per live edge, not a dense matrix. |
 | [`PackedMultiheadAttention`][kpnn2.PackedMultiheadAttention] | Attention that scores only live edgelist pairs, not a full matrix. |

@@ -556,12 +556,15 @@ def test_from_dict_helpers_call_parsers():
     adjacency_src = inspect.getsource(serialize_mod.adjacency_spec_from_dict)
     fingerprint_src = inspect.getsource(serialize_mod.spec_fingerprint)
 
-    assert "from ._parse import parse_layered" in layered_src
-    assert "parse_layered(" in layered_src
+    assert "from ._parse import _layered_from_edgelist" in layered_src
+    assert "_layered_from_edgelist(" in layered_src
     assert "widths=widths" in layered_src
     assert "ranks=ranks" in layered_src
-    assert "from ._parse_adjacency import parse_adjacency" in adjacency_src
-    assert "parse_adjacency(" in adjacency_src
+    assert (
+        "from ._parse_adjacency import _adjacency_from_edgelist"
+        in adjacency_src
+    )
+    assert "_adjacency_from_edgelist(" in adjacency_src
     assert "widths=_widths_from_payload(payload)" in adjacency_src
     assert "hashlib.sha256" in fingerprint_src
 
@@ -714,6 +717,7 @@ def test_ranked_payload_includes_every_compacted_node():
     spec = parse_layered(
         _unequal_sibling_edgelist(),
         ranks=_unequal_sibling_ranks(),
+        outputs=["Long", "Short"],
     )
     payload = spec.to_dict()
     assert payload["ranks"] == {
@@ -727,7 +731,10 @@ def test_ranked_payload_includes_every_compacted_node():
         spec,
         roundtrip,
     )
-    default = parse_layered(_unequal_sibling_edgelist())
+    default = parse_layered(
+        _unequal_sibling_edgelist(),
+        outputs=["Long", "Short"],
+    )
     assert spec.fingerprint != default.fingerprint
     assert spec.layer_nodes != default.layer_nodes
 

@@ -95,8 +95,10 @@ later prompt asks.
    source/target indices over every node, cycles and self-loops
    allowed. It never allocates an `(n, n)` tensor. It takes the
    same optional keyword-only `widths=` as `parse_layered` and has
-   no `ranks=` argument. The user picks the layout; a DAG is valid
-   input to both.
+   no `ranks=` argument. Both take an optional keyword-only
+   `outputs=`: the output nodes the caller reads, checked against
+   the inferred ones. Without it, more than one output node warns.
+   The user picks the layout; a DAG is valid input to both.
 2. **Specify:** `LayeredSpec` holds named nodes by layer, per-node
    widths, and one `Hop` per layer after the first. A hop's packed
    indices are in **unit** space: a named edge `A→B` expands into
@@ -371,8 +373,8 @@ Exported from `kpnn2` (`src/kpnn2/__init__.py`):
 
 | Symbol | Role |
 |--------|------|
-| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only; optional `widths=`, `ranks=`) |
-| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed; optional `widths=`) |
+| `parse_layered` | Edgelist DataFrame → `LayeredSpec` (DAG only; optional `widths=`, `ranks=`, `outputs=`) |
+| `parse_adjacency` | Edgelist DataFrame → `AdjacencySpec` (packed layout; cycles allowed; optional `widths=`, `outputs=`) |
 | `LayeredSpec` | Frozen structural dataclass (layers, packed hops, skip metadata) |
 | `Hop` | One layer's incoming packed edges; exported because `spec.hops` uses it |
 | `Skip` | One skip-edge record (see below); exported because `spec.skips` uses it |
@@ -500,6 +502,43 @@ on.
 - **Hidden nodes:** every other named node (not input, not output).
   Sorted alphabetically. Stored in `spec.hidden_nodes`.
 
+**Confirming outputs (`outputs=`, both parsers):** out-degree 0
+cannot tell a readout from a node whose onward rows the edgelist
+lacks, such as a factor no pathway row continues from. Both are
+output nodes, and a head that reads every output node reads both.
+`outputs=` names the output nodes the caller reads. It is a check,
+never a declaration: roles stay inferred, and a spec parsed with
+`outputs=` is equal to one parsed without it (same fields,
+`to_dict`, fingerprint). It is not stored.
+
+- `None` or omitted: no check. More than one output node issues a
+  `UserWarning` through `warn_at_caller` that counts and names
+  them (sorted) and points at `outputs=`. One output node is
+  silent.
+- Accepted: any one-dimensional collection of names (list, tuple,
+  set, numpy array, `pandas.Index`). Names match after `str(...)`
+  and compare as a set, so order does not matter. A string, bytes,
+  a tensor, a mapping, a non-1-D array, a non-iterable, an empty
+  collection, or a name repeated after `str(...)` raises
+  `Kpnn2Error` before the edgelist is read.
+- Unknown names and names of nodes with an outgoing edge raise
+  `Kpnn2Error` in one message, each found name with its role
+  (`TF1 (hidden)`, `g1 (input)`); the message points at
+  `unit_index()` for reading a node that feeds others.
+- Otherwise, output nodes missing from `outputs=` raise
+  `Kpnn2Error` naming them and every node with no directed path to
+  a declared output (sorted), with the fix: drop the rows whose
+  target is one of those and parse again. The kept rows then have
+  exactly the declared outputs as nodes with no outgoing edge.
+  They parse unless no input node reaches a declared output,
+  which only a cycle no input feeds allows on `parse_adjacency`;
+  then the parse raises for having no input node.
+- `from_dict` runs no confirmation and never warns: it rebuilds a
+  spec that was parsed before.
+
+The parsers never drop rows themselves: removing nodes is graph
+curation and stays with the caller.
+
 **Layering (Kahn / longest-path from inputs, or `ranks=`):**
 
 - Default (`ranks=None` or omitted): process nodes in topological
@@ -564,7 +603,7 @@ node names, sorted alphabetically and comma-separated.
 Isolated nodes cannot appear: the node set is the union of `source`
 and `target` values only.
 
-### `parse_layered(..., widths=, ranks=)`
+### `parse_layered(..., widths=, ranks=, outputs=)`
 
 ```python
 parse_layered(
@@ -572,6 +611,7 @@ parse_layered(
     *,
     widths: Mapping[str, int] | None = None,
     ranks: Mapping[str, int] | None = None,
+    outputs: Iterable[str] | None = None,
 ) -> LayeredSpec
 ```
 
@@ -595,9 +635,12 @@ runs after the unknown-name check.
 every graph node must have a non-negative int or numpy integer;
 see **Layering**.
 
-`parse_adjacency(..., widths=)` takes the same `widths=` with the
-same validation and messages. Do **not** add `ranks=` to
-`parse_adjacency`: there is no depth to rank.
+`outputs=`: see **Confirming outputs** under **Node roles**.
+
+`parse_adjacency(..., widths=, outputs=)` takes the same
+`widths=` and `outputs=` with the same validation and messages.
+Do **not** add `ranks=` to `parse_adjacency`: there is no depth
+to rank.
 
 ---
 
@@ -1023,7 +1066,7 @@ no longer needed to express a skip edge.
 ## `parse_adjacency` and `AdjacencySpec`
 
 ```text
-parse_adjacency(edgelist, *, widths=None) -> AdjacencySpec
+parse_adjacency(edgelist, *, widths=None, outputs=None) -> AdjacencySpec
 ```
 
 The second layout. Every node goes into one state vector, sorted
@@ -1387,7 +1430,9 @@ the new spec. A stale index of a different width raises in
 `PackedLinear.forward`; one of the same width (an input
 swapped for another) cannot be caught. Pass the
 same `widths=` / `ranks=` as the original parse, or the new
-spec will not match.
+spec will not match. Pass the same `outputs=` too: dropping a
+node's last outgoing edge makes it an output node, and the
+check names it.
 
 **Bias is not a packed slot.** Bias is shape
 `(out_features,)`, one value per output unit, not per edge.
@@ -1487,13 +1532,16 @@ Unknown extra keys on an otherwise valid payload are ignored
 (forward compatible). A stray `"ranks"` key on an adjacency
 payload is ignored like any extra key; `"widths"` is read.
 
-`LayeredSpec.from_dict(payload)` calls `parse_layered` on a
-DataFrame built from `payload["edges"]`, passing
+`LayeredSpec.from_dict(payload)` parses a DataFrame built from
+`payload["edges"]` with every `parse_layered` check, passing
 `payload["widths"]` when present and `payload["ranks"]` when
 present. Absent or empty `"widths"` is all 1. Absent `"ranks"`
 is longest-path. Invalid type or values raise `Kpnn2Error`.
-`AdjacencySpec.from_dict` calls `parse_adjacency`, passing
-`payload["widths"]` when present. Hops and
+`AdjacencySpec.from_dict` does the same with `parse_adjacency`,
+passing `payload["widths"]` when present. Neither runs the
+`outputs=` confirmation or warns about several output nodes:
+the payload stores no `outputs`, and the spec was parsed
+before. Hops and
 masks are not hand-rebuilt. A layout mismatch (an adjacency
 dict into `LayeredSpec.from_dict`, or the reverse) raises
 `Kpnn2Error` naming the mismatch.
@@ -2948,8 +2996,9 @@ private helper that only sees kpnn2-produced data, such as every
 lookup on the internal unit layout (`src/kpnn2/_layout.py`), raises
 an internal error.
 
-A warning to the caller (a float node name, an experimental or
-deprecated aggregation method) goes through `warn_at_caller` from
+A warning to the caller (a float node name, several output nodes
+without `outputs=`, an experimental or deprecated aggregation
+method) goes through `warn_at_caller` from
 `src/kpnn2/_errors.py`. It points at the first frame outside kpnn2,
 the caller's own line, at any call depth, so do not pass a fixed
 `stacklevel`.

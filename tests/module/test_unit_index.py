@@ -32,6 +32,7 @@ def _spec(widths=None):
     return parse_adjacency(
         _edgelist(),
         widths=widths,
+        outputs=["y", "z"],
     )
 
 

@@ -820,6 +820,14 @@ def _random_cyclic():
     return sorted(edges)
 
 
+def _sinks(edges):
+    """
+    Nodes that are never a source: the graph's output nodes.
+    """
+    sources = {source for source, _ in edges}
+    return sorted({target for _, target in edges} - sources)
+
+
 def test_parsers_pass_internal_checks_on_random_graphs():
     random.seed(42)
     n_reranked = 0
@@ -827,9 +835,11 @@ def test_parsers_pass_internal_checks_on_random_graphs():
         order, edges = _random_dag()
         widths = _random_widths(edges)
         edgelist = _shuffled_frame(edges)
+        outputs = _sinks(edges)
         default = kpnn2.parse_layered(
             edgelist,
             widths=widths,
+            outputs=outputs,
         )
         ranked = kpnn2.parse_layered(
             edgelist,
@@ -838,10 +848,12 @@ def test_parsers_pass_internal_checks_on_random_graphs():
                 order,
                 edges,
             ),
+            outputs=outputs,
         )
         kpnn2.parse_adjacency(
             edgelist,
             widths=widths,
+            outputs=outputs,
         )
         n_reranked += ranked.layer_nodes != default.layer_nodes
     for _ in range(100):

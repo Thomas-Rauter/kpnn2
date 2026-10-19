@@ -81,7 +81,10 @@ def _features_frame(
 
 
 def test_unrolled_absent_edge_has_zero_forward_influence():
-    spec = parse_adjacency(_independent_paths_edgelist())
+    spec = parse_adjacency(
+        _independent_paths_edgelist(),
+        outputs=["decoy", "prediction"],
+    )
     model = _pinned_linear_model(spec)
     prediction_idx = spec.output_nodes.index("prediction")
     decoy_idx = spec.output_nodes.index("decoy")
@@ -115,7 +118,10 @@ def test_unrolled_absent_edge_has_zero_forward_influence():
 
 
 def test_unrolled_absent_edge_has_zero_input_gradient():
-    spec = parse_adjacency(_independent_paths_edgelist())
+    spec = parse_adjacency(
+        _independent_paths_edgelist(),
+        outputs=["decoy", "prediction"],
+    )
     model = _pinned_linear_model(spec)
     prediction_idx = spec.output_nodes.index("prediction")
     feature_a_idx = spec.input_nodes.index("feature_a")

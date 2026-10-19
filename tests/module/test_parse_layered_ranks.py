@@ -79,10 +79,14 @@ def test_ranks_none_matches_default_longest_path():
 
 def test_unequal_siblings_share_a_layer_with_equal_ranks():
     edgelist = _unequal_sibling_edgelist()
-    default = parse_layered(edgelist)
+    default = parse_layered(
+        edgelist,
+        outputs=["Long", "Short"],
+    )
     ranked = parse_layered(
         edgelist,
         ranks=_unequal_sibling_ranks(),
+        outputs=["Long", "Short"],
     )
 
     assert default.layer_nodes == (
@@ -326,8 +330,12 @@ def test_skip_only_parent_omits_previous_layer():
             "B": 1,
             "C": 2,
         },
+        outputs=["B", "C"],
     )
-    default = parse_layered(_skip_only_edgelist())
+    default = parse_layered(
+        _skip_only_edgelist(),
+        outputs=["B", "C"],
+    )
 
     assert default.layer_nodes == (("A",), ("B", "C"))
     assert spec.layer_nodes == (("A",), ("B",), ("C",))
@@ -362,6 +370,7 @@ def test_widths_and_ranks_together():
             "Long": 2,
         },
         ranks=_unequal_sibling_ranks(),
+        outputs=["Long", "Short"],
     )
 
     assert spec.layer_nodes == (

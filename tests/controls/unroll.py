@@ -44,6 +44,7 @@ class UnrolledScenario:
     id: str
     n_steps: int
     edgelist: pd.DataFrame
+    outputs: tuple[str, ...]
     attributed_outputs: tuple[str, ...]
     important_features: tuple[str, ...]
     unimportant_features: tuple[str, ...]
@@ -272,6 +273,7 @@ def _wrap_scenario(
         id=scenario_id,
         n_steps=n_steps,
         edgelist=graph.edgelist,
+        outputs=graph.outputs,
         attributed_outputs=(PREDICTION_OUTPUT,),
         important_features=important_features,
         unimportant_features=unimportant_features,

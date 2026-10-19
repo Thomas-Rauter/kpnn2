@@ -97,7 +97,8 @@ def _fan_in_spec(fan_in):
                 "source": sources,
                 "target": targets,
             }
-        )
+        ),
+        outputs=["T", "U"],
     )
 
 

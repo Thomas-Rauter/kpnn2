@@ -55,7 +55,10 @@ def _run_scenario(
     Pin weights, forward, backward, return feature and hidden grads.
     """
     _set_seeds()
-    spec = parse_layered(scenario.edgelist)
+    spec = parse_layered(
+        scenario.edgelist,
+        outputs=scenario.outputs,
+    )
     model = LayeredNet(
         spec,
         bias=scenario.bias,

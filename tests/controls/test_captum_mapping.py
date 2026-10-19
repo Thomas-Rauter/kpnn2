@@ -80,7 +80,10 @@ def test_integrated_gradients_maps_input_node_order() -> None:
     """
     _set_seeds()
     scenario = _dead_edge_scenario()
-    spec = parse_layered(scenario.edgelist)
+    spec = parse_layered(
+        scenario.edgelist,
+        outputs=scenario.outputs,
+    )
     model = _pinned_model(
         spec,
         scenario,
@@ -143,7 +146,10 @@ def test_synthetic_captum_tensor_maps_hidden_layer_names() -> None:
     LayerConductance tests below.
     """
     scenario = _dead_edge_scenario()
-    spec = parse_layered(scenario.edgelist)
+    spec = parse_layered(
+        scenario.edgelist,
+        outputs=scenario.outputs,
+    )
     hop = 0
     layer = hop + 1
     names = list(spec.layer_nodes[layer])

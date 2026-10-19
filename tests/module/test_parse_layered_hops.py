@@ -190,7 +190,10 @@ def test_parse_layered_hops_early_output_indexing():
         }
     )
 
-    spec = parse_layered(edgelist)
+    spec = parse_layered(
+        edgelist,
+        outputs=["C", "E"],
+    )
 
     assert spec.layer_nodes == (("A",), ("E", "H"), ("C",))
     first, second = spec.hops

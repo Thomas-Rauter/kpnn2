@@ -37,6 +37,7 @@ class StructuralScenario:
 
     id: str
     edgelist: pd.DataFrame
+    outputs: tuple[str, ...]
     attributed_outputs: tuple[str, ...]
     important_features: tuple[str, ...]
     unimportant_features: tuple[str, ...]
@@ -89,6 +90,7 @@ def _from_importance_graph(
     return StructuralScenario(
         id=scenario_id,
         edgelist=graph.edgelist,
+        outputs=graph.outputs,
         attributed_outputs=outputs,
         important_features=graph.important_features,
         unimportant_features=graph.unimportant_features,
@@ -108,6 +110,7 @@ def _disconnected_two_tower(
     return StructuralScenario(
         id=scenario_id,
         edgelist=graph.edgelist,
+        outputs=graph.outputs,
         attributed_outputs=(PREDICTION_OUTPUT,),
         important_features=graph.tower_a_features,
         unimportant_features=graph.tower_b_features,

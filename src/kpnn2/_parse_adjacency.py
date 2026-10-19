@@ -2,7 +2,7 @@
 Adjacency parsing for kpnn2.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 import pandas as pd
 
@@ -14,6 +14,8 @@ from ._parse import (
     _TARGET,
     _build_adjacency,
     _check_edges_conserved,
+    _confirm_outputs,
+    _declared_outputs,
     _node_sets,
     _normalize_widths,
     _validate_edgelist,
@@ -100,10 +102,72 @@ def _check_input_units(spec: AdjacencySpec) -> None:
         )
 
 
+def _adjacency_from_edgelist(
+    edgelist: pd.DataFrame,
+    *,
+    widths: Mapping[str, int] | None,
+) -> AdjacencySpec:
+    """
+    Parse ``edgelist`` into an ``AdjacencySpec`` without ``outputs``.
+
+    Runs every check of ``parse_adjacency`` except the output
+    confirmation, which neither raises nor warns here.
+    ``AdjacencySpec.from_dict`` uses it: it rebuilds a spec that
+    was parsed before, so several outputs are not news.
+    """
+    normalized = _validate_edgelist(edgelist)
+    (
+        node_set,
+        children,
+        parents,
+        in_degree,
+        out_degree,
+    ) = _build_adjacency(normalized)
+    input_nodes, output_nodes, hidden_nodes = _node_sets(
+        node_set,
+        in_degree,
+        out_degree,
+    )
+    nodes = sorted(node_set)
+    width_of = _normalize_widths(
+        widths,
+        node_set,
+        input_nodes,
+    )
+    layout = build_layout(
+        nodes,
+        [width_of[name] for name in nodes],
+    )
+    source_index, target_index = _packed_edge_indices(
+        normalized,
+        layout,
+    )
+    spec = AdjacencySpec(
+        nodes=tuple(nodes),
+        node_widths=layout.widths(),
+        input_nodes=tuple(input_nodes),
+        output_nodes=tuple(output_nodes),
+        hidden_nodes=tuple(hidden_nodes),
+        source_index=source_index,
+        target_index=target_index,
+        input_index=layout.units_of(input_nodes),
+        output_index=layout.units_of(output_nodes),
+    )
+    _check_edges_conserved(
+        spec,
+        normalized,
+        width_of,
+        [(spec.source_index, spec.target_index)],
+    )
+    _check_input_units(spec)
+    return spec
+
+
 def parse_adjacency(  # numpydoc ignore=PR06
     edgelist: pd.DataFrame,
     *,
     widths: Mapping[str, int] | None = None,
+    outputs: Iterable[str] | None = None,
 ) -> AdjacencySpec:
     """
     Parse a source/target edgelist into an ``AdjacencySpec``.
@@ -168,6 +232,29 @@ def parse_adjacency(  # numpydoc ignore=PR06
         floats, ``0``, and negatives are rejected. Input nodes
         must stay width 1: each reads one feature column, so
         separate measurements belong on separate input nodes.
+    outputs : iterable of str, optional
+        The output nodes you read, to confirm the ones the parser
+        infers. Every node with no outgoing edge is an output
+        node, so a node whose onward rows are missing from the
+        edgelist is one too, and ``output_index`` would hand it
+        to the head as a prediction. With ``outputs``, any other
+        node with no outgoing edge raises, and the message names
+        every node with no path to a name in ``outputs``,
+        including the nodes of a cycle that never reaches one:
+        drop the rows whose target is one of those and parse
+        again.
+        ``outputs`` checks and never assigns. It does not make a
+        node an output, and the spec is the same as without it.
+
+        ``None`` or omitted skips the check, and the parse warns
+        when there is more than one output node. Names are
+        matched after ``str(...)`` and compared as a set, so a
+        list, tuple, set, one-dimensional numpy array, or
+        ``pandas.Index`` works in any order. A string, a mapping,
+        an empty collection, a repeated name, an unknown name, or
+        a node with an outgoing edge raises ``Kpnn2Error``. To
+        read a node that feeds others, use
+        ``AdjacencySpec.unit_index``.
 
     Returns
     -------
@@ -193,8 +280,11 @@ def parse_adjacency(  # numpydoc ignore=PR06
         duplicated; there is no in-degree-0 node or no out-degree-0
         node; or ``widths`` is not a mapping, names an unknown node,
         holds a value that is not a positive integer (``bool``
-        included), or gives an input node a width other than 1.
-        Each message names the offending pairs or nodes, sorted.
+        included), or gives an input node a width other than 1;
+        or ``outputs`` is a string, a mapping, or empty, repeats a
+        name, names a node that is not an output node, or leaves
+        out an output node. Each message names the offending
+        pairs or nodes, sorted.
 
     Warns
     -----
@@ -202,7 +292,10 @@ def parse_adjacency(  # numpydoc ignore=PR06
         If ``source`` or ``target`` holds a float or a ``bool``,
         converted to a name such as ``"1.0"`` or ``"True"``.
         Convert the column to the intended strings first to
-        silence it.
+        silence it. Also if ``outputs`` is omitted and the graph
+        has more than one output node; the message names them.
+        Pass the output nodes you read as ``outputs`` to silence
+        it.
 
     See Also
     --------
@@ -276,49 +369,13 @@ def parse_adjacency(  # numpydoc ignore=PR06
     >>> wide.input_index
     (3,)
     """
-    normalized = _validate_edgelist(edgelist)
-    (
-        node_set,
-        children,
-        parents,
-        in_degree,
-        out_degree,
-    ) = _build_adjacency(normalized)
-    input_nodes, output_nodes, hidden_nodes = _node_sets(
-        node_set,
-        in_degree,
-        out_degree,
+    declared = _declared_outputs(outputs)
+    spec = _adjacency_from_edgelist(
+        edgelist,
+        widths=widths,
     )
-    nodes = sorted(node_set)
-    width_of = _normalize_widths(
-        widths,
-        node_set,
-        input_nodes,
-    )
-    layout = build_layout(
-        nodes,
-        [width_of[name] for name in nodes],
-    )
-    source_index, target_index = _packed_edge_indices(
-        normalized,
-        layout,
-    )
-    spec = AdjacencySpec(
-        nodes=tuple(nodes),
-        node_widths=layout.widths(),
-        input_nodes=tuple(input_nodes),
-        output_nodes=tuple(output_nodes),
-        hidden_nodes=tuple(hidden_nodes),
-        source_index=source_index,
-        target_index=target_index,
-        input_index=layout.units_of(input_nodes),
-        output_index=layout.units_of(output_nodes),
-    )
-    _check_edges_conserved(
+    _confirm_outputs(
         spec,
-        normalized,
-        width_of,
-        [(spec.source_index, spec.target_index)],
+        declared,
     )
-    _check_input_units(spec)
     return spec

@@ -48,6 +48,7 @@ def _adjacency(widths=None):
     return parse_adjacency(
         _adjacency_edgelist(),
         widths=widths,
+        outputs=["y", "z"],
     )
 
 
@@ -55,6 +56,7 @@ def _layered(widths=None):
     return parse_layered(
         _layered_edgelist(),
         widths=widths,
+        outputs=["y", "z"],
     )
 
 
@@ -347,6 +349,7 @@ def test_layered_ranks_keep_rows_on_their_hops():
             "y": 3,
             "z": 3,
         },
+        outputs=["y", "z"],
     )
     table = spec.slot_table()
     assert table.loc[2].values.tolist() == [

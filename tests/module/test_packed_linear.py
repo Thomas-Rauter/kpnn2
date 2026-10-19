@@ -204,12 +204,18 @@ def test_packed_linear_rejects_stale_alignment_after_reparse():
             "g4": [4.0],
         }
     )
-    old = parse_layered(edgelist)
+    old = parse_layered(
+        edgelist,
+        outputs=["T", "U"],
+    )
     stale = align_inputs(
         features.columns,
         old,
     )
-    new = parse_layered(edgelist[edgelist["source"] != "g3"])
+    new = parse_layered(
+        edgelist[edgelist["source"] != "g3"],
+        outputs=["T", "U"],
+    )
     assert new.input_nodes == ("g1", "g2", "g4")
     hop = new.hops[0]
     layer = PackedLinear(

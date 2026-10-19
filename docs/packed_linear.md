@@ -516,8 +516,13 @@ A reparse rebuilds the layout; it is not "the same graph minus
 a row." Both parsers recompute `input_nodes` and
 `output_nodes`. `parse_layered()` also recomputes longest-path
 depths (unless you pass the same `ranks=`), hop membership, the
-concatenated source axes, and `skips`. Pass the same `widths=`
-and `ranks=` as the original parse.
+concatenated source axes, and `skips`. Pass the same `widths=`,
+`ranks=`, and `outputs=` as the original parse.
+
+Removing a node's last outgoing edge makes it an output node. With
+`outputs=`, the reparse raises and names that node and every node
+with no path left to your outputs; drop the rows whose target is
+one of them. Without it, the extra output node only warns.
 
 After the new parse:
 

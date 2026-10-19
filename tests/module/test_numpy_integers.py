@@ -108,12 +108,14 @@ def test_parse_layered_numpy_widths_and_ranks_match_int(integer_type):
         _layered_edgelist(),
         widths=widths,
         ranks=ranks,
+        outputs=["C", "D"],
     )
 
     spec = parse_layered(
         _layered_edgelist(),
         widths={name: integer_type(value) for name, value in widths.items()},
         ranks={name: integer_type(value) for name, value in ranks.items()},
+        outputs=["C", "D"],
     )
 
     assert spec == expected
@@ -154,6 +156,7 @@ def test_from_dict_accepts_numpy_widths():
     expected = parse_layered(
         _layered_edgelist(),
         widths={"H": 3},
+        outputs=["C", "D"],
     )
     payload = expected.to_dict()
     payload["widths"] = {"H": np.int64(3)}
@@ -165,7 +168,10 @@ def test_from_dict_accepts_numpy_widths():
 
 
 def test_from_dict_schema_tag_stays_a_python_int():
-    payload = parse_layered(_layered_edgelist()).to_dict()
+    payload = parse_layered(
+        _layered_edgelist(),
+        outputs=["C", "D"],
+    ).to_dict()
     payload["kpnn2_spec"] = np.int64(1)
 
     with pytest.raises(
@@ -678,6 +684,7 @@ def test_map_node_attributions_numpy_layer_matches_int():
     spec = parse_layered(
         _layered_edgelist(),
         widths={"H": 2},
+        outputs=["C", "D"],
     )
     attributions = torch.arange(
         2 * spec.layer_dims[1],
@@ -722,7 +729,10 @@ def test_map_node_attributions_numpy_layer_matches_int():
     ],
 )
 def test_map_node_attributions_non_integer_layer_still_raises(value):
-    spec = parse_layered(_layered_edgelist())
+    spec = parse_layered(
+        _layered_edgelist(),
+        outputs=["C", "D"],
+    )
     attributions = torch.zeros(spec.layer_dims[1])
 
     with pytest.raises(

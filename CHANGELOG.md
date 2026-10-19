@@ -4,6 +4,22 @@ Notable API and core changes only. This project follows
 semantic versioning.
 
 
+## [Unreleased]
+
+### Added
+
+- `outputs=` on `parse_layered` and `parse_adjacency`: the output
+  nodes you read. Any other node with no outgoing edge raises
+  `Kpnn2Error`, naming every node with no path to a declared
+  output. It checks only; the spec is unchanged.
+
+### Changed
+
+- `parse_layered` and `parse_adjacency` warn when the edgelist
+  has more than one output node and `outputs=` is not given.
+  `from_dict` does not warn.
+
+
 ## [0.3.0] - 16. Oktober 2026
 
 ### Changed

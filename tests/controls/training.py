@@ -470,7 +470,10 @@ def train_matched_linear_towers(
         rng,
         n_eval,
     )
-    spec = parse_layered(graph.edgelist)
+    spec = parse_layered(
+        graph.edgelist,
+        outputs=graph.outputs,
+    )
     model = LayeredNet(
         spec,
         bias=bias,

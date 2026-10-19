@@ -45,6 +45,7 @@ def _spec(widths=None, ranks=None):
         _edgelist(),
         widths=widths,
         ranks=ranks,
+        outputs=["y", "z"],
     )
 
 

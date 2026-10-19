@@ -55,7 +55,10 @@ def _run_scenario(
     Pin weights, unroll T steps, return feature and hidden scores.
     """
     _set_seeds()
-    spec = parse_adjacency(scenario.edgelist)
+    spec = parse_adjacency(
+        scenario.edgelist,
+        outputs=scenario.outputs,
+    )
     model = AdjacencyNet(
         spec,
         n_steps=scenario.n_steps,

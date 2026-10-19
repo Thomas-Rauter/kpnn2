@@ -47,7 +47,11 @@ def test_parse_layered_allows_early_outputs():
         }
     )
 
-    spec = parse_layered(edgelist)
+    with pytest.warns(
+        UserWarning,
+        match="2 output nodes, nodes with no outgoing edge: C, E",
+    ):
+        spec = parse_layered(edgelist)
 
     assert spec.input_nodes == ("A",)
     assert spec.hidden_nodes == ("H",)

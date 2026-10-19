@@ -408,6 +408,63 @@ _PARSE_LAYERED_CASES = [
         "Non-forward edge(s): H -> C",
         lambda: _layered(ranks={"A": 0, "H": 2, "C": 1}),
     ),
+    _Bad(
+        "parse_layered",
+        "outputs_is_an_int",
+        _TYPE,
+        "outputs",
+        lambda: _layered(outputs=5),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_is_a_mapping",
+        _TYPE,
+        "'outputs' must be a collection of node names, not a mapping",
+        lambda: _layered(outputs={"C": 1}),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_is_empty",
+        _VALUE,
+        "'outputs' must name at least one node",
+        lambda: _layered(outputs=[]),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_repeat_a_node",
+        _SEMANTIC,
+        "more than once: C",
+        lambda: _layered(outputs=["C", "C"]),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_name_an_unknown_node",
+        _SEMANTIC,
+        "not in the edgelist: Z",
+        lambda: _layered(outputs=["Z"]),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_name_a_hidden_node",
+        _SEMANTIC,
+        "not output nodes: H (hidden)",
+        lambda: _layered(outputs=["C", "H"]),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_leave_out_an_output_node",
+        _SEMANTIC,
+        "not in 'outputs': D",
+        lambda: kpnn2.parse_layered(
+            pd.DataFrame(
+                {
+                    "source": ["A", "A"],
+                    "target": ["C", "D"],
+                }
+            ),
+            outputs=["C"],
+        ),
+    ),
 ]
 
 _PARSE_ADJACENCY_CASES = [
@@ -531,6 +588,42 @@ _PARSE_ADJACENCY_CASES = [
                     "target": ["b", "a"],
                 }
             )
+        ),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "outputs_is_an_int",
+        _TYPE,
+        "outputs",
+        lambda: _adjacency(outputs=5),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "outputs_is_empty",
+        _VALUE,
+        "'outputs' must name at least one node",
+        lambda: _adjacency(outputs=()),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "outputs_name_an_input_node",
+        _SEMANTIC,
+        "not output nodes: x (input)",
+        lambda: _adjacency(outputs=["x", "y"]),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "outputs_leave_out_a_node_on_a_dead_cycle",
+        _SEMANTIC,
+        "no path to a node in 'outputs': c, d, z",
+        lambda: kpnn2.parse_adjacency(
+            pd.DataFrame(
+                {
+                    "source": ["x", "a", "x", "c", "d", "d"],
+                    "target": ["a", "y", "c", "d", "c", "z"],
+                }
+            ),
+            outputs=["y"],
         ),
     ),
 ]
@@ -2089,9 +2182,19 @@ _VALID_CASES = [
         ).node_units(" A"),
     ),
     _Valid(
+        "parse_layered",
+        "outputs_as_a_set",
+        lambda: _layered(outputs={"C"}),
+    ),
+    _Valid(
         "parse_adjacency",
         "numpy_integer_widths",
         lambda: _adjacency(widths={"a": np.int32(2)}),
+    ),
+    _Valid(
+        "parse_adjacency",
+        "outputs_as_a_pandas_index",
+        lambda: _adjacency(outputs=pd.Index(["y"])),
     ),
     _Valid(
         "parse_adjacency",

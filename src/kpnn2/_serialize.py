@@ -216,9 +216,11 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
     """
     Rebuild a ``LayeredSpec`` by parsing ``payload["edges"]``.
 
-    Calls ``parse_layered`` on a DataFrame built from the tagged
-    dict, passing ``payload["widths"]`` and ``payload["ranks"]``
-    when present. Extra unknown keys are ignored.
+    Parses a DataFrame built from the tagged dict as
+    ``parse_layered`` does, passing ``payload["widths"]`` and
+    ``payload["ranks"]`` when present. Extra unknown keys are
+    ignored. The spec was parsed before, so several output nodes
+    do not warn.
 
     Parameters
     ----------
@@ -237,7 +239,7 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
         If ``payload`` is invalid or ``layout`` is not
         ``"layered"``.
     """
-    from ._parse import parse_layered
+    from ._parse import _layered_from_edgelist
 
     table = _edgelist_from_payload(
         payload,
@@ -245,7 +247,7 @@ def layered_spec_from_dict(payload: object) -> LayeredSpec:
     )
     widths = _widths_from_payload(payload)
     ranks = _ranks_from_payload(payload)
-    return parse_layered(
+    return _layered_from_edgelist(
         table,
         widths=widths,
         ranks=ranks,
@@ -256,9 +258,11 @@ def adjacency_spec_from_dict(payload: object) -> AdjacencySpec:
     """
     Rebuild an ``AdjacencySpec`` by parsing ``payload["edges"]``.
 
-    Calls ``parse_adjacency`` on a DataFrame built from the
-    tagged dict, passing ``payload["widths"]`` when present.
-    Extra keys are ignored, including a stray ``"ranks"``.
+    Parses a DataFrame built from the tagged dict as
+    ``parse_adjacency`` does, passing ``payload["widths"]`` when
+    present. Extra keys are ignored, including a stray
+    ``"ranks"``. The spec was parsed before, so several output
+    nodes do not warn.
 
     Parameters
     ----------
@@ -277,13 +281,13 @@ def adjacency_spec_from_dict(payload: object) -> AdjacencySpec:
         If ``payload`` is invalid or ``layout`` is not
         ``"adjacency"``.
     """
-    from ._parse_adjacency import parse_adjacency
+    from ._parse_adjacency import _adjacency_from_edgelist
 
     table = _edgelist_from_payload(
         payload,
         expected_layout=_LAYOUT_ADJACENCY,
     )
-    return parse_adjacency(
+    return _adjacency_from_edgelist(
         table,
         widths=_widths_from_payload(payload),
     )

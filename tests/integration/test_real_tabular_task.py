@@ -77,7 +77,12 @@ def _run_real_tabular_task() -> dict[str, float]:
     _set_seed(SEED)
     x_train_df, x_test_df, y_train, y_test = _make_breast_cancer_data()
     edgelist = _make_feedforward_architecture_edgelist(list(x_train_df.columns))
-    spec = parse_layered(edgelist)
+    spec = parse_layered(
+        edgelist,
+        outputs=[
+            f"classification_basis_{idx:02d}" for idx in range(N_BASIS_OUTPUTS)
+        ],
+    )
     x_train_shuffled = x_train_df.loc[
         :,
         list(reversed(x_train_df.columns)),

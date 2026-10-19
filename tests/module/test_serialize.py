@@ -170,5 +170,8 @@ def test_serialize_module_does_not_import_parsers_at_top_level():
     assert "_parse_adjacency" not in imported
     layered_src = inspect.getsource(serialize_mod.layered_spec_from_dict)
     adjacency_src = inspect.getsource(serialize_mod.adjacency_spec_from_dict)
-    assert "from ._parse import parse_layered" in layered_src
-    assert "from ._parse_adjacency import parse_adjacency" in adjacency_src
+    assert "from ._parse import _layered_from_edgelist" in layered_src
+    assert (
+        "from ._parse_adjacency import _adjacency_from_edgelist"
+        in adjacency_src
+    )

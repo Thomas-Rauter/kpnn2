@@ -156,6 +156,14 @@ def test_adjacency_table_matches_hand_counts():
     )
 
 
+def _sinks(edges):
+    """
+    Nodes that are never a source: the graph's output nodes.
+    """
+    sources = {source for source, _ in edges}
+    return sorted({target for _, target in edges} - sources)
+
+
 def test_layered_counts_match_networkx_on_random_dags():
     random.seed(42)
     for _ in range(100):
@@ -166,6 +174,7 @@ def test_layered_counts_match_networkx_on_random_dags():
                 columns=["source", "target"],
             ),
             widths=_random_widths(edges),
+            outputs=_sinks(edges),
         )
         table = spec.node_table()
         pd.testing.assert_frame_equal(
@@ -188,6 +197,7 @@ def test_adjacency_counts_match_networkx_on_random_cyclic_graphs():
                 columns=["source", "target"],
             ),
             widths=_random_widths(edges),
+            outputs=_sinks(edges),
         )
         table = spec.node_table()
         pd.testing.assert_frame_equal(
@@ -325,10 +335,14 @@ def test_ranks_change_only_layers_and_row_order():
             "target": ["Short", "Mid", "Long"],
         }
     )
-    default = kpnn2.parse_layered(edgelist).node_table()
+    default = kpnn2.parse_layered(
+        edgelist,
+        outputs=["Long", "Short"],
+    ).node_table()
     ranked = kpnn2.parse_layered(
         edgelist,
         ranks={"A": 0, "Mid": 1, "Short": 2, "Long": 2},
+        outputs=["Long", "Short"],
     ).node_table()
     assert list(default.index) == ["A", "Mid", "Short", "Long"]
     assert list(ranked.index) == ["A", "Mid", "Long", "Short"]

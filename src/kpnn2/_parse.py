@@ -2,8 +2,9 @@
 Edgelist parsing for kpnn2.
 """
 
-from collections import deque
-from collections.abc import Mapping, Sequence
+from collections import Counter, deque
+from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 
 import numpy as np
 import pandas as pd
@@ -19,7 +20,12 @@ from ._layout import (
 )
 from ._serialize import canonical_edges
 from ._spec import Hop, LayeredSpec, Skip
-from ._validate import describe, is_integer, require_node_mapping
+from ._validate import (
+    as_name_list,
+    describe,
+    is_integer,
+    require_node_mapping,
+)
 
 _SOURCE = "source"
 _TARGET = "target"
@@ -1052,11 +1058,221 @@ def _check_layer_axes(spec: LayeredSpec) -> None:
             )
 
 
+def _declared_outputs(outputs: object) -> list[str] | None:
+    """
+    Return ``outputs`` as a list of names, or ``None`` if omitted.
+
+    The names are compared as a set, so a set is accepted and
+    order does not matter. Each name goes through ``str(...)``,
+    as edgelist node names do. A string, a mapping, an empty
+    collection, and a repeated name raise ``Kpnn2Error``.
+    """
+    if outputs is None:
+        return None
+    if isinstance(outputs, Mapping):
+        raise Kpnn2Error(
+            "'outputs' must be a collection of node names, not a "
+            f"mapping. Got {describe(outputs)}. Pass the names as a "
+            "list."
+        )
+    names = as_name_list(
+        list(outputs) if isinstance(outputs, AbstractSet) else outputs,
+        "outputs",
+        "output node names",
+    )
+    if not names:
+        raise Kpnn2Error(
+            "'outputs' must name at least one node. Got "
+            f"{describe(outputs)}. Pass the output nodes you read, or "
+            "omit 'outputs'."
+        )
+    counts = Counter(names)
+    repeated = sorted(name for name, count in counts.items() if count > 1)
+    if repeated:
+        raise Kpnn2Error(
+            "'outputs' names a node more than once: "
+            f"{', '.join(repeated)}. Name each output node once."
+        )
+    return names
+
+
+def _without_path_to(
+    targets: Sequence[str],
+    edgelist: pd.DataFrame,
+) -> list[str]:
+    """
+    Return the nodes with no directed path to any of ``targets``.
+
+    A node in ``targets`` reaches itself. The walk follows parents
+    back from ``targets`` and visits each node once, so a cycle
+    ends it. Names are sorted.
+    """
+    nodes, _, parents, _, _ = _build_adjacency(edgelist)
+    reached = set(targets)
+    queue = deque(targets)
+    while queue:
+        for parent in parents[queue.popleft()]:
+            if parent not in reached:
+                reached.add(parent)
+                queue.append(parent)
+    return sorted(nodes - reached)
+
+
+def _confirm_outputs(
+    spec: LayeredSpec | AdjacencySpec,
+    declared: list[str] | None,
+) -> None:
+    """
+    Check the output nodes against ``declared``, or warn without it.
+
+    Output nodes are inferred from out-degree 0, which a node
+    whose onward rows are missing also has. ``declared`` must
+    be exactly ``spec.output_nodes``. Unknown names and names of
+    nodes with an outgoing edge raise first, in one message.
+    Output nodes left out of ``declared`` raise next, naming
+    every node with no path to a declared one: in the rows whose
+    target is none of those, exactly ``declared`` have no
+    outgoing edge. Without ``declared``, more than one output
+    node warns.
+    """
+    found = spec.output_nodes
+    if declared is None:
+        if len(found) > 1:
+            warn_at_caller(
+                f"The edgelist has {len(found)} output nodes, nodes with "
+                f"no outgoing edge: {', '.join(found)}. A node whose "
+                "onward rows are missing from the edgelist is an output "
+                "node too. Pass the output nodes you read as 'outputs' "
+                "to confirm them: this warning then stops, and parsing "
+                "raises on any other node with no outgoing edge.",
+                UserWarning,
+            )
+        return
+    role = {name: "input" for name in spec.input_nodes}
+    role.update({name: "hidden" for name in spec.hidden_nodes})
+    output_set = set(found)
+    unknown = sorted(
+        name for name in declared if name not in role and name not in output_set
+    )
+    not_outputs = sorted(name for name in declared if name in role)
+    problems = []
+    if unknown:
+        problems.append(
+            "'outputs' names node(s) that are not in the edgelist: "
+            f"{', '.join(unknown)}."
+        )
+    if not_outputs:
+        labels = ", ".join(f"{name} ({role[name]})" for name in not_outputs)
+        problems.append(
+            "'outputs' names node(s) with an outgoing edge, which are "
+            f"not output nodes: {labels}. To read a node that feeds "
+            "others, index it with unit_index()."
+        )
+    if problems:
+        raise Kpnn2Error(" ".join(problems))
+    extra = sorted(output_set - set(declared))
+    if extra:
+        dead = _without_path_to(
+            declared,
+            spec.to_edgelist(),
+        )
+        raise Kpnn2Error(
+            "Node(s) with no outgoing edge that are not in 'outputs': "
+            f"{', '.join(extra)}. The edgelist has no row leaving them, "
+            "so they are output nodes too. Node(s) with no path to a "
+            f"node in 'outputs': {', '.join(dead)}. Drop the edgelist "
+            "rows whose target is one of these and parse again, or add "
+            "a node to 'outputs' if you read it."
+        )
+
+
+def _layered_from_edgelist(
+    edgelist: pd.DataFrame,
+    *,
+    widths: Mapping[str, int] | None,
+    ranks: Mapping[str, int] | None,
+) -> LayeredSpec:
+    """
+    Parse ``edgelist`` into a ``LayeredSpec`` without ``outputs``.
+
+    Runs every check of ``parse_layered`` except the output
+    confirmation, which neither raises nor warns here.
+    ``LayeredSpec.from_dict`` uses it: it rebuilds a spec that
+    was parsed before, so several outputs are not news.
+    """
+    normalized = _validate_edgelist(edgelist)
+    _reject_self_loops(normalized)
+    (
+        nodes,
+        children,
+        parents,
+        in_degree,
+        out_degree,
+    ) = _build_adjacency(normalized)
+    input_nodes, output_nodes, hidden_nodes = _node_sets(
+        nodes,
+        in_degree,
+        out_degree,
+    )
+    layer_nodes = _rank_layers(
+        nodes,
+        children,
+        parents,
+        in_degree,
+    )
+    if ranks is not None:
+        layer_nodes = _layers_from_user_ranks(
+            ranks,
+            nodes,
+            input_nodes,
+            normalized,
+        )
+    width_of = _normalize_widths(
+        widths,
+        nodes,
+        input_nodes,
+    )
+    layouts = _layer_layouts(
+        layer_nodes,
+        width_of,
+    )
+    placement = _node_placement(layouts)
+    layer_dims = [layout.n_units for layout in layouts]
+    hops = _build_hops(
+        normalized,
+        layouts,
+        placement,
+    )
+    skips = _build_skips(
+        normalized,
+        placement,
+    )
+    spec = LayeredSpec(
+        input_nodes=tuple(input_nodes),
+        output_nodes=tuple(output_nodes),
+        hidden_nodes=tuple(hidden_nodes),
+        layer_nodes=tuple(tuple(layer) for layer in layer_nodes),
+        layer_dims=tuple(layer_dims),
+        layer_widths=tuple(layout.widths() for layout in layouts),
+        hops=tuple(hops),
+        skips=tuple(skips),
+    )
+    _check_edges_conserved(
+        spec,
+        normalized,
+        width_of,
+        [(hop.source_index, hop.target_index) for hop in spec.hops],
+    )
+    _check_layer_axes(spec)
+    return spec
+
+
 def parse_layered(  # numpydoc ignore=PR06
     edgelist: pd.DataFrame,
     *,
     widths: Mapping[str, int] | None = None,
     ranks: Mapping[str, int] | None = None,
+    outputs: Iterable[str] | None = None,
 ) -> LayeredSpec:
     """
     Parse a source/target edgelist into a ``LayeredSpec``.
@@ -1157,6 +1373,28 @@ def parse_layered(  # numpydoc ignore=PR06
         rank to a strictly higher one, so an edge between two
         nodes of equal rank is illegal. A node may have only
         skip parents, with none in the layer just below it.
+    outputs : iterable of str, optional
+        The output nodes you read, to confirm the ones the parser
+        infers. Every node with no outgoing edge is an output
+        node, so a node whose onward rows are missing from the
+        edgelist is one too, and a model that reads every output
+        node would read it as a prediction. With ``outputs``, any
+        other node with no outgoing edge raises, and the message
+        names every node with no path to a name in ``outputs``:
+        drop the rows whose target is one of those and parse
+        again. ``outputs`` checks and never assigns. It does not
+        make a node an output, and the spec is the same as
+        without it.
+
+        ``None`` or omitted skips the check, and the parse warns
+        when there is more than one output node. Names are
+        matched after ``str(...)`` and compared as a set, so a
+        list, tuple, set, one-dimensional numpy array, or
+        ``pandas.Index`` works in any order. A string, a mapping,
+        an empty collection, a repeated name, an unknown name, or
+        a node with an outgoing edge raises ``Kpnn2Error``. To
+        read a node that feeds others, use
+        ``LayeredSpec.unit_index``.
 
     Returns
     -------
@@ -1182,8 +1420,11 @@ def parse_layered(  # numpydoc ignore=PR06
         than 1; or ``ranks`` is incomplete, names an
         unknown node, is not a mapping of non-negative integers,
         places inputs off the minimum rank, places a non-input at
-        that minimum, or contains a non-forward edge. Each message
-        names the offending pairs or nodes, sorted.
+        that minimum, or contains a non-forward edge; or
+        ``outputs`` is a string, a mapping, or empty, repeats a
+        name, names a node that is not an output node, or leaves
+        out an output node. Each message names the offending
+        pairs or nodes, sorted.
 
     Warns
     -----
@@ -1191,7 +1432,10 @@ def parse_layered(  # numpydoc ignore=PR06
         If ``source`` or ``target`` holds a float or a ``bool``,
         converted to a name such as ``"1.0"`` or ``"True"``.
         Convert the column to the intended strings first to
-        silence it.
+        silence it. Also if ``outputs`` is omitted and the graph
+        has more than one output node; the message names them.
+        Pass the output nodes you read as ``outputs`` to silence
+        it.
 
     See Also
     --------
@@ -1278,7 +1522,8 @@ def parse_layered(  # numpydoc ignore=PR06
     With ``ranks``, two nodes can share a layer even when their
     chains of parents differ in length. By default ``Short`` sits
     in layer 1, one above its only parent, while ``Long`` sits in
-    layer 2 behind ``Mid``:
+    layer 2 behind ``Mid``. Both are output nodes, so ``outputs``
+    confirms them; without it, the parse warns:
 
     >>> siblings = pd.DataFrame(
     ...     {
@@ -1286,7 +1531,10 @@ def parse_layered(  # numpydoc ignore=PR06
     ...         "target": ["Short", "Mid", "Long"],
     ...     }
     ... )
-    >>> kpnn2.parse_layered(siblings).layer_nodes
+    >>> kpnn2.parse_layered(
+    ...     siblings,
+    ...     outputs=["Long", "Short"],
+    ... ).layer_nodes
     (('A',), ('Mid', 'Short'), ('Long',))
 
     Giving both the same rank puts them in one layer, and
@@ -1302,74 +1550,50 @@ def parse_layered(  # numpydoc ignore=PR06
     ...         "Short": 2,
     ...         "Long": 2,
     ...     },
+    ...     outputs=["Long", "Short"],
     ... )
     >>> spec.layer_nodes
     (('A',), ('Mid',), ('Long', 'Short'))
     >>> spec.skips[0].source, spec.skips[0].target
     ('A', 'Short')
+
+    ``outputs`` catches a node whose onward rows are missing. This
+    edgelist has no row out of ``D``, so ``D`` is an output node
+    too, and the parse raises:
+
+    >>> dangling = pd.DataFrame(
+    ...     {
+    ...         "source": ["A", "H", "B", "A"],
+    ...         "target": ["H", "C", "D", "D"],
+    ...     }
+    ... )
+    >>> kpnn2.parse_layered(
+    ...     dangling,
+    ...     outputs=["C"],
+    ... )  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    Kpnn2Error: Node(s) with no outgoing edge that are not in ...
+
+    The message names ``B`` and ``D``, the nodes with no path to
+    ``C``. Dropping the rows whose target is one of them leaves
+    ``C`` as the only output node:
+
+    >>> kept = dangling[~dangling["target"].isin(["B", "D"])]
+    >>> kpnn2.parse_layered(
+    ...     kept,
+    ...     outputs=["C"],
+    ... ).output_nodes
+    ('C',)
     """
-    normalized = _validate_edgelist(edgelist)
-    _reject_self_loops(normalized)
-    (
-        nodes,
-        children,
-        parents,
-        in_degree,
-        out_degree,
-    ) = _build_adjacency(normalized)
-    input_nodes, output_nodes, hidden_nodes = _node_sets(
-        nodes,
-        in_degree,
-        out_degree,
+    declared = _declared_outputs(outputs)
+    spec = _layered_from_edgelist(
+        edgelist,
+        widths=widths,
+        ranks=ranks,
     )
-    layer_nodes = _rank_layers(
-        nodes,
-        children,
-        parents,
-        in_degree,
-    )
-    if ranks is not None:
-        layer_nodes = _layers_from_user_ranks(
-            ranks,
-            nodes,
-            input_nodes,
-            normalized,
-        )
-    width_of = _normalize_widths(
-        widths,
-        nodes,
-        input_nodes,
-    )
-    layouts = _layer_layouts(
-        layer_nodes,
-        width_of,
-    )
-    placement = _node_placement(layouts)
-    layer_dims = [layout.n_units for layout in layouts]
-    hops = _build_hops(
-        normalized,
-        layouts,
-        placement,
-    )
-    skips = _build_skips(
-        normalized,
-        placement,
-    )
-    spec = LayeredSpec(
-        input_nodes=tuple(input_nodes),
-        output_nodes=tuple(output_nodes),
-        hidden_nodes=tuple(hidden_nodes),
-        layer_nodes=tuple(tuple(layer) for layer in layer_nodes),
-        layer_dims=tuple(layer_dims),
-        layer_widths=tuple(layout.widths() for layout in layouts),
-        hops=tuple(hops),
-        skips=tuple(skips),
-    )
-    _check_edges_conserved(
+    _confirm_outputs(
         spec,
-        normalized,
-        width_of,
-        [(hop.source_index, hop.target_index) for hop in spec.hops],
+        declared,
     )
-    _check_layer_axes(spec)
     return spec

@@ -36,6 +36,7 @@ def _spec(widths=None):
     return parse_layered(
         _edgelist(),
         widths=widths,
+        outputs=["y", "z"],
     )
 
 

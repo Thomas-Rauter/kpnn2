@@ -722,7 +722,10 @@ def test_integer_and_string_with_the_same_text_are_one_node():
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        spec = parse_layered(edgelist)
+        spec = parse_layered(
+            edgelist,
+            outputs=["b", "c"],
+        )
 
     assert spec.input_nodes == ("1",)
     assert spec.output_nodes == ("b", "c")
