@@ -65,9 +65,9 @@ _LINE_COUNTS = re.compile(
     r"takes (\d+) lines with `kpnn2` and (\d+) in hand-written PyTorch"
 )
 
-# "`gene_n3` now regulates `tf_stat` instead of `tf_nfkb`", read as
-# (source, new target, old target).
-_REVISION = re.compile(r"`(\w+)` now regulates `(\w+)` instead of `(\w+)`")
+# "the row `gene_n3 → tf_nfkb` becomes `gene_n3 → tf_stat`", read as
+# (old source, old target, new source, new target).
+_REVISION = re.compile(r"the row `(\w+) → (\w+)` becomes `(\w+) → (\w+)`")
 
 # Each edge list both columns must refuse. The snippet raises
 # ValueError and parse_layered raises Kpnn2Error; only that both
@@ -142,10 +142,14 @@ def _revised_pairs() -> list[tuple[str, str]]:
     match = _REVISION.search(_flat_section())
     assert match, (
         "The section no longer names the revised interaction as "
-        "'`source` now regulates `new` instead of `old`'; update "
+        "'the row `source → old` becomes `source → new`'; update "
         "this test or the prose."
     )
-    source, new, old = match.groups()
+    source, old, new_source, new = match.groups()
+    assert new_source == source, (
+        f"The revised row starts at {new_source}, not {source}; the "
+        "silent failure needs one edge rewired from the same source."
+    )
     pairs = _figure_pairs()
     assert (source, old) in pairs, f"{source} -> {old} is not in Figure 2"
     assert (source, new) not in pairs, f"{source} -> {new} already exists"
