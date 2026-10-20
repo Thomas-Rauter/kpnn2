@@ -3403,8 +3403,9 @@ too short to define anything.
 | Docstring → `docs/reference/` | What is the exact contract? | `Hop.source_layers` |
 
 **Concepts page.** Ordered by the pipeline (graph → prior →
-edgelist → node → DAG → parser → spec → layer → hop → skip edge →
-packed indices → live edge → state vector → attribution → KPNN),
+edgelist → node → unit → DAG → parser → spec → layer → hop → skip
+edge → packed indices → live edge → state vector → attribution →
+KPNN),
 never alphabetically: the terms are a dependency chain, not a set. One
 `##` per term so every entry is a link target. It carries the
 concept; the docstring carries the contract.
@@ -3447,7 +3448,7 @@ too long.
 - **Coinages** a PyTorch user cannot guess — hop, live edge,
   packed indices, skip edge, spec, state vector — get gloss and
   link.
-- **Borrowed words that are narrower here** — graph, node,
+- **Borrowed words that are narrower here** — graph, node, unit,
   layer, attribution, parser — get the link; gloss only where
   the local meaning differs from the obvious one (e.g. layer,
   because depth is longest-path).

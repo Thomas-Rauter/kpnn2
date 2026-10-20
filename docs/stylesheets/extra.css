@@ -118,7 +118,8 @@
     var(--md-default-fg-color--lightest);
 }
 
-/* Collapsed setup cells in notebooks (javascripts/hide_input.js):
+/* Collapsed setup and plotting code in notebooks
+   (javascripts/hide_input.js):
    a plain grey bar, not Material's admonition-style details. */
 .md-typeset details.hidden-setup {
   border-color: var(--md-default-fg-color--lighter);

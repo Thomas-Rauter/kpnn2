@@ -144,7 +144,8 @@ hidden_nodes = [node for node in targets if node != "outcome"]
 
 After training, `attributions` holds what an attribution method
 returned for the hidden layer: one row per sample and one column
-per hidden unit, in the order of `hidden_nodes`. The code names
+per hidden [unit](concepts.md#unit), in the order of
+`hidden_nodes`. The code names
 the columns from a sorted list:
 
 ```python
@@ -329,16 +330,16 @@ Pinned in
 
 ### Unrolled adjacency
 
-<img class="correctness-icon" src="../figures/correctness/unrolled_adjacency.svg" alt="A grey first hop around a cycle; a red wrap reaches the output">
+<img class="correctness-icon" src="../figures/correctness/unrolled_adjacency.svg" alt="A grey first pass around a cycle; a red wrap reaches the output">
 
-A `parse_adjacency` graph has no layers: the user applies one
-shared [state vector](concepts.md#state-vector), one unit per
-node, `T` times, so how far a signal travels
-depends on `T`. The step count therefore enters the ground
-truth. A walk that needs three hops is dead at `T=2` and live
-at `T=3` on the same edgelist, which makes unbounded DAG
-reachability the wrong labels here. `T` is chosen in the test,
-not by `kpnn2`.
+A `parse_adjacency` graph has no layers. The user applies one
+shared module `T` times to the
+[state vector](concepts.md#state-vector) — a single vector over
+all nodes — so how far a signal travels depends on `T`. The step
+count therefore enters the ground truth. A path three edges long
+is dead at `T=2` and live at `T=3` on the same edgelist, which
+makes unbounded DAG reachability the wrong labels here. `T` is
+chosen in the test, not by `kpnn2`.
 
 Pinned-weight scores on a linear `PackedLinear` must match those
 T-bounded labels. Swapping the `T=2` and `T=3` labels must fail.

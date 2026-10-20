@@ -15,6 +15,7 @@ instead of redefining. This page carries the concept; the
 | [Prior](#prior) | The graph as knowledge you assume before training |
 | [Edgelist](#edgelist) | That graph as a `source` / `target` table |
 | [Node](#node) | One named entity, one unit by default |
+| [Unit](#unit) | One tensor position, a neuron; a node owns one or more |
 | [Directed acyclic graph](#dag) (DAG) | A graph with no feedback loop |
 | [Parser](#parser) | `parse_layered()` or `parse_adjacency()` |
 | [Spec](#spec) | The parsed layout, frozen; no parameters |
@@ -23,7 +24,7 @@ instead of redefining. This page carries the concept; the
 | [Skip edge](#skip-edge) | An edge whose endpoints are >1 layer apart |
 | [Packed indices](#packed-indices) | Two parallel lists, one entry per unit pair |
 | [Live edge](#live-edge) | A unit pair that exists, so it gets a weight |
-| [State vector](#state-vector) | Every node as one unit, in an `AdjacencySpec` |
+| [State vector](#state-vector) | Every node's units in one vector, in an `AdjacencySpec` |
 | [Attribution](#attribution) | A score per node or feature, after training |
 | [Knowledge-primed neural network](#kpnn) (KPNN) | The domain framing that named the package |
 
@@ -72,6 +73,12 @@ of computation.
 | B | H |
 | H | C |
 
+For a biological prior, the direction of computation is usually the
+reverse of regulation. A measured gene feeds the transcription
+factor that regulates it, so the row is gene → transcription factor.
+[Figure 1 on Home](index.md#what-it-is) shows this flip: the genes
+are the input nodes, and the receptor is the output node.
+
 Extra columns are ignored, and the frame is read and never
 modified. A node name is text: an integer is read through
 `str(...)`, so `1` and `"1"` name the same node. A float or bool
@@ -82,9 +89,10 @@ the table you pass in, and the structure it encodes.
 ## Node
 
 One named entity, and the name is yours to choose. By default a
-node is one unit of the network. `parse_layered(..., widths=)` can
-give a named node several units, so that one entity owns a small
-block rather than a single scalar.
+node is one [unit](#unit) of the network. The `widths=` argument of
+`parse_layered()` and `parse_adjacency()` can give a named node
+several units, so that one entity owns a small block rather than a
+single scalar.
 
 A parser splits nodes into three groups by degree, alphabetical
 within each:
@@ -156,6 +164,27 @@ overwrites. The measurement stays fixed, and the feedback changes
 the computed node. [Cyclic graph example](cyclic-graph-example.ipynb)
 parses this graph and counts the steps it needs.
 
+## Unit
+
+One position on the last axis of a layer's tensor or of the
+[state vector](#state-vector), holding one value per sample.
+Neural-network texts also call it a neuron: `nn.Linear(4, 3)` maps
+four input units to three output units.
+
+A node is the named entity, and its units are where its values
+live. Each node owns a contiguous block of units, and its width is
+the length of that block. At width 1 a node is a single unit, so
+the two words name the same position until `widths=` makes a node
+wider.
+
+Tensors count units, not nodes. `layer_dims[i]` on a `LayeredSpec`
+and `state_dim` on an `AdjacencySpec` are unit counts, and
+`node_units()` and `unit_index()` turn node names into unit
+positions. A named edge between wide nodes becomes a block of unit
+pairs, which is why [packed indices](#packed-indices) and
+[live edges](#live-edge) count pairs of units rather than named
+edges.
+
 ## DAG
 
 A directed acyclic graph: no path leads from a node back to itself.
@@ -211,24 +240,24 @@ Depth is the longest path from the inputs by default.
 official levels — ontology tiers, say — instead of at whatever
 depth the longest path puts them.
 
-An `AdjacencySpec` has no layers at all: every node is one unit of
-a single state vector instead.
+An `AdjacencySpec` has no layers at all: every node owns a block of
+units in a single state vector instead.
 
 ## Hop
 
 Everything that arrives at one layer: every edge whose target is a
 node of that layer, whichever layer it left.
 
-A hop holds no weights at all — those live in the layer you build
+A hop holds no weights at all — those live in the module you build
 from it. It stores only its edges, as
 [packed indices](#packed-indices), and its columns are its source
 layers concatenated: the axis `gather_hop_inputs()` assembles.
 
-One hop is one layer of the model, so a hop is exactly what a
-single `PackedLinear` — or `MaskedLinear(hop.to_mask())`, the
-dense hatch — computes. `spec.hops[i]` is the hop into layer
-`i + 1`, which makes `len(spec.hops)` one less than the number of
-layers.
+Each hop becomes one module of your network: a `PackedLinear` built
+from it, or `MaskedLinear(hop.to_mask())`, the dense alternative.
+That module reads the hop's columns and writes the layer the hop
+arrives at. `spec.hops[i]` is the hop into layer `i + 1`, which
+makes `len(spec.hops)` one less than the number of layers.
 
 Hops are a `LayeredSpec` idea. An `AdjacencySpec` has none.
 
@@ -270,7 +299,7 @@ The saving is storage, not a different kernel. `PackedLinear` is a
 1-D dense weight plus `index_add` on ordinary dense tensors; there
 are no sparse kernels in `kpnn2`, and none are planned.
 
-[PackedLinear](packed_linear.md) is the layer that reads them.
+[PackedLinear](packed_linear.md) is the module that reads them.
 
 ## Live edge
 
@@ -313,9 +342,11 @@ gradients, or anything else. `kpnn2` does not import Captum. What
 `map_node_attributions()` does is label the node axis of the
 tensor that comes back, using the names the spec already holds, and
 return it as an `xarray.DataArray`.
-`aggregate_node_attributions()` can then fold observations (and
-optional seeds) to one score per node; that step is optional and
-does not run Captum.
+`aggregate_node_attributions()` is a separate, optional step: it
+passes the labeled scores to an aggregation method that you choose
+by name, and `list_aggregation_methods()` lists the registered
+methods with their status. The default method, `rauter_mangano_2026`, is
+not yet implemented, and calling it raises `Kpnn2Error`.
 
 The reason this is worth a term: in a dense network only the input
 features have names, so attribution stops at the inputs. On a named

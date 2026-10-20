@@ -7,7 +7,7 @@ can build that way.
 
 | Type | Supported | What to use                                                                                                                                                                                                             |
 | --- |-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Feedforward | Yes       | `parse_layered` (optional `widths=` to give a node several units), `PackedLinear.from_hop`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
+| Feedforward | Yes       | `parse_layered` (optional `widths=` to give a node several [units](concepts.md#unit)), `PackedLinear.from_hop`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
 | Cyclic | Yes       | `parse_adjacency`, `PackedLinear.from_adjacency` or `MaskedLinear(spec.to_mask())`, loop you own → [Cyclic graph example](cyclic-graph-example.ipynb)                                                                                  |
 | Transformer | Yes       | `parse_adjacency` + `PackedMultiheadAttention.from_adjacency`; encoder / FFN / head are yours → [Transformer example](transformer-example.ipynb)                                                                                       |
 | Sequence RNN / GRU / LSTM | Yes, see [Sequence models](#sequence-models) | `parse_adjacency` + `MaskedLinear` / `PackedLinear` as the maps; you write the time loop (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) → [Time-series example](time-series-example.ipynb)                                       |
@@ -72,7 +72,7 @@ implementation. Where the prior should become a GNN, that is the
 right tool.
 
 An edgelist does not by itself determine the model. A knowledge
-graph (a pathway map, an ontology, a sensor network) states which
+graph states which
 interactions exist; how that prior enters the model is a second
 choice, and each choice encodes a different hypothesis about the
 data-generating process. In `kpnn2` the graph is the
@@ -97,18 +97,19 @@ data-generating process. In `kpnn2` the graph is the
   the prior one level up, constraining which pairs may attend at
   all.
 - **Directed propagation, not k rounds of neighborhood
-  aggregation.** A pathway or an ontology is a deep directed
-  cascade, and the quantity of interest is what propagates along
+  aggregation.** Many graphs of say protein-protein interactions in a cell are
+  a deep directed cascade, and the quantity of interest is what propagates along
   it. A sparsely connected feedforward network traverses that
   cascade in one pass with [skip edges](concepts.md#skip-edge)
   intact; message passing
   reaches the same depth only by stacking rounds, mixing
-  neighboring node states as it proceeds.
+  neighboring node states as it proceeds. The latter can be the "right model of
+  the world", but in many cases it probably is not.
 
 A GNN is the better hypothesis where the structure is the object of
 study: samples that are distinct graphs, nodes or edges unseen at
 training time, or node- and link-level tasks on a single large
-knowledge graph. There are knowledge-primed GNN papers; this
+knowledge graph. There are knowledge-primed GNN (KPGNN) papers; this
 project will not wrap or replace PyG for them.
 
 Same edgelist, different hypothesis about the data-generating

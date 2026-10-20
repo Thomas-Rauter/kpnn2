@@ -38,9 +38,9 @@ P-NET, for example, is built on a hierarchy of Reactome pathways
 ([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).
 
 PyTorch can express such networks, but its standard layers do not.
-`nn.Linear` connects every unit of one layer to every unit of the
-next (Figure 1a). A KPNN connects only the pairs its prior names,
-and many of its edges skip layers: these
+`nn.Linear` connects every [unit](concepts.md#unit) of one layer
+to every unit of the next (Figure 1a). A KPNN connects only the
+pairs its prior names, and many of its edges skip layers: these
 [skip edges](concepts.md#skip-edge) are dashed in Figure 1b. The
 common workaround multiplies each weight matrix by a fixed 0/1 mask
 that you derive from the prior yourself.
@@ -380,9 +380,10 @@ thought of. The failure below is one they did not.
 
 Train the left model and save its `state_dict`. Months later, a
 new database release revises one interaction in Figure 2:
-`gene_n3` now regulates `tf_stat` instead of `tf_nfkb`. No node
-changes layer, so every tensor keeps its shape. Rerun the left
-column on the new prior and reload the checkpoint:
+`gene_n3` is a target of `tf_stat` instead of `tf_nfkb`, so the row
+`gene_n3 → tf_nfkb` becomes `gene_n3 → tf_stat`. No node changes
+layer, so every tensor keeps its shape. Rerun the left column on the
+new prior and reload the checkpoint:
 
 ```python
 # Before: trained on the old pathway_prior.csv

@@ -8,13 +8,6 @@ Install the core `kpnn2` package from PyPI with:
 pip install kpnn2
 ```
 
-The core installation supports parsing an edgelist into a
-`LayeredSpec`, building `MaskedLinear` layers, aligning named inputs,
-and mapping a layer tensor back to named nodes. Training stays
-ordinary PyTorch. [**Supported architectures**](supported.md)
-lists which architecture families you can assemble from those
-primitives.
-
 `kpnn2` requires Python 3.10 or later. See the tested Python
 versions in the badge on the [**Home**](index.md) page.
 
@@ -25,24 +18,12 @@ Core dependencies are `torch`, `pandas`, `numpy`, and `xarray`.
 `kpnn2` does not run attribution for you. Captum is not a package
 dependency.
 
-If you want Captum (as in
-[**Feedforward example**](feedforward-example.ipynb), the
-[**Time-series example**](time-series-example.ipynb), and the
-[**Transformer example**](transformer-example.ipynb)), install
-it yourself:
-
 ```bash
 pip install captum
 ```
 
-Then pass the resulting tensor to
-[`map_node_attributions`][kpnn2.map_node_attributions].
-Fold named scores with
-[`aggregate_node_attributions`][kpnn2.aggregate_node_attributions]
-when you want one value per node.
 Any other attribution method that yields a tensor of named-layer
-units works the same way. Extra axes (class, step, …) stay as extra
-xarray dimensions.
+nodes also works.
 
 ## Development installation
 

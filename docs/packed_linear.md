@@ -4,12 +4,23 @@
 [live edge](concepts.md#live-edge) — an edge the graph actually
 has. Use it on a [`Hop`](concepts.md#hop) — everything entering
 one layer — or on an `AdjacencySpec` when the dense rectangle
-`MaskedLinear(to_mask())` would strain RAM.
+`MaskedLinear(to_mask())` would strain RAM. When that rectangle
+fits in memory, `MaskedLinear` builds the same model and runs
+faster.
 
-On a `LayeredSpec`, build one layer per hop with
+Both layers apply the same map: with the same live-edge weights
+and bias, they return the same output. They differ in how they
+store `weight`, and so in memory and speed. The tutorials on a
+`LayeredSpec` build `PackedLinear` even on toy graphs, so that
+their code runs unchanged on a genome-size prior. The cyclic and
+time-series examples keep `MaskedLinear`, because their graphs
+are small.
+
+On a `LayeredSpec`, build one `PackedLinear` per hop with
 `PackedLinear.from_hop()`. It reads the hop's
 [packed indices](concepts.md#packed-indices) — two parallel lists,
-one entry per unit pair — and both widths off the hop:
+one entry per [unit](concepts.md#unit) pair — and both widths off
+the hop:
 
 ```python
 layer = kpnn2.PackedLinear.from_hop(hop)
@@ -17,8 +28,8 @@ layer = kpnn2.PackedLinear.from_hop(hop)
 
 Nothing upstream changes: `gather_hop_inputs` still concatenates
 whole source layers, and `PackedLinear` reads only the live
-columns. Small graphs may keep `MaskedLinear(hop.to_mask())` for
-GEMM.
+columns. On a hop, the dense alternative is
+`MaskedLinear(hop.to_mask())`, and it takes the same input.
 
 On an `AdjacencySpec` every node shares one
 [state vector](concepts.md#state-vector), a single vector over
@@ -31,8 +42,6 @@ builds it:
 core = kpnn2.PackedLinear.from_adjacency(spec)
 ```
 
-Small cyclic graphs may stay on `MaskedLinear(spec.to_mask())`.
-
 [Layered vs. unlayered](layered_vs_adjacency.md) is the layout
 split. [Feedforward example](feedforward-example.ipynb) uses
 packed hops. [Cyclic graph example](cyclic-graph-example.ipynb)
@@ -41,14 +50,15 @@ is the shared-state path.
 ## The RAM problem
 
 Dense storage costs memory in proportion to the rectangle, not to
-the live edges in it. A hop that concatenates a 20k-gene input
-layer into a [skip](concepts.md#skip-edge), an edge spanning more
-than one layer, makes `MaskedLinear` store an `(out, ~20k)`
-parameter, a dense float32 mask, and Adam state of the same
-shape, even when only a handful of those columns are live edges.
-An `AdjacencySpec` with a wide input layer has the same problem
-as an `(n, n)` square. Dataset size and minibatch size are not
-this problem.
+the live edges in it. Suppose one gene in a 20k-gene input layer
+has a [skip edge](concepts.md#skip-edge) — an edge spanning more
+than one layer. The hop that holds that edge then reads the whole
+input layer, so `MaskedLinear` stores an `(out, ~20k)` parameter,
+a dense float32 mask, and Adam state of the same shape, even when
+only a handful of those columns are live edges. An
+`AdjacencySpec` with many input nodes has the same problem: its
+dense rectangle is an `(n, n)` square over every node. Dataset
+size and minibatch size are not this problem.
 
 Nothing is lost by dropping the dead entries: masked-out cells
 are multiplied by zero, so they never affected learning. They
@@ -63,7 +73,9 @@ sparse-tensor acceleration.
 
 Use `PackedLinear` when the dense rectangle would hurt.
 Otherwise `MaskedLinear` is better: its `(out, in)` weight runs
-as one GEMM.
+as one GEMM. Switching keeps the model but changes `weight`: a
+fixed seed can draw different starting values, and a checkpoint
+saved from one layer does not load into the other.
 
 ## Construction
 
@@ -193,11 +205,14 @@ decoder. There is no autoencoder class; `forward()` is yours.
 ## Constrained init
 
 `constraint=` maps `weight` to the effective weight in
-`forward`. `reset_parameters` draws the degree-aware value for
-that effective weight. It reaches `weight` through the
-constraint's own `right_inverse`, the same method
-`torch.nn.utils.parametrize` uses. Without one, `weight` stores
-the draw and the map is applied on top.
+`forward`. `reset_parameters` draws a degree-aware starting
+value for that effective weight: the edges into each unit start
+on a scale set by that unit's fan-in, the number of edges
+entering it. [`PackedLinear`][kpnn2.PackedLinear] gives the exact
+range. The draw reaches `weight` through the constraint's own
+`right_inverse`, the same method `torch.nn.utils.parametrize`
+uses. Without one, `weight` stores the draw and the map is
+applied on top.
 
 That matters for `nn.Softplus()`, which has no `right_inverse`:
 every edge then starts near `softplus(0) = ln 2`, whatever its

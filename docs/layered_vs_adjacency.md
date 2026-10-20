@@ -54,8 +54,9 @@ because the skip makes `A` a parent of `C` alongside `H`.
 [Edges that skip layers](skip-edges.ipynb) is the algorithm for
 that extra source layer.
 
-`parse_adjacency()` ranks nothing. `spec.nodes` gives the
-state-vector order, `A`, `C`, `H`, alphabetically. Edges become
+`parse_adjacency()` does not sort nodes into layers.
+`spec.nodes` gives the state-vector order, `A`, `C`, `H`,
+alphabetically. Edges become
 packed `source_index` / `target_index` pairs over that order,
 and `spec.to_mask()` renders them as a 3×3 square where
 `mask[target, source]` is `1` for an original edge. Row `A` is
@@ -99,7 +100,10 @@ for index, hop in enumerate(spec.hops):
 The output hop stays linear.
 
 `self.hops[index]` is `PackedLinear.from_hop(hop)` for that
-hop. `MaskedLinear(hop.to_mask())` is the dense hatch.
+hop. The dense alternative, `MaskedLinear(hop.to_mask())`,
+builds the same model and runs faster when the hop's full
+rectangle fits in memory; [PackedLinear](packed_linear.md)
+explains the choice.
 [Feedforward example](feedforward-example.ipynb) writes that module.
 [Edges that skip layers](skip-edges.ipynb) shows why gather raises
 if a source layer was never stored.
@@ -108,10 +112,10 @@ On an `AdjacencySpec` there is one square multiply. Aligned
 inputs do not fit the state vector: `align_inputs()` returns
 `len(spec.input_index)` positions, not `spec.state_dim`, so
 you gather those columns and scatter them in at
-`spec.input_index`. Input rows of
-`to_mask()` are structurally zero (`fan_in == 0`), so the
-multiply drives those units to zero: the scatter is required,
-and so is repeating it on every pass if you loop.
+`spec.input_index`. No edge enters an input node, so the input
+rows of `to_mask()` are all zero, and the multiply drives those
+[units](concepts.md#unit) to zero: the scatter is required, and
+so is repeating it on every pass if you loop.
 
 ```python
 core = kpnn2.MaskedLinear(spec.to_mask())
