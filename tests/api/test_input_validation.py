@@ -1864,7 +1864,7 @@ _ATTENTION_CASES = [
         "PackedMultiheadAttention",
         "forward_key_sequence_too_short",
         _SHAPE,
-        "key sequence length must equal key_features",
+        "'key' sequence length must equal key_features",
         lambda: _attend(key=torch.tensor([[1.0, 1.0, 1.0, 1.0]])),
     ),
     _Bad(

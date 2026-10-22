@@ -54,7 +54,6 @@ _NOT_YET_CONVERTED = frozenset(
         "src/kpnn2/_align.py",
         "src/kpnn2/_attributions.py",
         "src/kpnn2/_gather.py",
-        "src/kpnn2/_packed_multihead_attention.py",
     }
 )
 
