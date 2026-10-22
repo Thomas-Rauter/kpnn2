@@ -2231,21 +2231,22 @@ _MAP_CASES = [
         "map_node_attributions",
         "tensor_too_wide",
         _SHAPE,
-        "wrong number of units",
+        "The 'node' axis of 'attributions' must have one entry per unit "
+        "of layer 0.",
         lambda: _map(attributions=torch.tensor([[1.0, 2.0]])),
     ),
     _Bad(
         "map_node_attributions",
         "dims_length_differs",
         _SHAPE,
-        "'dims' length",
+        "'dims' must have one name per axis of 'attributions'.",
         lambda: _map(dims=["node"]),
     ),
     _Bad(
         "map_node_attributions",
         "two_axis_selectors",
         _SEMANTIC,
-        "Got layer, hop_output",
+        "Got: 'layer', 'hop_output'",
         lambda: _map(hop_output=_LAYERED.hops[0]),
     ),
     _Bad(
@@ -2264,6 +2265,30 @@ _MAP_CASES = [
         _SEMANTIC,
         "do not apply to an AdjacencySpec",
         lambda: _map(spec=_ADJACENCY),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "axis_a_typo",
+        _TYPO,
+        "Did you mean: 'inputs'",
+        lambda: _map(
+            layer=None,
+            axis="input",
+        ),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "dims_name_node_a_typo",
+        _TYPO,
+        "Did you mean: 'node' for 'nodes'",
+        lambda: _map(dims=("observation", "nodes")),
+    ),
+    _Bad(
+        "map_node_attributions",
+        "coords_key_a_typo",
+        _TYPO,
+        "Did you mean: 'observation'",
+        lambda: _map(coords={"observaton": [0, 1, 2]}),
     ),
 ]
 

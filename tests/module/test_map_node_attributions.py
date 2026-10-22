@@ -80,7 +80,12 @@ def test_map_node_attributions_rejects_wrong_width():
 
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
+        match=re.escape(
+            "The 'node' axis of 'attributions' must have one entry per "
+            "unit of layer 1.\n"
+            "  Got: 3 (axis 1 of shape (1, 3))\n"
+            "  Expected: 2 (spec.layer_dims[1])"
+        ),
     ):
         map_node_attributions(
             attributions,
@@ -324,7 +329,9 @@ def _invalid_map_cases():
             spec,
             1,
             {},
-            "torch.Tensor or a sequence",
+            "'attributions' must be a torch.Tensor or a list or tuple of "
+            "tensors.\n"
+            "  Got: dict of length 1",
             id="not_tensor_or_sequence",
         ),
         pytest.param(
@@ -332,7 +339,7 @@ def _invalid_map_cases():
             spec,
             1,
             {},
-            "must not be empty",
+            "'attributions' must hold at least one tensor.",
             id="empty_sequence",
         ),
         pytest.param(
@@ -372,7 +379,9 @@ def _invalid_map_cases():
             spec,
             1,
             {"dims": ("node",)},
-            "length must match",
+            "'dims' must have one name per axis of 'attributions'.\n"
+            "  Got: length 1\n"
+            "  Expected: length 2, for shape (1, 2)",
             id="dims_wrong_length",
         ),
         pytest.param(
@@ -412,7 +421,9 @@ def _invalid_map_cases():
             spec,
             1,
             {"coords": {"foo": [0]}},
-            "unknown dim",
+            "Unknown dim name(s) in 'coords'.\n"
+            "  Got: 'foo'\n"
+            "  Expected: dim names 'observation'",
             id="coords_unknown_dim",
         ),
         pytest.param(
@@ -420,7 +431,10 @@ def _invalid_map_cases():
             spec,
             1,
             {"coords": {"observation": ["a"]}},
-            "length must be 2",
+            "'coords['observation']' must have one label per position on the "
+            "'observation' axis.\n"
+            "  Got: length 1\n"
+            "  Expected: length 2",
             id="coords_wrong_length",
         ),
     ]
@@ -439,7 +453,7 @@ def test_map_node_attributions_rejects_invalid_arguments(
 ):
     with pytest.raises(
         Kpnn2Error,
-        match=match,
+        match=re.escape(match),
     ):
         map_node_attributions(
             attributions,
@@ -535,14 +549,17 @@ def test_map_node_attributions_adjacency_rejects_wrong_width():
 
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
-    ) as caught:
+        match=re.escape(
+            "The 'node' axis of 'attributions' must have one entry per "
+            "unit of the state vector.\n"
+            "  Got: 3 (axis 1 of shape (2, 3))\n"
+            "  Expected: 4 (spec.state_dim)"
+        ),
+    ):
         map_node_attributions(
             torch.zeros(2, 3),
             spec,
         )
-
-    assert "Expected 4" in str(caught.value)
 
 
 def test_map_node_attributions_adjacency_inputs_axis():
@@ -600,7 +617,7 @@ def test_map_node_attributions_does_not_infer_adjacency_inputs():
 
     with pytest.raises(
         Kpnn2Error,
-        match="Expected 4",
+        match=re.escape("\n  Expected: 4 (spec.state_dim)"),
     ):
         map_node_attributions(
             torch.zeros(2, 1),
@@ -647,16 +664,18 @@ def test_map_node_attributions_rejects_inputs_axis_with_layer():
 
     with pytest.raises(
         Kpnn2Error,
-        match="exactly one of",
-    ) as caught:
+        match=re.escape(
+            "A LayeredSpec takes only one of 'layer', 'hop_input', "
+            "'hop_output', and 'axis'.\n"
+            "  Got: 'layer', 'axis'\n"
+        ),
+    ):
         map_node_attributions(
             torch.zeros(1, 1),
             spec,
             0,
             axis="inputs",
         )
-
-    assert "Got layer, axis." in str(caught.value)
 
 
 def test_map_node_attributions_rejects_an_unknown_axis():
@@ -665,11 +684,31 @@ def test_map_node_attributions_rejects_an_unknown_axis():
     with pytest.raises(
         Kpnn2Error,
         match="'axis' must be 'inputs' or None",
-    ):
+    ) as caught:
         map_node_attributions(
             torch.zeros(2, 4),
             spec,
             axis="state",
+        )
+
+    assert "Did you mean" not in str(caught.value)
+
+
+def test_map_node_attributions_suggests_inputs_for_a_typo():
+    spec = _tiny_adjacency_spec()
+
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "'axis' must be 'inputs' or None.\n"
+            "  Got: 'input' (str)\n"
+            "  Did you mean: 'inputs'"
+        ),
+    ):
+        map_node_attributions(
+            torch.zeros(2, 1),
+            spec,
+            axis="input",
         )
 
 
@@ -678,7 +717,13 @@ def test_map_node_attributions_adjacency_rejects_a_layer():
 
     with pytest.raises(
         Kpnn2Error,
-        match="do not apply to an AdjacencySpec",
+        match=re.escape(
+            "'layer', 'hop_input', and 'hop_output' do not apply to an "
+            "AdjacencySpec: it has no layers, only one state vector.\n"
+            "  Got: 'layer'\n"
+            "  Fix: Omit them to label the node axis with spec.nodes, or "
+            "pass axis='inputs' to label the input units."
+        ),
     ):
         map_node_attributions(
             torch.zeros(2, 4),
@@ -692,7 +737,14 @@ def test_map_node_attributions_layered_requires_layer_or_hop_side():
 
     with pytest.raises(
         Kpnn2Error,
-        match="needs one of 'layer', 'hop_input', or 'hop_output'",
+        match=re.escape(
+            "A LayeredSpec needs one of 'layer', 'hop_input', "
+            "'hop_output', or axis='inputs'.\n"
+            "  Fix: Pass layer= with a 0-based index into "
+            "spec.layer_nodes, or a Hop from spec.hops as hop_output= "
+            "(what its module returns) or hop_input= (what its module "
+            "reads)."
+        ),
     ):
         map_node_attributions(
             torch.zeros(2, 2),
@@ -741,7 +793,10 @@ def test_map_node_attributions_repeats_wide_layered_names():
     assert da.shape[-1] == spec.layer_dims[1]
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
+        match=re.escape(
+            "\n  Got: 1 (axis 1 of shape (2, 1))\n"
+            "  Expected: 3 (spec.layer_dims[1])"
+        ),
     ):
         map_node_attributions(
             torch.zeros(2, 1),
@@ -931,10 +986,14 @@ def test_map_node_attributions_repeats_wide_hop_source_names():
 @pytest.mark.parametrize(
     ("layer", "sides", "named"),
     [
-        (1, ("hop_input",), "layer, hop_input"),
-        (1, ("hop_output",), "layer, hop_output"),
-        (None, ("hop_input", "hop_output"), "hop_input, hop_output"),
-        (1, ("hop_input", "hop_output"), "layer, hop_input, hop_output"),
+        (1, ("hop_input",), "'layer', 'hop_input'"),
+        (1, ("hop_output",), "'layer', 'hop_output'"),
+        (None, ("hop_input", "hop_output"), "'hop_input', 'hop_output'"),
+        (
+            1,
+            ("hop_input", "hop_output"),
+            "'layer', 'hop_input', 'hop_output'",
+        ),
     ],
 )
 def test_map_node_attributions_rejects_more_than_one_axis(
@@ -947,7 +1006,10 @@ def test_map_node_attributions_rejects_more_than_one_axis(
 
     with pytest.raises(
         Kpnn2Error,
-        match="exactly one of",
+        match=re.escape(
+            "A LayeredSpec takes only one of 'layer', 'hop_input', "
+            "'hop_output', and 'axis'."
+        ),
     ) as caught:
         map_node_attributions(
             torch.zeros(1, 2),
@@ -956,7 +1018,7 @@ def test_map_node_attributions_rejects_more_than_one_axis(
             **{side: hop for side in sides},
         )
 
-    assert f"Got {named}." in str(caught.value)
+    assert f"\n  Got: {named}\n" in str(caught.value)
 
 
 @pytest.mark.parametrize(
@@ -969,7 +1031,11 @@ def test_map_node_attributions_adjacency_rejects_a_hop(side):
 
     with pytest.raises(
         Kpnn2Error,
-        match="do not apply to an AdjacencySpec",
+        match=re.escape(
+            "'layer', 'hop_input', and 'hop_output' do not apply to an "
+            "AdjacencySpec: it has no layers, only one state vector.\n"
+            f"  Got: '{side}'\n"
+        ),
     ):
         map_node_attributions(
             torch.zeros(2, 4),
@@ -1026,15 +1092,18 @@ def test_map_node_attributions_hop_input_rejects_wrong_width():
 
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
-    ) as caught:
+        match=re.escape(
+            "The 'node' axis of 'attributions' must have one entry per "
+            "input unit of 'hop_input'.\n"
+            "  Got: 3 (axis 0 of shape (3,))\n"
+            f"  Expected: {hop.in_features} (hop_input.in_features)"
+        ),
+    ):
         map_node_attributions(
             torch.zeros(3),
             spec,
             hop_input=hop,
         )
-
-    assert f"Expected {hop.in_features}" in str(caught.value)
 
 
 def test_map_node_attributions_hop_output_rejects_input_width():
@@ -1044,15 +1113,19 @@ def test_map_node_attributions_hop_output_rejects_input_width():
 
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
-    ) as caught:
+        match=re.escape(
+            "The 'node' axis of 'attributions' must have one entry per "
+            "output unit of 'hop_output'.\n"
+            f"  Got: {hop.in_features} (axis 0 of shape "
+            f"({hop.in_features},))\n"
+            f"  Expected: {hop.out_features} (hop_output.out_features)"
+        ),
+    ):
         map_node_attributions(
             torch.zeros(hop.in_features),
             spec,
             hop_output=hop,
         )
-
-    assert f"Expected {hop.out_features}" in str(caught.value)
 
 
 def _square_hop_spec():
@@ -1189,6 +1262,18 @@ def _received_value_cases():
     scores = torch.zeros(1, 2)
     return [
         pytest.param(
+            (
+                torch.zeros(1, 3),
+                torch.zeros(1, 3),
+            ),
+            {"layer": 1},
+            "The 'node' axis of 'attributions' must have one entry per "
+            "unit of layer 1.\n"
+            "  Got: 3 (axis 2 of stacked shape (2, 1, 3))\n"
+            "  Expected: 2 (spec.layer_dims[1])",
+            id="node_axis_stacked",
+        ),
+        pytest.param(
             scores,
             {
                 "spec": "spec",
@@ -1202,14 +1287,14 @@ def _received_value_cases():
         pytest.param(
             scores,
             {"axis": "state"},
-            "'axis' must be 'inputs' or None. Got 'state' (str).",
+            "'axis' must be 'inputs' or None.\n  Got: 'state' (str)",
             id="axis",
         ),
         pytest.param(
             scores,
             {"axis": np.array(["inputs"])},
-            "'axis' must be 'inputs' or None. Got ndarray of shape (1,), "
-            "dtype <U6.",
+            "'axis' must be 'inputs' or None.\n"
+            "  Got: ndarray of shape (1,), dtype <U6",
             id="axis_array",
         ),
         pytest.param(
@@ -1242,8 +1327,9 @@ def _received_value_cases():
         pytest.param(
             torch.zeros(1, 2).numpy(),
             {"layer": 1},
-            "'attributions' must be a torch.Tensor or a sequence of "
-            "tensors. Got ndarray of shape (1, 2), dtype float32.",
+            "'attributions' must be a torch.Tensor or a list or tuple of "
+            "tensors.\n"
+            "  Got: ndarray of shape (1, 2), dtype float32",
             id="attributions_array",
         ),
         pytest.param(
@@ -1252,8 +1338,8 @@ def _received_value_cases():
                 1.0,
             ],
             {"layer": 1},
-            "Each item in 'attributions' must be a torch.Tensor. Got "
-            "1.0 (float) at position 1.",
+            "Each item of 'attributions' must be a torch.Tensor.\n"
+            "  Got: 1.0 (float) at position 1",
             id="attributions_item",
         ),
         pytest.param(
@@ -1263,9 +1349,8 @@ def _received_value_cases():
                 torch.zeros(2, 2),
             ),
             {"layer": 1},
-            "Tensors in 'attributions' must all have the same shape. "
-            "Got shape (1, 2) at position 0 and shape (2, 2) at "
-            "position 2.",
+            "Tensors in 'attributions' must all have the same shape.\n"
+            "  Got: shape (1, 2) at position 0 and shape (2, 2) at position 2",
             id="attributions_shapes",
         ),
         pytest.param(
@@ -1274,7 +1359,8 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": ("observation", 0),
             },
-            "'dims' must be a sequence of strings. Got 0 (int) at position 1.",
+            "'dims' must be a sequence of strings.\n"
+            "  Got: 0 (int) at position 1",
             id="dims_item",
         ),
         pytest.param(
@@ -1283,8 +1369,8 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": True,
             },
-            "'dims' must be a sequence of strings, one per tensor axis. "
-            "Got True (bool).",
+            "'dims' must be a sequence of strings, one per tensor axis.\n"
+            "  Got: True (bool)",
             id="dims_bool",
         ),
         pytest.param(
@@ -1293,9 +1379,10 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": "node",
             },
-            "'dims' must be a sequence of strings, one per tensor axis. "
-            "Got 'node' (str). A single string is one value, not a "
-            "sequence; wrap it in a list.",
+            "'dims' must be a sequence of strings, one per tensor axis, not "
+            "a single string.\n"
+            "  Got: 'node' (str)\n"
+            "  Fix: Wrap it in a list.",
             id="dims_str",
         ),
         pytest.param(
@@ -1304,8 +1391,8 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": np.array("node"),
             },
-            "'dims' must be a sequence of strings, one per tensor axis. "
-            "Got ndarray of shape (), dtype <U4.",
+            "'dims' must be a sequence of strings, one per tensor axis.\n"
+            "  Got: ndarray of shape (), dtype <U4",
             id="dims_zero_dim_array",
         ),
         pytest.param(
@@ -1326,7 +1413,7 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": ("b", "a", "b", "a"),
             },
-            "'dims' names must be unique. Got repeated name(s): 'a', 'b'.",
+            "'dims' names must be unique.\n  Got: repeated 'a', 'b'",
             id="dims_repeated",
         ),
         pytest.param(
@@ -1335,15 +1422,51 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": ("observation", "class"),
             },
-            "'dims' must contain 'node' exactly once. Got "
-            "('observation', 'class').",
+            "'dims' must contain 'node' exactly once.\n"
+            "  Got: 'observation', 'class'",
             id="dims_without_node",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "dims": ("observation", "nodes"),
+            },
+            "'dims' must contain 'node' exactly once.\n"
+            "  Got: 'observation', 'nodes'\n"
+            "  Did you mean: 'node' for 'nodes'",
+            id="dims_node_typo",
+        ),
+        pytest.param(
+            (
+                scores,
+                scores,
+            ),
+            {
+                "layer": 1,
+                "dims": ("observation", "node"),
+            },
+            "'dims' must have one name per axis of 'attributions'.\n"
+            "  Got: length 2\n"
+            "  Expected: length 3, for the stacked shape (2, 1, 2)",
+            id="dims_length_stacked",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "dims": ("layer", "node"),
+            },
+            "'dims' must not include 'layer': kpnn2 reserves it for the "
+            "depth coordinate along 'node'.",
+            id="dims_layer",
         ),
         pytest.param(
             torch.zeros(1, 1, 2),
             {"layer": 1},
-            "Pass dims= for attribution tensors with 3 or more axes. "
-            "Got a 3-dimensional tensor.",
+            "'dims' is required when 'attributions' has 3 or more axes.\n"
+            "  Got: Tensor of shape (1, 1, 2), dtype torch.float32\n"
+            "  Fix: Pass dims= with one name per axis, 'node' among them.",
             id="dims_required",
         ),
         pytest.param(
@@ -1352,8 +1475,11 @@ def _received_value_cases():
                 torch.zeros(1, 1, 2),
             ),
             {"layer": 1},
-            "Pass dims= when stacking tensors with 3 or more axes. "
-            "Got 3-dimensional tensors.",
+            "'dims' is required when 'attributions' stacks tensors with 3 or "
+            "more axes.\n"
+            "  Got: tensors of shape (1, 1, 2)\n"
+            "  Fix: Pass dims= with one name per axis of the stacked tensor, "
+            "the new leading axis included.",
             id="dims_required_stacked",
         ),
         pytest.param(
@@ -1362,8 +1488,46 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": ["obs"],
             },
-            "'coords' must be a mapping. Got ['obs'] (list).",
+            "'coords' must be a mapping of dim name to labels.\n"
+            "  Got: ['obs'] (list)",
             id="coords",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {"node": ["E", "H"]},
+            },
+            "'coords' must not include 'node' or 'layer': kpnn2 reserves "
+            "them for the node names and depths.\n"
+            "  Got: 'node'",
+            id="coords_node",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {"observaton": [0]},
+            },
+            "Unknown dim name(s) in 'coords'.\n"
+            "  Got: 'observaton'\n"
+            "  Expected: dim names 'observation'\n"
+            "  Did you mean: 'observation'",
+            id="coords_key_typo",
+        ),
+        pytest.param(
+            scores,
+            {
+                "layer": 1,
+                "coords": {
+                    0: [0],
+                    "obs": [0],
+                },
+            },
+            "Unknown dim name(s) in 'coords'.\n"
+            "  Got: 0, 'obs'\n"
+            "  Expected: dim names 'observation'",
+            id="coords_key_not_a_str",
         ),
         pytest.param(
             scores,
@@ -1371,8 +1535,9 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": None},
             },
-            "'coords['observation']' must be a sequence of labels, one "
-            "per position on that axis. Got None.",
+            "'coords['observation']' must be a sequence of labels, one per "
+            "position on that axis.\n"
+            "  Got: None",
             id="coords_value_none",
         ),
         pytest.param(
@@ -1381,9 +1546,10 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": "s"},
             },
-            "'coords['observation']' must be a sequence of labels, one "
-            "per position on that axis. Got 's' (str). A single string "
-            "is one value, not a sequence; wrap it in a list.",
+            "'coords['observation']' must be a sequence of labels, one per "
+            "position on that axis, not a single string.\n"
+            "  Got: 's' (str)\n"
+            "  Fix: Wrap it in a list.",
             id="coords_value_str",
         ),
         pytest.param(
@@ -1439,7 +1605,7 @@ def test_map_node_attributions_messages_report_the_received_value(
 def test_map_node_attributions_tensor_mapping_is_not_printed():
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("Got dict of length 1."),
+        match=re.escape("\n  Got: dict of length 1"),
     ) as caught:
         map_node_attributions(
             {"scores": torch.tensor([[123.0, 456.0]])},
@@ -1450,24 +1616,29 @@ def test_map_node_attributions_tensor_mapping_is_not_printed():
 
 
 @pytest.mark.parametrize(
-    "attributions",
+    ("attributions", "message"),
     [
         pytest.param(
             torch.tensor(1.0),
+            "'attributions' needs a 'node' axis.\n"
+            "  Got: Tensor of shape (), dtype torch.float32",
             id="tensor",
         ),
         pytest.param(
             [torch.tensor(1.0)],
+            "Tensors in 'attributions' need a 'node' axis.\n"
+            "  Got: tensors of shape ()",
             id="stacked",
         ),
     ],
 )
 def test_map_node_attributions_rejects_a_zero_dimensional_tensor(
     attributions,
+    message,
 ):
     with pytest.raises(
         Kpnn2Error,
-        match=r"need(s)? a node axis\. Got (a )?0-dimensional tensor",
+        match=re.escape(message),
     ):
         map_node_attributions(
             attributions,
