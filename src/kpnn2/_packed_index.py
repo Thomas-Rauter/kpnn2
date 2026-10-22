@@ -6,21 +6,20 @@ from collections.abc import Iterable
 import numpy as np
 import torch
 
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, caller_error, listed
 from ._validate import describe, is_integer, reject_unordered
 
 _INDEX_FORMS = "a 1-dimensional integer tensor or a sequence of int"
-_NOT_INDEX = f"must be {_INDEX_FORMS}."
-
-# A duplicate-pair message lists at most this many pairs.
-_DUPLICATES_SHOWN = 5
 
 
 def _not_an_index(
     name: str,
     received: str,
 ) -> Kpnn2Error:
-    return Kpnn2Error(f"'{name}' {_NOT_INDEX} Got {received}.")
+    return caller_error(
+        f"'{name}' must be {_INDEX_FORMS}.",
+        got=received,
+    )
 
 
 def copy_index(
@@ -151,12 +150,12 @@ def as_packed_pairs(
         "target_index",
     )
     if source.shape != target.shape:
-        raise Kpnn2Error(
-            "'source_index' and 'target_index' must have the same length. "
-            f"Got {source.numel()} and {target.numel()}."
+        raise caller_error(
+            "'source_index' and 'target_index' must have the same length.",
+            got=f"lengths {source.numel()} and {target.numel()}",
         )
     if source.numel() == 0:
-        raise Kpnn2Error(
+        raise caller_error(
             "'source_index' and 'target_index' must contain at least one index."
         )
     _check_in_range(
@@ -178,9 +177,12 @@ def as_packed_pairs(
         )
     )
     if len(set(pairs)) != len(pairs):
-        raise Kpnn2Error(
-            f"{owner} indices contain duplicate (source, target) pair(s). "
-            f"Got {_duplicated_pairs(pairs)}."
+        counts = Counter(pairs)
+        duplicated = sorted(pair for pair, count in counts.items() if count > 1)
+        raise caller_error(
+            f"{owner} indices contain {len(duplicated)} duplicate "
+            "(source, target) pair(s).",
+            got=listed(duplicated),
         )
     return source, target
 
@@ -194,8 +196,8 @@ def _check_in_range(
     """
     Raise unless every entry of ``index`` is in ``[0, bound)``.
 
-    The message names the bound and its value, the first entry
-    outside the range and its position, and how many there are.
+    The message names how many entries are outside the range, the
+    first of them and its position, and the valid range.
     """
     outside = (index < 0) | (index >= bound)
     if not bool(outside.any()):
@@ -204,23 +206,14 @@ def _check_in_range(
     first = int(positions[0])
     count = int(positions.numel())
     entries = "entry" if count == 1 else "entries"
-    raise Kpnn2Error(
-        f"'{name}' entries must satisfy 0 <= {name} < {bound_name}. "
-        f"Got {count} {entries} out of range with {bound_name}={bound}; "
-        f"the first is {int(index[first])} at position {first}."
+    raise caller_error(
+        f"'{name}' entries must satisfy 0 <= {name} < {bound_name}.",
+        got=(
+            f"{count} {entries} out of range, the first "
+            f"{int(index[first])} at position {first}"
+        ),
+        expected=f"entries from 0 to {bound - 1}, as {bound_name}={bound}",
     )
-
-
-def _duplicated_pairs(pairs: list[tuple[int, int]]) -> str:
-    """Count the pairs that repeat and list the first few, sorted."""
-    counts = Counter(pairs)
-    duplicated = sorted(pair for pair, count in counts.items() if count > 1)
-    text = ", ".join(str(pair) for pair in duplicated[:_DUPLICATES_SHOWN])
-    hidden = len(duplicated) - _DUPLICATES_SHOWN
-    if hidden > 0:
-        text = f"{text} (and {hidden} more)"
-    noun = "pair" if len(duplicated) == 1 else "pairs"
-    return f"{len(duplicated)} duplicated {noun}: {text}"
 
 
 def digest_matches(

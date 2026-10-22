@@ -1019,6 +1019,13 @@ _LAYERED_SPEC_CASES = [
     ),
     _Bad(
         "LayeredSpec",
+        "from_dict_layout_a_typo",
+        _TYPO,
+        "Did you mean: 'layered'",
+        lambda: _layered_payload(layout="Layered"),
+    ),
+    _Bad(
+        "LayeredSpec",
         "node_units_name_a_typo",
         _TYPO,
         "Did you mean: 'H'",
@@ -1255,6 +1262,13 @@ _ADJACENCY_SPEC_CASES = [
         _SEMANTIC,
         "layout 'layered'",
         lambda: _adjacency_payload(layout="layered"),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "from_dict_layout_a_typo",
+        _TYPO,
+        "Did you mean: 'adjacency'",
+        lambda: _adjacency_payload(layout="adjacncy"),
     ),
     _Bad(
         "AdjacencySpec",

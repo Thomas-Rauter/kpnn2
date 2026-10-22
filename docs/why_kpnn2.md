@@ -418,14 +418,10 @@ model.load_state_dict(torch.load("model.pt"))
 ```
 
 ```text
-Kpnn2Error: The checkpoint identity does not match this layer. The
-mismatch is in submodule 'lins.0'. The checkpoint was saved with
-identity '0f59017a8609...'; this layer has identity
-'46a9dc2f04f2...'. Load a checkpoint saved from a layer built from
-the same spec (with identity=spec.fingerprint). To move weights
-onto a different prior, copy them by name with edge_location() on
-the old and the new spec; see 'Changing the prior (reparse)' on the
-PackedLinear page of the kpnn2 docs.
+Kpnn2Error: The checkpoint identity does not match this layer in submodule 'lins.0'.
+  Got: identity '0f59017a8609...'
+  Expected: identity '46a9dc2f04f2...'
+  Fix: Load a checkpoint saved from a layer built from the same spec (with identity=spec.fingerprint). To move weights onto a different prior, copy them by name with edge_location() on the old and the new spec (see 'Changing the prior (reparse)' on the PackedLinear page of the kpnn2 docs).
 ```
 
 Each `PackedLinear` saves a digest of its packed indices and,

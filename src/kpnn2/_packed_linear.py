@@ -935,7 +935,7 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
                 current,
             ):
                 raise wiring_mismatch(
-                    "The checkpoint indices do not match this layer.",
+                    "The checkpoint indices do not match this layer",
                     prefix,
                 )
         super()._load_from_state_dict(

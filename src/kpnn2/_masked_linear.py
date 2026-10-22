@@ -16,7 +16,7 @@ from ._constraint import (
     check_constraint_shape,
     stored_from_effective,
 )
-from ._errors import Kpnn2Error
+from ._errors import caller_error, listed
 from ._generator import as_generator
 from ._identity import (
     as_identity,
@@ -30,27 +30,20 @@ from ._validate import as_bool, check_layer_input, describe
 _MASK_DIGEST_KEY = "mask_digest"
 # kpnn2 0.1 stored the trainable tensor through torch parametrize.
 _LEGACY_WEIGHT_KEY = "parametrizations.weight.original"
-# Distinct offending values a non-binary mask error lists.
-_OTHER_VALUES_SHOWN = 5
 
 
 def _other_values(mask: torch.Tensor) -> str:
     """
     List the distinct entries of ``mask`` that are neither 0 nor 1.
 
-    Sorted, NaN last as ``nan``, at most ``_OTHER_VALUES_SHOWN``
-    of them, then how many more there are.
+    Sorted, NaN last as ``nan``, through ``listed``.
     """
     other = mask[(mask != 0) & (mask != 1)]
     nan = other.isnan()
-    values = [str(value) for value in torch.unique(other[~nan]).tolist()]
+    values: list[object] = list(torch.unique(other[~nan]).tolist())
     if bool(nan.any()):
         values.append("nan")
-    text = ", ".join(values[:_OTHER_VALUES_SHOWN])
-    hidden = len(values) - _OTHER_VALUES_SHOWN
-    if hidden > 0:
-        text = f"{text} (and {hidden} more)"
-    return text
+    return listed(values)
 
 
 def _check_mask_entries(mask: torch.Tensor) -> None:
@@ -67,27 +60,30 @@ def _check_mask_entries(mask: torch.Tensor) -> None:
         neither 0 nor 1 (NaN included), or no entry is 1.
     """
     if mask.shape[0] == 0 or mask.shape[1] == 0:
-        raise Kpnn2Error(
-            "'mask' must have at least one row and one column. "
-            f"Got shape {tuple(mask.shape)}."
+        raise caller_error(
+            "'mask' must have at least one row and one column.",
+            got=describe(mask),
         )
     if mask.is_complex():
-        raise Kpnn2Error(
-            "'mask' must have a bool, integer, or floating dtype. "
-            f"Got {mask.dtype}."
+        raise caller_error(
+            "'mask' must have a bool, integer, or floating dtype.",
+            got=describe(mask),
         )
     is_one = mask == 1
     if not bool((is_one | (mask == 0)).all()):
-        raise Kpnn2Error(
-            "'mask' must contain only 0 and 1. Got other value(s): "
-            f"{_other_values(mask)}. Pass a 0/1 mask and put per-edge "
-            "scaling or signs in the 'constraint' module."
+        raise caller_error(
+            "'mask' must contain only 0 and 1.",
+            got=f"other value(s) {_other_values(mask)}",
+            fix=(
+                "Pass a 0/1 mask, and put per-edge scaling or signs in "
+                "the 'constraint' module."
+            ),
         )
     if not bool(is_one.any()):
-        raise Kpnn2Error(
+        raise caller_error(
             "'mask' has no live entry: every value is 0, so the layer "
-            "would output only its bias. Build it with Hop.to_mask() "
-            "or AdjacencySpec.to_mask()."
+            "would output only its bias.",
+            fix="Build it with Hop.to_mask() or AdjacencySpec.to_mask().",
         )
 
 
@@ -376,15 +372,16 @@ class MaskedLinear(nn.Module):
             "bias",
         )
         if not isinstance(mask, torch.Tensor):
-            raise Kpnn2Error(
-                f"'mask' must be a torch.Tensor. Got {describe(mask)}. "
-                "Build it with Hop.to_mask() or AdjacencySpec.to_mask()."
+            raise caller_error(
+                "'mask' must be a torch.Tensor.",
+                got=describe(mask),
+                fix="Build it with Hop.to_mask() or AdjacencySpec.to_mask().",
             )
         if mask.ndim != 2:
-            raise Kpnn2Error(
+            raise caller_error(
                 "'mask' must be a 2-dimensional tensor of shape "
-                "(out_features, in_features). Got shape "
-                f"{tuple(mask.shape)}."
+                "(out_features, in_features).",
+                got=describe(mask),
             )
         _check_mask_entries(mask)
         constraint = as_constraint(constraint)
@@ -650,7 +647,7 @@ class MaskedLinear(nn.Module):
                 current,
             ):
                 raise wiring_mismatch(
-                    "The checkpoint mask does not match this layer.",
+                    "The checkpoint mask does not match this layer",
                     prefix,
                 )
         legacy = prefix + _LEGACY_WEIGHT_KEY

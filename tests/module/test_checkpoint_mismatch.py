@@ -1,10 +1,10 @@
 """Checkpoint-mismatch messages name the submodule, the difference, the fix.
 
 A model holds many connectivity layers, so "this layer" alone does not
-say which one refused the checkpoint. Each message keeps its first
-sentence (older ``match=`` patterns still hold) and then names the
-submodule path from the load prefix, what differs, and how to fix the
-call.
+say which one refused the checkpoint. The headline names the submodule
+path from the load prefix and what differs; an identity mismatch shows
+both identities on its Got and Expected lines, and the Fix line says how
+to fix the call.
 """
 
 import hashlib
@@ -35,7 +35,8 @@ _REWIRED = [(0, 0), (2, 0), (1, 1)]
 _SAVED_IDENTITY = hashlib.sha256(b"saved prior").hexdigest()
 _LIVE_IDENTITY = hashlib.sha256(b"live prior").hexdigest()
 
-_IDENTITY_SENTENCE = "The checkpoint identity does not match this layer."
+_IDENTITY_SENTENCE = "The checkpoint identity does not match this layer"
+_WIRING_REASON = ": the saved edges, sizes, or edge order differ."
 
 Builder = Callable[[list[tuple[int, int]], str | None], nn.Module]
 
@@ -87,15 +88,15 @@ def _packed_attention(
 _LAYERS = {
     "MaskedLinear": (
         _masked_linear,
-        "The checkpoint mask does not match this layer.",
+        "The checkpoint mask does not match this layer",
     ),
     "PackedLinear": (
         _packed_linear,
-        "The checkpoint indices do not match this layer.",
+        "The checkpoint indices do not match this layer",
     ),
     "PackedMultiheadAttention": (
         _packed_attention,
-        "The checkpoint indices do not match this layer.",
+        "The checkpoint indices do not match this layer",
     ),
 }
 
@@ -164,16 +165,17 @@ def _assert_unchanged(
 
 
 def _assert_names_only_the_middle_hop(message: str) -> None:
-    assert "submodule 'hops.1'." in message
+    assert " in submodule 'hops.1'" in message.splitlines()[0]
     assert "'hops.0'" not in message
     assert "'hops.2'" not in message
-    assert "top-level" not in message
 
 
 def _assert_names_the_fix(message: str) -> None:
-    assert "identity=spec.fingerprint" in message
-    assert "edge_location()" in message
-    assert "'Changing the prior (reparse)'" in message
+    fix = message.splitlines()[-1]
+    assert fix.startswith("  Fix: Load a checkpoint saved from a layer")
+    assert "identity=spec.fingerprint" in fix
+    assert "edge_location()" in fix
+    assert "'Changing the prior (reparse)'" in fix
 
 
 @pytest.mark.parametrize("layer", sorted(_LAYERS))
@@ -198,12 +200,10 @@ def test_wiring_mismatch_names_the_failing_submodule(layer: str) -> None:
         saved,
     )
 
-    assert message.startswith(f"{sentence} ")
+    lines = message.splitlines()
+    assert lines[0] == f"{sentence} in submodule 'hops.1'{_WIRING_REASON}"
+    assert len(lines) == 2
     _assert_names_only_the_middle_hop(message)
-    assert (
-        "The saved wiring (edges, sizes, or edge order) differs from "
-        "this layer's." in message
-    )
     _assert_names_the_fix(message)
     _assert_unchanged(
         live["hops"][1],
@@ -235,12 +235,12 @@ def test_identity_mismatch_shows_both_identities_shortened(
         saved,
     )
 
-    assert message.startswith(f"{_IDENTITY_SENTENCE} ")
+    assert message.splitlines()[:3] == [
+        f"{_IDENTITY_SENTENCE} in submodule 'hops.1'.",
+        f"  Got: identity {_shortened(_SAVED_IDENTITY)}",
+        f"  Expected: identity {_shortened(_LIVE_IDENTITY)}",
+    ]
     _assert_names_only_the_middle_hop(message)
-    assert (
-        f"saved with identity {_shortened(_SAVED_IDENTITY)}; "
-        f"this layer has identity {_shortened(_LIVE_IDENTITY)}."
-    ) in message
     assert _SAVED_IDENTITY not in message
     assert _LIVE_IDENTITY not in message
     _assert_names_the_fix(message)
@@ -273,22 +273,23 @@ def test_identity_mismatch_says_when_the_layer_has_no_identity(
         saved,
     )
 
-    assert message.startswith(f"{_IDENTITY_SENTENCE} ")
+    assert message.splitlines()[:3] == [
+        f"{_IDENTITY_SENTENCE} in submodule 'hops.1'.",
+        f"  Got: identity {_shortened(_SAVED_IDENTITY)}",
+        "  Expected: no identity, as this layer has identity=None",
+    ]
     _assert_names_only_the_middle_hop(message)
-    assert (
-        f"saved with identity {_shortened(_SAVED_IDENTITY)}; "
-        "this layer has no identity (identity=None)."
-    ) in message
     _assert_names_the_fix(message)
 
 
 @pytest.mark.parametrize("layer", sorted(_LAYERS))
 @pytest.mark.parametrize("check", ["wiring", "identity"])
-def test_layer_loaded_directly_gets_top_level_wording(
+def test_layer_loaded_directly_names_no_submodule(
     layer: str,
     check: str,
 ) -> None:
     build, sentence = _LAYERS[layer]
+    headline = f"{sentence}{_WIRING_REASON}"
     torch.manual_seed(42)
     if check == "wiring":
         saved = build(
@@ -300,7 +301,7 @@ def test_layer_loaded_directly_gets_top_level_wording(
             None,
         )
     else:
-        sentence = _IDENTITY_SENTENCE
+        headline = f"{_IDENTITY_SENTENCE}."
         saved = build(
             _WIRING,
             _SAVED_IDENTITY,
@@ -315,9 +316,7 @@ def test_layer_loaded_directly_gets_top_level_wording(
         saved,
     )
 
-    assert message.startswith(
-        f"{sentence} The mismatch is in the top-level module, loaded directly. "
-    )
+    assert message.splitlines()[0] == headline
     assert "submodule" not in message
     _assert_names_the_fix(message)
 
@@ -341,7 +340,7 @@ def test_short_identities_are_shown_whole(layer: str) -> None:
     )
 
     assert (
-        "saved with identity 'left'; this layer has identity 'right'."
+        "\n  Got: identity 'left'\n  Expected: identity 'right'\n"
     ) in message
 
 
@@ -378,7 +377,7 @@ def test_unreadable_saved_identity_is_named_as_such(
         live.load_state_dict(state)
 
     assert (
-        "saved with an unreadable identity; this layer has identity 'abc'."
+        "\n  Got: an unreadable identity\n  Expected: identity 'abc'\n"
     ) in str(info.value)
 
 

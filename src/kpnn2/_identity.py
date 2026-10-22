@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, caller_error
 from ._validate import describe
 
 IDENTITY_KEY = "identity"
@@ -22,8 +22,8 @@ _MISMATCH_FIX = (
     "Load a checkpoint saved from a layer built from the same spec "
     "(with identity=spec.fingerprint). To move weights onto a "
     "different prior, copy them by name with edge_location() on the "
-    "old and the new spec; see 'Changing the prior (reparse)' on the "
-    "PackedLinear page of the kpnn2 docs."
+    "old and the new spec (see 'Changing the prior (reparse)' on the "
+    "PackedLinear page of the kpnn2 docs)."
 )
 
 
@@ -49,9 +49,10 @@ def as_identity(value: object) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise Kpnn2Error(
-            f"'identity' must be a str or None. Got {describe(value)}. "
-            "Pass spec.fingerprint or None."
+        raise caller_error(
+            "'identity' must be a str or None.",
+            got=describe(value),
+            fix="Pass spec.fingerprint or None.",
         )
     return value
 
@@ -169,11 +170,12 @@ def check_identity(
         saved,
         identity,
     ):
-        raise _checkpoint_mismatch(
-            "The checkpoint identity does not match this layer.",
-            prefix,
-            f"The checkpoint was saved with {_saved_identity(saved)}; "
-            f"{_live_identity(identity)}.",
+        raise caller_error(
+            "The checkpoint identity does not match this layer"
+            f"{_location(prefix)}.",
+            got=_saved_identity(saved),
+            expected=_live_identity(identity),
+            fix=_MISMATCH_FIX,
         )
 
 
@@ -187,8 +189,8 @@ def wiring_mismatch(
     Parameters
     ----------
     problem : str
-        First sentence of the message, naming the digest that
-        differs.
+        Start of the headline, without a period, naming the
+        digest that differs.
     prefix : str
         Module prefix, as in
         ``nn.Module._load_from_state_dict``.
@@ -196,27 +198,22 @@ def wiring_mismatch(
     Returns
     -------
     Kpnn2Error
-        Error whose message starts with ``problem``, then names
-        the submodule and says how to fix the load.
+        Error whose headline is ``problem``, the submodule, and
+        what differs, and whose ``Fix`` line says how to fix the
+        load.
     """
-    return _checkpoint_mismatch(
-        problem,
-        prefix,
-        "The saved wiring (edges, sizes, or edge order) differs from "
-        "this layer's.",
+    return caller_error(
+        f"{problem}{_location(prefix)}: the saved edges, sizes, or edge "
+        "order differ.",
+        fix=_MISMATCH_FIX,
     )
 
 
-def _checkpoint_mismatch(
-    problem: str,
-    prefix: str,
-    difference: str,
-) -> Kpnn2Error:
-    if prefix:
-        where = f"The mismatch is in submodule '{prefix.removesuffix('.')}'."
-    else:
-        where = "The mismatch is in the top-level module, loaded directly."
-    return Kpnn2Error(f"{problem} {where} {difference} {_MISMATCH_FIX}")
+def _location(prefix: str) -> str:
+    """Name the submodule a load prefix points at, if any."""
+    if not prefix:
+        return ""
+    return f" in submodule '{prefix.removesuffix('.')}'"
 
 
 def _saved_identity(saved: object) -> str:
@@ -232,8 +229,8 @@ def _saved_identity(saved: object) -> str:
 
 def _live_identity(identity: str | None) -> str:
     if identity is None:
-        return "this layer has no identity (identity=None)"
-    return f"this layer has identity {_shown_identity(identity)}"
+        return "no identity, as this layer has identity=None"
+    return f"identity {_shown_identity(identity)}"
 
 
 def _shown_identity(identity: str) -> str:

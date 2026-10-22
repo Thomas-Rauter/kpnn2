@@ -56,6 +56,14 @@ _LAYERS = [
 ]
 
 _NOT_INDEX = "must be a 1-dimensional integer tensor or a sequence of int."
+_SOURCE_RANGE = (
+    f"entries from 0 to {_SOURCE_BOUND - 1}, as "
+    f"{{source_bound}}={_SOURCE_BOUND}"
+)
+_TARGET_RANGE = (
+    f"entries from 0 to {_TARGET_BOUND - 1}, as "
+    f"{{target_bound}}={_TARGET_BOUND}"
+)
 _UNORDERED = (
     "must be a 1-dimensional integer tensor or a sequence of int, not "
     "{kind}: its items are matched by position."
@@ -69,41 +77,42 @@ _CASES = [
     pytest.param(
         torch.tensor([0.0, 1.0]),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got Tensor of shape (2,), "
-        "dtype torch.float32.",
+        f"'source_index' {_NOT_INDEX}\n  Got: Tensor of shape (2,), "
+        "dtype torch.float32",
         id="float_tensor",
     ),
     pytest.param(
         [0, 1],
         [0, 1.0],
-        f"'target_index' {_NOT_INDEX} Got 1.0 (float) at position 1.",
+        f"'target_index' {_NOT_INDEX}\n  Got: 1.0 (float) at position 1",
         id="float_sequence",
     ),
     pytest.param(
         torch.tensor([[0, 1]]),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got Tensor of shape (1, 2), "
-        "dtype torch.int64.",
+        f"'source_index' {_NOT_INDEX}\n  Got: Tensor of shape (1, 2), "
+        "dtype torch.int64",
         id="two_dimensional",
     ),
     pytest.param(
         torch.tensor([True, False]),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got Tensor of shape (2,), "
-        "dtype torch.bool.",
+        f"'source_index' {_NOT_INDEX}\n  Got: Tensor of shape (2,), "
+        "dtype torch.bool",
         id="bool_tensor",
     ),
     pytest.param(
         np.array([True, False]),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got ndarray of shape (2,), dtype bool.",
+        f"'source_index' {_NOT_INDEX}\n"
+        "  Got: ndarray of shape (2,), dtype bool",
         id="numpy_bool_array",
     ),
     pytest.param(
         np.array([0.0, 1.0]),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got ndarray of shape (2,), "
-        "dtype float64.",
+        f"'source_index' {_NOT_INDEX}\n  Got: ndarray of shape (2,), "
+        "dtype float64",
         id="numpy_float_array",
     ),
     pytest.param(
@@ -112,8 +121,8 @@ _CASES = [
             dtype=np.int64,
         ),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got ndarray of shape (1, 2), "
-        "dtype int64.",
+        f"'source_index' {_NOT_INDEX}\n  Got: ndarray of shape (1, 2), "
+        "dtype int64",
         id="numpy_two_dimensional",
     ),
     pytest.param(
@@ -122,7 +131,8 @@ _CASES = [
             dtype=object,
         ),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got ndarray of shape (2,), dtype object.",
+        f"'source_index' {_NOT_INDEX}\n"
+        "  Got: ndarray of shape (2,), dtype object",
         id="numpy_object_array",
     ),
     pytest.param(
@@ -131,38 +141,39 @@ _CASES = [
             dtype=np.int64,
         ),
         [0],
-        f"'source_index' {_NOT_INDEX} Got ndarray of shape (), dtype int64.",
+        f"'source_index' {_NOT_INDEX}\n  Got: ndarray of shape (), dtype int64",
         id="numpy_zero_dim",
     ),
     pytest.param(
         [0, 1],
         [np.int64(0), np.bool_(True)],
-        f"'target_index' {_NOT_INDEX} Got True ({_NUMPY_BOOL}) at position 1.",
+        f"'target_index' {_NOT_INDEX}\n"
+        f"  Got: True ({_NUMPY_BOOL}) at position 1",
         id="numpy_bool_item",
     ),
     pytest.param(
         [0, 1],
         [np.int64(0), np.float64(1.0)],
-        f"'target_index' {_NOT_INDEX} Got 1.0 (float64) at position 1.",
+        f"'target_index' {_NOT_INDEX}\n  Got: 1.0 (float64) at position 1",
         id="numpy_float_item",
     ),
     pytest.param(
         [0, 1, 2],
         [0, 1, "2"],
-        f"'target_index' {_NOT_INDEX} Got '2' (str) at position 2.",
+        f"'target_index' {_NOT_INDEX}\n  Got: '2' (str) at position 2",
         id="str_item",
     ),
     pytest.param(
         5,
         [0],
-        f"'source_index' {_NOT_INDEX} Got 5 (int).",
+        f"'source_index' {_NOT_INDEX}\n  Got: 5 (int)",
         id="not_iterable",
     ),
     pytest.param(
         torch.tensor([0j, 1j]),
         [0, 1],
-        f"'source_index' {_NOT_INDEX} Got Tensor of shape (2,), "
-        "dtype torch.complex64.",
+        f"'source_index' {_NOT_INDEX}\n  Got: Tensor of shape (2,), "
+        "dtype torch.complex64",
         id="complex_tensor",
     ),
     pytest.param(
@@ -192,14 +203,14 @@ _CASES = [
     pytest.param(
         [0],
         "0",
-        f"'target_index' {_NOT_INDEX} Got '0' (str).",
+        f"'target_index' {_NOT_INDEX}\n  Got: '0' (str)",
         id="str",
     ),
     pytest.param(
         [0, 1],
         [0],
-        "'source_index' and 'target_index' must have the same length. "
-        "Got 2 and 1.",
+        "'source_index' and 'target_index' must have the same length.\n"
+        "  Got: lengths 2 and 1",
         id="length_mismatch",
     ),
     pytest.param(
@@ -212,68 +223,69 @@ _CASES = [
         [-1],
         [0],
         "'source_index' entries must satisfy "
-        "0 <= source_index < {source_bound}. Got 1 entry out of range "
-        f"with {{source_bound}}={_SOURCE_BOUND}; the first is -1 at "
-        "position 0.",
+        "0 <= source_index < {source_bound}.\n"
+        "  Got: 1 entry out of range, the first -1 at position 0\n"
+        f"  Expected: {_SOURCE_RANGE}",
         id="source_below",
     ),
     pytest.param(
         [_SOURCE_BOUND],
         [0],
         "'source_index' entries must satisfy "
-        "0 <= source_index < {source_bound}. Got 1 entry out of range "
-        f"with {{source_bound}}={_SOURCE_BOUND}; the first is "
-        f"{_SOURCE_BOUND} at position 0.",
+        "0 <= source_index < {source_bound}.\n"
+        f"  Got: 1 entry out of range, the first {_SOURCE_BOUND} at "
+        "position 0\n"
+        f"  Expected: {_SOURCE_RANGE}",
         id="source_above",
     ),
     pytest.param(
         [0, 1, 7, 2, -4],
         [0, 1, 0, 1, 0],
         "'source_index' entries must satisfy "
-        "0 <= source_index < {source_bound}. Got 2 entries out of range "
-        f"with {{source_bound}}={_SOURCE_BOUND}; the first is 7 at "
-        "position 2.",
+        "0 <= source_index < {source_bound}.\n"
+        "  Got: 2 entries out of range, the first 7 at position 2\n"
+        f"  Expected: {_SOURCE_RANGE}",
         id="source_several_out_of_range",
     ),
     pytest.param(
         [0],
         [-1],
         "'target_index' entries must satisfy "
-        "0 <= target_index < {target_bound}. Got 1 entry out of range "
-        f"with {{target_bound}}={_TARGET_BOUND}; the first is -1 at "
-        "position 0.",
+        "0 <= target_index < {target_bound}.\n"
+        "  Got: 1 entry out of range, the first -1 at position 0\n"
+        f"  Expected: {_TARGET_RANGE}",
         id="target_below",
     ),
     pytest.param(
         [0],
         [_TARGET_BOUND],
         "'target_index' entries must satisfy "
-        "0 <= target_index < {target_bound}. Got 1 entry out of range "
-        f"with {{target_bound}}={_TARGET_BOUND}; the first is "
-        f"{_TARGET_BOUND} at position 0.",
+        "0 <= target_index < {target_bound}.\n"
+        f"  Got: 1 entry out of range, the first {_TARGET_BOUND} at "
+        "position 0\n"
+        f"  Expected: {_TARGET_RANGE}",
         id="target_above",
     ),
     pytest.param(
         [0, 0],
         [1, 1],
-        "{owner} indices contain duplicate (source, target) pair(s). "
-        "Got 1 duplicated pair: (0, 1).",
+        "{owner} indices contain 1 duplicate (source, target) pair(s).\n"
+        "  Got: (0, 1)",
         id="duplicate_pair",
     ),
     pytest.param(
         [2, 0, 1, 2, 0, 0, 0, 1],
         [1, 1, 0, 1, 1, 0, 1, 1],
-        "{owner} indices contain duplicate (source, target) pair(s). "
-        "Got 2 duplicated pairs: (0, 1), (2, 1).",
+        "{owner} indices contain 2 duplicate (source, target) pair(s).\n"
+        "  Got: (0, 1), (2, 1)",
         id="duplicate_pairs_sorted",
     ),
     pytest.param(
         [2, 2, 1, 1, 0, 0] * 2,
         [1, 0, 1, 0, 1, 0] * 2,
-        "{owner} indices contain duplicate (source, target) pair(s). "
-        "Got 6 duplicated pairs: (0, 0), (0, 1), (1, 0), (1, 1), (2, 0) "
-        "(and 1 more).",
-        id="duplicate_pairs_capped",
+        "{owner} indices contain 6 duplicate (source, target) pair(s).\n"
+        "  Got: (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)",
+        id="duplicate_pairs_all",
     ),
 ]
 
@@ -315,6 +327,23 @@ def test_packed_layers_share_index_errors(
             target_index,
         )
     assert str(excinfo.value) == expected
+
+
+def test_duplicate_pair_list_is_capped_at_ten():
+    pairs = [(source, target) for source in range(4) for target in range(3)]
+    with pytest.raises(Kpnn2Error) as excinfo:
+        PackedLinear(
+            [source for source, _ in pairs] * 2,
+            [target for _, target in pairs] * 2,
+            3,
+            4,
+        )
+    assert str(excinfo.value) == (
+        "PackedLinear indices contain 12 duplicate (source, target) "
+        "pair(s).\n"
+        "  Got: (0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), "
+        "(2, 1), (2, 2), (3, 0), and 2 more"
+    )
 
 
 @pytest.mark.parametrize(

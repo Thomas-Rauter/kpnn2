@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error, internal_error
+from ._errors import Kpnn2Error, caller_error, close_matches, internal_error
 from ._layout import build_layout, hop_axis_layouts
 from ._spec import LayeredSpec
 from ._validate import describe, require_node_mapping
@@ -298,33 +298,56 @@ def _edgelist_from_payload(
     expected_layout: str,
 ) -> pd.DataFrame:
     if not isinstance(payload, dict):
-        raise Kpnn2Error(f"'payload' must be a dict. Got {describe(payload)}.")
+        raise caller_error(
+            "'payload' must be a dict.",
+            got=describe(payload),
+        )
     if "kpnn2_spec" not in payload:
-        raise Kpnn2Error(
-            "'kpnn2_spec' must be 1. The payload has no 'kpnn2_spec' key."
+        raise caller_error(
+            "'kpnn2_spec' must be 1.",
+            got="a payload with no 'kpnn2_spec' key",
         )
     version = payload["kpnn2_spec"]
     if type(version) is not int or version != _SPEC_VERSION:
-        raise Kpnn2Error(f"'kpnn2_spec' must be 1. Got {describe(version)}.")
+        raise caller_error(
+            "'kpnn2_spec' must be 1.",
+            got=describe(version),
+        )
     if "layout" not in payload:
-        raise Kpnn2Error(
-            "'layout' must be 'layered' or 'adjacency'. The payload has "
-            "no 'layout' key."
+        raise caller_error(
+            "'layout' must be 'layered' or 'adjacency'.",
+            got="a payload with no 'layout' key",
         )
     layout = payload["layout"]
     if layout not in _KNOWN_LAYOUTS:
-        raise Kpnn2Error(
-            "'layout' must be 'layered' or 'adjacency'. Got "
-            f"{describe(layout)}."
+        raise caller_error(
+            "'layout' must be 'layered' or 'adjacency'.",
+            got=describe(layout),
+            candidates=(
+                close_matches(
+                    [layout],
+                    _KNOWN_LAYOUTS,
+                )
+                if isinstance(layout, str)
+                else None
+            ),
         )
     if layout != expected_layout:
         class_name = _LAYOUT_CLASS_NAME[expected_layout]
-        raise Kpnn2Error(
-            f"{class_name}.from_dict received layout "
-            f"'{layout}'; expected '{expected_layout}'."
+        other_class = _LAYOUT_CLASS_NAME[layout]
+        raise caller_error(
+            f"{class_name}.from_dict received layout '{layout}'.",
+            expected=f"'{expected_layout}'",
+            fix=(
+                f"Pass it to {other_class}.from_dict, or pick the class "
+                "from payload['layout']."
+            ),
         )
     if "edges" not in payload:
-        raise Kpnn2Error("'edges' is missing.")
+        raise caller_error(
+            "'edges' must be a sequence of [source, target] pairs.",
+            got="a payload with no 'edges' key",
+        )
     pairs = _pairs_from_edges(payload["edges"])
     # Names stay raw, so the parser rejects a missing one (None,
     # NaN) as it does in a caller's edgelist instead of reading
@@ -341,9 +364,9 @@ def _pairs_from_edges(edges: object) -> list[list[object]]:
         edges,
         _NON_PAIR_SEQUENCES,
     ):
-        raise Kpnn2Error(
-            "'edges' must be a sequence of [source, target] pairs. Got "
-            f"{describe(edges)}."
+        raise caller_error(
+            "'edges' must be a sequence of [source, target] pairs.",
+            got=describe(edges),
         )
     pairs: list[list[object]] = []
     for position, pair in enumerate(edges):
@@ -354,9 +377,9 @@ def _pairs_from_edges(edges: object) -> list[list[object]]:
         )
         names = [str(name) for name in pair] if is_pair else []
         if not is_pair or "" in names:
-            raise Kpnn2Error(
-                "Each edge must be a pair of two nonempty names. Got "
-                f"edges[{position}] = {describe(pair)}."
+            raise caller_error(
+                "Each edge must be a pair of two nonempty names.",
+                got=f"edges[{position}] = {describe(pair)}",
             )
         pairs.append(list(pair))
     return pairs
@@ -430,7 +453,7 @@ def _layered_ranks_payload(spec: LayeredSpec) -> dict[str, int] | None:
         )
     except Kpnn2Error as error:
         raise internal_error(
-            f"re-ranking a LayeredSpec's own edges failed: {error}"
+            f"re-ranking a LayeredSpec's own edges raised {error!r}"
         ) from error
     default = tuple(tuple(layer) for layer in default_layers)
     if default == spec.layer_nodes:

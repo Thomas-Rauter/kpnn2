@@ -298,4 +298,4 @@ def test_kpnn2_model_refuses_the_old_checkpoint(
         new["model"].load_state_dict(old["model"].state_dict())
 
     if identity:
-        assert f"Kpnn2Error: {info.value}" in _flat_section()
+        assert f"Kpnn2Error: {info.value}\n" in _section()

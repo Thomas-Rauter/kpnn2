@@ -5,7 +5,7 @@ Optional per-entry maps on live edge weights.
 import torch
 from torch import nn
 
-from ._errors import Kpnn2Error
+from ._errors import caller_error
 from ._validate import describe
 
 
@@ -33,10 +33,10 @@ def as_constraint(constraint: object) -> nn.Module | None:
     if constraint is None:
         return None
     if not isinstance(constraint, nn.Module):
-        raise Kpnn2Error(
-            "'constraint' must be a torch.nn.Module or None. Got "
-            f"{describe(constraint)}. Pass an instance such as "
-            "nn.Softplus()."
+        raise caller_error(
+            "'constraint' must be a torch.nn.Module or None.",
+            got=describe(constraint),
+            fix="Pass an instance such as nn.Softplus().",
         )
     return constraint
 
@@ -132,13 +132,18 @@ def stored_from_effective(
         "constraint.right_inverse",
     )
     checked = stored if live is None else stored[live]
-    if not bool(torch.isfinite(checked).all()):
-        raise Kpnn2Error(
-            "'constraint.right_inverse' returned a non-finite value "
-            "for a live edge. It receives the degree-aware draw for "
-            "the effective weight, uniform in [-bound, bound] and "
-            "possibly exactly 0, and must map every such value to a "
-            "finite stored value."
+    finite = torch.isfinite(checked)
+    if not bool(finite.all()):
+        count = int((~finite).sum())
+        raise caller_error(
+            "'constraint.right_inverse' must return a finite value for "
+            "every live edge.",
+            got=f"{count} non-finite value(s) on live edges",
+            fix=(
+                "Make it map every value in [-b, b], 0 included, to a "
+                "finite value, where b is the layer's init_bound() for "
+                "that entry."
+            ),
         )
     return stored
 
@@ -154,8 +159,8 @@ def _check_weight_shape(
     ``name`` is the callable that returned ``result``.
     """
     if not isinstance(result, torch.Tensor) or result.shape != shape:
-        raise Kpnn2Error(
-            f"'{name}' must return a tensor of the same shape as the "
-            f"weight. The weight has shape {tuple(shape)}. Got "
-            f"{describe(result)}."
+        raise caller_error(
+            f"'{name}' must return a tensor of the same shape as the weight.",
+            got=describe(result),
+            expected=f"shape {tuple(shape)}",
         )

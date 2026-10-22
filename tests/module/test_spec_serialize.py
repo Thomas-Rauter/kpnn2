@@ -235,9 +235,12 @@ def test_layered_from_dict_rejects_adjacency_layout():
     ) as caught:
         LayeredSpec.from_dict(payload)
 
-    message = str(caught.value)
-    assert "adjacency" in message
-    assert "layered" in message
+    assert str(caught.value) == (
+        "LayeredSpec.from_dict received layout 'adjacency'.\n"
+        "  Expected: 'layered'\n"
+        "  Fix: Pass it to AdjacencySpec.from_dict, or pick the class from "
+        "payload['layout']."
+    )
 
 
 def test_adjacency_from_dict_rejects_layered_layout():
@@ -370,8 +373,8 @@ def test_from_dict_bad_third_edge_names_its_position_and_pair():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Each edge must be a pair of two nonempty names. Got "
-            "edges[2] = ['C', ''] (list)."
+            "Each edge must be a pair of two nonempty names.\n"
+            "  Got: edges[2] = ['C', ''] (list)"
         ),
     ):
         LayeredSpec.from_dict(payload)
@@ -379,7 +382,7 @@ def test_from_dict_bad_third_edge_names_its_position_and_pair():
     payload["edges"][2] = ("C", "D", "E")
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("Got edges[2] = ('C', 'D', 'E') (tuple)."),
+        match=re.escape("\n  Got: edges[2] = ('C', 'D', 'E') (tuple)"),
     ):
         LayeredSpec.from_dict(payload)
 
@@ -394,12 +397,12 @@ def test_from_dict_bad_edge_message_shortens_a_long_pair():
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("Got edges[1] = ['xxx"),
+        match=re.escape("\n  Got: edges[1] = ['xxx"),
     ) as exc_info:
         LayeredSpec.from_dict(payload)
 
     message = str(exc_info.value)
-    assert message.endswith("... (list).")
+    assert message.endswith("... (list)")
     assert long_name not in message
 
 
@@ -409,33 +412,35 @@ def test_from_dict_bad_edge_message_shortens_a_long_pair():
         pytest.param(
             "kpnn2_spec",
             2,
-            "'kpnn2_spec' must be 1. Got 2 (int).",
+            "'kpnn2_spec' must be 1.\n  Got: 2 (int)",
             id="version-2",
         ),
         pytest.param(
             "kpnn2_spec",
             "1",
-            "'kpnn2_spec' must be 1. Got '1' (str).",
+            "'kpnn2_spec' must be 1.\n  Got: '1' (str)",
             id="version-str",
         ),
         pytest.param(
             "layout",
             "Layered",
-            "'layout' must be 'layered' or 'adjacency'. Got 'Layered' (str).",
+            "'layout' must be 'layered' or 'adjacency'.\n"
+            "  Got: 'Layered' (str)\n"
+            "  Did you mean: 'layered'",
             id="layout-case",
         ),
         pytest.param(
             "edges",
             "not-pairs",
-            "'edges' must be a sequence of [source, target] pairs. Got "
-            "'not-pairs' (str).",
+            "'edges' must be a sequence of [source, target] pairs.\n"
+            "  Got: 'not-pairs' (str)",
             id="edges-str",
         ),
         pytest.param(
             "edges",
             {"A": "H"},
-            "'edges' must be a sequence of [source, target] pairs. Got "
-            "{'A': 'H'} (dict).",
+            "'edges' must be a sequence of [source, target] pairs.\n"
+            "  Got: {'A': 'H'} (dict)",
             id="edges-dict",
         ),
         pytest.param(
@@ -487,14 +492,21 @@ def test_adjacency_from_dict_reports_received_widths():
     [
         pytest.param(
             "kpnn2_spec",
-            "'kpnn2_spec' must be 1. The payload has no 'kpnn2_spec' key.",
+            "'kpnn2_spec' must be 1.\n"
+            "  Got: a payload with no 'kpnn2_spec' key",
             id="version",
         ),
         pytest.param(
             "layout",
-            "'layout' must be 'layered' or 'adjacency'. The payload has no "
-            "'layout' key.",
+            "'layout' must be 'layered' or 'adjacency'.\n"
+            "  Got: a payload with no 'layout' key",
             id="layout",
+        ),
+        pytest.param(
+            "edges",
+            "'edges' must be a sequence of [source, target] pairs.\n"
+            "  Got: a payload with no 'edges' key",
+            id="edges",
         ),
     ],
 )
@@ -515,14 +527,14 @@ def test_from_dict_says_which_key_is_missing(
 def test_from_dict_non_dict_payload_names_its_type():
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'payload' must be a dict. Got ['A', 'H'] (list)."),
+        match=re.escape("'payload' must be a dict.\n  Got: ['A', 'H'] (list)"),
     ):
         LayeredSpec.from_dict(["A", "H"])
 
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'payload' must be a dict. Got '{\"kpnn2_spec\": 1}' (str)."
+            "'payload' must be a dict.\n  Got: '{\"kpnn2_spec\": 1}' (str)"
         ),
     ):
         AdjacencySpec.from_dict('{"kpnn2_spec": 1}')

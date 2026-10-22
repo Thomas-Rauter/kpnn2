@@ -277,14 +277,19 @@ def test_masked_right_inverse_is_checked_on_live_entries_only():
 def test_non_finite_right_inverse_on_a_live_edge_raises(build):
     hop = _fan_in_spec(6).hops[0]
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="non-finite",
-    ):
+    with pytest.raises(Kpnn2Error) as caught:
         build(
             hop,
             constraint=_Inverse(lambda weight: weight + float("nan")),
         )
+
+    assert str(caught.value) == (
+        "'constraint.right_inverse' must return a finite value for every "
+        "live edge.\n"
+        "  Got: 8 non-finite value(s) on live edges\n"
+        "  Fix: Make it map every value in [-b, b], 0 included, to a "
+        "finite value, where b is the layer's init_bound() for that entry."
+    )
 
 
 @_BUILDERS
@@ -296,8 +301,9 @@ def test_right_inverse_of_wrong_shape_raises(build):
         Kpnn2Error,
         match=re.escape(
             "'constraint.right_inverse' must return a tensor of the same "
-            f"shape as the weight. The weight has shape {shape}. Got "
-            "Tensor of shape (1,), dtype torch.float32."
+            "shape as the weight.\n"
+            "  Got: Tensor of shape (1,), dtype torch.float32\n"
+            f"  Expected: shape {shape}"
         ),
     ):
         build(
@@ -315,8 +321,9 @@ def test_right_inverse_returning_a_non_tensor_raises(build):
         Kpnn2Error,
         match=re.escape(
             "'constraint.right_inverse' must return a tensor of the same "
-            f"shape as the weight. The weight has shape {shape}. Got "
-            "None."
+            "shape as the weight.\n"
+            "  Got: None\n"
+            f"  Expected: shape {shape}"
         ),
     ):
         build(

@@ -607,8 +607,8 @@ def test_to_dict_re_ranking_failure_fails_an_internal_check(monkeypatch):
     with pytest.raises(
         AssertionError,
         match=_internal_check(
-            "re-ranking a LayeredSpec's own edges failed: "
-            "Edgelist contains a cycle."
+            "re-ranking a LayeredSpec's own edges raised "
+            "Kpnn2Error('Edgelist contains a cycle.')"
         ),
     ) as caught:
         spec.to_dict()
