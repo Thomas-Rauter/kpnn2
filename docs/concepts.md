@@ -76,7 +76,7 @@ of computation.
 For a biological prior, the direction of computation is usually the
 reverse of regulation. A measured gene feeds the transcription
 factor that regulates it, so the row is gene → transcription factor.
-[Figure 1 on Home](index.md#what-it-is) shows this flip: the genes
+[Figure 1 on Home](index.md#what-is-kpnn2) shows this flip: the genes
 are the input nodes, and the receptor is the output node.
 
 Extra columns are ignored, and the frame is read and never

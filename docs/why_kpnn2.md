@@ -1,6 +1,6 @@
 # Why kpnn2
 
-[Home](index.md#why-it-exists) gives three reasons to use `kpnn2`.
+[Home](index.md#why-kpnn2-exists) gives three reasons to use `kpnn2`.
 This page gives the evidence for each one, after a short background
 on what a knowledge-primed network needs from PyTorch:
 
@@ -22,7 +22,7 @@ A [knowledge-primed neural network](concepts.md#kpnn) (KPNN) takes
 its wiring from a [prior](concepts.md#prior) — what you take as
 known before training. In the form that
 [Fortelny and Bock (2020)](https://doi.org/10.1186/s13059-020-02100-5)
-introduced, shown in [Figure 1 on Home](index.md#what-it-is), the
+introduced, shown in [Figure 1 on Home](index.md#what-is-kpnn2), the
 network runs against the direction of signaling. Gene expression
 enters at the input nodes, passes through transcription factors and
 kinases in the hidden layers, and reaches the receptor at the

@@ -8,7 +8,7 @@ name. This page explains those checks.
 The tests guard against three mistakes. Each one leaves a model
 that trains and gives attributions without an error, so it would
 end up in your results. Figure 1 shows them on the graph from
-Figure 2 on [Home](index.md#how-it-works):
+Figure 2 on [Home](index.md#how-kpnn2-works):
 
 - **An edge goes missing.** `protein_d → outcome` is a
   [skip edge](concepts.md#skip-edge): it skips the hidden layer.
