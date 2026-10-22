@@ -299,6 +299,16 @@ session does not read kpnn2
 sources, docs, or `CONTEXT.md`. Paper code is fetched into
 gitignored `.paper-code/`. Do not add it to git.
 
+`dev/error_message_audit_prompt.md` audits the content of
+error, warning, and internal-error messages in agent sessions
+the user starts by hand, one module group per session. Tests
+enforce the message format; the audit judges what they cannot:
+whether each message is accurate and useful, and whether it
+has the right fields. It is not pytest, not CI, and not docs.
+Work in it only when the current chat points at that file. An
+audit session writes one report under gitignored
+`out/error_audit/` and edits nothing else.
+
 MkDocs output, coverage, and wheels go under gitignored
 `out/` (`out/site`, `out/htmlcov`, `out/coverage.xml`,
 `out/dist`). Do not write `site/`, `htmlcov/`, or `dist/`
