@@ -20,7 +20,7 @@ _LAYERED_WIDTHS = {
 
 def _adjacency_edgelist():
     """
-    Inputs u and x feed a feedback core a <-> b, a has a self-loop,
+    Inputs u and x feed a cycle a <-> b, a has a self-loop,
     and the core feeds outputs y and z.
     """
     return pd.DataFrame(

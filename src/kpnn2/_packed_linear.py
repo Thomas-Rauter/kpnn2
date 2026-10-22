@@ -299,7 +299,7 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
 
     Examples
     --------
-    An input feeding a two-node feedback core plus one output,
+    An input feeding a two-node cycle plus one output,
     stepped once over the shared state vector:
 
     >>> import pandas as pd

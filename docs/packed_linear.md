@@ -96,7 +96,7 @@ vector onto itself, so the aligned inputs must be scattered into
 it. Input nodes have in-degree 0, so no packed edge ever reaches
 them: writing them in each step is required, not cosmetic. The
 [Cyclic graph example](cyclic-graph-example.ipynb) does the same
-scatter inside a full loop:
+scatter before every step:
 
 ```python
 col = kpnn2.align_inputs(df.columns, spec)

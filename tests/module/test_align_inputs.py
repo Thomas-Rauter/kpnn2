@@ -26,7 +26,7 @@ def _tiny_spec():
 
 def _cyclic_edgelist():
     """
-    Inputs A and B feed a two-node feedback core; H feeds C.
+    Inputs A and B feed a two-node cycle; H feeds C.
     """
     return pd.DataFrame(
         {

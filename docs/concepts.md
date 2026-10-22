@@ -16,7 +16,7 @@ instead of redefining. This page carries the concept; the
 | [Edgelist](#edgelist) | That graph as a `source` / `target` table |
 | [Node](#node) | One named entity, one unit by default |
 | [Unit](#unit) | One tensor position, a neuron; a node owns one or more |
-| [Directed acyclic graph](#dag) (DAG) | A graph with no feedback loop |
+| [Directed acyclic graph](#dag) (DAG) | A graph with no cycle |
 | [Parser](#parser) | `parse_layered()` or `parse_adjacency()` |
 | [Spec](#spec) | The parsed layout, frozen; no parameters |
 | [Layer](#layer) | A depth in a `LayeredSpec` |
@@ -149,19 +149,19 @@ reason. If one `table` holds the features and a `label` column,
 align `table.drop(columns="label").columns` and index that same
 reduced table.
 
-A feedback loop that returns to a measured entity ends at its
-computed node, never at its input node. If the prior has a loop
-between the transcription factor `STAT3` and its target gene
+A [cycle](#dag) that returns to a measured entity ends at its
+computed node, never at its input node. If the prior has a feedback
+loop between the transcription factor `STAT3` and its target gene
 `SOCS3`, write the rows `SOCS3_gene → SOCS3`, `SOCS3 → STAT3`, and
-`STAT3 → SOCS3`. `SOCS3_gene` stays an input, and the loop runs
+`STAT3 → SOCS3`. `SOCS3_gene` stays an input, and the cycle runs
 through `SOCS3`.
 
 An edge into `SOCS3_gene` would make it a hidden node, and
 `align_inputs()` would raise on its column. A cyclic model also
 writes the measured values into the input nodes before every step,
 so an edge into one could only compute a value that the next write
-overwrites. The measurement stays fixed, and the feedback changes
-the computed node. [Cyclic graph example](cyclic-graph-example.ipynb)
+overwrites. The measurement stays fixed, and the cycle changes the
+computed node. [Cyclic graph example](cyclic-graph-example.ipynb)
 parses this graph and counts the steps it needs.
 
 ## Unit
@@ -188,8 +188,9 @@ edges.
 ## DAG
 
 A directed acyclic graph: no path leads from a node back to itself.
+A path that does is a cycle.
 
-Depth only exists without feedback, so `parse_layered()` requires a
+Depth only exists without cycles, so `parse_layered()` requires a
 DAG and raises on a cycle. `parse_adjacency()` has no depth to
 compute, so cycles and self-loops are ordinary there. A DAG is
 valid for both parsers — being a DAG tells you which parsers are

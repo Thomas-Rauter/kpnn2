@@ -18,7 +18,7 @@ _WIDTHS = {
 
 def _edgelist():
     """
-    Inputs u and x feed a feedback core a <-> b; outputs y and z.
+    Inputs u and x feed a cycle a <-> b; outputs y and z.
     """
     return pd.DataFrame(
         {

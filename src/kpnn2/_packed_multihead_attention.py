@@ -1345,7 +1345,7 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
 
     Examples
     --------
-    An input ``x`` feeds a two-node feedback loop between ``a`` and
+    An input ``x`` feeds a two-node cycle between ``a`` and
     ``b``, which feeds an output ``y``. All four nodes form one
     four-token sequence:
 

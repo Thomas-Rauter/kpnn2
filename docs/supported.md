@@ -8,9 +8,9 @@ can build that way.
 | Type | Supported | What to use                                                                                                                                                                                                             |
 | --- |-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Feedforward | Yes       | `parse_layered` (optional `widths=` to give a node several [units](concepts.md#unit)), `PackedLinear.from_hop`, `gather_hop_inputs`; tied decode `PackedLinear.transpose` + `scatter_hop_outputs` → [Feedforward example](feedforward-example.ipynb) |
-| Cyclic | Yes       | `parse_adjacency`, `PackedLinear.from_adjacency` or `MaskedLinear(spec.to_mask())`, loop you own → [Cyclic graph example](cyclic-graph-example.ipynb)                                                                                  |
+| Cyclic | Yes       | `parse_adjacency`, `PackedLinear.from_adjacency` or `MaskedLinear(spec.to_mask())`, steps you write → [Cyclic graph example](cyclic-graph-example.ipynb)                                                                               |
 | Transformer | Yes       | `parse_adjacency` + `PackedMultiheadAttention.from_adjacency`; encoder / FFN / head are yours → [Transformer example](transformer-example.ipynb)                                                                                       |
-| Sequence RNN / GRU / LSTM | Yes, see [Sequence models](#sequence-models) | `parse_adjacency` + `MaskedLinear` / `PackedLinear` as the maps; you write the time loop (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) → [Time-series example](time-series-example.ipynb)                                       |
+| Sequence RNN / GRU / LSTM | Yes, see [Sequence models](#sequence-models) | `parse_adjacency` + `MaskedLinear` / `PackedLinear` as the maps; you write the steps over time (not `nn.RNN` / `nn.GRU` / `nn.LSTM`) → [Time-series example](time-series-example.ipynb)                                 |
 | Graph NN | No, see [Why not a GNN?](#why-not-a-gnn) | Knowledge-primed GNNs are a natural edgelist model in [PyG](https://pyg.org/).                                                                                                                                          |
 | Convolutional NN | No        | No sparsely connected support. Build it yourself in PyTorch (`nn.Conv1d` / `nn.Conv2d` / `nn.Conv3d`)                                                                                                                   |
 
@@ -25,8 +25,8 @@ this package does not ship `MaskedRNN`, `MaskedGRU`, or
 `MaskedLSTM`.
 
 What replaces them is the cyclic-graph recipe with a **changing**
-`x_t` at each step. Memory lives in the edgelist; the time loop is
-yours:
+`x_t` at each step. Memory lives in the edgelist; the steps over time
+are yours:
 
 1. Parse with `parse_adjacency()`. A self-loop or hidden→hidden
    edge lets a named [node](concepts.md#node) carry state across
@@ -36,7 +36,7 @@ yours:
    `MaskedLinear(spec.to_mask())`, or
    `PackedLinear.from_adjacency(spec)` when `n` is large, since
    `to_mask()` allocates `(n, n)`.
-3. In your `forward()`, loop over time `t`. Register
+3. In your `forward()`, step through time `t`. Register
    `torch.as_tensor(spec.input_index)` as a buffer and write
    `x_t` with `index_copy` into the
    [state vector](concepts.md#state-vector), then apply the
@@ -45,7 +45,7 @@ yours:
 4. You choose `n_steps`, the sequence length. `kpnn2` does not
    unroll time or pick a step count.
 
-An Elman-style net is that loop. A GRU or LSTM is the usual gate
+An Elman-style net is that recipe. A GRU or LSTM is the usual gate
 equations with one `MaskedLinear` per map; whether every gate
 shares the same prior is your modeling choice.
 
@@ -60,7 +60,7 @@ state = tap(self.act(self.core(state)))
 
 `tap` is one `nn.Identity` from an `nn.ModuleList`. The
 [Time-series example](time-series-example.ipynb) walks through
-the Elman loop, [attributions](concepts.md#attribution) on a
+the Elman-style net, [attributions](concepts.md#attribution) on a
 `step` axis, and a no-memory control.
 
 ## Why not a GNN?

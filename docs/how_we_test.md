@@ -524,7 +524,7 @@ catches breakage that tiny unit tests still pass.
 - That trained importance on real data will recover “the true
   nodes.” The trained checks are matched-tower simulations
   with a learnability gate.
-- That the package picks `n_steps` or writes your time loop.
+- That the package picks `n_steps` or writes your `forward()`.
   Unrolled-adjacency checks use tiny graphs and a fixed `T`.
 - That GPU or TPU numerics are covered in CI.
   [`tests/manual/`](https://github.com/Thomas-Rauter/kpnn2/tree/main/tests/manual)

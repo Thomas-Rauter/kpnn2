@@ -175,12 +175,12 @@ def parse_adjacency(  # numpydoc ignore=PR06
     Prior-knowledge edges, such as genes into pathways, become one
     alphabetical state vector plus packed source/target index
     tuples, ready for ``PackedLinear`` or packed attention. Reach
-    for it when the graph has cycles or self-loops, or when a
-    shared-state loop is the update; ``parse_layered`` ranks a DAG
-    into one packed hop per layer instead. Nothing is ranked here,
-    and no ``(n, n)`` tensor is allocated. Every node is a single
-    unit, one neuron, unless ``widths`` makes it a block of
-    several.
+    for it when the graph has cycles or self-loops, or when one
+    shared update, applied for several steps, is the model;
+    ``parse_layered`` ranks a DAG into one packed hop per layer
+    instead. Nothing is ranked here, and no ``(n, n)`` tensor is
+    allocated. Every node is a single unit, one neuron, unless
+    ``widths`` makes it a block of several.
 
     Parameters
     ----------
@@ -211,7 +211,7 @@ def parse_adjacency(  # numpydoc ignore=PR06
 
         - a hidden node that combines many parents and should
           pass on more than one summary of them
-        - a node in a feedback loop that should carry more than
+        - a node on a cycle that should carry more than
           one number from one update to the next
         - capacity that grows with the node, such as a width set
           by its number of parents
@@ -329,8 +329,8 @@ def parse_adjacency(  # numpydoc ignore=PR06
 
     Examples
     --------
-    A feedback edge ``b -> a``, which ``parse_layered`` would
-    reject, packed alongside the forward edges:
+    The cycle ``a -> b -> a``, which ``parse_layered`` would
+    reject, packed like every other edge:
 
     >>> import pandas as pd
     >>> import kpnn2

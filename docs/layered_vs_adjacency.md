@@ -18,7 +18,7 @@ return.
 [Feedforward example](feedforward-example.ipynb) is a feedforward
 `parse_layered()` workflow.
 [Cyclic graph example](cyclic-graph-example.ipynb) is a
-`parse_adjacency()` workflow on a graph with a feedback loop.
+`parse_adjacency()` workflow on a graph with a cycle.
 [Transformer example](transformer-example.ipynb) and
 [Time-series example](time-series-example.ipynb) use that same
 packed layout: they need named nodes and
@@ -69,12 +69,12 @@ on both specs (`A`, `H`, and `C`).
 
 ## How you compute
 
-<img class="figure-full" src="../figures/layered_vs_adjacency_forward.svg" alt="Top: the layered forward pass applies hops[0], holds A, gathers it with H, and applies hops[1] once. Bottom: the adjacency forward pass scatters x into the state vector and applies the to_mask() layer for n steps in a loop.">
+<img class="figure-full" src="../figures/layered_vs_adjacency_forward.svg" alt="Top: the layered forward pass applies hops[0], holds A, gathers it with H, and applies hops[1] once. Bottom: the adjacency forward pass scatters x into the state vector and applies the to_mask() layer for n steps.">
 
 **Figure 2.** How you compute on that toy. Layered is one
 sweep: hold `A`, gather it with `H`, then `hops[1]`. Adjacency
 scatters `A` into the state and applies
-`MaskedLinear(spec.to_mask())` in a loop you own.
+`MaskedLinear(spec.to_mask())` for as many steps as you choose.
 
 On a `LayeredSpec` you apply one `PackedLinear` per hop. Keep
 every layer you produce in `saved`, because a later hop may read
@@ -115,7 +115,7 @@ you gather those columns and scatter them in at
 `spec.input_index`. No edge enters an input node, so the input
 rows of `to_mask()` are all zero, and the multiply drives those
 [units](concepts.md#unit) to zero: the scatter is required, and
-so is repeating it on every pass if you loop.
+so is repeating it before every step.
 
 ```python
 core = kpnn2.MaskedLinear(spec.to_mask())
@@ -142,9 +142,9 @@ a new tensor, so the activation saved for backward is left
 alone.
 
 `n_steps` is yours; `kpnn2` does not unroll time. With `x` held
-fixed, that loop is the shared-state one
+fixed, these steps are the shared-state update that
 [Cyclic graph example](cyclic-graph-example.ipynb) trains on a
-graph with a feedback edge. When `x` changes at each step, it is
+graph with a cycle. When `x` changes at each step, they make
 a time-series [knowledge-primed neural network](concepts.md#kpnn)
 (KPNN); see
 [Time-series example](time-series-example.ipynb).
@@ -162,7 +162,7 @@ walkthrough is the
   usual KPNN.
 - Use `parse_adjacency()` for cycles and self-loops
   (`parse_layered()` raises on those), a shared-state or
-  time-series loop, or packed attention. It is the packed
+  time-series model, or packed attention. It is the packed
   layout: one state vector and packed edge indices.
 - A DAG may go through `parse_adjacency()` if you want that
   layout. The package never inspects the

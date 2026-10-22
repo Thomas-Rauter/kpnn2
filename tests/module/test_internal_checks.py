@@ -39,7 +39,7 @@ def _skip_edgelist():
 
 def _cyclic_edgelist():
     """
-    Input x feeds a two-node feedback core; a feeds output y.
+    Input x feeds a two-node cycle; a feeds output y.
     """
     return pd.DataFrame(
         {
@@ -51,7 +51,7 @@ def _cyclic_edgelist():
 
 def _two_input_cyclic_edgelist():
     """
-    Inputs x1 and x2 feed a two-node feedback core; a feeds y.
+    Inputs x1 and x2 feed a two-node cycle; a feeds y.
     """
     return pd.DataFrame(
         {

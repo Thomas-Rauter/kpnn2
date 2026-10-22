@@ -83,7 +83,7 @@ _EDGELIST = pd.DataFrame(
         "target": ["H", "C", "C"],
     }
 )
-# x -> a <-> b -> ... -> y: a feedback edge, nodes a, b, x, y.
+# x -> a <-> b -> ... -> y: a cycle, nodes a, b, x, y.
 _CYCLE = pd.DataFrame(
     {
         "source": ["x", "a", "b", "a"],

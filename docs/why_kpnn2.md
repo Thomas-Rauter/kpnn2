@@ -68,8 +68,8 @@ each new project rebuilds the parsing, the masks, and the checks.
   and gives every layer after the inputs one
   [hop](concepts.md#hop) — every edge that enters it, skip edges
   included. `parse_adjacency()` places all nodes in one
-  [state vector](concepts.md#state-vector), which allows feedback
-  loops and self-loops.
+  [state vector](concepts.md#state-vector), which allows cycles
+  and self-loops.
 - **Sparse layers.** `PackedLinear` (one trainable weight per
   edge), `MaskedLinear` (a masked dense matrix for small graphs),
   and `PackedMultiheadAttention` (attention restricted to the
@@ -86,8 +86,8 @@ each new project rebuilds the parsing, the masks, and the checks.
 
 The tutorials show them at work:
 [Edges that skip layers](skip-edges.ipynb) for skip edges,
-[Cyclic graph example](cyclic-graph-example.ipynb) for feedback
-loops, and [Transformer example](transformer-example.ipynb) for
+[Cyclic graph example](cyclic-graph-example.ipynb) for cycles,
+and [Transformer example](transformer-example.ipynb) for
 attention. [Supported architectures](supported.md) lists the model
 families they cover. [How we test](how_we_test.md) describes the
 tests behind them.

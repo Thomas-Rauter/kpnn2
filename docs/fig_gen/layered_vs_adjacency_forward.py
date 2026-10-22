@@ -6,7 +6,8 @@ Writes ``docs/figures/layered_vs_adjacency_forward.svg``,
 The same toy DAG as ``layered_vs_adjacency.svg``. Panel (a) is
 one layered sweep: hops, ReLU, gather. Panel (b) scatters the
 input into a state vector and applies
-``MaskedLinear(spec.to_mask())`` in a loop the user owns.
+``MaskedLinear(spec.to_mask())`` for as many steps as the user
+chooses.
 """
 
 from pathlib import Path
@@ -336,7 +337,7 @@ def svg_text() -> str:
             _label(
                 8,
                 94,
-                "(b) parse_adjacency — user loop",
+                "(b) parse_adjacency — steps you write",
                 anchor="start",
                 weight="700",
             ),

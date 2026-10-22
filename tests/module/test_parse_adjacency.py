@@ -12,7 +12,7 @@ from kpnn2 import (
 
 def _cyclic_edgelist():
     """
-    Input x feeds a two-node feedback core; a feeds output y.
+    Input x feeds a two-node cycle; a feeds output y.
     """
     return pd.DataFrame(
         {
@@ -103,7 +103,7 @@ def test_parse_adjacency_packed_indices_use_target_source_indexing():
     assert mask[position["a"], position["x"]].item() == 1.0
     assert mask[position["x"], position["a"]].item() == 0.0
 
-    # The feedback pair sets both directions, one per edge.
+    # The cycle a <-> b sets both directions, one per edge.
     assert mask[position["b"], position["a"]].item() == 1.0
     assert mask[position["a"], position["b"]].item() == 1.0
 

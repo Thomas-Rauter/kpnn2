@@ -136,7 +136,7 @@ class AdjacencySpec:
 
     Examples
     --------
-    An input feeding a two-node feedback core plus one output:
+    An input feeding a two-node cycle plus one output:
 
     >>> import pandas as pd
     >>> import kpnn2
@@ -929,7 +929,7 @@ class AdjacencySpec:
 
         Examples
         --------
-        A feedback edge ``b -> a`` and a self-loop on ``b``:
+        The cycle ``a -> b -> a`` and a self-loop on ``b``:
 
         >>> import pandas as pd
         >>> import kpnn2

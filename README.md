@@ -27,7 +27,7 @@ Build interpretable neural networks in PyTorch from a graph of
 named entities, with checks that every attribution is reported
 under the right name.
 
-## What it is
+## What is kpnn2?
 
 The neurons of a standard neural network have no meaning
 outside the model. An attribution method can say which neurons a
@@ -36,7 +36,8 @@ prediction relied on, but not what those neurons stand for.
 A knowledge-primed neural network (KPNN) is built from a graph of
 known entities, such as proteins and the interactions between
 them, as Figure 1 shows. Every neuron is mapped to one such known entity, and
-two neurons are connected only where the graph has an edge
+two neurons are connected only when there is a connection between the two
+entities in the graph
 ([Fortelny and Bock, 2020](https://doi.org/10.1186/s13059-020-02100-5)).
 The attributions of a KPNN therefore name entities with a domain-meaning, such
 as proteins, not anonymous neurons.
@@ -48,12 +49,13 @@ protein-gene interactions) (left) as an
 example, to a knowledge-primed neural network with the same wiring (right).
 
 `kpnn2` builds such networks in PyTorch from an edgelist, which is a table
-of edges between named entities. Any domain whose entities have
-names and known relationships works the same way. When each sample
-is its own graph, use a graph neural network instead; see
+of edges between named entities. `kpnn2` in principle can be used in any
+domain where there are meaningful entities with known relationships between
+them. When each
+sample is its own graph, use a graph neural network instead; see
 [Why not a GNN?](https://thomas-rauter.github.io/kpnn2/latest/supported/#why-not-a-gnn).
 
-## Why it exists
+## Why kpnn2 exists
 
 The justification of using `kpnn2` over custom code is best described with this 
 short story:
@@ -84,7 +86,7 @@ Three reasons to use it:
   Its tests check that only edges in the edgelist can affect a
   prediction;
   [How we test](https://thomas-rauter.github.io/kpnn2/latest/how_we_test/)
-  also lists what they do not prove.
+  also lists what is not tested.
 - **Less code, less to get wrong.** In the side-by-side example in
   [Why not custom PyTorch?](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/#why-not-custom-pytorch),
   one network takes 36 lines with `kpnn2` and 162 in hand-written
@@ -92,19 +94,21 @@ Three reasons to use it:
   check checkpoints, or label attributions. Every line you do not
   write is one where a column cannot slip.
 - **Built on, not rebuilt.** `kpnn2` provides tested layouts and
-  layers for skip edges, feedback loops, and attention limited to
-  the graph's edges. You start from them instead of designing and
-  validating your own, and spend your time on the new research question instead.
+  layers for skip edges, cycles, and attention limited to
+  the graph's edges. This gives you a starting point instead of designing and
+  validating everything on your own, and you can spend your time on the new
+  research question instead.
 
 [**Why kpnn2**](https://thomas-rauter.github.io/kpnn2/latest/why_kpnn2/)
 makes the full case and lists every check.
 
-## How it works
+## How kpnn2 works
 
 Each row of the edgelist is one edge, from a `source` node (=neuron) to a
-`target` node. `kpnn2` parses the edgelist, you build the network
-in PyTorch from the result and train it, and `kpnn2` labels the
-attributions with node names (Figure 2). `kpnn2` provides building
+`target` node. Use `kpnn2` to parse the edgelist, build the network
+in PyTorch from the parsing result and train it, then use `kpnn2` to label the
+node attributions derived from the trained network with the right node names
+(Figure 2). `kpnn2` provides building
 blocks, not a finished model: activations, losses, the training
 loop, and the attribution method stay your own PyTorch code, which gives you
 most of the flexibility that PyTorch offers.
@@ -127,16 +131,16 @@ it gets its own learned weight from the earlier layer: no relay or pseudo
 neurons are added in between, and it is not a residual
 connection.
 
-A graph with feedback loops has no layers, so `parse_layered()`
+A graph with cycles has no layers, so `parse_layered()`
 rejects it. `parse_adjacency()` accepts cycles and self-loops. It
 keeps every node in one
 [state vector](https://thomas-rauter.github.io/kpnn2/latest/concepts/#state-vector),
 and each edge gets its own learned weight between two positions of
 that vector. Your `forward()` applies the same connections for as
-many steps as you choose, so a signal can travel around a loop.
+many steps as you choose, so a signal can travel around a cycle.
 Input nodes have no incoming edges, so you write the inputs into
 the state vector before each step. If the inputs change at each
-step, the same loop is a time-series model.
+step, the same update makes a time-series model.
 
 [Layered vs. unlayered](https://thomas-rauter.github.io/kpnn2/latest/layered_vs_adjacency/)
 and the other How it works pages explain how the network is

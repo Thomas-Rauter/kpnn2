@@ -31,7 +31,7 @@ def _tiny_spec():
 
 def _tiny_adjacency_spec():
     """
-    Input x feeds a two-node feedback core; a feeds output y.
+    Input x feeds a two-node cycle; a feeds output y.
     """
     edgelist = pd.DataFrame(
         {

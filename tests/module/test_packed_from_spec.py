@@ -53,7 +53,7 @@ def _layered_spec():
 
 
 def _adjacency_spec(**kwargs):
-    """``x`` feeds a two-node feedback core ``a <-> b``, read by ``y``."""
+    """``x`` feeds a two-node cycle ``a <-> b``, read by ``y``."""
     return parse_adjacency(
         pd.DataFrame(
             {

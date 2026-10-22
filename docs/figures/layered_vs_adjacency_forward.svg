@@ -47,7 +47,7 @@
   <text x="265" y="22" text-anchor="middle" fill="#000" font-weight="400">C</text>
   <text x="40" y="66" text-anchor="start" fill="#000" font-weight="400">hold A</text>
 
-  <text x="8" y="94" text-anchor="start" fill="#000" font-weight="700">(b) parse_adjacency — user loop</text>
+  <text x="8" y="94" text-anchor="start" fill="#000" font-weight="700">(b) parse_adjacency — steps you write</text>
   <rect x="10" y="108" width="22" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
   <text x="21" y="117.2" text-anchor="middle" fill="#000">x</text>
   <rect x="48" y="108" width="38" height="14" fill="#fff" stroke="#000" stroke-width="0.6"/>
