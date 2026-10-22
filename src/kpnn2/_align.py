@@ -7,42 +7,32 @@ import pandas as pd
 import torch
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error
+from ._errors import caller_error, close_matches, listed
 from ._spec import LayeredSpec
-from ._validate import as_name_list, require_spec
+from ._validate import as_name_list, describe, require_spec
 
-_TENSOR_NOT_ACCEPTED_MSG = (
-    "'names' is a tensor; pass the feature names that "
-    "label that axis, even when its columns already follow "
-    "spec.input_nodes."
+# Why input nodes must be named like the feature columns.
+_ROLE_RULE = (
+    "an edgelist that starts at the measured features, so each input "
+    "node (a node with no incoming edge) is named like a feature column "
+    "and no computed node is"
 )
-_INPUT_ROLE_RULE = (
-    "Input nodes are the edgelist nodes with no incoming edge, "
-    "so the edgelist starts at the measured features, and each "
-    "input node is named like its feature column."
+_IDENTIFIER_FIX = (
+    "None of the input nodes is among the feature names; first check "
+    "that the feature names use the same identifiers as the edgelist."
 )
 _MISSING_FIX = (
-    "Add the missing feature columns, or give a computed node "
-    "with no incoming edge its parents in the edgelist. Do not "
-    "fit the width with a dense layer in front of the model: it "
-    "discards the prior wiring from the features."
+    "Add the missing feature columns, or give a computed node with no "
+    "incoming edge its parents in the edgelist. Do not fit the width "
+    "with a dense layer in front of the model: it discards the prior "
+    "wiring from the features."
 )
 _COMPUTED_FIX = (
-    "Give each measured feature its own input node, named "
-    "differently from every computed node (for example "
-    "STAT3_gene for the gene and STAT3 for the transcription "
-    "factor). A column you do not feed, such as a label column "
-    "named like an output node, belongs out of the table before "
-    "you take its names."
-)
-_DATAFRAME_NOT_ACCEPTED_MSG = (
-    "'names' is a DataFrame; pass the feature names "
-    "(for example data.columns). Apply the returned index "
-    "on the matrix yourself."
-)
-_ANNDATA_NOT_ACCEPTED_MSG = (
-    "'names' looks like AnnData; pass the .var_names "
-    "and apply the index to .X yourself."
+    "Give each measured feature its own input node, named differently "
+    "from every computed node (for example STAT3_gene for the gene and "
+    "STAT3 for the transcription factor). Take a column you do not "
+    "feed, such as a label column named like an output node, out of "
+    "the table before you take its names."
 )
 
 
@@ -111,11 +101,12 @@ def align_inputs(
         labels; labels are duplicated (including after ``str``
         conversion; the message names the unique duplicated
         labels, sorted, comma-separated); required names are
-        missing (the message names them, sorted, and counts the
-        input nodes found); or a name matches a hidden or output
-        node (the message names each with its role, sorted).
-        Missing names and computed-node names are reported in
-        one message.
+        missing (the message names them, sorted, counts them
+        against all input nodes, and suggests close feature
+        names that name no node); or a name matches a hidden or
+        output node (the message names each with its role,
+        sorted). Missing names and computed-node names are
+        reported in one message.
 
     See Also
     --------
@@ -231,7 +222,7 @@ def align_inputs(
     >>> kpnn2.align_inputs(computed, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    Kpnn2Error: Feature names match node(s) the model computes, ...
+    Kpnn2Error: Feature names match 1 node(s) the model computes, ...
 
     A tensor is not accepted; pass the names that label it:
 
@@ -239,7 +230,7 @@ def align_inputs(
     >>> kpnn2.align_inputs(t, spec)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    Kpnn2Error: 'names' is a tensor; pass the feature names that ...
+    Kpnn2Error: 'names' must be a sequence of feature names, not a ...
     """
     require_spec(spec)
     labels = _labels_from_names(names)
@@ -250,15 +241,14 @@ def align_inputs(
         label for label, count in label_counts.items() if count > 1
     )
     if duplicated_labels:
-        labels_str = ", ".join(duplicated_labels)
-        raise Kpnn2Error(
-            "Feature names must not contain duplicate labels "
-            "(including after converting labels to strings): "
-            f"{labels_str}."
+        raise caller_error(
+            "'names' must not contain duplicate labels (including after "
+            "converting labels to strings).",
+            got=listed(duplicated_labels),
         )
 
     _require_input_roles(
-        set(label_counts),
+        labels,
         spec,
     )
 
@@ -270,7 +260,7 @@ def align_inputs(
 
 
 def _require_input_roles(
-    labels: set[str],
+    labels: list[str],
     spec: LayeredSpec | AdjacencySpec,
 ) -> None:
     """
@@ -278,35 +268,66 @@ def _require_input_roles(
 
     Every input node must be a label, and no label may name a
     hidden or output node, whose column the model would never
-    read. Both findings go into one message.
+    read. Both findings go into one message. Missing input nodes
+    get close labels that name no node as suggestions, unless none
+    of several input nodes is a label and some label is no node:
+    then the names likely use another kind of identifier, as in
+    ``unknown_name_hints``.
     """
-    missing = [name for name in spec.input_nodes if name not in labels]
+    label_set = set(labels)
+    missing = sorted(name for name in spec.input_nodes if name not in label_set)
     roles = {name: "hidden" for name in spec.hidden_nodes}
     roles.update({name: "output" for name in spec.output_nodes})
-    computed = sorted(labels & roles.keys())
+    computed = sorted(label_set & roles.keys())
     if not missing and not computed:
         return
 
-    parts = []
+    findings = []
+    groups = []
+    candidates = None
+    fixes = []
     if missing:
-        found = len(spec.input_nodes) - len(missing)
-        parts.append(
-            "Feature names are missing required name(s): "
-            f"{', '.join(sorted(missing))}. Found {found} of "
-            f"{len(spec.input_nodes)} input nodes."
+        n_inputs = len(spec.input_nodes)
+        findings.append(f"are missing {len(missing)} of {n_inputs} input nodes")
+        groups.append(
+            (
+                "missing",
+                listed(missing),
+            )
         )
+        nodes = set(spec.input_nodes) | roles.keys()
+        unused = [label for label in labels if label not in nodes]
+        if len(missing) == n_inputs > 1 and unused:
+            fixes.append(_IDENTIFIER_FIX)
+        else:
+            candidates = close_matches(
+                missing,
+                unused,
+            )
+        fixes.append(_MISSING_FIX)
     if computed:
-        matched = ", ".join(f"{name} ({roles[name]})" for name in computed)
-        parts.append(
-            "Feature names match node(s) the model computes, so "
-            f"their columns would never be read: {matched}."
+        findings.append(
+            f"match {len(computed)} node(s) the model computes, so their "
+            "columns would never be read"
         )
-    parts.append(_INPUT_ROLE_RULE)
-    if missing:
-        parts.append(_MISSING_FIX)
-    if computed:
-        parts.append(_COMPUTED_FIX)
-    raise Kpnn2Error(" ".join(parts))
+        groups.append(
+            (
+                "computed",
+                listed(f"{name} ({roles[name]})" for name in computed),
+            )
+        )
+        fixes.append(_COMPUTED_FIX)
+    if len(groups) == 1:
+        got = groups[0][1]
+    else:
+        got = "; ".join(f"{label}: {names}" for label, names in groups)
+    raise caller_error(
+        f"Feature names {' and '.join(findings)}.",
+        got=got,
+        expected=_ROLE_RULE,
+        candidates=candidates,
+        fix=" ".join(fixes),
+    )
 
 
 def _labels_from_names(names: object) -> list[str]:
@@ -314,11 +335,32 @@ def _labels_from_names(names: object) -> list[str]:
     Convert ``names`` to ``str`` labels, or raise ``Kpnn2Error``.
     """
     if isinstance(names, torch.Tensor):
-        raise Kpnn2Error(_TENSOR_NOT_ACCEPTED_MSG)
+        raise caller_error(
+            "'names' must be a sequence of feature names, not a tensor.",
+            got=describe(names),
+            fix=(
+                "Pass the feature names that label its columns, even when "
+                "they already follow spec.input_nodes."
+            ),
+        )
     if isinstance(names, pd.DataFrame):
-        raise Kpnn2Error(_DATAFRAME_NOT_ACCEPTED_MSG)
+        raise caller_error(
+            "'names' must be a sequence of feature names, not a DataFrame.",
+            got=describe(names),
+            fix=(
+                "Pass its feature names (for example data.columns), and "
+                "apply the returned index on the matrix yourself."
+            ),
+        )
     if hasattr(names, "var_names") and hasattr(names, "X"):
-        raise Kpnn2Error(_ANNDATA_NOT_ACCEPTED_MSG)
+        raise caller_error(
+            "'names' must be a sequence of feature names, not AnnData.",
+            got=describe(names),
+            fix=(
+                "Pass its .var_names, and apply the returned index to .X "
+                "yourself."
+            ),
+        )
     return as_name_list(
         names,
         "names",

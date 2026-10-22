@@ -2507,8 +2507,8 @@ gather_hop_inputs(saved, hop) -> torch.Tensor
   parents.
 - Store every produced layer in `saved`. A missing source
   **layer** (not a missing named node) raises `Kpnn2Error`
-  instead of silently dropping those edges. The message names
-  the layer and the hop that wanted it.
+  instead of silently dropping those edges. One message names
+  every missing layer and the hop that wanted them.
 - Differentiable into every source: `torch.cat` passes gradient
   back to each part.
 - All parts must share dtype, device, and every dimension but
@@ -2627,8 +2627,13 @@ state = state.index_copy(
   `Kpnn2Error`. The message names the unique duplicated labels
   after `str(...)`, sorted, comma-separated. Checked first.
 - Missing required names: `Kpnn2Error`. The message names them,
-  sorted, comma-separated, and says how many input nodes were
-  found ("Found 1 of 2 input nodes").
+  sorted, comma-separated, and its headline counts them against
+  all input nodes ("missing 1 of 2 input nodes"). `Did you mean`
+  offers close feature names that name no node. When none of
+  several input nodes is a feature name and some feature name
+  is no node, the names likely use another kind of identifier:
+  the `Fix` says to check that instead, and nothing is
+  suggested.
 - A name of a hidden or output node: `Kpnn2Error`. The model
   computes that node and would never read the column, and one
   name is one node, so that feature has no input node of its
@@ -2637,12 +2642,13 @@ state = state.index_copy(
   measured feature's node, or drop the column from the table
   before taking its names. The message names a label column
   named like an output node as an example of the second fix.
-- Missing and computed-node names raise in one message. It
-  states the role rule (input nodes have no incoming edge, so
-  the edgelist starts at the measured features, named like
-  their columns), then the fix for each finding. The
-  missing-name fix says not to fit the width with a dense
-  layer in front of the model.
+- Missing and computed-node names raise in one message. Its
+  headline counts both findings, `Got` lists both groups,
+  `Expected` states the role rule (input nodes have no incoming
+  edge, so the edgelist starts at the measured features, named
+  like their columns), and `Fix` gives the fix for each
+  finding. The missing-name fix says not to fit the width with
+  a dense layer in front of the model.
 - Accepted: a 1-D sequence of labels (`df.columns`,
   `adata.var_names`, a numpy array, a list). The annotated
   type is `object` so a DataFrame or tensor is rejected at

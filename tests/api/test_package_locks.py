@@ -51,8 +51,6 @@ _NOT_YET_CONVERTED = frozenset(
         "src/kpnn2/_aggregation/_dispatch.py",
         "src/kpnn2/_aggregation/_methods/_rauter_mangano_2026.py",
         "src/kpnn2/_aggregation/_registry.py",
-        "src/kpnn2/_align.py",
-        "src/kpnn2/_gather.py",
     }
 )
 

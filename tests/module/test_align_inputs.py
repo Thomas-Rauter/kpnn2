@@ -13,6 +13,25 @@ from kpnn2 import (
     parse_layered,
 )
 
+_ROLE_RULE = (
+    "  Expected: an edgelist that starts at the measured features, so "
+    "each input node (a node with no incoming edge) is named like a "
+    "feature column and no computed node is\n"
+)
+_MISSING_FIX = (
+    "Add the missing feature columns, or give a computed node with no "
+    "incoming edge its parents in the edgelist. Do not fit the width "
+    "with a dense layer in front of the model: it discards the prior "
+    "wiring from the features."
+)
+_COMPUTED_FIX = (
+    "Give each measured feature its own input node, named differently "
+    "from every computed node (for example STAT3_gene for the gene and "
+    "STAT3 for the transcription factor). Take a column you do not "
+    "feed, such as a label column named like an output node, out of "
+    "the table before you take its names."
+)
+
 
 def _tiny_spec():
     edgelist = pd.DataFrame(
@@ -172,7 +191,7 @@ def test_align_inputs_rejects_missing_name():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="missing required",
+        match=re.escape("Feature names are missing 1 of 2 input nodes."),
     ):
         align_inputs(
             ["A"],
@@ -180,21 +199,18 @@ def test_align_inputs_rejects_missing_name():
         )
 
 
-def test_align_inputs_missing_message_counts_found_inputs():
+def test_align_inputs_missing_message_counts_input_nodes():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape(
-            "Feature names are missing required name(s): B. Found 1 "
-            "of 2 input nodes. Input nodes are the edgelist nodes with "
-            "no incoming edge, so the edgelist starts at the measured "
-            "features, and each input node is named like its feature "
-            "column. Add the missing feature columns, or give a "
-            "computed node with no incoming edge its parents in the "
-            "edgelist. Do not fit the width with a dense layer in "
-            "front of the model: it discards the prior wiring from "
-            "the features."
-        ),
+        match="^"
+        + re.escape(
+            "Feature names are missing 1 of 2 input nodes.\n"
+            "  Got: B\n"
+            f"{_ROLE_RULE}"
+            f"  Fix: {_MISSING_FIX}"
+        )
+        + "$",
     ):
         align_inputs(
             ["A", "unused"],
@@ -230,8 +246,8 @@ def test_align_inputs_rejects_names_of_computed_nodes(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Feature names match node(s) the model computes, so their "
-            f"columns would never be read: {listed}."
+            "the model computes, so their columns would never be read.\n"
+            f"  Got: {listed}\n"
         ),
     ) as caught:
         align_inputs(
@@ -249,28 +265,137 @@ def test_align_inputs_reports_missing_and_computed_together():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape(
-            "Feature names are missing required name(s): B. Found 1 "
-            "of 2 input nodes. Feature names match node(s) the model "
-            "computes, so their columns would never be read: "
-            "H (hidden)."
-        ),
-    ) as caught:
+        match="^"
+        + re.escape(
+            "Feature names are missing 1 of 2 input nodes and match 1 "
+            "node(s) the model computes, so their columns would never be "
+            "read.\n"
+            "  Got: missing: B; computed: H (hidden)\n"
+            f"{_ROLE_RULE}"
+            f"  Fix: {_MISSING_FIX} {_COMPUTED_FIX}"
+        )
+        + "$",
+    ):
         align_inputs(
             ["A", "H"],
             spec,
         )
 
+
+def test_align_inputs_suggests_unused_feature_names_for_missing_inputs():
+    """
+    H names a node, so it is no candidate for the missing B.
+    """
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "  Got: missing: B; computed: H (hidden)\n"
+            f"{_ROLE_RULE}"
+            "  Did you mean: 'b'\n"
+        ),
+    ):
+        align_inputs(
+            ["A", "b", "H", "unused"],
+            spec,
+        )
+
+
+def test_align_inputs_suggests_for_each_missing_input():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["A", "B", "D"],
+            "target": ["H", "H", "H"],
+        }
+    )
+    spec = parse_layered(edgelist)
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Feature names are missing 2 of 3 input nodes.\n"
+            "  Got: B, D\n"
+            f"{_ROLE_RULE}"
+            "  Did you mean: 'b' for 'B'; 'd' for 'D'\n"
+        ),
+    ):
+        align_inputs(
+            ["A", "b", "d"],
+            spec,
+        )
+
+
+def test_align_inputs_says_to_check_identifiers_when_no_input_matches():
+    """
+    Ensembl IDs for a graph named by gene symbols.
+    """
+    edgelist = pd.DataFrame(
+        {
+            "source": ["TP53", "MYC"],
+            "target": ["MDM2", "MDM2"],
+        }
+    )
+    spec = parse_layered(edgelist)
+    with pytest.raises(
+        Kpnn2Error,
+        match="^"
+        + re.escape(
+            "Feature names are missing 2 of 2 input nodes.\n"
+            "  Got: MYC, TP53\n"
+            f"{_ROLE_RULE}"
+            "  Fix: None of the input nodes is among the feature names; "
+            "first check that the feature names use the same identifiers "
+            f"as the edgelist. {_MISSING_FIX}"
+        )
+        + "$",
+    ):
+        align_inputs(
+            ["ENSG00000141510", "ENSG00000136997"],
+            spec,
+        )
+
+
+def test_align_inputs_suggests_names_when_the_only_input_is_missing():
+    edgelist = pd.DataFrame(
+        {
+            "source": ["TP53"],
+            "target": ["MDM2"],
+        }
+    )
+    spec = parse_layered(edgelist)
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("  Did you mean: 'Tp53'\n"),
+    ) as caught:
+        align_inputs(
+            ["Tp53", "ENSG00000141510"],
+            spec,
+        )
+    assert "identifiers" not in str(caught.value)
+
+
+def test_align_inputs_skips_identifier_check_without_unused_names():
+    """
+    Every name is a node, so the identifiers are of the same kind.
+    """
+    spec = _tiny_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("  Got: missing: A, B; computed: C (output)\n"),
+    ) as caught:
+        align_inputs(
+            ["C"],
+            spec,
+        )
     message = str(caught.value)
-    assert "dense layer" in message
-    assert "STAT3_gene" in message
+    assert "identifiers" not in message
+    assert "Did you mean" not in message
 
 
 def test_align_inputs_rejects_computed_node_on_adjacency_spec():
     spec = _tiny_adjacency_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("would never be read: K (hidden)."),
+        match=re.escape("  Got: K (hidden)\n"),
     ):
         align_inputs(
             ["A", "B", "K"],
@@ -293,7 +418,7 @@ def test_align_inputs_rejects_edgelist_that_starts_at_computed_layer():
     assert spec.input_nodes == ("IRF1", "STAT3")
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("would never be read: ZAP70 (output)."),
+        match=re.escape("  Got: ZAP70 (output)\n"),
     ):
         align_inputs(
             genes,
@@ -316,7 +441,7 @@ def test_align_inputs_rejects_feature_merged_with_hidden_node():
     assert spec.hidden_nodes == ("STAT3",)
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("would never be read: STAT3 (hidden)."),
+        match=re.escape("  Got: STAT3 (hidden)\n"),
     ):
         align_inputs(
             genes,
@@ -389,7 +514,9 @@ def test_align_inputs_rejects_tensor(names):
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=r"tensor.*feature names",
+        match=re.escape(
+            "'names' must be a sequence of feature names, not a tensor."
+        ),
     ):
         align_inputs(
             names,
@@ -407,7 +534,9 @@ def test_align_inputs_rejects_dataframe_values():
     )
     with pytest.raises(
         Kpnn2Error,
-        match=r"DataFrame.*feature names",
+        match=re.escape(
+            "'names' must be a sequence of feature names, not a DataFrame."
+        ),
     ):
         align_inputs(
             data,
@@ -418,18 +547,22 @@ def test_align_inputs_rejects_dataframe_values():
 class _FakeAnnData:
     var_names = pd.Index(["A", "B"])
     X = np.array([[1.0, 2.0]])
+    shape = (1, 2)
 
 
 def test_align_inputs_rejects_anndata_like():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=r"AnnData.*var_names",
-    ):
+        match=re.escape(
+            "'names' must be a sequence of feature names, not AnnData."
+        ),
+    ) as caught:
         align_inputs(
             _FakeAnnData(),
             spec,
         )
+    assert "Pass its .var_names" in str(caught.value)
 
 
 def test_align_inputs_rejects_2d_numpy_matrix():
@@ -745,7 +878,7 @@ def _invalid_adjacency_align_cases():
         pytest.param(
             ["A"],
             spec,
-            "missing required",
+            re.escape("Feature names are missing 1 of 2 input nodes."),
             id="missing_name",
         ),
         pytest.param(
@@ -757,13 +890,13 @@ def _invalid_adjacency_align_cases():
         pytest.param(
             tensor,
             spec,
-            r"tensor.*feature names",
+            "feature names, not a tensor",
             id="tensor",
         ),
         pytest.param(
             frame,
             spec,
-            r"DataFrame.*feature names",
+            "feature names, not a DataFrame",
             id="dataframe",
         ),
         pytest.param(
@@ -890,22 +1023,26 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
                     "B": [2.0],
                 }
             ),
-            "'names' is a DataFrame; pass the feature names (for "
-            "example data.columns). Apply the returned index on the "
-            "matrix yourself.",
+            "'names' must be a sequence of feature names, not a DataFrame.\n"
+            "  Got: DataFrame of shape (1, 2)\n"
+            "  Fix: Pass its feature names (for example data.columns), and "
+            "apply the returned index on the matrix yourself.",
             id="dataframe",
         ),
         pytest.param(
             torch.tensor([1]),
-            "'names' is a tensor; pass the feature names that label "
-            "that axis, even when its columns already follow "
-            "spec.input_nodes.",
+            "'names' must be a sequence of feature names, not a tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64\n"
+            "  Fix: Pass the feature names that label its columns, even "
+            "when they already follow spec.input_nodes.",
             id="tensor",
         ),
         pytest.param(
             _FakeAnnData(),
-            "'names' looks like AnnData; pass the .var_names and apply "
-            "the index to .X yourself.",
+            "'names' must be a sequence of feature names, not AnnData.\n"
+            "  Got: _FakeAnnData of shape (1, 2)\n"
+            "  Fix: Pass its .var_names, and apply the returned index to "
+            ".X yourself.",
             id="anndata_like",
         ),
     ],

@@ -2,11 +2,11 @@
 Source axis assembly and split for one hop.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import torch
 
-from ._errors import Kpnn2Error
+from ._errors import Kpnn2Error, caller_error, listed
 from ._spec import Hop, require_hop
 from ._validate import describe
 
@@ -81,8 +81,9 @@ def gather_hop_inputs(
     ------
     Kpnn2Error
         If ``saved`` is not a mapping or ``hop`` is not a
-        ``Hop``; a layer in ``hop.source_layers`` is absent from
-        ``saved`` or is not a tensor; a saved tensor is
+        ``Hop``; layers in ``hop.source_layers`` are absent from
+        ``saved`` (the message names all of them); a saved layer
+        is not a tensor; a saved tensor is
         0-dimensional or is the wrong number of units wide; or
         the source layers disagree on dtype, device, or a
         dimension other than the last, such as the batch size.
@@ -149,16 +150,31 @@ def gather_hop_inputs(
     ... )  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    Kpnn2Error: saved is missing layer 0. ...
+    Kpnn2Error: 'saved' must hold every layer the hop into layer 2 ...
     """
     require_hop(
         hop,
         "hop",
     )
     if not isinstance(saved, Mapping):
-        raise Kpnn2Error(
-            "'saved' must be a mapping of layer index to tensor. Got "
-            f"{describe(saved)}."
+        raise caller_error(
+            "'saved' must be a mapping of layer index to tensor.",
+            got=describe(saved),
+        )
+
+    # All missing layers before any other check, so one message
+    # names every layer the caller forgot to store.
+    missing = [layer for layer in hop.source_layers if layer not in saved]
+    if missing:
+        raise caller_error(
+            "'saved' must hold every layer the hop into layer "
+            f"{hop.target_layer} reads.",
+            got=f"missing {_layers(missing)}",
+            expected=_layers(hop.source_layers),
+            fix=(
+                "Store every layer the forward pass produces in 'saved', "
+                "keyed by its depth."
+            ),
         )
 
     parts: list[torch.Tensor] = []
@@ -166,54 +182,50 @@ def gather_hop_inputs(
         hop.source_layers,
         hop.source_dims,
     ):
-        if layer not in saved:
-            raise Kpnn2Error(
-                f"saved is missing layer {layer}. The hop into "
-                f"layer {hop.target_layer} reads layers "
-                f"{list(hop.source_layers)}."
-            )
         tensor = saved[layer]
         if not isinstance(tensor, torch.Tensor):
-            raise Kpnn2Error(
-                f"saved[{layer}] must be a torch.Tensor. Got "
-                f"{describe(tensor)}."
+            raise caller_error(
+                f"'saved[{layer}]' must be a torch.Tensor.",
+                got=describe(tensor),
             )
-        if tensor.ndim < 1:
-            raise Kpnn2Error(
-                f"saved[{layer}] has the wrong number of units. "
-                f"Expected {n_units}, got a 0-dimensional tensor."
-            )
-        if tensor.shape[-1] != n_units:
-            raise Kpnn2Error(
-                f"saved[{layer}] has the wrong number of units. "
-                f"Expected {n_units}, got {tensor.shape[-1]}."
+        if tensor.ndim < 1 or tensor.shape[-1] != n_units:
+            raise _units_error(
+                tensor,
+                f"'saved[{layer}]'",
+                f"spec.layer_dims[{layer}]",
+                n_units,
             )
         parts.append(tensor)
 
     first = parts[0]
+    first_name = f"saved[{hop.source_layers[0]}]"
     for layer, tensor in zip(
         hop.source_layers,
         parts,
     ):
         if tensor.dtype != first.dtype:
-            raise Kpnn2Error(
-                "Saved layers must share a dtype. "
-                f"saved[{hop.source_layers[0]}] is {first.dtype} "
-                f"and saved[{layer}] is {tensor.dtype}."
+            raise caller_error(
+                "Saved layers must share a dtype.",
+                got=(
+                    f"{first_name} is {first.dtype}; saved[{layer}] is "
+                    f"{tensor.dtype}"
+                ),
             )
         if tensor.device != first.device:
-            raise Kpnn2Error(
-                "Saved layers must share a device. "
-                f"saved[{hop.source_layers[0]}] is on "
-                f"{first.device} and saved[{layer}] is on "
-                f"{tensor.device}."
+            raise caller_error(
+                "Saved layers must share a device.",
+                got=(
+                    f"{first_name} is on {first.device}; saved[{layer}] is "
+                    f"on {tensor.device}"
+                ),
             )
         if tensor.shape[:-1] != first.shape[:-1]:
-            raise Kpnn2Error(
-                "Saved layers must share every dimension but the "
-                f"last. saved[{hop.source_layers[0]}] has shape "
-                f"{tuple(first.shape)} and saved[{layer}] has shape "
-                f"{tuple(tensor.shape)}."
+            raise caller_error(
+                "Saved layers must share every dimension but the last.",
+                got=(
+                    f"{first_name} has shape {tuple(first.shape)}; "
+                    f"saved[{layer}] has shape {tuple(tensor.shape)}"
+                ),
             )
 
     if len(parts) == 1:
@@ -338,19 +350,17 @@ def scatter_hop_outputs(
         "hop",
     )
     if not isinstance(tensor, torch.Tensor):
-        raise Kpnn2Error(
-            f"'tensor' must be a torch.Tensor. Got {describe(tensor)}."
+        raise caller_error(
+            "'tensor' must be a torch.Tensor.",
+            got=describe(tensor),
         )
     n_units = hop.in_features
-    if tensor.ndim < 1:
-        raise Kpnn2Error(
-            "tensor has the wrong number of units. "
-            f"Expected {n_units}, got a 0-dimensional tensor."
-        )
-    if tensor.shape[-1] != n_units:
-        raise Kpnn2Error(
-            "tensor has the wrong number of units. "
-            f"Expected {n_units}, got {tensor.shape[-1]}."
+    if tensor.ndim < 1 or tensor.shape[-1] != n_units:
+        raise _units_error(
+            tensor,
+            "'tensor'",
+            "hop.in_features",
+            n_units,
         )
 
     if len(hop.source_layers) == 1:
@@ -367,4 +377,30 @@ def scatter_hop_outputs(
             pieces,
             strict=True,
         )
+    )
+
+
+def _layers(layers: Sequence[int]) -> str:
+    """Name one or several layers: ``"layer 0"``, ``"layers 0, 1"``."""
+    noun = "layer" if len(layers) == 1 else "layers"
+    return f"{noun} {listed(layers)}"
+
+
+def _units_error(
+    tensor: torch.Tensor,
+    name: str,
+    width: str,
+    n_units: int,
+) -> Kpnn2Error:
+    """
+    Build the error for a tensor whose last axis is not ``n_units``.
+
+    ``name`` is the quoted tensor the message names, and ``width``
+    the field that sets ``n_units``. A 0-dimensional tensor gets
+    the same message: it has no last axis to hold the units.
+    """
+    return caller_error(
+        f"{name} must have shape (..., {width}).",
+        got=f"shape {tuple(tensor.shape)}",
+        expected=f"shape (..., {n_units})",
     )

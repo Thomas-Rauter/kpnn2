@@ -1995,7 +1995,7 @@ _HOP_AXIS_CASES = [
         "gather_hop_inputs",
         "saved_layer_too_wide",
         _SHAPE,
-        "saved[1] has the wrong number of units",
+        "'saved[1]' must have shape (..., spec.layer_dims[1])",
         lambda: _gather(
             {
                 0: torch.tensor([[1.0]]),
@@ -2007,7 +2007,7 @@ _HOP_AXIS_CASES = [
         "gather_hop_inputs",
         "saved_misses_a_layer",
         _SEMANTIC,
-        "saved is missing layer 1",
+        "Got: missing layer 1",
         lambda: _gather({0: torch.tensor([[1.0]])}),
     ),
     _Bad(
@@ -2055,7 +2055,7 @@ _HOP_AXIS_CASES = [
         "scatter_hop_outputs",
         "tensor_too_wide",
         _SHAPE,
-        "tensor has the wrong number of units",
+        "'tensor' must have shape (..., hop.in_features)",
         lambda: _scatter(torch.tensor([[1.0, 1.0, 1.0]])),
     ),
 ]
@@ -2089,22 +2089,39 @@ _ALIGN_CASES = [
         "align_inputs",
         "names_repeat_a_label",
         _SEMANTIC,
-        "strings): A",
+        "strings).\n  Got: A",
         lambda: _align(["A", "A"]),
     ),
     _Bad(
         "align_inputs",
         "names_miss_an_input",
         _SEMANTIC,
-        "required name(s): A",
+        "Got: missing: A;",
         lambda: _align(["H"]),
     ),
     _Bad(
         "align_inputs",
         "names_name_a_computed_node",
         _SEMANTIC,
-        "never be read: H (hidden)",
+        "never be read.\n  Got: H (hidden)",
         lambda: _align(["A", "H"]),
+    ),
+    _Bad(
+        "align_inputs",
+        "names_miss_an_input_by_case",
+        _TYPO,
+        "Did you mean: 'Tp53'",
+        lambda: kpnn2.align_inputs(
+            ["Tp53"],
+            kpnn2.parse_layered(
+                pd.DataFrame(
+                    {
+                        "source": ["TP53"],
+                        "target": ["MDM2"],
+                    }
+                )
+            ),
+        ),
     ),
 ]
 

@@ -166,7 +166,13 @@ def test_scatter_rejects_a_width_mismatch():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
+        match="^"
+        + re.escape(
+            "'tensor' must have shape (..., hop.in_features).\n"
+            "  Got: shape (1, 4)\n"
+            "  Expected: shape (..., 3)"
+        )
+        + "$",
     ):
         scatter_hop_outputs(
             torch.zeros(1, 4),
@@ -178,7 +184,11 @@ def test_scatter_rejects_a_zero_dimensional_tensor():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="0-dimensional",
+        match=re.escape(
+            "'tensor' must have shape (..., hop.in_features).\n"
+            "  Got: shape ()\n"
+            "  Expected: shape (..., 2)"
+        ),
     ):
         scatter_hop_outputs(
             torch.tensor(1.0),
@@ -191,8 +201,8 @@ def test_scatter_non_tensor_message_reports_the_received_type():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'tensor' must be a torch.Tensor. Got ndarray of shape "
-            "(1, 3), dtype float64."
+            "'tensor' must be a torch.Tensor.\n"
+            "  Got: ndarray of shape (1, 3), dtype float64"
         ),
     ):
         scatter_hop_outputs(

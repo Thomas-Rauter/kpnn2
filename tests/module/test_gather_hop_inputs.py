@@ -125,10 +125,42 @@ def test_gather_missing_layer_message_names_the_hop():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=r"hop into layer 2 reads layers \[0, 1\]",
+        match="^"
+        + re.escape(
+            "'saved' must hold every layer the hop into layer 2 reads.\n"
+            "  Got: missing layer 0\n"
+            "  Expected: layers 0, 1\n"
+            "  Fix: Store every layer the forward pass produces in 'saved', "
+            "keyed by its depth."
+        )
+        + "$",
     ):
         gather_hop_inputs(
             {1: torch.zeros(1, 1)},
+            spec.hops[1],
+        )
+
+
+def test_gather_names_every_missing_layer():
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("  Got: missing layers 0, 1\n"),
+    ):
+        gather_hop_inputs(
+            {2: torch.zeros(1, 1)},
+            spec.hops[1],
+        )
+
+
+def test_gather_reports_missing_layers_before_a_bad_entry():
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("  Got: missing layer 1\n"),
+    ):
+        gather_hop_inputs(
+            {0: [[1.0, 2.0]]},
             spec.hops[1],
         )
 
@@ -160,7 +192,7 @@ def test_gather_rejects_a_non_tensor_entry():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=r"saved\[0\] must be a torch.Tensor",
+        match=re.escape("'saved[0]' must be a torch.Tensor."),
     ):
         gather_hop_inputs(
             {
@@ -175,7 +207,13 @@ def test_gather_rejects_a_width_mismatch():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="wrong number of units",
+        match="^"
+        + re.escape(
+            "'saved[0]' must have shape (..., spec.layer_dims[0]).\n"
+            "  Got: shape (1, 3)\n"
+            "  Expected: shape (..., 2)"
+        )
+        + "$",
     ):
         gather_hop_inputs(
             {
@@ -190,7 +228,11 @@ def test_gather_rejects_a_zero_dimensional_tensor():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="0-dimensional",
+        match=re.escape(
+            "'saved[0]' must have shape (..., spec.layer_dims[0]).\n"
+            "  Got: shape ()\n"
+            "  Expected: shape (..., 2)"
+        ),
     ):
         gather_hop_inputs(
             {0: torch.tensor(1.0)},
@@ -202,7 +244,12 @@ def test_gather_rejects_mixed_dtypes():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="share a dtype",
+        match="^"
+        + re.escape(
+            "Saved layers must share a dtype.\n"
+            "  Got: saved[0] is torch.float32; saved[1] is torch.float64"
+        )
+        + "$",
     ):
         gather_hop_inputs(
             {
@@ -247,9 +294,9 @@ def test_gather_rejects_mismatched_leading_dimensions(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Saved layers must share every dimension but the last. "
-            f"saved[0] has shape (4, 2) and saved[1] has shape "
-            f"{second_shape}."
+            "Saved layers must share every dimension but the last.\n"
+            "  Got: saved[0] has shape (4, 2); saved[1] has shape "
+            f"{second_shape}"
         ),
     ):
         gather_hop_inputs(
@@ -259,6 +306,30 @@ def test_gather_rejects_mismatched_leading_dimensions(
                     2,
                 ),
                 1: second,
+            },
+            spec.hops[1],
+        )
+
+
+def test_gather_rejects_mixed_devices():
+    spec = _skip_spec()
+    with pytest.raises(
+        Kpnn2Error,
+        match="^"
+        + re.escape(
+            "Saved layers must share a device.\n"
+            "  Got: saved[0] is on cpu; saved[1] is on meta"
+        )
+        + "$",
+    ):
+        gather_hop_inputs(
+            {
+                0: torch.zeros(1, 2),
+                1: torch.zeros(
+                    1,
+                    1,
+                    device="meta",
+                ),
             },
             spec.hops[1],
         )
@@ -317,8 +388,8 @@ def test_gather_non_mapping_message_reports_the_received_type():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'saved' must be a mapping of layer index to tensor. "
-            "Got list of length 1."
+            "'saved' must be a mapping of layer index to tensor.\n"
+            "  Got: list of length 1"
         ),
     ) as caught:
         gather_hop_inputs(
@@ -333,7 +404,7 @@ def test_gather_non_tensor_entry_message_reports_the_received_value():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "saved[0] must be a torch.Tensor. Got [[1.0, 2.0]] (list)."
+            "'saved[0]' must be a torch.Tensor.\n  Got: [[1.0, 2.0]] (list)"
         ),
     ):
         gather_hop_inputs(
