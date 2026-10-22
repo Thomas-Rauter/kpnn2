@@ -171,6 +171,30 @@ walkthrough is the
   out-degree-0 node. A pure ring, or a lone self-loop, is
   rejected on both sides.
 
+On a DAG, the adjacency loop in
+[How you compute](#how-you-compute) reaches the layered output
+only after as many steps as the longest input-to-output path
+has edges. Three costs make `parse_layered()` the better choice
+there:
+
+- **Too few steps fail silently.** A node's value is final from
+  step `d` on, where `d` is the number of edges on its longest
+  path from the inputs. Before that it still depends on the zero
+  start state. Too few steps return wrong outputs and raise
+  nothing, and you have to find the step count yourself;
+  `parse_layered()` computes those depths for you.
+- **Attributions split across steps.** In the layered sweep a
+  node has one value, in one layer tensor. In the loop it has a
+  value at every step. When its paths to an output differ in
+  length, its effect reaches the output from several steps, so
+  a Captum tap on any one step sees only part of it.
+- **Every step applies every edge.** One layered sweep applies
+  each edge once. The loop applies all of them at every step,
+  and backward stores the whole state vector once per step.
+  The dense `to_mask()` square also spans every unit on both
+  axes, where a hop's rectangle spans only its target layer and
+  the layers it reads.
+
 ## Changing the prior
 
 Specs are frozen after parse, on both layouts.
