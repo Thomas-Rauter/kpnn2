@@ -10,7 +10,14 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from .._errors import Kpnn2Error, internal_error, warn_at_caller
+from .._errors import (
+    Kpnn2Error,
+    caller_error,
+    close_matches,
+    internal_error,
+    listed,
+    warn_at_caller,
+)
 from .._validate import describe
 from ._registry import (
     AggregationMethod,
@@ -18,6 +25,10 @@ from ._registry import (
 )
 
 _DEFAULT_METHOD = "rauter_mangano_2026"
+_VARIADIC = (
+    inspect.Parameter.VAR_POSITIONAL,
+    inspect.Parameter.VAR_KEYWORD,
+)
 
 
 def aggregate_node_attributions(
@@ -98,19 +109,24 @@ def aggregate_node_attributions(
     implemented.
     """
     if not isinstance(attributions, xr.DataArray):
-        raise Kpnn2Error(
-            "'attributions' must be an xarray.DataArray. Got "
-            f"{describe(attributions)}. Name the scores with "
-            "map_node_attributions() first."
+        raise caller_error(
+            "'attributions' must be an xarray.DataArray.",
+            got=describe(attributions),
+            fix="Name the scores with map_node_attributions() first.",
         )
     if not isinstance(method, str):
-        raise Kpnn2Error(
-            f"'method' must be a str. Got {describe(method)}. See "
-            "list_aggregation_methods() for the names."
+        raise caller_error(
+            "'method' must be a str.",
+            got=describe(method),
+            fix="See list_aggregation_methods() for the names.",
         )
     entry = lookup_aggregation_method(method)
     if entry.func is None:
-        raise Kpnn2Error(_removed_message(entry))
+        raise caller_error(
+            f"Aggregation method {entry.name!r} was removed in kpnn2 "
+            f"{entry.removed_in}.",
+            fix=f"Pass method={entry.replacement!r} instead.",
+        )
     _emit_status_signal(entry)
     params = _bound_method_params(
         method,
@@ -141,35 +157,24 @@ def _emit_status_signal(entry: AggregationMethod) -> None:
     status = entry.status
     if status == "experimental":
         warn_at_caller(
-            f"Aggregation method {entry.name!r} is "
-            "experimental; results may change.",
+            f"Aggregation method {entry.name!r} is experimental; results "
+            "may change.",
             UserWarning,
+            fix="Pass a recommended or supported method from "
+            "list_aggregation_methods() to stop this warning.",
         )
         return
     if status == "deprecated":
-        if entry.deprecation_message:
-            message = entry.deprecation_message
-        else:
-            version = entry.deprecated_in
-            replacement = entry.replacement
-            message = (
-                f"Aggregation method {entry.name!r} was "
-                f"deprecated in kpnn2 {version}. Use "
-                f"{replacement!r} instead."
-            )
-        warn_at_caller(
-            message,
-            FutureWarning,
+        # A method's own deprecation message replaces the headline.
+        headline = entry.deprecation_message or (
+            f"Aggregation method {entry.name!r} was deprecated in kpnn2 "
+            f"{entry.deprecated_in}."
         )
-
-
-def _removed_message(entry: AggregationMethod) -> str:
-    """Build the error for a removed method."""
-    return (
-        f"Aggregation method {entry.name!r} was removed in "
-        f"kpnn2 {entry.removed_in}. Use {entry.replacement!r} "
-        "instead."
-    )
+        warn_at_caller(
+            headline,
+            FutureWarning,
+            fix=f"Pass method={entry.replacement!r} instead.",
+        )
 
 
 def _bound_method_params(
@@ -188,9 +193,12 @@ def _bound_method_params(
             **method_kwargs,
         )
     except TypeError as exc:
-        raise Kpnn2Error(
-            f"Aggregation method {method!r} cannot be called with these "
-            f"keyword arguments: {exc}. {_keyword_arguments(signature)}"
+        raise _keyword_error(
+            method,
+            signature,
+            attributions,
+            labels,
+            method_kwargs,
         ) from exc
     bound.apply_defaults()
     # The first two parameters receive the data, whatever their names.
@@ -206,20 +214,68 @@ def _bound_method_params(
     )
 
 
-def _keyword_arguments(signature: inspect.Signature) -> str:
+def _keyword_error(
+    method: str,
+    signature: inspect.Signature,
+    attributions: xr.DataArray,
+    labels: object | None,
+    method_kwargs: dict[str, object],
+) -> Kpnn2Error:
+    """Name the keywords that do not bind and the required ones left out."""
+    unexpected = []
+    bindable = {}
+    for key, value in method_kwargs.items():
+        # One keyword at a time, so inspect decides which ones bind.
+        try:
+            signature.bind_partial(
+                attributions,
+                labels,
+                **{key: value},
+            )
+        except TypeError:
+            unexpected.append(key)
+        else:
+            bindable[key] = value
+    bound = signature.bind_partial(
+        attributions,
+        labels,
+        **bindable,
+    )
+    missing = [
+        parameter.name
+        for parameter in signature.parameters.values()
+        if parameter.default is parameter.empty
+        and parameter.kind not in _VARIADIC
+        and parameter.name not in bound.arguments
+    ]
+    groups = []
+    if unexpected:
+        groups.append(f"unexpected {listed(repr(key) for key in unexpected)}")
+    if missing:
+        groups.append(f"missing {listed(repr(name) for name in missing)}")
+    accepted = _keyword_arguments(signature)
+    return caller_error(
+        f"Keyword arguments do not match aggregation method {method!r}.",
+        got="; ".join(groups),
+        expected=(
+            f"keyword arguments {listed(repr(name) for name in accepted)}"
+            if accepted
+            else "no keyword arguments"
+        ),
+        candidates=close_matches(
+            unexpected,
+            accepted,
+        ),
+    )
+
+
+def _keyword_arguments(signature: inspect.Signature) -> list[str]:
     """Name the keyword arguments a method takes after the data two."""
-    names = [
+    return [
         parameter.name
         for parameter in list(signature.parameters.values())[2:]
-        if parameter.kind
-        not in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        )
+        if parameter.kind not in _VARIADIC
     ]
-    if not names:
-        return "It takes no keyword arguments."
-    return f"Its keyword arguments are: {', '.join(names)}."
 
 
 def _json_value(value: object) -> object:

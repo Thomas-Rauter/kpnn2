@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .._errors import Kpnn2Error
+from .._errors import caller_error, close_matches, listed
+from .._validate import describe
 
 OBSERVATION_DIM = "observation"
 NODE_DIM = "node"
@@ -23,21 +24,34 @@ def require_named_dims(
 ) -> None:
     """Require named dims and reject any leftover dim."""
     dims = set(attributions.dims)
+    allowed = set(required) | set(optional)
     missing = [name for name in required if name not in dims]
     if missing:
-        listed = ", ".join(repr(name) for name in missing)
-        raise Kpnn2Error(
-            f"Attribution DataArray is missing required dim(s): {listed}."
+        raise caller_error(
+            "Attribution DataArray is missing required dim(s): "
+            f"{listed(repr(name) for name in missing)}.",
+            got=_dims_text(attributions),
+            candidates=close_matches(
+                missing,
+                [
+                    name
+                    for name in attributions.dims
+                    if isinstance(name, str) and name not in allowed
+                ],
+            ),
         )
-    allowed = set(required) | set(optional)
     extra = sorted(dims - allowed)
     if extra:
-        listed = ", ".join(repr(name) for name in extra)
-        allowed_listed = ", ".join(repr(name) for name in sorted(allowed))
-        raise Kpnn2Error(
-            "Attribution DataArray has unexpected dim(s): "
-            f"{listed}. Reduce or rename them first. "
-            f"Allowed dims: {allowed_listed}."
+        allowed_names = listed(repr(name) for name in sorted(allowed))
+        raise caller_error(
+            "Attribution DataArray has unexpected dim(s).",
+            got=listed(repr(name) for name in extra),
+            expected=f"only dims {allowed_names}",
+            candidates=close_matches(
+                [name for name in extra if isinstance(name, str)],
+                sorted(allowed - dims),
+            ),
+            fix="Reduce or rename the unexpected dims first.",
         )
 
 
@@ -47,13 +61,12 @@ def require_unique_nodes(attributions: xr.DataArray) -> None:
         return
     names = pd.Index(attributions.coords[NODE_DIM].values)
     if names.has_duplicates:
-        repeated = ", ".join(
-            repr(name) for name in names[names.duplicated()].unique().tolist()
-        )
-        raise Kpnn2Error(
-            f"The {NODE_DIM!r} coordinate repeats name(s): {repeated}. "
-            "A node wider than 1 (or a hop axis) has one column per "
-            "unit; reduce the units to one column per node first."
+        repeated = names[names.duplicated()].unique().tolist()
+        raise caller_error(
+            f"The {NODE_DIM!r} coordinate repeats node names.",
+            got=listed(repr(name) for name in repeated),
+            fix="Reduce the units to one column per node first; a node "
+            "wider than 1, or a hop axis, has one column per unit.",
         )
 
 
@@ -70,22 +83,23 @@ def bind_labels(
     Series is reindexed to the observation coordinate.
     """
     if labels is None:
-        raise Kpnn2Error(
-            "'labels' is required for this aggregation method. Pass "
-            "labels= with one label per observation."
+        raise caller_error(
+            "'labels' is required for this aggregation method.",
+            fix="Pass labels= with one label per observation.",
         )
-    if isinstance(labels, xr.DataArray):
-        raise Kpnn2Error(
-            "'labels' must be a 1-d array or pandas Series, not a DataArray."
-        )
-    if isinstance(labels, pd.DataFrame):
-        raise Kpnn2Error(
-            "'labels' must be a 1-d array or pandas Series, not a DataFrame."
+    if isinstance(labels, (xr.DataArray, pd.DataFrame)):
+        raise caller_error(
+            "'labels' must be a 1-d array or pandas Series.",
+            got=describe(labels),
         )
     if observation_dim not in attributions.dims:
-        raise Kpnn2Error(
-            f"Attribution DataArray must have an {observation_dim!r} "
-            f"dim. Got dims {tuple(attributions.dims)}."
+        raise caller_error(
+            f"Attribution DataArray must have an {observation_dim!r} dim.",
+            got=_dims_text(attributions),
+            candidates=close_matches(
+                [observation_dim],
+                [name for name in attributions.dims if isinstance(name, str)],
+            ),
         )
     n_obs = int(attributions.sizes[observation_dim])
     if isinstance(labels, pd.Series):
@@ -97,15 +111,15 @@ def bind_labels(
     else:
         aligned = np.asarray(labels)
         if aligned.ndim != 1:
-            raise Kpnn2Error(
-                "'labels' must be 1-dimensional. Got shape "
-                f"{tuple(aligned.shape)}."
+            raise caller_error(
+                "'labels' must be 1-dimensional.",
+                got=f"shape {tuple(aligned.shape)}",
             )
         if int(aligned.shape[0]) != n_obs:
-            raise Kpnn2Error(
-                "'labels' length must match the "
-                f"{observation_dim!r} dim. Expected {n_obs}, "
-                f"got {int(aligned.shape[0])}."
+            raise caller_error(
+                f"'labels' length must match the {observation_dim!r} dim.",
+                got=f"length {int(aligned.shape[0])}",
+                expected=f"length {n_obs}",
             )
     return attributions.assign_coords({LABEL_COORD: (observation_dim, aligned)})
 
@@ -119,28 +133,44 @@ def _align_series(
     """Reindex a Series onto the observation coordinate."""
     obs_index = pd.Index(observation_coord.values)
     if obs_index.has_duplicates:
-        raise Kpnn2Error(
-            f"The {observation_dim!r} coordinate must be unique "
-            "to align a pandas Series of labels."
+        raise caller_error(
+            f"The {observation_dim!r} coordinate must be unique to align a "
+            "pandas Series of labels.",
+            got=f"repeated {_repeated_text(obs_index)}",
+            fix="Make the coordinate unique, or pass 'labels' as an array, "
+            "which is paired by position.",
         )
     if labels.index.has_duplicates:
-        index = labels.index
-        repeated = ", ".join(
-            repr(v) for v in index[index.duplicated()].unique().tolist()
-        )
-        raise Kpnn2Error(
+        raise caller_error(
             "'labels' index must be unique to align it to the "
-            f"{observation_dim!r} coordinate. Repeated: {repeated}."
+            f"{observation_dim!r} coordinate.",
+            got=f"repeated {_repeated_text(labels.index)}",
         )
-    extra = labels.index.difference(obs_index)
-    missing = obs_index.difference(labels.index)
-    if len(extra) > 0 or len(missing) > 0:
-        extra_str = ", ".join(repr(v) for v in extra.tolist())
-        missing_str = ", ".join(repr(v) for v in missing.tolist())
-        raise Kpnn2Error(
+    extra = labels.index.difference(obs_index).tolist()
+    missing = obs_index.difference(labels.index).tolist()
+    if extra or missing:
+        groups = []
+        if missing:
+            groups.append(f"missing {listed(repr(v) for v in missing)}")
+        if extra:
+            groups.append(f"extra {listed(repr(v) for v in extra)}")
+        raise caller_error(
             "'labels' index does not match the "
-            f"{observation_dim!r} coordinate. Missing: "
-            f"{missing_str or '(none)'}. Extra: "
-            f"{extra_str or '(none)'}."
+            f"{observation_dim!r} coordinate.",
+            got="; ".join(groups),
+            candidates=close_matches(
+                [v for v in extra if isinstance(v, str)],
+                [v for v in missing if isinstance(v, str)],
+            ),
         )
     return labels.reindex(obs_index).to_numpy()
+
+
+def _repeated_text(index: pd.Index) -> str:
+    """List the values an index repeats, each once."""
+    return listed(repr(v) for v in index[index.duplicated()].unique().tolist())
+
+
+def _dims_text(attributions: xr.DataArray) -> str:
+    """List the dims of a DataArray for a ``Got`` line."""
+    return f"dims {listed(repr(name) for name in attributions.dims)}"

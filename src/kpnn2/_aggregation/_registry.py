@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .._errors import Kpnn2Error
+from .._errors import caller_error, close_matches, listed
 
 _VALID_STATUSES = frozenset(
     {
@@ -93,6 +93,15 @@ def register_aggregation_method(
             "'deprecation_message' but its status is "
             f"{status!r}, not 'deprecated'."
         )
+    if deprecation_message and (
+        len(deprecation_message.splitlines()) != 1
+        or not deprecation_message.endswith(".")
+    ):
+        raise ValueError(
+            f"Aggregation method {name!r}: 'deprecation_message' becomes "
+            "the headline of its FutureWarning, so it must be one line "
+            f"ending with a period. Got {deprecation_message!r}."
+        )
 
     def decorator(func: AggregationFn) -> AggregationFn:
         _check_method_signature(name, func)
@@ -146,12 +155,20 @@ def lookup_aggregation_method(name: str) -> AggregationMethod:
     entry = _REGISTRY.get(name)
     if entry is None:
         available = callable_method_names()
-        if available:
-            listed = ", ".join(available)
-        else:
-            listed = "(none)"
-        raise Kpnn2Error(
-            f"Unknown aggregation method {name!r}. Available methods: {listed}."
+        raise caller_error(
+            "Unknown aggregation method.",
+            got=repr(name),
+            expected=(
+                f"one of {listed(repr(method) for method in available)}"
+                if available
+                else None
+            ),
+            candidates=close_matches(
+                [name],
+                available,
+            ),
+            fix="See list_aggregation_methods() for every method and its "
+            "status.",
         )
     return entry
 

@@ -2328,8 +2328,15 @@ _AGGREGATE_CASES = [
         "aggregate_node_attributions",
         "method_is_unknown",
         _SEMANTIC,
-        "Unknown aggregation method 'no_such_method'",
+        "Unknown aggregation method.\n  Got: 'no_such_method'",
         lambda: _aggregate(method="no_such_method"),
+    ),
+    _Bad(
+        "aggregate_node_attributions",
+        "method_is_misspelled",
+        _TYPO,
+        "Did you mean: 'rauter_mangano_2026'",
+        lambda: _aggregate(method="rauter_mangano_2025"),
     ),
 ]
 

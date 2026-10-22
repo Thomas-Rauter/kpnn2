@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import xarray as xr
 
-from ..._errors import Kpnn2Error
+from ..._errors import caller_error
 from .._registry import register_aggregation_method
 
 _METHOD_NAME = "rauter_mangano_2026"
@@ -63,4 +63,4 @@ def rauter_mangano_2026(
     list_aggregation_methods : Registry table.
     """
     del attributions, labels, kwargs
-    raise Kpnn2Error(_NOT_IMPLEMENTED)
+    raise caller_error(_NOT_IMPLEMENTED)

@@ -78,16 +78,16 @@ def test_default_method_is_not_yet_implemented():
     )
     da.attrs["origin"] = "test"
     before = da.copy(deep=True)
-    with pytest.raises(
-        Kpnn2Error,
-        match="not yet implemented",
-    ):
+    with pytest.raises(Kpnn2Error) as excinfo:
         aggregate_node_attributions(
             da,
             np.array([0, 1]),
             class_0=0,
             class_1=1,
         )
+    assert str(excinfo.value) == (
+        "Aggregation method 'rauter_mangano_2026' is not yet implemented."
+    )
     xr.testing.assert_identical(da, before)
 
 
@@ -111,11 +111,72 @@ def test_deprecated_method_emits_future_warning(register_dummy):
         deprecated_in="0.2.0",
         replacement="rauter_mangano_2026",
     )(_mean_dataset)
-    with pytest.warns(FutureWarning, match="deprecated in"):
+    with pytest.warns(FutureWarning) as record:
         aggregate_node_attributions(
             _da([[1.0], [0.0]], nodes=["n"]),
             np.array([0, 1]),
             method=name,
+        )
+    assert str(record[0].message) == (
+        "Aggregation method '_dummy_deprecated' was deprecated in kpnn2 "
+        "0.2.0.\n"
+        "  Fix: Pass method='rauter_mangano_2026' instead."
+    )
+
+
+def test_deprecation_message_replaces_the_warning_headline(register_dummy):
+    name = "_dummy_deprecated_message"
+    register_dummy(
+        name,
+        status="deprecated",
+        deprecated_in="0.2.0",
+        replacement="rauter_mangano_2026",
+        deprecation_message="Folded into rauter_mangano_2026.",
+    )(_mean_dataset)
+    with pytest.warns(FutureWarning) as record:
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method=name,
+        )
+    assert str(record[0].message) == (
+        "Folded into rauter_mangano_2026.\n"
+        "  Fix: Pass method='rauter_mangano_2026' instead."
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        pytest.param(
+            "Folded into rauter_mangano_2026.\nPass it instead.",
+            id="two_lines",
+        ),
+        pytest.param(
+            "Folded into rauter_mangano_2026",
+            id="no_period",
+        ),
+    ],
+)
+def test_deprecation_message_must_be_one_line_with_a_period(
+    register_dummy,
+    message,
+):
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "Aggregation method '_dummy_bad_headline': "
+            "'deprecation_message' becomes the headline of its "
+            "FutureWarning, so it must be one line ending with a period. "
+            f"Got {message!r}."
+        ),
+    ):
+        register_dummy(
+            "_dummy_bad_headline",
+            status="deprecated",
+            deprecated_in="0.2.0",
+            replacement="rauter_mangano_2026",
+            deprecation_message=message,
         )
 
 
@@ -175,32 +236,78 @@ def test_removed_method_raises_and_names_replacement(register_dummy):
     def _never_called(attributions, labels, **kwargs):
         raise AssertionError("removed method must not run")
 
-    with pytest.raises(
-        Kpnn2Error,
-        match="Use 'rauter_mangano_2026' instead",
-    ):
+    with pytest.raises(Kpnn2Error) as excinfo:
         aggregate_node_attributions(
             _da([[1.0], [0.0]], nodes=["n"]),
             np.array([0, 1]),
             method=name,
         )
+    assert str(excinfo.value) == (
+        "Aggregation method '_dummy_removed' was removed in kpnn2 0.2.0.\n"
+        "  Fix: Pass method='rauter_mangano_2026' instead."
+    )
     table = list_aggregation_methods()
     assert name in set(table["name"])
 
 
-def test_unknown_method_lists_available_names():
+@pytest.mark.parametrize(
+    ("method", "candidates"),
+    [
+        pytest.param(
+            "not_a_method",
+            "",
+            id="far",
+        ),
+        pytest.param(
+            "rauter_mangano_2025",
+            "  Did you mean: 'rauter_mangano_2026'\n",
+            id="misspelled",
+        ),
+    ],
+)
+def test_unknown_method_lists_available_names(
+    method,
+    candidates,
+):
     da = _da(
         [[1.0], [0.0]],
         nodes=["n"],
     )
-    with pytest.raises(
-        Kpnn2Error,
-        match="Available methods: .*rauter_mangano_2026",
-    ):
+    with pytest.raises(Kpnn2Error) as excinfo:
         aggregate_node_attributions(
             da,
             np.array([0, 1]),
-            method="not_a_method",
+            method=method,
+        )
+    assert str(excinfo.value) == (
+        "Unknown aggregation method.\n"
+        f"  Got: {method!r}\n"
+        "  Expected: one of 'rauter_mangano_2026'\n"
+        f"{candidates}"
+        "  Fix: See list_aggregation_methods() for every method and its "
+        "status."
+    )
+
+
+def test_unknown_method_skips_removed_methods(register_dummy):
+    register_dummy(
+        "_dummy_gone",
+        status="removed",
+        removed_in="0.2.0",
+        replacement="rauter_mangano_2026",
+    )(_mean_dataset)
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Unknown aggregation method.\n"
+            "  Got: '_dummy_gon'\n"
+            "  Expected: one of 'rauter_mangano_2026'\n"
+        ),
+    ):
+        aggregate_node_attributions(
+            _da([[1.0], [0.0]], nodes=["n"]),
+            np.array([0, 1]),
+            method="_dummy_gon",
         )
 
 
@@ -242,29 +349,47 @@ def _required_seed(attributions, labels, *, seed):
     return xr.Dataset({"score": attributions.mean("observation")})
 
 
+def _renamed_data(data, y, **kwargs):
+    del y, kwargs
+    return xr.Dataset({"score": data.mean("observation")})
+
+
 @pytest.mark.parametrize(
-    ("func", "kwargs", "detail", "accepted"),
+    ("func", "kwargs", "fields"),
     [
         pytest.param(
             _scaled_mean,
             {"sacle": 2.0},
-            "unexpected keyword argument 'sacle'",
-            "Its keyword arguments are: scale, seed.",
+            "  Got: unexpected 'sacle'\n"
+            "  Expected: keyword arguments 'scale', 'seed'\n"
+            "  Did you mean: 'scale'",
             id="misspelled",
         ),
         pytest.param(
             _mean_dataset,
             {"scale": 2.0},
-            "unexpected keyword argument 'scale'",
-            "It takes no keyword arguments.",
+            "  Got: unexpected 'scale'\n  Expected: no keyword arguments",
             id="none_accepted",
         ),
         pytest.param(
             _required_seed,
             {},
-            "missing a required",
-            "Its keyword arguments are: seed.",
+            "  Got: missing 'seed'\n  Expected: keyword arguments 'seed'",
             id="missing",
+        ),
+        pytest.param(
+            _required_seed,
+            {"sed": 42},
+            "  Got: unexpected 'sed'; missing 'seed'\n"
+            "  Expected: keyword arguments 'seed'\n"
+            "  Did you mean: 'seed'",
+            id="misspelled_required",
+        ),
+        pytest.param(
+            _renamed_data,
+            {"data": 1.0},
+            "  Got: unexpected 'data'\n  Expected: no keyword arguments",
+            id="data_parameter",
         ),
     ],
 )
@@ -272,11 +397,8 @@ def test_method_kwargs_message_names_method_and_its_arguments(
     register_dummy,
     func,
     kwargs,
-    detail,
-    accepted,
+    fields,
 ):
-    # The middle of the message is inspect's own text, which varies
-    # across Python versions; pin the parts kpnn2 writes.
     name = "_dummy_kwargs"
     register_dummy(name)(func)
     with pytest.raises(Kpnn2Error) as caught:
@@ -286,13 +408,9 @@ def test_method_kwargs_message_names_method_and_its_arguments(
             method=name,
             **kwargs,
         )
-    text = str(caught.value)
-    assert text.startswith(
-        f"Aggregation method {name!r} cannot be called with these "
-        "keyword arguments: "
+    assert str(caught.value) == (
+        f"Keyword arguments do not match aggregation method {name!r}.\n{fields}"
     )
-    assert detail in text
-    assert text.endswith(accepted)
 
 
 def test_method_must_return_a_dataset(register_dummy):
@@ -319,12 +437,18 @@ def test_method_must_return_a_dataset(register_dummy):
 def test_experimental_method_emits_user_warning(register_dummy):
     name = "_dummy_experimental"
     register_dummy(name, status="experimental")(_mean_dataset)
-    with pytest.warns(UserWarning, match="experimental"):
+    with pytest.warns(UserWarning) as record:
         aggregate_node_attributions(
             _da([[1.0], [0.0]], nodes=["n"]),
             np.array([0, 1]),
             method=name,
         )
+    assert str(record[0].message) == (
+        "Aggregation method '_dummy_experimental' is experimental; results "
+        "may change.\n"
+        "  Fix: Pass a recommended or supported method from "
+        "list_aggregation_methods() to stop this warning."
+    )
 
 
 def test_list_aggregation_methods_includes_default():
@@ -434,9 +558,9 @@ def test_non_dataarray_message_reports_the_received_type():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'attributions' must be an xarray.DataArray. Got ndarray "
-            "of shape (2, 1), dtype float64. Name the scores with "
-            "map_node_attributions() first."
+            "'attributions' must be an xarray.DataArray.\n"
+            "  Got: ndarray of shape (2, 1), dtype float64\n"
+            "  Fix: Name the scores with map_node_attributions() first."
         ),
     ):
         aggregate_node_attributions(
@@ -467,8 +591,8 @@ def test_method_type_message_reports_the_received_value(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"'method' must be a str. Got {received}. See "
-            "list_aggregation_methods() for the names."
+            f"'method' must be a str.\n  Got: {received}\n"
+            "  Fix: See list_aggregation_methods() for the names."
         ),
     ):
         aggregate_node_attributions(

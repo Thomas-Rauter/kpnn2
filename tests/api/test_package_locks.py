@@ -45,14 +45,7 @@ _MESSAGE_BUILDERS = "src/kpnn2/_errors.py"
 
 # Modules that still build messages by hand. Each step of the
 # message-format migration converts some and removes them here.
-_NOT_YET_CONVERTED = frozenset(
-    {
-        "src/kpnn2/_aggregation/_bind.py",
-        "src/kpnn2/_aggregation/_dispatch.py",
-        "src/kpnn2/_aggregation/_methods/_rauter_mangano_2026.py",
-        "src/kpnn2/_aggregation/_registry.py",
-    }
-)
+_NOT_YET_CONVERTED = frozenset()
 
 _FORBIDDEN = """\
 import random
