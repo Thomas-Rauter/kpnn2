@@ -3059,6 +3059,31 @@ All user-facing failures from the public API raise `Kpnn2Error`.
 Do not leak raw `ValueError` / `KeyError` for contract violations
 at the public boundary (internal helpers may use them if wrapped).
 
+Every `Kpnn2Error`, every warning kpnn2 issues, and every internal
+error (below) share one message format: a headline that says what
+is wrong and ends with a period, then optional field lines, each
+indented two spaces, each one line, each at most once, in this
+order:
+
+```text
+<headline>
+  Got: <received>
+  Expected: <valid>
+  Did you mean: <close names>
+  Fix: <instructions>
+```
+
+Callers and their agents can rely on the headline as the first
+line, the four labels, their order, and one line per field (a line
+break inside a value is escaped). The wording is not stable. The
+exceptions carry no extra attributes: the message text is the
+interface. `Did you mean` suggests close valid names; kpnn2 never
+picks a name for the caller. Messages are built only in
+`src/kpnn2/_errors.py` (`caller_error`, `warn_at_caller`,
+`internal_error`); `tests/api/test_package_locks.py` enforces
+that. When to give which field, and how to write it, is in
+`dev/src_guidelines.txt`, section 3.
+
 Integer arguments accept a Python `int` or a numpy integer scalar
 (`numbers.Integral`) and convert it to `int` at the boundary, so
 nothing kpnn2 stores or returns holds a numpy integer; `bool`,
@@ -3074,11 +3099,12 @@ no order, and a mapping would be read as its keys.
 `Kpnn2Error` is for caller mistakes. A failed internal consistency
 check is a kpnn2 bug: package code raises it explicitly with
 `raise internal_error("...")` from `src/kpnn2/_errors.py`, which
-returns an `AssertionError` (not a `Kpnn2Error`) whose message says
-it is a kpnn2 bug and asks for a report at the issue tracker. It
-never warns. `src/` never uses the `assert` statement, because
-`python -O` strips it; `tests/api/test_package_locks.py` enforces
-that. Checks cover invariants whose violation would otherwise go
+returns an `AssertionError` (not a `Kpnn2Error`) whose headline
+says it is a bug in kpnn2 and whose `Fix` line asks for a report
+at the issue tracker. It never warns. `src/` never uses the
+`assert` statement, because `python -O` strips it;
+`tests/api/test_package_locks.py` enforces that. Checks cover
+invariants whose violation would otherwise go
 unnoticed (normalizations, edge conservation, identifier alignment
 after a reordering). They do not repeat what holds by construction
 or what validation guarantees, they stay cheap, and they never go

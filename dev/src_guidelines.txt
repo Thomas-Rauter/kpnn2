@@ -120,15 +120,14 @@ and explain the conflict.
 
   The headline, the four labels, their order, and one line
   per field are a stable format callers and their agents
-  can rely on. The wording is not.
+  can rely on (the contract is in CONTEXT.md **Errors**).
+  The wording is not.
 - Build messages only in `_errors.py`: `raise
   caller_error(...)` for a `Kpnn2Error`, `warn_at_caller`
   for a warning, `raise internal_error(...)` for a failed
   internal check. Do not call `Kpnn2Error(...)`,
   `AssertionError(...)`, or `warnings.warn(...)` anywhere
   else; `tests/api/test_package_locks.py` enforces this.
-  Modules on its `_NOT_YET_CONVERTED` list still build
-  messages by hand until they are converted.
 - Headline (required): one line that says what is wrong,
   ending with a period. It may add a short reason. For an
   argument, name it and state the rule: "'bias' must be

@@ -18,6 +18,9 @@ semantic versioning.
 - `parse_layered` and `parse_adjacency` warn when the edgelist
   has more than one output node and `outputs=` is not given.
   `from_dict` does not warn.
+- Errors, warnings, and internal errors share one message format:
+  a headline, then optional `Got`, `Expected`, `Did you mean`, and
+  `Fix` lines. A misspelled name gets close valid names suggested.
 
 
 ## [0.3.0] - 16. Oktober 2026

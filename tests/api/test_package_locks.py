@@ -40,12 +40,9 @@ _GLOBAL_SEEDS = frozenset(
 _COMPILER_NAMES = frozenset(_COMPILER_LEFTOVERS)
 
 # Messages are built only here, so every error and warning shares
-# one format (dev/src_guidelines.txt, section 3).
+# one format (CONTEXT.md **Errors**, dev/src_guidelines.txt,
+# section 3).
 _MESSAGE_BUILDERS = "src/kpnn2/_errors.py"
-
-# Modules that still build messages by hand. Each step of the
-# message-format migration converts some and removes them here.
-_NOT_YET_CONVERTED = frozenset()
 
 _FORBIDDEN = """\
 import random
@@ -417,18 +414,12 @@ def test_src_does_not_use_assert():
 
 
 def test_src_builds_messages_only_in_the_errors_module():
-    allowed = _NOT_YET_CONVERTED | {_MESSAGE_BUILDERS}
     hits = [
         hit
         for hit in _src_findings()["message"]
-        if _hit_path(hit) not in allowed
+        if _hit_path(hit) != _MESSAGE_BUILDERS
     ]
     assert hits == []
-
-
-def test_not_yet_converted_modules_still_build_messages():
-    paths = {_hit_path(hit) for hit in _src_findings()["message"]}
-    assert sorted(_NOT_YET_CONVERTED - paths) == []
 
 
 def test_scanner_flags_forbidden_syntax_and_allows_copies():

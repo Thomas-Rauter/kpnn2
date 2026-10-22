@@ -6,10 +6,10 @@ wrong type, a non-bool flag, an out-of-range value, a wrong shape,
 and a semantic violation, wherever the category applies. Each row
 names the text its message must contain: the argument or the
 offending name. Type, flag, and value messages must also report
-what was received (``Got``). A second table holds valid edge cases
-that must not raise, so the first cannot pass by rejecting too
-much. A guard fails when a public name has no row and no listed
-reason.
+what was received on a ``Got`` field line. A second table holds
+valid edge cases that must not raise, so the first cannot pass by
+rejecting too much. A guard fails when a public name has no row
+and no listed reason.
 
 Every layer here draws its init from a local generator seeded with
 42, so the module never touches the global RNG.
@@ -36,7 +36,8 @@ _SEMANTIC = "semantic"
 # A misspelled name: the message must suggest close valid names.
 _TYPO = "typo"
 
-# Kinds whose message must report the received value.
+# Kinds whose message must report the received value on a
+# "  Got: " field line, not only say "Got" somewhere.
 _REPORTS_RECEIVED = frozenset(
     {
         _TYPE,
@@ -2719,7 +2720,7 @@ def test_bad_input_raises_kpnn2_error(case):
     ) as error:
         case.call()
     if case.kind in _REPORTS_RECEIVED:
-        assert "Got" in str(error.value)
+        assert "\n  Got: " in str(error.value)
     if case.kind == _TYPO:
         assert "\n  Did you mean: " in str(error.value)
 

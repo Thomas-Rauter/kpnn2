@@ -29,10 +29,6 @@ helpers and constants in those modules. If the user names no
 modules, ask. Do not audit the whole package in one session:
 quality drops over 150 messages.
 
-If `_NOT_YET_CONVERTED` in `tests/api/test_package_locks.py`
-still lists a module in scope, skip that module and say so at
-the top of the report. Its messages are not in the format yet.
-
 ## Read, in this order
 
 1. `AGENTS.md`.
@@ -168,7 +164,7 @@ message:
 # Error-message audit: <scope>
 
 kpnn2 <version>, <short sha>, tree <clean | dirty>.
-Modules: <list>. Skipped: <list and why, or none>.
+Modules: <list>.
 
 ## Summary
 
