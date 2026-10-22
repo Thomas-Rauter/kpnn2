@@ -180,7 +180,7 @@ def test_parse_adjacency_rejects_non_dataframe():
     ) as exc_info:
         parse_adjacency([["a", "b"]])
 
-    assert "Got [['a', 'b']] (list)." in str(exc_info.value)
+    assert "\n  Got: [['a', 'b']] (list)" in str(exc_info.value)
 
 
 def test_parse_adjacency_rejects_missing_columns():
@@ -188,7 +188,7 @@ def test_parse_adjacency_rejects_missing_columns():
 
     with pytest.raises(
         Kpnn2Error,
-        match="Missing: target",
+        match="missing: 'target'",
     ):
         parse_adjacency(edgelist)
 
@@ -287,8 +287,10 @@ def test_parse_adjacency_rejects_a_pure_ring_for_having_no_input():
         parse_adjacency(edgelist)
 
     message = str(exc_info.value)
-    assert "Every node has an incoming edge" in message
-    assert message.endswith("add input nodes that appear only in 'source'.")
+    assert "every node has an incoming edge" in message
+    assert message.endswith(
+        "\n  Fix: Add input nodes that appear only in 'source'."
+    )
 
 
 def test_parse_adjacency_rejects_a_lone_self_loop():
@@ -305,7 +307,7 @@ def test_parse_adjacency_rejects_a_lone_self_loop():
     ) as exc_info:
         parse_adjacency(edgelist)
 
-    assert "Every node has an incoming edge" in str(exc_info.value)
+    assert "every node has an incoming edge" in str(exc_info.value)
 
 
 def test_parse_adjacency_rejects_a_graph_with_no_output():
@@ -323,8 +325,10 @@ def test_parse_adjacency_rejects_a_graph_with_no_output():
         parse_adjacency(edgelist)
 
     message = str(exc_info.value)
-    assert "Every node has an outgoing edge" in message
-    assert message.endswith("add output nodes that appear only in 'target'.")
+    assert "every node has an outgoing edge" in message
+    assert message.endswith(
+        "\n  Fix: Add output nodes that appear only in 'target'."
+    )
 
 
 def test_parse_adjacency_to_mask_drives_a_masked_linear():

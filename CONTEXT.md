@@ -519,7 +519,7 @@ The warning points at the caller's line, from the parsers and
 | No missing values in `source` or `target` | `Kpnn2Error` |
 | Every `source` / `target` value is a `str`, integer, float, or `bool` | `Kpnn2Error` naming the rows; a float or `bool` warns |
 | No empty-string node names | `Kpnn2Error` |
-| No two distinct node names equal after `str.strip()` | `Kpnn2Error` naming every group, sorted |
+| No two distinct node names equal after `str.strip()` | `Kpnn2Error` naming the groups, sorted |
 | At least one edge | `Kpnn2Error` |
 | No duplicate `(source, target)` pairs | `Kpnn2Error` naming the pair(s), sorted |
 | No self-loops (`source == target`) | `Kpnn2Error` naming the node(s), sorted |
@@ -633,16 +633,16 @@ ranking. Do **not** add `ranks=` to `parse_adjacency`.
 
 A cycle is detected when `len(depths) != len(nodes)` after the
 sweep. The `Kpnn2Error` message still says the edgelist has a
-cycle and that only DAGs are supported, and lists every unranked
-name (`nodes` minus keys of `depths`), sorted alphabetically and
+cycle and that only DAGs are supported, and lists the unranked
+names (`nodes` minus keys of `depths`), sorted alphabetically and
 comma-separated. That leftover set may include nodes downstream
 of a cycle, not only vertices on a directed cycle. Do not run a
 separate cycle-extraction algorithm.
 
 Two or more distinct names in `source` and `target` that are
 equal after `str.strip()` (tabs, newlines, and non-breaking
-spaces included) raise `Kpnn2Error`. The message lists every
-group by `repr`, groups sorted by stripped name and names within
+spaces included) raise `Kpnn2Error`. The message lists the
+groups by `repr`, groups sorted by stripped name and names within
 a group sorted, and ends with the fix: strip the names before
 parsing or give them distinct names. Only collisions raise; names
 are never stripped, case-folded, or otherwise rewritten.
@@ -681,7 +681,7 @@ Input nodes (in-degree 0) must have width 1; an explicit `1` is
 accepted. Each input reads one feature column, so extra units
 would only hold copies of it, and their weights would collapse
 to one effective weight per target unit. A wider input raises
-`Kpnn2Error` listing every offender as `name=width`, sorted by
+`Kpnn2Error` listing the offenders as `name=width`, sorted by
 name, and telling the caller to give each measurement its own
 input node. Width is for hidden and output nodes. This check
 runs after the unknown-name check.

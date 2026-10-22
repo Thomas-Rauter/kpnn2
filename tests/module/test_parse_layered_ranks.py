@@ -252,7 +252,7 @@ def test_ranks_message_describes_the_value_without_its_data(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"Rank for node 'H' must be a non-negative int. Got {got}."
+            f"Rank for node 'H' must be a non-negative int.\n  Got: {got}"
         ),
     ) as caught:
         parse_layered(
@@ -406,3 +406,23 @@ def test_parse_adjacency_has_no_ranks_argument():
             edgelist,
             ranks={"A": 0, "H": 1, "C": 2},
         )
+
+
+def test_ranks_naming_no_node_say_to_check_the_identifiers():
+    with pytest.raises(Kpnn2Error) as caught:
+        parse_layered(
+            _chain_edgelist(),
+            ranks={
+                "x1": 0,
+                "x2": 1,
+                "x3": 2,
+            },
+        )
+
+    message = str(caught.value)
+    assert message.startswith("Unknown node name(s) in 'ranks'.\n")
+    assert "Did you mean" not in message
+    assert message.endswith(
+        "\n  Fix: None of the names in 'ranks' is a node; check that "
+        "they use the same identifiers as the edgelist."
+    )

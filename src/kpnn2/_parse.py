@@ -10,7 +10,14 @@ import numpy as np
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error, internal_error, warn_at_caller
+from ._errors import (
+    Kpnn2Error,
+    caller_error,
+    close_matches,
+    internal_error,
+    listed,
+    warn_at_caller,
+)
 from ._layout import (
     Layout,
     NodeSlot,
@@ -29,8 +36,6 @@ from ._validate import (
 
 _SOURCE = "source"
 _TARGET = "target"
-_COLUMN_LIMIT = 10
-_ROW_LIMIT = 5
 # How a source / target value becomes a node name.
 _NAME = "name"
 _CONVERTED = "converted"
@@ -42,19 +47,41 @@ _NAME_COLUMN_TYPES = (
 )
 
 
-def _capped_list(
-    items: Sequence[object],
-    limit: int,
-) -> str:
+def _unknown_names_error(
+    argument: str,
+    unknown: list[str],
+    n_given: int,
+    nodes: Iterable[str],
+) -> Kpnn2Error:
     """
-    Join the ``repr`` of the first ``limit`` items.
+    Build the error for names in ``argument`` that are no node.
 
-    Past ``limit``, the rest are counted: ``'a', 'b', and 3 more``.
+    Close node names are suggested, unless none of the several
+    given names is a node: then they are likely another kind of
+    identifier, and the fix says so.
     """
-    shown = ", ".join(repr(item) for item in items[:limit])
-    if len(items) > limit:
-        return f"{shown}, and {len(items) - limit} more"
-    return shown
+    if len(unknown) == n_given > 1:
+        return caller_error(
+            f"Unknown node name(s) in '{argument}'.",
+            got=listed(unknown),
+            fix=_identifier_fix(argument),
+        )
+    return caller_error(
+        f"Unknown node name(s) in '{argument}'.",
+        got=listed(unknown),
+        candidates=close_matches(
+            unknown,
+            nodes,
+        ),
+    )
+
+
+def _identifier_fix(argument: str) -> str:
+    """Return the fix for an argument none of whose names is a node."""
+    return (
+        f"None of the names in '{argument}' is a node; check that they "
+        "use the same identifiers as the edgelist."
+    )
 
 
 def _flagged_rows(
@@ -72,10 +99,7 @@ def _flagged_rows(
     for column, flagged in flags.items():
         labels = index[flagged.to_numpy()].tolist()
         if labels:
-            labels_str = _capped_list(
-                labels,
-                _ROW_LIMIT,
-            )
+            labels_str = listed(repr(label) for label in labels)
             parts.append(
                 f"'{column}': {len(labels)} row(s) at index {labels_str}"
             )
@@ -179,11 +203,12 @@ def _check_name_types(edgelist: pd.DataFrame) -> None:
             rejected,
             edgelist.index,
         )
-        raise Kpnn2Error(
+        raise caller_error(
             "Edgelist 'source' and 'target' must hold node names: "
-            "strings, or integers that are read through str(). Got "
-            f"{describe(value)} in '{column}' at index {label!r}. "
-            f"{rows_str}. Replace each with the name it stands for."
+            "strings, or integers that are read through str().",
+            got=f"{describe(value)} in '{column}' at index {label!r}; "
+            f"{rows_str}",
+            fix="Replace each with the name it stands for.",
         )
     converted = {column: kind == _CONVERTED for column, kind in kinds.items()}
     if any(bool(flagged.any()) for flagged in converted.values()):
@@ -198,12 +223,13 @@ def _check_name_types(edgelist: pd.DataFrame) -> None:
         )
         warn_at_caller(
             "Edgelist holds float or bool values in 'source' or "
-            "'target'; they become node names through str(), so "
-            f"{text} became {text!r}. {rows_str}. Node names are text, "
-            "so 1.0 and 1 name different nodes. To silence this, "
-            "convert the column to the intended strings first, for "
-            "example with .astype(int).astype(str) for float IDs.",
+            "'target', which become node names through str(): node "
+            "names are text, so 1.0 and 1 name different nodes.",
             UserWarning,
+            got=f"{text} became {text!r}; {rows_str}",
+            fix="Convert the column to the intended strings first, for "
+            "example with .astype(int).astype(str) for float IDs; the "
+            "warning then stops.",
         )
 
 
@@ -234,8 +260,8 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
         but a ``str``, integer, float, or ``bool``; message counts
         the rows per column and names the first few by index
         label), the table has no rows, two or more names differ
-        only by leading or trailing whitespace (message names every
-        such group, sorted), or ``(source, target)`` pairs are
+        only by leading or trailing whitespace (message names the
+        groups, sorted), or ``(source, target)`` pairs are
         duplicated (message names the unique pairs, sorted).
 
     Warns
@@ -245,30 +271,37 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
         which becomes a name such as ``'1.0'`` or ``'True'``.
     """
     if not isinstance(edgelist, pd.DataFrame):
-        raise Kpnn2Error(
-            f"'edgelist' must be a pandas DataFrame. Got {describe(edgelist)}."
+        raise caller_error(
+            "'edgelist' must be a pandas DataFrame.",
+            got=describe(edgelist),
         )
 
     missing_columns = [
         name for name in (_SOURCE, _TARGET) if name not in edgelist.columns
     ]
     if missing_columns:
-        missing_str = ", ".join(missing_columns)
         present = edgelist.columns.tolist()
-        present_str = (
-            _capped_list(
-                present,
-                _COLUMN_LIMIT,
-            )
-            or "none"
-        )
-        raise Kpnn2Error(
-            "Edgelist must contain columns 'source' and 'target'. "
-            f"Missing: {missing_str}. Present columns: {present_str}."
+        if present:
+            present_str = listed(repr(column) for column in present)
+        else:
+            present_str = "none"
+        raise caller_error(
+            "Edgelist must contain columns 'source' and 'target'; "
+            f"missing: {listed(repr(name) for name in missing_columns)}.",
+            got=f"columns {present_str}",
+            candidates=close_matches(
+                [
+                    column
+                    for column in present
+                    if isinstance(column, str)
+                    and column not in (_SOURCE, _TARGET)
+                ],
+                missing_columns,
+            ),
         )
 
     if len(edgelist) == 0:
-        raise Kpnn2Error("Edgelist must contain at least one edge.")
+        raise caller_error("Edgelist must contain at least one edge.")
 
     source = edgelist[_SOURCE]
     target = edgelist[_TARGET]
@@ -280,9 +313,9 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
             },
             edgelist.index,
         )
-        raise Kpnn2Error(
-            "Edgelist contains missing values in 'source' or 'target'. "
-            f"{rows_str}."
+        raise caller_error(
+            "Edgelist contains missing values in 'source' or 'target'.",
+            got=rows_str,
         )
     _check_name_types(edgelist)
 
@@ -303,9 +336,9 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
             },
             edgelist.index,
         )
-        raise Kpnn2Error(
-            "Edgelist contains empty node names in 'source' or 'target'. "
-            f"{rows_str}."
+        raise caller_error(
+            "Edgelist contains empty node names in 'source' or 'target'.",
+            got=rows_str,
         )
 
     names = set(normalized[_SOURCE]) | set(normalized[_TARGET])
@@ -321,15 +354,17 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
         if len(names_by_stripped[stripped]) > 1
     ]
     if collisions:
-        groups_str = "; ".join(
-            ", ".join(repr(name) for name in group) for group in collisions
+        groups_str = listed(
+            f"({', '.join(repr(name) for name in group)})"
+            for group in collisions
         )
-        raise Kpnn2Error(
+        raise caller_error(
             "Edgelist contains node names that differ only by leading "
-            f"or trailing whitespace: {groups_str}. Strip the names "
-            "before parsing (for example "
+            "or trailing whitespace.",
+            got=groups_str,
+            fix="Strip the names before parsing (for example "
             'edgelist["source"].str.strip()) or give them distinct '
-            "names."
+            "names.",
         )
 
     n_duplicates = int(normalized.duplicated().sum())
@@ -345,11 +380,10 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
                 unique_pairs[_TARGET],
             )
         ]
-        pairs_str = ", ".join(pair_labels)
-        raise Kpnn2Error(
-            f"Edgelist contains {n_duplicates} duplicate edge(s): "
-            f"{pairs_str}. At most one connection is allowed for each "
-            "source-target pair."
+        raise caller_error(
+            f"Edgelist contains {n_duplicates} duplicate edge(s): at most "
+            "one connection is allowed for each source-target pair.",
+            got=listed(pair_labels),
         )
 
     return pd.DataFrame(
@@ -379,10 +413,12 @@ def _reject_self_loops(edgelist: pd.DataFrame) -> None:
     n_self_loops = int(self_loops.sum())
     if n_self_loops > 0:
         loop_nodes = sorted(set(edgelist[_SOURCE][self_loops].tolist()))
-        nodes_str = ", ".join(loop_nodes)
-        raise Kpnn2Error(
-            f"Edgelist contains {n_self_loops} self-loop(s): "
-            f"{nodes_str}. Self-loops are not allowed."
+        raise caller_error(
+            f"Edgelist contains {n_self_loops} self-loop(s), and "
+            "parse_layered() supports only DAGs.",
+            got=f"self-loop(s) on {listed(loop_nodes)}",
+            fix="Use parse_adjacency(), which allows self-loops and "
+            "cycles, or drop those rows.",
         )
 
 
@@ -461,16 +497,18 @@ def _node_sets(
     input_nodes = sorted(node for node in nodes if in_degree[node] == 0)
     output_nodes = sorted(node for node in nodes if out_degree[node] == 0)
     if not input_nodes:
-        raise Kpnn2Error(
-            "Edgelist must contain at least one input node (in-degree 0). "
-            "Every node has an incoming edge, so the graph has no entry "
-            "point; add input nodes that appear only in 'source'."
+        raise caller_error(
+            "Edgelist must contain at least one input node (in-degree 0): "
+            "every node has an incoming edge, so the graph has no entry "
+            "point.",
+            fix="Add input nodes that appear only in 'source'.",
         )
     if not output_nodes:
-        raise Kpnn2Error(
-            "Edgelist must contain at least one output node (out-degree 0). "
-            "Every node has an outgoing edge, so the graph has no exit "
-            "point; add output nodes that appear only in 'target'."
+        raise caller_error(
+            "Edgelist must contain at least one output node (out-degree "
+            "0): every node has an outgoing edge, so the graph has no "
+            "exit point.",
+            fix="Add output nodes that appear only in 'target'.",
         )
     input_set = set(input_nodes)
     output_set = set(output_nodes)
@@ -518,7 +556,7 @@ def _rank_layers(
     ------
     Kpnn2Error
         If a cycle leaves some nodes unranked. The message names
-        every leftover node (``nodes`` minus keys of ``depths``),
+        the leftover nodes (``nodes`` minus keys of ``depths``),
         sorted alphabetically.
     """
     remaining = dict(in_degree)
@@ -537,10 +575,12 @@ def _rank_layers(
 
     if len(depths) != len(nodes):
         unranked = sorted(nodes - depths.keys())
-        unranked_str = ", ".join(unranked)
-        raise Kpnn2Error(
-            "Edgelist contains a cycle. Only DAGs are supported. "
-            f"Unranked nodes: {unranked_str}."
+        raise caller_error(
+            "Edgelist contains a cycle, and parse_layered() supports "
+            "only DAGs.",
+            got=f"nodes on or downstream of a cycle: {listed(unranked)}",
+            fix="Use parse_adjacency(), which allows cycles, or remove "
+            "an edge from each cycle.",
         )
 
     return _layers_from_depths(depths)
@@ -586,19 +626,25 @@ def _layers_from_user_ranks(
     for key, value in ranks.items():
         name = str(key)
         if not is_integer(value) or value < 0:
-            raise Kpnn2Error(
-                f"Rank for node {name!r} must be a non-negative int. "
-                f"Got {describe(value)}."
+            raise caller_error(
+                f"Rank for node {name!r} must be a non-negative int.",
+                got=describe(value),
             )
         requested[name] = int(value)
     unknown = sorted(set(requested) - nodes)
     if unknown:
-        names_str = ", ".join(unknown)
-        raise Kpnn2Error(f"Unknown node name(s) in 'ranks': {names_str}.")
+        raise _unknown_names_error(
+            "ranks",
+            unknown,
+            len(requested),
+            nodes,
+        )
     missing = sorted(nodes - set(requested))
     if missing:
-        names_str = ", ".join(missing)
-        raise Kpnn2Error(f"Missing node name(s) in 'ranks': {names_str}.")
+        raise caller_error(
+            "Missing node name(s) in 'ranks': every node needs a rank.",
+            got=f"no rank for {listed(missing)}",
+        )
 
     used = sorted(set(requested.values()))
     rank_to_layer = {rank: index for index, rank in enumerate(used)}
@@ -617,20 +663,19 @@ def _layers_from_user_ranks(
     if inputs_off_min or non_inputs_at_min:
         offenders = []
         if inputs_off_min:
-            names_str = ", ".join(inputs_off_min)
             offenders.append(
-                f"input node(s) not at the minimum rank: {names_str}"
+                "input node(s) not at the minimum rank: "
+                f"{listed(inputs_off_min)}"
             )
         if non_inputs_at_min:
-            names_str = ", ".join(non_inputs_at_min)
             offenders.append(
-                f"non-input node(s) at the minimum rank: {names_str}"
+                "non-input node(s) at the minimum rank: "
+                f"{listed(non_inputs_at_min)}"
             )
-        detail = "; ".join(offenders)
-        raise Kpnn2Error(
+        raise caller_error(
             "All in-degree-0 nodes must share the minimum rank "
-            "in 'ranks', and no non-input may use that rank. "
-            f"{detail}."
+            "in 'ranks', and no non-input may use that rank.",
+            got="; ".join(offenders),
         )
 
     bad_pairs: list[tuple[str, str]] = []
@@ -651,10 +696,9 @@ def _layers_from_user_ranks(
         pair_labels = [
             f"{source} -> {target}" for source, target in unique_pairs
         ]
-        pairs_str = ", ".join(pair_labels)
-        raise Kpnn2Error(
-            "Every named edge must go strictly forward under "
-            f"'ranks'. Non-forward edge(s): {pairs_str}."
+        raise caller_error(
+            "Every named edge must go strictly forward under 'ranks'.",
+            got=f"non-forward edge(s) {listed(pair_labels)}",
         )
 
     return _layers_from_depths(depths)
@@ -685,24 +729,28 @@ def _normalize_widths(
     for key, value in widths.items():
         name = str(key)
         if not is_integer(value) or value < 1:
-            raise Kpnn2Error(
-                f"Width for node {name!r} must be a positive int. "
-                f"Got {describe(value)}."
+            raise caller_error(
+                f"Width for node {name!r} must be a positive int.",
+                got=describe(value),
             )
         requested[name] = int(value)
     unknown = sorted(set(requested) - nodes)
     if unknown:
-        names_str = ", ".join(unknown)
-        raise Kpnn2Error(f"Unknown node name(s) in 'widths': {names_str}.")
+        raise _unknown_names_error(
+            "widths",
+            unknown,
+            len(requested),
+            nodes,
+        )
     wide_inputs = sorted(
         name for name in input_nodes if requested.get(name, 1) != 1
     )
     if wide_inputs:
-        got_str = ", ".join(f"{name}={requested[name]}" for name in wide_inputs)
-        raise Kpnn2Error(
+        raise caller_error(
             "Input nodes (in-degree 0) must have width 1 in 'widths', "
-            f"since each reads one feature column. Got {got_str}. "
-            "Give each measurement its own input node."
+            "since each reads one feature column.",
+            got=listed(f"{name}={requested[name]}" for name in wide_inputs),
+            fix="Give each measurement its own input node.",
         )
     return {node: requested.get(node, 1) for node in nodes}
 
@@ -1070,10 +1118,10 @@ def _declared_outputs(outputs: object) -> list[str] | None:
     if outputs is None:
         return None
     if isinstance(outputs, Mapping):
-        raise Kpnn2Error(
-            "'outputs' must be a collection of node names, not a "
-            f"mapping. Got {describe(outputs)}. Pass the names as a "
-            "list."
+        raise caller_error(
+            "'outputs' must be a collection of node names, not a mapping.",
+            got=describe(outputs),
+            fix="Pass the names as a list.",
         )
     names = as_name_list(
         list(outputs) if isinstance(outputs, AbstractSet) else outputs,
@@ -1081,17 +1129,17 @@ def _declared_outputs(outputs: object) -> list[str] | None:
         "output node names",
     )
     if not names:
-        raise Kpnn2Error(
-            "'outputs' must name at least one node. Got "
-            f"{describe(outputs)}. Pass the output nodes you read, or "
-            "omit 'outputs'."
+        raise caller_error(
+            "'outputs' must name at least one node.",
+            got=describe(outputs),
+            fix="Pass the output nodes you read, or omit 'outputs'.",
         )
     counts = Counter(names)
     repeated = sorted(name for name, count in counts.items() if count > 1)
     if repeated:
-        raise Kpnn2Error(
-            "'outputs' names a node more than once: "
-            f"{', '.join(repeated)}. Name each output node once."
+        raise caller_error(
+            "'outputs' names a node more than once.",
+            got=listed(repeated),
         )
     return names
 
@@ -1140,12 +1188,13 @@ def _confirm_outputs(
         if len(found) > 1:
             warn_at_caller(
                 f"The edgelist has {len(found)} output nodes, nodes with "
-                f"no outgoing edge: {', '.join(found)}. A node whose "
-                "onward rows are missing from the edgelist is an output "
-                "node too. Pass the output nodes you read as 'outputs' "
-                "to confirm them: this warning then stops, and parsing "
-                "raises on any other node with no outgoing edge.",
+                "no outgoing edge; a node whose onward rows are missing "
+                "from the edgelist is an output node too.",
                 UserWarning,
+                got=listed(found),
+                fix="Pass the output nodes you read as 'outputs' to "
+                "confirm them; the warning then stops, and parsing raises "
+                "on any other node with no outgoing edge.",
             )
         return
     role = {name: "input" for name in spec.input_nodes}
@@ -1155,35 +1204,75 @@ def _confirm_outputs(
         name for name in declared if name not in role and name not in output_set
     )
     not_outputs = sorted(name for name in declared if name in role)
-    problems = []
-    if unknown:
-        problems.append(
-            "'outputs' names node(s) that are not in the edgelist: "
-            f"{', '.join(unknown)}."
+    if unknown or not_outputs:
+        raise _wrong_outputs_error(
+            unknown,
+            [f"{name} ({role[name]})" for name in not_outputs],
+            declared,
+            found,
         )
-    if not_outputs:
-        labels = ", ".join(f"{name} ({role[name]})" for name in not_outputs)
-        problems.append(
-            "'outputs' names node(s) with an outgoing edge, which are "
-            f"not output nodes: {labels}. To read a node that feeds "
-            "others, index it with unit_index()."
-        )
-    if problems:
-        raise Kpnn2Error(" ".join(problems))
     extra = sorted(output_set - set(declared))
     if extra:
         dead = _without_path_to(
             declared,
             spec.to_edgelist(),
         )
-        raise Kpnn2Error(
+        # Every name, not listed(): the fix drops the rows of each.
+        raise caller_error(
             "Node(s) with no outgoing edge that are not in 'outputs': "
-            f"{', '.join(extra)}. The edgelist has no row leaving them, "
-            "so they are output nodes too. Node(s) with no path to a "
-            f"node in 'outputs': {', '.join(dead)}. Drop the edgelist "
-            "rows whose target is one of these and parse again, or add "
-            "a node to 'outputs' if you read it."
+            "the edgelist has no row leaving them, so they are output "
+            "nodes too.",
+            got=listed(extra),
+            fix="Drop the edgelist rows whose target is one of the "
+            "nodes with no path to a node in 'outputs' "
+            f"({', '.join(dead)}) and parse again, or add a node to "
+            "'outputs' if you read it.",
         )
+
+
+def _wrong_outputs_error(
+    unknown: list[str],
+    not_outputs: list[str],
+    declared: list[str],
+    found: Sequence[str],
+) -> Kpnn2Error:
+    """
+    Build the error for names in ``outputs`` that are no output node.
+
+    Both kinds of wrong name go into one message: names that are
+    not in the edgelist, and nodes with an outgoing edge, given as
+    ``"name (role)"``.
+    """
+    kinds = []
+    found_parts = []
+    candidates = None
+    fixes = []
+    if unknown:
+        kinds.append("node(s) that are not in the edgelist")
+        found_parts.append(("not in the edgelist", listed(unknown)))
+        if len(unknown) == len(declared) > 1:
+            fixes.append(_identifier_fix("outputs"))
+        else:
+            candidates = close_matches(
+                unknown,
+                [name for name in found if name not in declared],
+            )
+    if not_outputs:
+        kinds.append(
+            "node(s) with an outgoing edge, which are not output nodes"
+        )
+        found_parts.append(("with an outgoing edge", listed(not_outputs)))
+        fixes.append("Index a node that feeds others with unit_index().")
+    if len(found_parts) == 1:
+        got = found_parts[0][1]
+    else:
+        got = "; ".join(f"{label}: {names}" for label, names in found_parts)
+    return caller_error(
+        f"'outputs' names {', and '.join(kinds)}.",
+        got=got,
+        candidates=candidates,
+        fix=" ".join(fixes) or None,
+    )
 
 
 def _layered_from_edgelist(

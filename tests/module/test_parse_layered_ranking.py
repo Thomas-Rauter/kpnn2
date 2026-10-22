@@ -49,7 +49,7 @@ def test_parse_layered_allows_early_outputs():
 
     with pytest.warns(
         UserWarning,
-        match="2 output nodes, nodes with no outgoing edge: C, E",
+        match="2 output nodes, nodes with no outgoing edge;.*\n  Got: C, E",
     ):
         spec = parse_layered(edgelist)
 
@@ -132,8 +132,10 @@ def test_parse_layered_rejects_missing_input():
         parse_layered(edgelist)
 
     message = str(exc_info.value)
-    assert "Every node has an incoming edge" in message
-    assert message.endswith("add input nodes that appear only in 'source'.")
+    assert "every node has an incoming edge" in message
+    assert message.endswith(
+        "\n  Fix: Add input nodes that appear only in 'source'."
+    )
 
 
 def test_parse_layered_rejects_missing_output():
@@ -151,5 +153,30 @@ def test_parse_layered_rejects_missing_output():
         parse_layered(edgelist)
 
     message = str(exc_info.value)
-    assert "Every node has an outgoing edge" in message
-    assert message.endswith("add output nodes that appear only in 'target'.")
+    assert "every node has an outgoing edge" in message
+    assert message.endswith(
+        "\n  Fix: Add output nodes that appear only in 'target'."
+    )
+
+
+def test_parse_layered_self_loop_list_is_capped_at_ten():
+    names = [f"n{i:02d}" for i in range(12)]
+    edgelist = pd.DataFrame(
+        {
+            "source": names,
+            "target": names,
+        }
+    )
+
+    with pytest.raises(Kpnn2Error) as caught:
+        parse_layered(edgelist)
+
+    message = str(caught.value)
+    assert message.splitlines() == [
+        "Edgelist contains 12 self-loop(s), and parse_layered() supports "
+        "only DAGs.",
+        "  Got: self-loop(s) on n00, n01, n02, n03, n04, n05, n06, n07, "
+        "n08, n09, and 2 more",
+        "  Fix: Use parse_adjacency(), which allows self-loops and "
+        "cycles, or drop those rows.",
+    ]

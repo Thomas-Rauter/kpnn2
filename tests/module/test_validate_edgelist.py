@@ -48,7 +48,7 @@ def test_validate_edgelist_rejects_missing_columns():
 
     with pytest.raises(
         Kpnn2Error,
-        match="Missing: target",
+        match="missing: 'target'",
     ):
         _validate_edgelist(edgelist)
 
@@ -57,7 +57,7 @@ def test_validate_edgelist_non_dataframe_message_names_its_type():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'edgelist' must be a pandas DataFrame. Got [['a', 'b']] (list)."
+            "'edgelist' must be a pandas DataFrame.\n  Got: [['a', 'b']] (list)"
         ),
     ):
         _validate_edgelist(
@@ -76,7 +76,10 @@ def test_validate_edgelist_missing_column_message_lists_present_columns():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Missing: source. Present columns: 'Source', 'target'."
+            "Edgelist must contain columns 'source' and 'target'; "
+            "missing: 'source'.\n"
+            "  Got: columns 'Source', 'target'\n"
+            "  Did you mean: 'source'"
         ),
     ):
         _validate_edgelist(edgelist)
@@ -87,19 +90,19 @@ def test_validate_edgelist_present_columns_are_capped_at_ten():
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'c08', 'c09', and 3 more."),
+        match=re.escape("'c08', 'c09', and 3 more") + "$",
     ) as exc_info:
         _validate_edgelist(edgelist)
 
     message = str(exc_info.value)
-    assert "Present columns: 'c00', 'c01'," in message
+    assert "Got: columns 'c00', 'c01'," in message
     assert "'c10'" not in message
 
 
 def test_validate_edgelist_frame_without_columns_says_none_present():
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("Missing: source, target. Present columns: none."),
+        match=re.escape("missing: 'source', 'target'.\n  Got: columns none"),
     ):
         _validate_edgelist(pd.DataFrame())
 
@@ -182,8 +185,8 @@ def test_validate_edgelist_bad_rows_named_by_index_label_and_counted(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"Edgelist contains {problem} in 'source' or 'target'. "
-            "'source': 2 row(s) at index 'r1', 'r3'."
+            f"Edgelist contains {problem} in 'source' or 'target'.\n"
+            "  Got: 'source': 2 row(s) at index 'r1', 'r3'"
         ),
     ):
         _validate_edgelist(edgelist)
@@ -208,8 +211,8 @@ def test_validate_edgelist_bad_rows_are_counted_per_column(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'source': 1 row(s) at index 'r1'; "
-            "'target': 1 row(s) at index 'r2'."
+            "  Got: 'source': 1 row(s) at index 'r1'; "
+            "'target': 1 row(s) at index 'r2'"
         ),
     ):
         _validate_edgelist(edgelist)
@@ -219,29 +222,30 @@ def test_validate_edgelist_bad_rows_are_counted_per_column(
     ("bad", "problem"),
     _BAD_ROW_CASES,
 )
-def test_validate_edgelist_bad_rows_show_only_the_first_five_labels(
+def test_validate_edgelist_bad_rows_show_only_the_first_ten_labels(
     bad,
     problem,
 ):
     edgelist = pd.DataFrame(
         {
-            "source": ["a"] * 7,
-            "target": [bad] * 7,
+            "source": ["a"] * 12,
+            "target": [bad] * 12,
         },
-        index=list("abcdefg"),
+        index=list("abcdefghijkl"),
     )
 
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'target': 7 row(s) at index 'a', 'b', 'c', 'd', 'e', and 2 more."
+            "'target': 12 row(s) at index 'a', 'b', 'c', 'd', 'e', 'f', "
+            "'g', 'h', 'i', 'j', and 2 more"
         ),
     ) as exc_info:
         _validate_edgelist(edgelist)
 
     message = str(exc_info.value)
-    assert "'f'" not in message
-    assert "'g'" not in message
+    assert "'k'" not in message
+    assert "'l'" not in message
 
 
 @pytest.mark.parametrize(
@@ -262,7 +266,7 @@ def test_validate_edgelist_bad_rows_use_labels_not_positions(
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'source': 1 row(s) at index 20."),
+        match=re.escape("'source': 1 row(s) at index 20") + "$",
     ):
         _validate_edgelist(edgelist)
 
@@ -291,7 +295,7 @@ def test_parsers_name_bad_rows_by_index_label(parse):
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'source': 1 row(s) at index 'second'."),
+        match=re.escape("'source': 1 row(s) at index 'second'"),
     ):
         parse(edgelist)
 
@@ -406,7 +410,7 @@ def test_validate_edgelist_lists_every_whitespace_group_in_order():
         _validate_edgelist(edgelist)
 
     message = str(exc_info.value)
-    assert "' B', 'B', 'B '; 'Z', 'Z '." in message
+    assert "Got: (' B', 'B', 'B '), ('Z', 'Z ')\n" in message
     assert "'Y'" not in message
 
 
@@ -629,7 +633,7 @@ _ENTRY_POINTS = [
 
 _NOT_NAMES = (
     "Edgelist 'source' and 'target' must hold node names: strings, "
-    "or integers that are read through str(). "
+    "or integers that are read through str().\n"
 )
 
 
@@ -774,11 +778,12 @@ def test_validate_edgelist_warns_on_float_and_bool_names(
         UserWarning,
         match=re.escape(
             "Edgelist holds float or bool values in 'source' or "
-            "'target'; they become node names through str(), so "
-            f"{example}. {rows}. Node names are text, so 1.0 and 1 "
-            "name different nodes. To silence this, convert the "
-            "column to the intended strings first, for example with "
-            ".astype(int).astype(str) for float IDs."
+            "'target', which become node names through str(): node "
+            "names are text, so 1.0 and 1 name different nodes.\n"
+            f"  Got: {example}; {rows}\n"
+            "  Fix: Convert the column to the intended strings first, "
+            "for example with .astype(int).astype(str) for float IDs; "
+            "the warning then stops."
         ),
     ):
         normalized = _validate_edgelist(edgelist)
@@ -862,9 +867,9 @@ def test_validate_edgelist_rejects_values_that_are_not_names(
 
     message = str(exc_info.value)
     assert message == (
-        f"{_NOT_NAMES}Got {described} in 'target' at index 'r2'. "
-        "'target': 1 row(s) at index 'r2'. Replace each with the name "
-        "it stands for."
+        f"{_NOT_NAMES}  Got: {described} in 'target' at index 'r2'; "
+        "'target': 1 row(s) at index 'r2'\n"
+        "  Fix: Replace each with the name it stands for."
     )
     assert "12345" not in message
 
@@ -886,9 +891,9 @@ def test_validate_edgelist_counts_rejected_rows_per_column():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"{_NOT_NAMES}Got ['x'] (list) in 'source' at index 1. "
+            f"{_NOT_NAMES}  Got: ['x'] (list) in 'source' at index 1; "
             "'source': 2 row(s) at index 1, 2; 'target': 1 row(s) at "
-            "index 0."
+            "index 0\n"
         ),
     ):
         _validate_edgelist(edgelist)
@@ -945,7 +950,7 @@ def test_public_entry_points_reject_values_that_are_not_names(build):
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape(f"{_NOT_NAMES}Got ['x'] (list)"),
+        match=re.escape(f"{_NOT_NAMES}  Got: ['x'] (list)"),
     ):
         build(edgelist)
 

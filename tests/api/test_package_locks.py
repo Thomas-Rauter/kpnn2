@@ -62,7 +62,6 @@ _NOT_YET_CONVERTED = frozenset(
         "src/kpnn2/_masked_linear.py",
         "src/kpnn2/_packed_index.py",
         "src/kpnn2/_packed_multihead_attention.py",
-        "src/kpnn2/_parse.py",
         "src/kpnn2/_serialize.py",
         "src/kpnn2/_spec.py",
     }

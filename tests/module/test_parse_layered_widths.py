@@ -152,7 +152,7 @@ def test_widths_message_describes_the_value_without_its_data(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"Width for node 'H' must be a positive int. Got {got}."
+            f"Width for node 'H' must be a positive int.\n  Got: {got}"
         ),
     ) as caught:
         parse_layered(
@@ -173,8 +173,9 @@ def test_widths_rejects_wide_input_nodes_listed_sorted():
         Kpnn2Error,
         match=re.escape(
             "Input nodes (in-degree 0) must have width 1 in 'widths', "
-            "since each reads one feature column. Got A=2, B=3. "
-            "Give each measurement its own input node."
+            "since each reads one feature column.\n"
+            "  Got: A=2, B=3\n"
+            "  Fix: Give each measurement its own input node."
         ),
     ):
         parse_layered(
@@ -254,3 +255,34 @@ def test_skip_stays_one_record_with_block_starts():
     assert skip.target_in_layer == 0
     hop = spec.hops[skip.target_layer - 1]
     assert len(hop.source_index) == 2 * 3 + 1 * 3
+
+
+def test_widths_unknown_name_suggests_a_close_node():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(
+            "Unknown node name(s) in 'widths'.\n  Got: h\n  Did you mean: 'H'"
+        ),
+    ):
+        parse_layered(
+            _chain_edgelist(),
+            widths={"h": 2},
+        )
+
+
+def test_widths_naming_no_node_says_to_check_the_identifiers():
+    with pytest.raises(Kpnn2Error) as caught:
+        parse_layered(
+            _chain_edgelist(),
+            widths={
+                "ENSG01": 2,
+                "ENSG02": 2,
+            },
+        )
+
+    message = str(caught.value)
+    assert "Did you mean" not in message
+    assert message.endswith(
+        "\n  Fix: None of the names in 'widths' is a node; check that "
+        "they use the same identifiers as the edgelist."
+    )

@@ -154,7 +154,10 @@ and explain the conflict.
 - Several problems in one message: separate the items
   within a field with "; ".
 - Lists of names, rows, or values go through `listed`: at
-  most ten items, then ", and N more".
+  most ten items, then ", and N more". The one exception is
+  a list the caller needs whole to act on the Fix, such as
+  the nodes whose rows to drop: list every item, and say so
+  in a comment at the call site.
 - Flag arguments must be a Python `bool`
   (`_validate.as_bool`). Integer arguments go through
   `_validate.is_integer`, which accepts numpy integers, and

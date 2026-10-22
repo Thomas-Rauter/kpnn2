@@ -167,11 +167,12 @@ def test_several_outputs_warn_and_name_them(parse):
         UserWarning,
         match=re.escape(
             "The edgelist has 2 output nodes, nodes with no outgoing "
-            "edge: TF3, out. A node whose onward rows are missing from "
-            "the edgelist is an output node too. Pass the output nodes "
-            "you read as 'outputs' to confirm them: this warning then "
-            "stops, and parsing raises on any other node with no "
-            "outgoing edge."
+            "edge; a node whose onward rows are missing from the "
+            "edgelist is an output node too.\n"
+            "  Got: TF3, out\n"
+            "  Fix: Pass the output nodes you read as 'outputs' to "
+            "confirm them; the warning then stops, and parsing raises on "
+            "any other node with no outgoing edge."
         ),
     ) as record:
         parse(_dangling_edgelist())
@@ -289,11 +290,13 @@ def test_left_out_output_raises_with_every_node_without_a_path(parse):
         Kpnn2Error,
         match=re.escape(
             "Node(s) with no outgoing edge that are not in 'outputs': "
-            "TF3. The edgelist has no row leaving them, so they are "
-            "output nodes too. Node(s) with no path to a node in "
-            "'outputs': K, TF3, g3, g4, g5. Drop the edgelist rows whose "
-            "target is one of these and parse again, or add a node to "
-            "'outputs' if you read it."
+            "the edgelist has no row leaving them, so they are output "
+            "nodes too.\n"
+            "  Got: TF3\n"
+            "  Fix: Drop the edgelist rows whose target is one of the "
+            "nodes with no path to a node in 'outputs' (K, TF3, g3, g4, "
+            "g5) and parse again, or add a node to 'outputs' if you read "
+            "it."
         ),
     ):
         parse(
@@ -331,7 +334,7 @@ def test_cycle_without_a_path_to_an_output_is_named():
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("no path to a node in 'outputs': c, d, z."),
+        match=re.escape("no path to a node in 'outputs' (c, d, z)"),
     ):
         parse_adjacency(
             edgelist,
@@ -349,7 +352,7 @@ def test_self_loop_does_not_make_a_path():
 
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("no path to a node in 'outputs': b, z."),
+        match=re.escape("no path to a node in 'outputs' (b, z)"),
     ):
         parse_adjacency(
             edgelist,
@@ -378,7 +381,7 @@ def test_named_nodes_match_an_independent_walk_on_random_graphs():
         with pytest.raises(
             Kpnn2Error,
             match=re.escape(
-                f"no path to a node in 'outputs': {', '.join(dead)}."
+                f"no path to a node in 'outputs' ({', '.join(dead)})"
             ),
         ):
             parse(
@@ -452,10 +455,11 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'outputs' names node(s) that are not in the edgelist: oot. "
-            "'outputs' names node(s) with an outgoing edge, which are not "
-            "output nodes: TF1 (hidden), g1 (input). To read a node that "
-            "feeds others, index it with unit_index()."
+            "'outputs' names node(s) that are not in the edgelist, and "
+            "node(s) with an outgoing edge, which are not output nodes.\n"
+            "  Got: not in the edgelist: oot; with an outgoing edge: TF1 "
+            "(hidden), g1 (input)\n"
+            "  Fix: Index a node that feeds others with unit_index()."
         ),
     ):
         parse(
@@ -495,8 +499,10 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
         ),
         pytest.param(
             {"C": 1},
-            "'outputs' must be a collection of node names, not a mapping. "
-            "Got {'C': 1} (dict). Pass the names as a list.",
+            "'outputs' must be a collection of node names, not a "
+            "mapping.\n"
+            "  Got: {'C': 1} (dict)\n"
+            "  Fix: Pass the names as a list.",
             id="mapping",
         ),
         pytest.param(
@@ -512,19 +518,19 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
         ),
         pytest.param(
             [],
-            "'outputs' must name at least one node. Got [] (list). Pass the "
-            "output nodes you read, or omit 'outputs'.",
+            "'outputs' must name at least one node.\n"
+            "  Got: [] (list)\n"
+            "  Fix: Pass the output nodes you read, or omit 'outputs'.",
             id="empty",
         ),
         pytest.param(
             ["C", "E", "C"],
-            "'outputs' names a node more than once: C. Name each output "
-            "node once.",
+            "'outputs' names a node more than once.\n  Got: C",
             id="repeated",
         ),
         pytest.param(
             ["C", 1, "1"],
-            "'outputs' names a node more than once: 1.",
+            "'outputs' names a node more than once.\n  Got: 1",
             id="repeated_after_str",
         ),
     ],
@@ -606,3 +612,69 @@ def test_caller_data_is_not_modified(parse):
         before,
     )
     assert outputs == ["out"]
+
+
+@pytest.mark.parametrize(
+    "parse",
+    _PARSERS,
+)
+def test_outputs_typo_suggests_only_undeclared_output_nodes(parse):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("  Got: TF4\n  Did you mean: 'TF3'"),
+    ):
+        parse(
+            _dangling_edgelist(),
+            outputs=["out", "TF4"],
+        )
+    with pytest.raises(Kpnn2Error) as caught:
+        parse(
+            _dangling_edgelist(),
+            outputs=["out", "oot"],
+        )
+
+    assert "Did you mean" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "parse",
+    _PARSERS,
+)
+def test_outputs_naming_no_node_say_to_check_the_identifiers(parse):
+    with pytest.raises(Kpnn2Error) as caught:
+        parse(
+            _dangling_edgelist(),
+            outputs=["X1", "X2"],
+        )
+
+    assert str(caught.value).endswith(
+        "\n  Fix: None of the names in 'outputs' is a node; check that "
+        "they use the same identifiers as the edgelist."
+    )
+
+
+@pytest.mark.parametrize(
+    "parse",
+    _PARSERS,
+)
+def test_left_out_outputs_are_capped_but_every_node_to_drop_is_named(parse):
+    dead = [f"d{i:02d}" for i in range(12)]
+    edgelist = pd.DataFrame(
+        {
+            "source": ["in"] * 13,
+            "target": ["out", *dead],
+        }
+    )
+
+    with pytest.raises(Kpnn2Error) as caught:
+        parse(
+            edgelist,
+            outputs=["out"],
+        )
+
+    message = str(caught.value)
+    assert "\n  Got: d00, d01, d02, d03, d04, d05, d06, d07, d08, d09, " in (
+        message
+    )
+    assert "and 2 more\n" in message
+    assert f"'outputs' ({', '.join(dead)})" in message

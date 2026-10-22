@@ -33,6 +33,8 @@ _FLAG = "flag"
 _VALUE = "value"
 _SHAPE = "shape"
 _SEMANTIC = "semantic"
+# A misspelled name: the message must suggest close valid names.
+_TYPO = "typo"
 
 # Kinds whose message must report the received value.
 _REPORTS_RECEIVED = frozenset(
@@ -328,7 +330,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "target_column_missing",
         _SHAPE,
-        "Missing: target",
+        "missing: 'target'",
         lambda: kpnn2.parse_layered(
             pd.DataFrame(
                 {
@@ -342,7 +344,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "cycle",
         _SEMANTIC,
-        "Unranked nodes: A, B, O",
+        "nodes on or downstream of a cycle: A, B, O",
         lambda: kpnn2.parse_layered(
             pd.DataFrame(
                 {
@@ -356,7 +358,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "self_loop",
         _SEMANTIC,
-        "self-loop(s): A",
+        "self-loop(s) on A",
         lambda: kpnn2.parse_layered(
             pd.DataFrame(
                 {
@@ -384,7 +386,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "widths_name_unknown_node",
         _SEMANTIC,
-        "Unknown node name(s) in 'widths': Z",
+        "Unknown node name(s) in 'widths'.\n  Got: Z",
         lambda: _layered(widths={"Z": 2}),
     ),
     _Bad(
@@ -398,14 +400,14 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "ranks_miss_a_node",
         _SEMANTIC,
-        "Missing node name(s) in 'ranks': C, H",
+        "no rank for C, H",
         lambda: _layered(ranks={"A": 0}),
     ),
     _Bad(
         "parse_layered",
         "ranks_put_an_edge_backwards",
         _SEMANTIC,
-        "Non-forward edge(s): H -> C",
+        "non-forward edge(s) H -> C",
         lambda: _layered(ranks={"A": 0, "H": 2, "C": 1}),
     ),
     _Bad(
@@ -433,28 +435,28 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "outputs_repeat_a_node",
         _SEMANTIC,
-        "more than once: C",
+        "more than once.\n  Got: C",
         lambda: _layered(outputs=["C", "C"]),
     ),
     _Bad(
         "parse_layered",
         "outputs_name_an_unknown_node",
         _SEMANTIC,
-        "not in the edgelist: Z",
+        "not in the edgelist.\n  Got: Z",
         lambda: _layered(outputs=["Z"]),
     ),
     _Bad(
         "parse_layered",
         "outputs_name_a_hidden_node",
         _SEMANTIC,
-        "not output nodes: H (hidden)",
+        "not output nodes.\n  Got: H (hidden)",
         lambda: _layered(outputs=["C", "H"]),
     ),
     _Bad(
         "parse_layered",
         "outputs_leave_out_an_output_node",
         _SEMANTIC,
-        "not in 'outputs': D",
+        "so they are output nodes too.\n  Got: D",
         lambda: kpnn2.parse_layered(
             pd.DataFrame(
                 {
@@ -464,6 +466,42 @@ _PARSE_LAYERED_CASES = [
             ),
             outputs=["C"],
         ),
+    ),
+    _Bad(
+        "parse_layered",
+        "source_column_capitalized",
+        _TYPO,
+        "Did you mean: 'source'",
+        lambda: kpnn2.parse_layered(
+            _EDGELIST.rename(columns={"source": "Source"}),
+        ),
+    ),
+    _Bad(
+        "parse_layered",
+        "widths_name_a_typo",
+        _TYPO,
+        "Did you mean: 'H'",
+        lambda: _layered(widths={"h": 2}),
+    ),
+    _Bad(
+        "parse_layered",
+        "ranks_name_a_typo",
+        _TYPO,
+        "Did you mean: 'H'",
+        lambda: _layered(
+            ranks={
+                "A": 0,
+                "h": 1,
+                "C": 2,
+            },
+        ),
+    ),
+    _Bad(
+        "parse_layered",
+        "outputs_name_a_typo",
+        _TYPO,
+        "Did you mean: 'C'",
+        lambda: _layered(outputs=["c"]),
     ),
 ]
 
@@ -608,14 +646,14 @@ _PARSE_ADJACENCY_CASES = [
         "parse_adjacency",
         "outputs_name_an_input_node",
         _SEMANTIC,
-        "not output nodes: x (input)",
+        "not output nodes.\n  Got: x (input)",
         lambda: _adjacency(outputs=["x", "y"]),
     ),
     _Bad(
         "parse_adjacency",
         "outputs_leave_out_a_node_on_a_dead_cycle",
         _SEMANTIC,
-        "no path to a node in 'outputs': c, d, z",
+        "no path to a node in 'outputs' (c, d, z)",
         lambda: kpnn2.parse_adjacency(
             pd.DataFrame(
                 {
@@ -625,6 +663,29 @@ _PARSE_ADJACENCY_CASES = [
             ),
             outputs=["y"],
         ),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "target_column_capitalized",
+        _TYPO,
+        "Did you mean: 'target'",
+        lambda: kpnn2.parse_adjacency(
+            _CYCLE.rename(columns={"target": "Target"}),
+        ),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "widths_name_a_typo",
+        _TYPO,
+        "Did you mean: 'a'",
+        lambda: _adjacency(widths={"A": 2}),
+    ),
+    _Bad(
+        "parse_adjacency",
+        "outputs_name_a_typo",
+        _TYPO,
+        "Did you mean: 'y'",
+        lambda: _adjacency(outputs=["Y"]),
     ),
 ]
 
@@ -2514,6 +2575,8 @@ def test_bad_input_raises_kpnn2_error(case):
         case.call()
     if case.kind in _REPORTS_RECEIVED:
         assert "Got" in str(error.value)
+    if case.kind == _TYPO:
+        assert "\n  Did you mean: " in str(error.value)
 
 
 @pytest.mark.parametrize(
@@ -2532,6 +2595,7 @@ def test_case_kinds_are_known():
         _VALUE,
         _SHAPE,
         _SEMANTIC,
+        _TYPO,
     }
     assert {case.kind for case in _BAD_CASES} <= kinds
 
