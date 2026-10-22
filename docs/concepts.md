@@ -363,6 +363,12 @@ package. Prior knowledge, encoded as a graph, constrains the
 structure of the network, so the model keeps only the connections
 that known relationships between named entities support.
 
+The term covers a family of models, not one paper's architecture.
+Fortelny and Bock (2020) coined it, and models published as visible
+or biologically informed neural networks, such as DCell and P-NET,
+are KPNNs too. [KPNNs in context](kpnns_in_context.md) compares
+them with other ways of building knowledge into a network.
+
 The payoff is [attribution](#attribution) on those named entities.
 Biology is the common setting — genes, transcription factors,
 kinases, pathways — but nothing in `kpnn2` is biological. Any

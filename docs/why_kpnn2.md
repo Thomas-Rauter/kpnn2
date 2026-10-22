@@ -32,7 +32,7 @@ Connections the prior does not contain are absent rather than
 merely small. So sparsity, which elsewhere in deep learning serves
 speed or memory, here carries the meaning of the model.
 
-Related models, also called visible or biologically informed neural
+Other KPNNs, published as visible or biologically informed neural
 networks, take the prior from pathway databases or ontologies.
 P-NET, for example, is built on a hierarchy of Reactome pathways
 ([Elmarakeby et al., 2021](https://doi.org/10.1038/s41586-021-03922-4)).

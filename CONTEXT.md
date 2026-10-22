@@ -24,6 +24,39 @@ under the right name.
 
 ---
 
+## What "KPNN" means
+
+"Knowledge-primed neural network" (KPNN) is the umbrella term
+for a family of models, not the architecture of one paper. A
+KPNN is any neural network whose connectivity comes from a
+prior graph of named entities: each entity is a node, and two
+nodes connect only where the graph relates their entities.
+
+Fortelny and Bock (2020) coined the name and showed it on
+signaling and gene-regulatory networks over single-cell RNA-seq,
+computing against the direction of signaling (gene →
+transcription factor → kinase → receptor). That is one KPNN,
+not the definition. Models published under other names are
+KPNNs too: DCell and DrugCell (Gene Ontology), P-NET (Reactome),
+GenNet, LEMBAS (recurrent, along signaling), ParsVNN,
+PathExpSurv, and visible or biologically informed neural
+networks (VNNs, BINNs) in general. They differ in prior, inputs,
+outputs, direction, layout, and node width. kpnn2 serves all of
+them, and the domain need not be biological.
+
+Do not call these models "related to", "inspired by", or
+"neighbors of" KPNNs. Do not equate "KPNN" with signaling,
+transcription factors, or the Fortelny and Bock layout. The
+neighbors are approaches that put knowledge somewhere other
+than the wiring: physics-informed networks (loss),
+convolutional and equivariant networks (symmetry), Hamiltonian
+networks (form of the dynamics), concept bottleneck models
+(labels on hidden units), GNNs (graph as data), and mechanistic
+ODE models (rate laws). `docs/kpnns_in_context.md` compares
+them.
+
+---
+
 ## Locked contrasts
 
 "Sparse" means two different things. Do not collapse them.
@@ -3299,6 +3332,7 @@ CHANGELOG.md                  # notable API / core only; see below
 docs/
   reference/                  # api.md + one page per public name
     aggregation/              # one page per method; not public names
+  kpnns_in_context.md         # KPNN family; neighboring approaches
   why_kpnn2.md                # evidence for Home's three reasons
   supported.md                # architecture-family support; why not a GNN
   packed_linear.md            # PackedLinear; tutorials use it on hops
