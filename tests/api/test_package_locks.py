@@ -47,7 +47,6 @@ _MESSAGE_BUILDERS = "src/kpnn2/_errors.py"
 # message-format migration converts some and removes them here.
 _NOT_YET_CONVERTED = frozenset(
     {
-        "src/kpnn2/_adjacency_spec.py",
         "src/kpnn2/_aggregation/_bind.py",
         "src/kpnn2/_aggregation/_dispatch.py",
         "src/kpnn2/_aggregation/_methods/_rauter_mangano_2026.py",
@@ -58,12 +57,10 @@ _NOT_YET_CONVERTED = frozenset(
         "src/kpnn2/_gather.py",
         "src/kpnn2/_generator.py",
         "src/kpnn2/_identity.py",
-        "src/kpnn2/_layout.py",
         "src/kpnn2/_masked_linear.py",
         "src/kpnn2/_packed_index.py",
         "src/kpnn2/_packed_multihead_attention.py",
         "src/kpnn2/_serialize.py",
-        "src/kpnn2/_spec.py",
     }
 )
 

@@ -386,7 +386,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "widths_name_unknown_node",
         _SEMANTIC,
-        "Unknown node name(s) in 'widths'.\n  Got: Z",
+        "Unknown node name(s) in 'widths'.\n  Got: 'Z'",
         lambda: _layered(widths={"Z": 2}),
     ),
     _Bad(
@@ -442,7 +442,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "outputs_name_an_unknown_node",
         _SEMANTIC,
-        "not in the edgelist.\n  Got: Z",
+        "not in the edgelist.\n  Got: 'Z'",
         lambda: _layered(outputs=["Z"]),
     ),
     _Bad(
@@ -704,7 +704,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_location_unknown_name",
         _SEMANTIC,
-        "Unknown node name: Z",
+        "unknown node name.\n  Got: 'Z'",
         lambda: _LAYERED.edge_location(
             "A",
             "Z",
@@ -714,7 +714,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_location_empty_name",
         _SEMANTIC,
-        "Node name is empty",
+        "a node name is empty.",
         lambda: _LAYERED.edge_location(
             "",
             "H",
@@ -724,14 +724,14 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "node_units_unknown_name",
         _SEMANTIC,
-        "Unknown node name: Z",
+        "Unknown node name.\n  Got: 'Z'",
         lambda: _LAYERED.node_units("Z"),
     ),
     _Bad(
         "LayeredSpec",
         "node_units_name_with_whitespace",
         _SEMANTIC,
-        "Unknown node name:  A",
+        "Unknown node name.\n  Got: ' A'",
         lambda: _LAYERED.node_units(" A"),
     ),
     _Bad(
@@ -828,7 +828,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "unit_index_unknown_names",
         _SEMANTIC,
-        "Unknown node name(s): P, Q",
+        "Unknown node name(s).\n  Got: 'P', 'Q'",
         lambda: _LAYERED.unit_index(
             ["Q", "H", "P"],
             layer=1,
@@ -838,7 +838,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "unit_index_node_in_another_layer",
         _SEMANTIC,
-        "Node(s) not in layer 1: A (layer 0), C (layer 2)",
+        "Node(s) not in layer 1.\n  Got: A (layer 0), C (layer 2)",
         lambda: _LAYERED.unit_index(
             ["C", "H", "A"],
             layer=1,
@@ -925,7 +925,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_index_unknown_names",
         _SEMANTIC,
-        "Unknown node name(s): P, Q",
+        "Unknown node name(s).\n  Got: 'P', 'Q'",
         lambda: _LAYERED.edge_index(
             ["Q", "A"],
             ["C", "P"],
@@ -936,7 +936,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_index_absent_edges",
         _SEMANTIC,
-        "No edge(s): C -> A, C -> H",
+        "Got: C -> A, C -> H",
         lambda: _LAYERED.edge_index(
             ["C", "A", "C"],
             ["H", "C", "A"],
@@ -947,7 +947,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_index_edge_in_another_hop",
         _SEMANTIC,
-        "Edge(s) not in spec.hops[1]: A -> H (spec.hops[0])",
+        "Edge(s) not in spec.hops[1].\n  Got: A -> H (spec.hops[0])",
         lambda: _LAYERED.edge_index(
             ["A", "A"],
             ["C", "H"],
@@ -1017,6 +1017,54 @@ _LAYERED_SPEC_CASES = [
         "layout 'adjacency'",
         lambda: _layered_payload(layout="adjacency"),
     ),
+    _Bad(
+        "LayeredSpec",
+        "node_units_name_a_typo",
+        _TYPO,
+        "Did you mean: 'H'",
+        lambda: _LAYERED.node_units("h"),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "hop_units_name_a_typo",
+        _TYPO,
+        "Did you mean: 'H'",
+        lambda: _LAYERED.hop_units(
+            _LAYERED.hops[1],
+            "h",
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "unit_index_name_a_typo",
+        _TYPO,
+        "Did you mean: 'H'",
+        lambda: _LAYERED.unit_index(
+            ["h"],
+            layer=1,
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_location_name_a_typo",
+        _TYPO,
+        "Did you mean: 'A'",
+        lambda: _LAYERED.edge_location(
+            "a",
+            "H",
+        ),
+    ),
+    _Bad(
+        "LayeredSpec",
+        "edge_index_name_a_typo",
+        _TYPO,
+        "Did you mean: 'A'",
+        lambda: _LAYERED.edge_index(
+            ["a"],
+            ["H"],
+            hop=_LAYERED.hops[0],
+        ),
+    ),
 ]
 
 _ADJACENCY_SPEC_CASES = [
@@ -1034,7 +1082,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "edge_location_unknown_name",
         _SEMANTIC,
-        "Unknown node name: q",
+        "unknown node name.\n  Got: 'q'",
         lambda: _ADJACENCY.edge_location(
             "x",
             "q",
@@ -1044,7 +1092,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "node_units_unknown_name",
         _SEMANTIC,
-        "Unknown node name: q",
+        "Unknown node name.\n  Got: 'q'",
         lambda: _ADJACENCY.node_units("q"),
     ),
     _Bad(
@@ -1093,7 +1141,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "unit_index_unknown_names",
         _SEMANTIC,
-        "Unknown node name(s): p, q",
+        "Unknown node name(s).\n  Got: 'p', 'q'",
         lambda: _ADJACENCY.unit_index(["q", "a", "p", "q"]),
     ),
     _Bad(
@@ -1150,7 +1198,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "edge_index_unknown_names",
         _SEMANTIC,
-        "Unknown node name(s): p, q",
+        "Unknown node name(s).\n  Got: 'p', 'q'",
         lambda: _ADJACENCY.edge_index(
             ["q", "a"],
             ["b", "p"],
@@ -1160,7 +1208,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "edge_index_absent_edges",
         _SEMANTIC,
-        "No edge(s): x -> b, x -> y",
+        "Got: x -> b, x -> y",
         lambda: _ADJACENCY.edge_index(
             ["x", "a", "x", "x"],
             ["y", "b", "b", "y"],
@@ -1207,6 +1255,40 @@ _ADJACENCY_SPEC_CASES = [
         _SEMANTIC,
         "layout 'layered'",
         lambda: _adjacency_payload(layout="layered"),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "node_units_name_a_typo",
+        _TYPO,
+        "Did you mean: 'a'",
+        lambda: _ADJACENCY.node_units("A"),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "unit_index_name_a_typo",
+        _TYPO,
+        "Did you mean: 'a'",
+        lambda: _ADJACENCY.unit_index(["A"]),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_location_name_a_typo",
+        _TYPO,
+        "Did you mean: 'x'",
+        lambda: _ADJACENCY.edge_location(
+            "X",
+            "a",
+        ),
+    ),
+    _Bad(
+        "AdjacencySpec",
+        "edge_index_name_a_typo",
+        _TYPO,
+        "Did you mean: 'x'",
+        lambda: _ADJACENCY.edge_index(
+            ["X"],
+            ["a"],
+        ),
     ),
 ]
 

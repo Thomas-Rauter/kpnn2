@@ -860,7 +860,8 @@ value), not on the spec.
 
 Missing pair, empty names, or a name that is not a node:
 `Kpnn2Error`. The message names the pair as
-`{source} -> {target}`.
+`{source} -> {target}`. When the reverse pair is an edge, its
+fix says to swap source and target.
 
 To copy weights onto a new prior, look up the same named
 edge on **both** specs. See **Reparse hatch**.
@@ -894,13 +895,14 @@ edge.
   "target node names"), and must have the same length. A repeated
   edge repeats its slots; no edges give `()`.
 - Order of checks: `sources` type, `targets` type, `hop`, lengths,
-  an empty name, names that are not nodes (all listed in one
+  an empty name, names that are not nodes (listed in one
   message, pointing at `spec.layer_nodes`), pairs that are not
-  edges (all listed, sorted, pointing at `spec.to_edgelist()`),
-  then edges in another hop, all listed, sorted, each with its
-  hop: `Edge(s) not in spec.hops[1]: c -> y (spec.hops[2]).
-  Call edge_index once per hop; edge_location gives the hop of
-  an edge.`
+  edges (listed, sorted, pointing at `spec.to_edgelist()`, with
+  a fix for each pair whose reverse is an edge), then edges in
+  another hop, listed, sorted, each with its hop:
+  `Edge(s) not in spec.hops[1].` / `Got: c -> y (spec.hops[2])`
+  / `Fix: Call edge_index once per hop; edge_location gives the
+  hop of an edge.`
 - It returns positions, not values: one value per edge on a wide
   edge is the caller's repeat across `len(edge_location(s,
   t)[1])` slots. It takes no tensor or data and stores no
@@ -1005,11 +1007,11 @@ silently points into the wrong node after a wide one.
   `ndim != 1`, or a non-iterable raises. A repeated name
   repeats its units; empty `names` gives `()`.
 - Order of checks: `names` type, `layer`, an empty name, names
-  that are not nodes (all listed in one message, pointing at
-  `spec.layer_nodes`), then nodes in another layer, all listed
-  in one message, sorted, each with its layer:
-  `Node(s) not in layer 1: c (layer 2), u (layer 0). Valid
-  names are in spec.layer_nodes[1].`
+  that are not nodes (listed in one message, pointing at
+  `spec.layer_nodes`), then nodes in another layer, listed in
+  one message, sorted, each with its layer:
+  `Node(s) not in layer 1.` / `Got: c (layer 2), u (layer 0)` /
+  `Expected: names in spec.layer_nodes[1]`.
 - Names in several layers need one call per layer; no single
   tensor holds their units. Outputs at different depths can
   share the last layer through `ranks=`.
@@ -1177,7 +1179,7 @@ for outputs). It is for nodes the caller names outside
 reads one unit of a wide node. A repeated name repeats its
 units; empty `names` gives `()`. Names are matched after
 `str(...)`; an empty name raises `Kpnn2Error`, and so do
-unknown names, all listed in one message.
+unknown names, listed in one message.
 `LayeredSpec.unit_index(names, layer=)` is the same rule on one
 layer.
 
@@ -1235,9 +1237,10 @@ stored order. Named-edge order agrees with `to_edgelist()` rows.
 `source` and `target` are matched after `str(...)`, same as
 parse. Missing pair, empty names, or a name that is not a
 node: `Kpnn2Error`. The message names the pair as
-`{source} -> {target}`. This is identity into packed slots,
-not a constraint DSL. Mixed signs and frozen values belong
-in user PyTorch that indexes these slots (`torch.where`
+`{source} -> {target}`, and says to swap source and target
+when the reverse pair is an edge. This is identity into packed
+slots, not a constraint DSL. Mixed signs and frozen values
+belong in user PyTorch that indexes these slots (`torch.where`
 inside `constraint=` to hold a value), not on the spec.
 
 To copy weights onto a new prior, look up the same named

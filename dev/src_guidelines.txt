@@ -140,7 +140,9 @@ and explain the conflict.
   - Got: the received value, built with
     `_validate.describe` (never print tensor values), or
     the part of the input that breaks the rule: names,
-    rows, a shape. No trailing period.
+    rows, a shape. A name that matches nothing is shown
+    with `repr`, so stray spaces and case show. No trailing
+    period.
   - Expected: what would be valid, only when the headline
     does not say it already. Never repeat the headline. No
     trailing period.

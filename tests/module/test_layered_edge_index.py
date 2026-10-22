@@ -513,16 +513,17 @@ _OTHER_HOP = parse_layered(
             ["x"],
             ["c"],
             1.0,
-            "'hop' must be a Hop from spec.hops. Got 1.0 (float).",
+            "'hop' must be a Hop from spec.hops.\n  Got: 1.0 (float)",
             id="hop_not_a_hop",
         ),
         pytest.param(
             ["x"],
             ["c"],
             "other",
-            "'hop' must match an entry of spec.hops. Got a Hop that equals "
-            "none of them. Take it from this spec's hops; a Hop from "
-            "another spec does not match.",
+            "'hop' must match an entry of spec.hops: a Hop from another spec "
+            "does not match.\n"
+            "  Got: a Hop that equals none of them\n"
+            "  Fix: Take it from this spec's hops.",
             id="hop_from_another_spec",
         ),
         pytest.param(
@@ -530,7 +531,8 @@ _OTHER_HOP = parse_layered(
             ["c"],
             1,
             "'sources' and 'targets' must have the same length: edge i is "
-            "sources[i] -> targets[i]. Got 2 source(s) and 1 target(s).",
+            "sources[i] -> targets[i].\n"
+            "  Got: 2 source(s) and 1 target(s)",
             id="lengths_differ",
         ),
         pytest.param(
@@ -544,25 +546,29 @@ _OTHER_HOP = parse_layered(
             ["q", "x", "Q"],
             ["c", "p", "c"],
             1,
-            "Unknown node name(s): Q, p, q. Valid names are in "
-            "spec.layer_nodes.",
+            "Unknown node name(s).\n"
+            "  Got: 'Q', 'p', 'q'\n"
+            "  Expected: names in spec.layer_nodes",
             id="unknown_names",
         ),
         pytest.param(
             ["c", "u", "c", "y"],
             ["a", "b", "a", "a"],
             1,
-            "No edge(s): c -> a, u -> b, y -> a. Valid edges are the rows "
-            "of spec.to_edgelist().",
+            "No edge(s) for some source-target pairs.\n"
+            "  Got: c -> a, u -> b, y -> a\n"
+            "  Expected: rows of spec.to_edgelist()\n"
+            "  Fix: Swap source and target for c -> a: the reverse is an edge.",
             id="absent_edges_before_other_hop",
         ),
         pytest.param(
             ["c", "x", "u", "c"],
             ["y", "c", "a", "y"],
             1,
-            "Edge(s) not in spec.hops[1]: c -> y (spec.hops[2]), u -> a "
-            "(spec.hops[0]). Call edge_index once per hop; edge_location "
-            "gives the hop of an edge.",
+            "Edge(s) not in spec.hops[1].\n"
+            "  Got: c -> y (spec.hops[2]), u -> a (spec.hops[0])\n"
+            "  Fix: Call edge_index once per hop; edge_location gives the hop "
+            "of an edge.",
             id="edges_in_other_hops",
         ),
     ],

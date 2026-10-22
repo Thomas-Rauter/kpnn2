@@ -8,11 +8,12 @@ from itertools import accumulate
 import pandas as pd
 from torch import Tensor
 
-from ._errors import Kpnn2Error
+from ._errors import caller_error, listed
 from ._layout import (
     build_layout,
     edges_by_slot,
     hop_axis_layouts,
+    no_edge_error,
     resolve_edge_names,
     resolve_edge_pairs,
     resolve_node_name,
@@ -284,8 +285,9 @@ def require_hop(
     Raise unless ``hop`` is a ``Hop``; ``name`` is its argument.
     """
     if not isinstance(hop, Hop):
-        raise Kpnn2Error(
-            f"'{name}' must be a Hop from spec.hops. Got {describe(hop)}."
+        raise caller_error(
+            f"'{name}' must be a Hop from spec.hops.",
+            got=describe(hop),
         )
 
 
@@ -304,10 +306,11 @@ def require_spec_hop(
         name,
     )
     if hop not in hops:
-        raise Kpnn2Error(
-            f"'{name}' must match an entry of spec.hops. Got a Hop "
-            "that equals none of them. Take it from this spec's "
-            "hops; a Hop from another spec does not match."
+        raise caller_error(
+            f"'{name}' must match an entry of spec.hops: a Hop from "
+            "another spec does not match.",
+            got="a Hop that equals none of them",
+            fix="Take it from this spec's hops.",
         )
 
 
@@ -727,7 +730,10 @@ class LayeredSpec:
             )
         )
         if located is None:
-            raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+            raise no_edge_error(
+                [(source_name, target_name)],
+                locations,
+            )
         return located
 
     def edge_index(
@@ -787,9 +793,9 @@ class LayeredSpec:
             not iterable; if ``hop`` is not a ``Hop`` of this
             spec; if the lengths differ; if a name is empty; if a
             name is not a node; if a pair is not an edge; or if an
-            edge is in another hop. One message lists every
-            unknown name, one every missing edge, and one every
-            edge in another hop with its hop.
+            edge is in another hop. One message lists the unknown
+            names, one the missing edges, and one the edges in
+            another hop with their hop.
 
         Notes
         -----
@@ -892,14 +898,14 @@ class LayeredSpec:
             }
         )
         if elsewhere:
-            listed = ", ".join(
-                f"{source} -> {target} (spec.hops[{other}])"
-                for source, target, other in elsewhere
-            )
-            raise Kpnn2Error(
-                f"Edge(s) not in spec.hops[{hop_index}]: {listed}. Call "
-                "edge_index once per hop; edge_location gives the hop of "
-                "an edge."
+            raise caller_error(
+                f"Edge(s) not in spec.hops[{hop_index}].",
+                got=listed(
+                    f"{source} -> {target} (spec.hops[{other}])"
+                    for source, target, other in elsewhere
+                ),
+                fix="Call edge_index once per hop; edge_location gives "
+                "the hop of an edge.",
             )
         slots: list[int] = []
         for pair in pairs:
@@ -1229,10 +1235,11 @@ class LayeredSpec:
             hop.target_layer,
         )
         if node_name not in source_layout.names:
-            raise Kpnn2Error(
-                f"Node {node_name} is not on this hop's source axis. "
-                f"It is in layer {node_layer}, and the hop reads "
-                f"layers {list(hop.source_layers)}."
+            raise caller_error(
+                f"Node {node_name} is not on this hop's source axis.",
+                got=f"{node_name} in layer {node_layer}",
+                expected="a node in the layers the hop reads, "
+                f"{list(hop.source_layers)}",
             )
         return source_layout.slot(node_name).units
 
@@ -1283,8 +1290,8 @@ class LayeredSpec:
             mapping, not one-dimensional, or not iterable; if
             ``layer`` is not an integer in range; if a name is
             empty; if a name is not a node; or if a node is in
-            another layer. One message lists every unknown name,
-            and one lists every node in another layer with its
+            another layer. One message lists the unknown names,
+            and one lists the nodes in another layer with their
             layer.
 
         Notes
@@ -1366,12 +1373,12 @@ class LayeredSpec:
             {name for name in node_names if layer_of[name] != layer}
         )
         if elsewhere:
-            listed = ", ".join(
-                f"{name} (layer {layer_of[name]})" for name in elsewhere
-            )
-            raise Kpnn2Error(
-                f"Node(s) not in layer {layer}: {listed}. Valid names are "
-                f"in spec.layer_nodes[{layer}]."
+            raise caller_error(
+                f"Node(s) not in layer {layer}.",
+                got=listed(
+                    f"{name} (layer {layer_of[name]})" for name in elsewhere
+                ),
+                expected=f"names in spec.layer_nodes[{layer}]",
             )
         return build_layout(
             self.layer_nodes[layer],

@@ -204,7 +204,9 @@ def test_scatter_non_tensor_message_reports_the_received_type():
 def test_scatter_non_hop_message_reports_the_received_value():
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'hop' must be a Hop from spec.hops. Got 'hop' (str)."),
+        match=re.escape(
+            "'hop' must be a Hop from spec.hops.\n  Got: 'hop' (str)"
+        ),
     ):
         scatter_hop_outputs(
             torch.zeros(1, 2),

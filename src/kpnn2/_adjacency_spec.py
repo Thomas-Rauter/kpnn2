@@ -7,12 +7,13 @@ from dataclasses import dataclass
 import pandas as pd
 from torch import Tensor
 
-from ._errors import Kpnn2Error
+from ._errors import caller_error
 from ._layout import (
     Layout,
     build_layout,
     dense_mask_from_indices,
     edges_by_slot,
+    no_edge_error,
     resolve_edge_names,
     resolve_edge_pairs,
     resolve_node_name,
@@ -337,7 +338,7 @@ class AdjacencySpec:
             If ``names`` is a tensor, a ``str``, ``bytes``, a set, a
             mapping, not one-dimensional, or not iterable; if a
             name is empty; or if a name is not a node. One message
-            lists every unknown name.
+            lists the unknown names.
 
         Notes
         -----
@@ -579,7 +580,10 @@ class AdjacencySpec:
             )
         )
         if not packed:
-            raise Kpnn2Error(f"No edge {source_name} -> {target_name}.")
+            raise no_edge_error(
+                [(source_name, target_name)],
+                locations,
+            )
         return packed
 
     def edge_index(
@@ -632,8 +636,8 @@ class AdjacencySpec:
             ``bytes``, a set, a mapping, not one-dimensional, or
             not iterable; if their lengths differ; if a name is
             empty; if a name is not a node; or if a pair is not an
-            edge. One message lists every unknown name, and one
-            lists every missing edge.
+            edge. One message lists the unknown names, and one
+            lists the missing edges.
 
         Notes
         -----
@@ -1128,6 +1132,8 @@ def require_adjacency_spec(
         ``Hop`` included.
     """
     if not isinstance(spec, AdjacencySpec):
-        raise Kpnn2Error(
-            f"'spec' must be an AdjacencySpec. Got {describe(spec)}. {fix}"
+        raise caller_error(
+            "'spec' must be an AdjacencySpec.",
+            got=describe(spec),
+            fix=fix,
         )

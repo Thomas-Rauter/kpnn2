@@ -102,7 +102,7 @@ def test_widths_unknown_name_errors():
             widths={"Z": 2, "Q": 3},
         )
     message = str(caught.value)
-    assert "Q, Z" in message
+    assert "\n  Got: 'Q', 'Z'" in message
 
 
 def test_widths_rejects_bool_zero_and_negative():
@@ -261,7 +261,7 @@ def test_widths_unknown_name_suggests_a_close_node():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Unknown node name(s) in 'widths'.\n  Got: h\n  Did you mean: 'H'"
+            "Unknown node name(s) in 'widths'.\n  Got: 'h'\n  Did you mean: 'H'"
         ),
     ):
         parse_layered(

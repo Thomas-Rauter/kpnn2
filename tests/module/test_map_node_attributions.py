@@ -1227,14 +1227,16 @@ def _received_value_cases():
         pytest.param(
             torch.zeros(2),
             {"hop_input": 1},
-            "'hop_input' must be a Hop from spec.hops. Got 1 (int).",
+            "'hop_input' must be a Hop from spec.hops.\n  Got: 1 (int)",
             id="hop_input_not_hop",
         ),
         pytest.param(
             torch.zeros(2),
             {"hop_output": other},
-            "'hop_output' must match an entry of spec.hops. Got a Hop "
-            "that equals none of them.",
+            "'hop_output' must match an entry of spec.hops: a Hop from "
+            "another spec does not match.\n"
+            "  Got: a Hop that equals none of them\n"
+            "  Fix: Take it from this spec's hops.",
             id="hop_output_not_in_spec",
         ),
         pytest.param(

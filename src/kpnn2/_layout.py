@@ -19,15 +19,29 @@ raises through ``internal_error``. ``resolve_edge_names``,
 ``resolve_edge_pairs``, ``resolve_node_name``, and
 ``resolve_node_names`` are the exception: they check
 caller-supplied names and raise ``Kpnn2Error``.
+``unknown_name_hints`` and ``no_edge_error`` build the parts of
+those messages that other lookups share.
 """
 
-from collections.abc import Container, Iterable, Iterator, Sequence
+from collections.abc import (
+    Collection,
+    Container,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from dataclasses import dataclass, field
 
 import numpy as np
 import torch
 
-from ._errors import Kpnn2Error, internal_error
+from ._errors import (
+    Kpnn2Error,
+    caller_error,
+    close_matches,
+    internal_error,
+    listed,
+)
 
 DEFAULT_NODE_WIDTH = 1
 
@@ -502,7 +516,7 @@ def edges_by_slot(
 def resolve_edge_names(
     source: object,
     target: object,
-    known_names: Container[str],
+    known_names: Collection[str],
     listed_in: str,
 ) -> tuple[str, str]:
     """
@@ -510,8 +524,8 @@ def resolve_edge_names(
 
     Converts with ``str(...)``. Empty names and names that are
     not in ``known_names`` raise ``Kpnn2Error`` naming the pair
-    as ``{source} -> {target}``, followed by the reason
-    ``resolve_node_name`` gives for the first bad name.
+    as ``{source} -> {target}`` and the first bad name, with the
+    hints ``resolve_node_name`` gives.
 
     Parameters
     ----------
@@ -538,15 +552,14 @@ def resolve_edge_names(
     source_name = str(source)
     target_name = str(target)
     for node_name in (source_name, target_name):
-        problem = _node_name_problem(
+        error = _node_name_error(
             node_name,
             known_names,
             listed_in,
+            f"{source_name} -> {target_name}",
         )
-        if problem is not None:
-            raise Kpnn2Error(
-                f"No edge {source_name} -> {target_name}. {problem}"
-            )
+        if error is not None:
+            raise error
     return source_name, target_name
 
 
@@ -593,10 +606,10 @@ def resolve_edge_pairs(
         ``known_names``, or a pair is not in ``known_edges``.
     """
     if len(sources) != len(targets):
-        raise Kpnn2Error(
+        raise caller_error(
             "'sources' and 'targets' must have the same length: edge i "
-            f"is sources[i] -> targets[i]. Got {len(sources)} source(s) "
-            f"and {len(targets)} target(s)."
+            "is sources[i] -> targets[i].",
+            got=f"{len(sources)} source(s) and {len(targets)} target(s)",
         )
     resolve_node_names(
         [*sources, *targets],
@@ -612,19 +625,80 @@ def resolve_edge_pairs(
     )
     missing = sorted({pair for pair in pairs if pair not in known_edges})
     if missing:
-        listed = ", ".join(
-            f"{source} -> {target}" for source, target in missing
-        )
-        raise Kpnn2Error(
-            f"No edge(s): {listed}. Valid edges are the rows of "
-            "spec.to_edgelist()."
+        raise no_edge_error(
+            missing,
+            known_edges,
         )
     return pairs
 
 
+def no_edge_error(
+    pairs: Sequence[tuple[str, str]],
+    known_edges: Container[tuple[str, str]],
+) -> Kpnn2Error:
+    """
+    Build the error for name pairs that are no named edge.
+
+    Both names of each pair are nodes. One pair puts it in the
+    headline, several go in ``Got``. A pair whose reverse is an
+    edge gets a fix that says so, since a swapped source and
+    target is the likely mistake.
+
+    Parameters
+    ----------
+    pairs
+        ``(source, target)`` pairs that are not in ``known_edges``,
+        in the order to name them.
+    known_edges
+        ``(source, target)`` pairs of the spec's named edges.
+
+    Returns
+    -------
+    Kpnn2Error
+        Error that names the pairs and points at
+        ``spec.to_edgelist()``.
+    """
+    labels = [f"{source} -> {target}" for source, target in pairs]
+    swapped = [
+        label
+        for label, (source, target) in zip(
+            labels,
+            pairs,
+            strict=True,
+        )
+        if (target, source) in known_edges
+    ]
+    if len(pairs) == 1:
+        if swapped:
+            source, target = pairs[0]
+            fix = (
+                f"Swap source and target: the edge {target} -> {source} exists."
+            )
+        else:
+            fix = None
+        return caller_error(
+            f"No edge {labels[0]}.",
+            expected="a row of spec.to_edgelist()",
+            fix=fix,
+        )
+    if swapped:
+        fix = (
+            f"Swap source and target for {listed(swapped)}: the "
+            "reverse is an edge."
+        )
+    else:
+        fix = None
+    return caller_error(
+        "No edge(s) for some source-target pairs.",
+        got=listed(labels),
+        expected="rows of spec.to_edgelist()",
+        fix=fix,
+    )
+
+
 def resolve_node_name(
     name: object,
-    known_names: Container[str],
+    known_names: Collection[str],
     listed_in: str,
 ) -> str:
     """
@@ -654,13 +728,14 @@ def resolve_node_name(
         If the name is empty or is not in ``known_names``.
     """
     node_name = str(name)
-    problem = _node_name_problem(
+    error = _node_name_error(
         node_name,
         known_names,
         listed_in,
+        None,
     )
-    if problem is not None:
-        raise Kpnn2Error(problem)
+    if error is not None:
+        raise error
     return node_name
 
 
@@ -701,35 +776,110 @@ def resolve_node_names(
     """
     node_names = [str(name) for name in names]
     if "" in node_names:
-        raise Kpnn2Error(_EMPTY_NODE_NAME)
+        raise caller_error(_EMPTY_NODE_NAME)
     known = frozenset(known_names)
     unknown = sorted({name for name in node_names if name not in known})
     if unknown:
-        raise Kpnn2Error(
-            f"Unknown node name(s): {', '.join(unknown)}. Valid names are "
-            f"in {listed_in}."
+        candidates, fix = unknown_name_hints(
+            unknown,
+            len(set(node_names)),
+            known,
+            None,
+        )
+        raise caller_error(
+            "Unknown node name(s).",
+            got=listed(repr(name) for name in unknown),
+            expected=f"names in {listed_in}",
+            candidates=candidates,
+            fix=fix,
         )
     return node_names
 
 
-def _node_name_problem(
-    node_name: str,
-    known_names: Container[str],
-    listed_in: str,
-) -> str | None:
+def unknown_name_hints(
+    unknown: Sequence[str],
+    n_given: int,
+    known_names: Iterable[str],
+    argument: str | None,
+) -> tuple[str | None, str | None]:
     """
-    Return why ``node_name`` names no node, or ``None`` if it does.
+    Return the ``Did you mean`` and ``Fix`` values for unknown names.
 
-    The valid names are not listed, because a graph may have
-    thousands; the message points at ``listed_in`` instead.
+    Close valid names are suggested, unless none of several given
+    names is valid: then they are likely another kind of
+    identifier, such as Ensembl IDs for gene symbols, and the fix
+    says to check them instead.
+
+    Parameters
+    ----------
+    unknown
+        The names that are not valid, in the order the message
+        lists them.
+    n_given
+        How many distinct names the caller gave.
+    known_names
+        The valid names to suggest from.
+    argument
+        The argument that held the names, quoted in the fix, or
+        ``None`` when the message names no argument.
+
+    Returns
+    -------
+    tuple of (str or None, str or None)
+        ``(candidates, fix)``; at most one is not ``None``.
     """
-    if node_name == "":
-        return _EMPTY_NODE_NAME
-    if node_name not in known_names:
-        return (
-            f"Unknown node name: {node_name}. Valid names are in {listed_in}."
+    if len(unknown) == n_given > 1:
+        where = "" if argument is None else f" in '{argument}'"
+        fix = (
+            f"None of the names{where} is a node; check that they use "
+            "the same identifiers as the edgelist."
         )
-    return None
+        return None, fix
+    return (
+        close_matches(
+            unknown,
+            known_names,
+        ),
+        None,
+    )
+
+
+def _node_name_error(
+    node_name: str,
+    known_names: Collection[str],
+    listed_in: str,
+    edge: str | None,
+) -> Kpnn2Error | None:
+    """
+    Return the error for a name that names no node, or ``None``.
+
+    ``edge`` is ``"source -> target"`` when the name is half of a
+    pair. The valid names are not listed, because a graph may have
+    thousands; ``Expected`` points at ``listed_in`` instead.
+    """
+    if node_name != "" and node_name in known_names:
+        return None
+    prefix = "" if edge is None else f"No edge {edge}: "
+    if node_name == "":
+        if edge is None:
+            return caller_error(_EMPTY_NODE_NAME)
+        return caller_error(f"{prefix}a node name is empty.")
+    candidates, _ = unknown_name_hints(
+        [node_name],
+        1,
+        known_names,
+        None,
+    )
+    if edge is None:
+        headline = "Unknown node name."
+    else:
+        headline = f"{prefix}unknown node name."
+    return caller_error(
+        headline,
+        got=repr(node_name),
+        expected=f"a name in {listed_in}",
+        candidates=candidates,
+    )
 
 
 def iter_block_pairs(

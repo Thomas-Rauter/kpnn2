@@ -439,34 +439,37 @@ def test_bad_name_message_gives_the_reason_after_the_pair():
             layered,
             "A",
             "Z",
-            "No edge A -> Z. Unknown node name: Z. Valid names are in "
-            "spec.layer_nodes.",
+            "No edge A -> Z: unknown node name.\n"
+            "  Got: 'Z'\n"
+            "  Expected: a name in spec.layer_nodes",
         ),
         (
             layered,
             "Y",
             "Z",
-            "No edge Y -> Z. Unknown node name: Y. Valid names are in "
-            "spec.layer_nodes.",
+            "No edge Y -> Z: unknown node name.\n"
+            "  Got: 'Y'\n"
+            "  Expected: a name in spec.layer_nodes",
         ),
         (
             layered,
             "A",
             "",
-            "No edge A -> . Node name is empty.",
+            "No edge A -> : a node name is empty.",
         ),
         (
             adjacency,
             "z",
             "a",
-            "No edge z -> a. Unknown node name: z. Valid names are in "
-            "spec.nodes.",
+            "No edge z -> a: unknown node name.\n"
+            "  Got: 'z'\n"
+            "  Expected: a name in spec.nodes",
         ),
         (
             adjacency,
             "",
             "a",
-            "No edge  -> a. Node name is empty.",
+            "No edge  -> a: a node name is empty.",
         ),
     )
     for spec, source, target, message in cases:
@@ -489,4 +492,8 @@ def test_missing_edge_between_nodes_gives_no_name_reason():
             "H",
             "A",
         )
-    assert str(caught.value) == "No edge H -> A."
+    assert str(caught.value) == (
+        "No edge H -> A.\n"
+        "  Expected: a row of spec.to_edgelist()\n"
+        "  Fix: Swap source and target: the edge A -> H exists."
+    )

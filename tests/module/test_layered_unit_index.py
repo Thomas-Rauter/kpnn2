@@ -205,7 +205,7 @@ def test_outputs_ranked_to_one_layer_read_in_label_order(widths):
     assert longest.node_units("y")[0] == 3
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("Node(s) not in layer 3: z (layer 2)."),
+        match=re.escape("Node(s) not in layer 3.\n  Got: z (layer 2)\n"),
     ):
         longest.unit_index(
             labels,
@@ -520,20 +520,25 @@ def test_layer_is_keyword_only_and_required():
         pytest.param(
             ["q", "a", "Q", "q"],
             1,
-            "Unknown node name(s): Q, q. Valid names are in spec.layer_nodes.",
+            "Unknown node name(s).\n"
+            "  Got: 'Q', 'q'\n"
+            "  Expected: names in spec.layer_nodes",
             id="unknown_names",
         ),
         pytest.param(
             ["q", "y"],
             1,
-            "Unknown node name(s): q. Valid names are in spec.layer_nodes.",
+            "Unknown node name(s).\n"
+            "  Got: 'q'\n"
+            "  Expected: names in spec.layer_nodes",
             id="unknown_before_other_layer",
         ),
         pytest.param(
             ["y", "a", "u", "y", "c"],
             1,
-            "Node(s) not in layer 1: c (layer 2), u (layer 0), y (layer 3). "
-            "Valid names are in spec.layer_nodes[1].",
+            "Node(s) not in layer 1.\n"
+            "  Got: c (layer 2), u (layer 0), y (layer 3)\n"
+            "  Expected: names in spec.layer_nodes[1]",
             id="other_layers",
         ),
     ],

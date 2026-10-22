@@ -199,7 +199,7 @@ def test_unknown_rank_names_raise_sorted():
                 "Q": 3,
             },
         )
-    assert "Q, Z" in str(caught.value)
+    assert "\n  Got: 'Q', 'Z'" in str(caught.value)
 
 
 def test_bool_and_non_int_ranks_raise():

@@ -202,7 +202,7 @@ def test_empty_and_unknown_name_raise():
         spec.node_units("")
     with pytest.raises(
         Kpnn2Error,
-        match="Unknown node name: Z",
+        match="Unknown node name.\n  Got: 'Z'",
     ):
         spec.node_units("Z")
     with pytest.raises(
@@ -215,7 +215,7 @@ def test_empty_and_unknown_name_raise():
         )
     with pytest.raises(
         Kpnn2Error,
-        match="Unknown node name: Z",
+        match="Unknown node name.\n  Got: 'Z'",
     ):
         spec.hop_units(
             spec.hops[0],
@@ -292,14 +292,18 @@ def test_unknown_name_message_points_to_the_valid_names():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Unknown node name: Z. Valid names are in spec.layer_nodes."
+            "Unknown node name.\n"
+            "  Got: 'Z'\n"
+            "  Expected: a name in spec.layer_nodes"
         ),
     ):
         layered.node_units("Z")
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Unknown node name: Z. Valid names are in spec.layer_nodes."
+            "Unknown node name.\n"
+            "  Got: 'Z'\n"
+            "  Expected: a name in spec.layer_nodes"
         ),
     ):
         layered.hop_units(
@@ -308,7 +312,9 @@ def test_unknown_name_message_points_to_the_valid_names():
         )
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("Unknown node name: Z. Valid names are in spec.nodes."),
+        match=re.escape(
+            "Unknown node name.\n  Got: 'Z'\n  Expected: a name in spec.nodes"
+        ),
     ):
         adjacency.node_units("Z")
 
@@ -319,22 +325,25 @@ def test_unknown_name_message_points_to_the_valid_names():
         pytest.param(
             0,
             "C",
-            "Node C is not on this hop's source axis. It is in layer "
-            "2, and the hop reads layers [0].",
+            "Node C is not on this hop's source axis.\n"
+            "  Got: C in layer 2\n"
+            "  Expected: a node in the layers the hop reads, [0]",
             id="target_of_a_later_hop",
         ),
         pytest.param(
             1,
             "C",
-            "Node C is not on this hop's source axis. It is in layer "
-            "2, and the hop reads layers [0, 1].",
+            "Node C is not on this hop's source axis.\n"
+            "  Got: C in layer 2\n"
+            "  Expected: a node in the layers the hop reads, [0, 1]",
             id="own_target",
         ),
         pytest.param(
             0,
             "H",
-            "Node H is not on this hop's source axis. It is in layer "
-            "1, and the hop reads layers [0].",
+            "Node H is not on this hop's source axis.\n"
+            "  Got: H in layer 1\n"
+            "  Expected: a node in the layers the hop reads, [0]",
             id="own_target_hidden",
         ),
     ],
@@ -359,7 +368,7 @@ def test_hop_messages_report_the_received_value():
     spec = parse_layered(_chain_plus_skip())
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'hop' must be a Hop from spec.hops. Got 1 (int)."),
+        match=re.escape("'hop' must be a Hop from spec.hops.\n  Got: 1 (int)"),
     ):
         spec.hop_units(
             1,
@@ -369,9 +378,10 @@ def test_hop_messages_report_the_received_value():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'hop' must match an entry of spec.hops. Got a Hop that "
-            "equals none of them. Take it from this spec's hops; a "
-            "Hop from another spec does not match."
+            "'hop' must match an entry of spec.hops: a Hop from another "
+            "spec does not match.\n"
+            "  Got: a Hop that equals none of them\n"
+            "  Fix: Take it from this spec's hops."
         ),
     ):
         spec.hop_units(

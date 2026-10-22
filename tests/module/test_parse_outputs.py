@@ -457,7 +457,7 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
         match=re.escape(
             "'outputs' names node(s) that are not in the edgelist, and "
             "node(s) with an outgoing edge, which are not output nodes.\n"
-            "  Got: not in the edgelist: oot; with an outgoing edge: TF1 "
+            "  Got: not in the edgelist: 'oot'; with an outgoing edge: TF1 "
             "(hidden), g1 (input)\n"
             "  Fix: Index a node that feeds others with unit_index()."
         ),
@@ -621,7 +621,7 @@ def test_caller_data_is_not_modified(parse):
 def test_outputs_typo_suggests_only_undeclared_output_nodes(parse):
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("  Got: TF4\n  Did you mean: 'TF3'"),
+        match=re.escape("  Got: 'TF4'\n  Did you mean: 'TF3'"),
     ):
         parse(
             _dangling_edgelist(),

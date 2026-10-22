@@ -292,7 +292,9 @@ def test_caller_names_are_not_mutated():
         ),
         pytest.param(
             ["q", "a", "Q", "q"],
-            "Unknown node name(s): Q, q. Valid names are in spec.nodes.",
+            "Unknown node name(s).\n"
+            "  Got: 'Q', 'q'\n"
+            "  Expected: names in spec.nodes",
             id="unknown_names",
         ),
     ],
@@ -306,3 +308,25 @@ def test_rejection_messages_are_pinned(
         match=f"^{re.escape(message)}$",
     ):
         _spec().unit_index(names)
+
+
+def test_names_that_are_no_node_say_to_check_the_identifiers():
+    with pytest.raises(Kpnn2Error) as caught:
+        _spec().unit_index(["ENSG01", "ENSG02"])
+
+    message = str(caught.value)
+    assert "Did you mean" not in message
+    assert message.endswith(
+        "\n  Fix: None of the names is a node; check that they use the "
+        "same identifiers as the edgelist."
+    )
+
+
+def test_one_unknown_name_among_nodes_gets_a_suggestion():
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape("  Got: 'A'\n  Expected: names in spec.nodes\n"),
+    ) as caught:
+        _spec().unit_index(["a", "A"])
+
+    assert "\n  Did you mean: 'a'" in str(caught.value)

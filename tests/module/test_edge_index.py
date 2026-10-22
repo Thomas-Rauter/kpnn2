@@ -422,7 +422,8 @@ def test_caller_names_are_not_mutated():
             ["a", "b"],
             ["b"],
             "'sources' and 'targets' must have the same length: edge i is "
-            "sources[i] -> targets[i]. Got 2 source(s) and 1 target(s).",
+            "sources[i] -> targets[i].\n"
+            "  Got: 2 source(s) and 1 target(s)",
             id="lengths_differ",
         ),
         pytest.param(
@@ -440,21 +441,24 @@ def test_caller_names_are_not_mutated():
         pytest.param(
             ["q", "a", "Q"],
             ["b", "q", "a"],
-            "Unknown node name(s): Q, q. Valid names are in spec.nodes.",
+            "Unknown node name(s).\n"
+            "  Got: 'Q', 'q'\n"
+            "  Expected: names in spec.nodes",
             id="unknown_names",
         ),
         pytest.param(
             ["y", "a", "x", "y"],
             ["a", "b", "b", "a"],
-            "No edge(s): x -> b, y -> a. Valid edges are the rows of "
-            "spec.to_edgelist().",
+            "No edge(s) for some source-target pairs.\n"
+            "  Got: x -> b, y -> a\n"
+            "  Expected: rows of spec.to_edgelist()\n"
+            "  Fix: Swap source and target for y -> a: the reverse is an edge.",
             id="absent_edges",
         ),
         pytest.param(
             ["b"],
             ["b"],
-            "No edge(s): b -> b. Valid edges are the rows of "
-            "spec.to_edgelist().",
+            "No edge b -> b.\n  Expected: a row of spec.to_edgelist()",
             id="absent_self_loop",
         ),
     ],

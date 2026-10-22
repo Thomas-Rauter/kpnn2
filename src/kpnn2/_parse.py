@@ -24,6 +24,7 @@ from ._layout import (
     build_layout,
     concat_layouts,
     iter_block_pairs,
+    unknown_name_hints,
 )
 from ._serialize import canonical_edges
 from ._spec import Hop, LayeredSpec, Skip
@@ -56,31 +57,19 @@ def _unknown_names_error(
     """
     Build the error for names in ``argument`` that are no node.
 
-    Close node names are suggested, unless none of the several
-    given names is a node: then they are likely another kind of
-    identifier, and the fix says so.
+    The hints are those of ``unknown_name_hints``.
     """
-    if len(unknown) == n_given > 1:
-        return caller_error(
-            f"Unknown node name(s) in '{argument}'.",
-            got=listed(unknown),
-            fix=_identifier_fix(argument),
-        )
+    candidates, fix = unknown_name_hints(
+        unknown,
+        n_given,
+        nodes,
+        argument,
+    )
     return caller_error(
         f"Unknown node name(s) in '{argument}'.",
-        got=listed(unknown),
-        candidates=close_matches(
-            unknown,
-            nodes,
-        ),
-    )
-
-
-def _identifier_fix(argument: str) -> str:
-    """Return the fix for an argument none of whose names is a node."""
-    return (
-        f"None of the names in '{argument}' is a node; check that they "
-        "use the same identifiers as the edgelist."
+        got=listed(repr(name) for name in unknown),
+        candidates=candidates,
+        fix=fix,
     )
 
 
@@ -1249,14 +1238,20 @@ def _wrong_outputs_error(
     fixes = []
     if unknown:
         kinds.append("node(s) that are not in the edgelist")
-        found_parts.append(("not in the edgelist", listed(unknown)))
-        if len(unknown) == len(declared) > 1:
-            fixes.append(_identifier_fix("outputs"))
-        else:
-            candidates = close_matches(
-                unknown,
-                [name for name in found if name not in declared],
+        found_parts.append(
+            (
+                "not in the edgelist",
+                listed(repr(name) for name in unknown),
             )
+        )
+        candidates, fix = unknown_name_hints(
+            unknown,
+            len(declared),
+            [name for name in found if name not in declared],
+            "outputs",
+        )
+        if fix is not None:
+            fixes.append(fix)
     if not_outputs:
         kinds.append(
             "node(s) with an outgoing edge, which are not output nodes"
