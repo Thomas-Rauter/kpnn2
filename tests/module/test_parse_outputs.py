@@ -473,17 +473,24 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
     [
         pytest.param(
             "C",
-            "'outputs' is a string; pass a sequence of output node names.",
+            "'outputs' must be a sequence of output node names, not a "
+            "str.\n"
+            "  Got: 'C' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="string",
         ),
         pytest.param(
             b"C",
-            "'outputs' is bytes; pass a sequence of output node names.",
+            "'outputs' must be a sequence of output node names, not "
+            "bytes.\n"
+            "  Got: b'C' (bytes)",
             id="bytes",
         ),
         pytest.param(
             torch.tensor([1]),
-            "'outputs' is a tensor; pass a sequence of output node names.",
+            "'outputs' must be a sequence of output node names, not a "
+            "tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
@@ -494,13 +501,13 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
         ),
         pytest.param(
             np.array([["C", "E"]]),
-            "'outputs' must be one-dimensional.",
+            "'outputs' must be one-dimensional: a matrix is not a name list.",
             id="matrix",
         ),
         pytest.param(
             5,
-            "Unsupported outputs type. Expected a sequence of output node "
-            "names. Got 5 (int).",
+            "'outputs' must be a sequence of output node names.\n"
+            "  Got: 5 (int)",
             id="int",
         ),
         pytest.param(
@@ -544,7 +551,7 @@ def test_bad_outputs_raise(
 def test_outputs_type_is_checked_before_the_edgelist(parse):
     with pytest.raises(
         Kpnn2Error,
-        match="'outputs' is a string",
+        match="'outputs' must be a sequence of output node names, not a str",
     ):
         parse(
             "not a frame",

@@ -441,13 +441,14 @@ def test_from_dict_bad_edge_message_shortens_a_long_pair():
         pytest.param(
             "widths",
             ["H"],
-            "'widths' must be a mapping of node name to int. Got ['H'] (list).",
+            "'widths' must be a mapping of node name to int.\n"
+            "  Got: ['H'] (list)",
             id="widths-list",
         ),
         pytest.param(
             "ranks",
             3,
-            "'ranks' must be a mapping of node name to int. Got 3 (int).",
+            "'ranks' must be a mapping of node name to int.\n  Got: 3 (int)",
             id="ranks-int",
         ),
     ],
@@ -474,8 +475,8 @@ def test_adjacency_from_dict_reports_received_widths():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'widths' must be a mapping of node name to int. Got "
-            "[('x', 2)] (list)."
+            "'widths' must be a mapping of node name to int.\n"
+            "  Got: [('x', 2)] (list)"
         ),
     ):
         AdjacencySpec.from_dict(payload)

@@ -365,50 +365,57 @@ def test_caller_names_are_not_mutated():
         pytest.param(
             "a",
             ["b"],
-            "'sources' is a string; pass a sequence of source node names.",
+            "'sources' must be a sequence of source node names, not a str.\n"
+            "  Got: 'a' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="str",
         ),
         pytest.param(
             ["a"],
             b"b",
-            "'targets' is bytes; pass a sequence of target node names.",
+            "'targets' must be a sequence of target node names, not bytes.\n"
+            "  Got: b'b' (bytes)",
             id="bytes",
         ),
         pytest.param(
             torch.tensor([0]),
             ["b"],
-            "'sources' is a tensor; pass a sequence of source node names.",
+            "'sources' must be a sequence of source node names, not a "
+            "tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
             ["a"],
             5,
-            "Unsupported targets type. Expected a sequence of target node "
-            "names. Got 5 (int).",
+            "'targets' must be a sequence of target node names.\n"
+            "  Got: 5 (int)",
             id="int",
         ),
         pytest.param(
             {"a"},
             ["b"],
             "'sources' must be a sequence of source node names, not a set: "
-            "its items are matched by position. Got {'a'} (set). Pass a "
-            "list or tuple in the intended order.",
+            "its items are matched by position.\n"
+            "  Got: {'a'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="set",
         ),
         pytest.param(
             ["a"],
             {"a": "b"},
             "'targets' must be a sequence of target node names, not a "
-            "mapping: its items are matched by position. Got {'a': 'b'} "
-            "(dict). Pass a list or tuple in the intended order.",
+            "mapping: its items are matched by position.\n"
+            "  Got: {'a': 'b'} (dict)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="mapping",
         ),
         pytest.param(
             np.array([["a"]]),
             ["b"],
-            "'sources' must be one-dimensional. Got ndarray of shape (1, 1), "
-            "dtype <U1. A matrix is not a name list; pass the source node "
-            "names and index the matrix yourself.",
+            "'sources' must be one-dimensional: a matrix is not a name list.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1\n"
+            "  Fix: Pass the source node names, and index the matrix yourself.",
             id="matrix",
         ),
         pytest.param(

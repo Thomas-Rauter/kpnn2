@@ -457,7 +457,7 @@ def _invalid_align_cases():
         pytest.param(
             object(),
             spec,
-            "Unsupported names type",
+            "'names' must be a sequence of feature names.",
             id="unsupported_type",
         ),
         pytest.param(
@@ -475,7 +475,7 @@ def _invalid_align_cases():
         pytest.param(
             "AB",
             spec,
-            "string",
+            "'names' must be a sequence of feature names, not a str",
             id="string",
         ),
         pytest.param(
@@ -570,7 +570,7 @@ def test_align_inputs_rejects_bytes():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=r"bytes.*feature names",
+        match=r"feature names, not bytes\.",
     ) as caught:
         align_inputs(
             b"AB",
@@ -769,7 +769,7 @@ def _invalid_adjacency_align_cases():
         pytest.param(
             object(),
             spec,
-            "Unsupported names type",
+            "'names' must be a sequence of feature names.",
             id="unsupported_type",
         ),
     ]
@@ -814,8 +814,9 @@ def test_align_inputs_matrix_message_reports_the_received_shape():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'names' must be one-dimensional. Got ndarray of shape "
-            "(1, 2), dtype float64."
+            "'names' must be one-dimensional: a matrix is not a name "
+            "list.\n"
+            "  Got: ndarray of shape (1, 2), dtype float64"
         ),
     ):
         align_inputs(
@@ -829,8 +830,7 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Unsupported names type. Expected a sequence of feature "
-            "names. Got 5 (int)."
+            "'names' must be a sequence of feature names.\n  Got: 5 (int)"
         ),
     ):
         align_inputs(
@@ -844,39 +844,43 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
     [
         pytest.param(
             5,
-            "Unsupported names type. Expected a sequence of feature "
-            "names. Got 5 (int).",
+            "'names' must be a sequence of feature names.\n  Got: 5 (int)",
             id="int",
         ),
         pytest.param(
             "A",
-            "'names' is a string; pass a sequence of feature names.",
+            "'names' must be a sequence of feature names, not a str.\n"
+            "  Got: 'A' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="str",
         ),
         pytest.param(
             b"A",
-            "'names' is bytes; pass a sequence of feature names.",
+            "'names' must be a sequence of feature names, not bytes.\n"
+            "  Got: b'A' (bytes)",
             id="bytes",
         ),
         pytest.param(
             {"A"},
             "'names' must be a sequence of feature names, not a set: its "
-            "items are matched by position. Got {'A'} (set). Pass a list "
-            "or tuple in the intended order.",
+            "items are matched by position.\n"
+            "  Got: {'A'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="set",
         ),
         pytest.param(
             {"A": 0},
-            "'names' must be a sequence of feature names, not a mapping: "
-            "its items are matched by position. Got {'A': 0} (dict). "
-            "Pass a list or tuple in the intended order.",
+            "'names' must be a sequence of feature names, not a mapping: its "
+            "items are matched by position.\n"
+            "  Got: {'A': 0} (dict)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="mapping",
         ),
         pytest.param(
             np.array([["A"]]),
-            "'names' must be one-dimensional. Got ndarray of shape "
-            "(1, 1), dtype <U1. A matrix is not a name list; pass the "
-            "feature names and index the matrix yourself.",
+            "'names' must be one-dimensional: a matrix is not a name list.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1\n"
+            "  Fix: Pass the feature names, and index the matrix yourself.",
             id="matrix",
         ),
         pytest.param(
@@ -930,9 +934,9 @@ def test_align_inputs_spec_message_reports_the_received_type():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'spec' must be a LayeredSpec or an AdjacencySpec. Got "
-            "DataFrame of shape (2, 2). Build one with parse_layered() "
-            "or parse_adjacency()."
+            "'spec' must be a LayeredSpec or an AdjacencySpec.\n"
+            "  Got: DataFrame of shape (2, 2)\n"
+            "  Fix: Build one with parse_layered() or parse_adjacency()."
         ),
     ):
         align_inputs(

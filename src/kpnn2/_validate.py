@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, TypeGuard
 import numpy as np
 import torch
 
-from ._errors import Kpnn2Error
+from ._errors import caller_error
 
 if TYPE_CHECKING:
     from ._adjacency_spec import AdjacencySpec
@@ -50,8 +50,9 @@ def as_positive_int(
         names ``name`` and describes ``value``.
     """
     if not is_integer(value) or value < 1:
-        raise Kpnn2Error(
-            f"'{name}' must be a positive int. Got {describe(value)}."
+        raise caller_error(
+            f"'{name}' must be a positive int.",
+            got=describe(value),
         )
     return int(value)
 
@@ -75,11 +76,23 @@ def as_layer_index(
         reports ``value``.
     """
     if not is_integer(value):
-        raise Kpnn2Error(f"'layer' must be an int. Got {describe(value)}.")
+        raise caller_error(
+            "'layer' must be an int.",
+            got=describe(value),
+        )
     layer = int(value)
     if layer < 0 or layer >= n_layers:
-        raise Kpnn2Error(
-            f"'layer' must be in range [0, {n_layers}). Got {layer}."
+        if layer < 0:
+            fix = (
+                f"Count from 0: the last layer is {n_layers - 1}. "
+                "Negative indices do not count from the end."
+            )
+        else:
+            fix = None
+        raise caller_error(
+            f"'layer' must be in range [0, {n_layers}).",
+            got=describe(value),
+            fix=fix,
         )
     return layer
 
@@ -102,8 +115,9 @@ def as_bool(
         and describes ``value``.
     """
     if not isinstance(value, bool):
-        raise Kpnn2Error(
-            f"'{name}' must be True or False. Got {describe(value)}."
+        raise caller_error(
+            f"'{name}' must be True or False.",
+            got=describe(value),
         )
     return value
 
@@ -193,10 +207,11 @@ def reject_unordered(
         kind = "a set"
     else:
         return
-    raise Kpnn2Error(
+    raise caller_error(
         f"'{name}' must be {expected}, not {kind}: its items are "
-        f"matched by position. Got {describe(value)}. Pass a list or "
-        "tuple in the intended order."
+        "matched by position.",
+        got=describe(value),
+        fix="Pass a list or tuple in the intended order.",
     )
 
 
@@ -240,20 +255,24 @@ def as_name_list(
         If ``names`` is a ``torch.Tensor``, a ``str``, ``bytes``,
         a set or a mapping, has an ``ndim`` other than 1, or is
         not iterable, checked in that order. The message quotes
-        ``argument`` and names ``noun``. For a set, a mapping, a
-        wrong ``ndim``, or a non-iterable it also describes
-        ``names``.
+        ``argument``, names ``noun``, and describes ``names``.
     """
     if isinstance(names, torch.Tensor):
-        raise Kpnn2Error(
-            f"'{argument}' is a tensor; pass a sequence of {noun}."
+        raise caller_error(
+            f"'{argument}' must be a sequence of {noun}, not a tensor.",
+            got=describe(names),
         )
     if isinstance(names, str):
-        raise Kpnn2Error(
-            f"'{argument}' is a string; pass a sequence of {noun}."
+        raise caller_error(
+            f"'{argument}' must be a sequence of {noun}, not a str.",
+            got=describe(names),
+            fix="Wrap a single name in a list.",
         )
     if isinstance(names, bytes):
-        raise Kpnn2Error(f"'{argument}' is bytes; pass a sequence of {noun}.")
+        raise caller_error(
+            f"'{argument}' must be a sequence of {noun}, not bytes.",
+            got=describe(names),
+        )
     reject_unordered(
         names,
         argument,
@@ -261,15 +280,16 @@ def as_name_list(
     )
     ndim = getattr(names, "ndim", None)
     if ndim is not None and ndim != 1:
-        raise Kpnn2Error(
-            f"'{argument}' must be one-dimensional. Got "
-            f"{describe(names)}. A matrix is not a name list; pass the "
-            f"{noun} and index the matrix yourself."
+        raise caller_error(
+            f"'{argument}' must be one-dimensional: a matrix is not a "
+            "name list.",
+            got=describe(names),
+            fix=f"Pass the {noun}, and index the matrix yourself.",
         )
     if not isinstance(names, Iterable):
-        raise Kpnn2Error(
-            f"Unsupported {argument} type. Expected a sequence of "
-            f"{noun}. Got {describe(names)}."
+        raise caller_error(
+            f"'{argument}' must be a sequence of {noun}.",
+            got=describe(names),
         )
     return [str(item) for item in names]
 
@@ -291,9 +311,9 @@ def require_node_mapping(
         message names ``name`` and describes ``value``.
     """
     if not isinstance(value, Mapping):
-        raise Kpnn2Error(
-            f"'{name}' must be a mapping of node name to int. Got "
-            f"{describe(value)}."
+        raise caller_error(
+            f"'{name}' must be a mapping of node name to int.",
+            got=describe(value),
         )
 
 
@@ -313,10 +333,10 @@ def require_spec(spec: "LayeredSpec | AdjacencySpec") -> None:
         spec,
         (LayeredSpec, AdjacencySpec),
     ):
-        raise Kpnn2Error(
-            "'spec' must be a LayeredSpec or an AdjacencySpec. Got "
-            f"{describe(spec)}. Build one with parse_layered() or "
-            "parse_adjacency()."
+        raise caller_error(
+            "'spec' must be a LayeredSpec or an AdjacencySpec.",
+            got=describe(spec),
+            fix="Build one with parse_layered() or parse_adjacency().",
         )
 
 
@@ -340,10 +360,10 @@ def require_floating(
         shape and dtype, never its values.
     """
     if not tensor.is_floating_point():
-        raise Kpnn2Error(
-            f"{what} must be a floating-point tensor. Got "
-            f"{describe(tensor)}. Convert it first, for example with "
-            ".float()."
+        raise caller_error(
+            f"{what} must be a floating-point tensor.",
+            got=describe(tensor),
+            fix="Convert it first, for example with .float().",
         )
 
 
@@ -368,22 +388,17 @@ def check_layer_input(
         ``in_features``.
     """
     if not isinstance(x, torch.Tensor):
-        raise Kpnn2Error(
-            f"{owner} input must be a torch.Tensor. Got {describe(x)}."
+        raise caller_error(
+            f"{owner} input must be a torch.Tensor.",
+            got=describe(x),
         )
     require_floating(
         x,
         f"{owner} input",
     )
-    if x.ndim < 1:
-        raise Kpnn2Error(
+    if x.ndim < 1 or x.shape[-1] != in_features:
+        raise caller_error(
             f"{owner} input must have shape (..., in_features) "
-            f"with in_features={in_features}. Got a 0-dimensional "
-            "tensor."
-        )
-    if x.shape[-1] != in_features:
-        raise Kpnn2Error(
-            f"{owner} input must have shape (..., in_features) "
-            f"with in_features={in_features}. Got last dimension "
-            f"{x.shape[-1]}."
+            f"with in_features={in_features}.",
+            got=describe(x),
         )

@@ -65,7 +65,6 @@ _NOT_YET_CONVERTED = frozenset(
         "src/kpnn2/_parse.py",
         "src/kpnn2/_serialize.py",
         "src/kpnn2/_spec.py",
-        "src/kpnn2/_validate.py",
     }
 )
 

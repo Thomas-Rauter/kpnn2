@@ -66,7 +66,7 @@ def test_masked_linear_rejects_input_of_wrong_width(width):
     ) as caught:
         layer(torch.randn(4, width))
 
-    assert f"Got last dimension {width}." in str(caught.value)
+    assert f"Got: Tensor of shape (4, {width})," in str(caught.value)
 
 
 def test_masked_linear_rejects_zero_dim_input():
@@ -74,7 +74,8 @@ def test_masked_linear_rejects_zero_dim_input():
 
     with pytest.raises(
         Kpnn2Error,
-        match=r"^MaskedLinear input .*in_features=3\. Got a 0-dimensional",
+        match=r"^MaskedLinear input .*in_features=3\.\n  Got: Tensor of "
+        r"shape \(\),",
     ):
         layer(torch.tensor(1.0))
 
@@ -84,8 +85,10 @@ def test_masked_linear_rejects_non_tensor_input():
 
     with pytest.raises(
         Kpnn2Error,
-        match=r"^MaskedLinear input must be a torch\.Tensor\. "
-        + re.escape("Got [[1.0, 2.0, 3.0]] (list)."),
+        match=re.escape(
+            "MaskedLinear input must be a torch.Tensor.\n"
+            "  Got: [[1.0, 2.0, 3.0]] (list)"
+        ),
     ):
         layer([[1.0, 2.0, 3.0]])
 
@@ -106,9 +109,9 @@ def test_masked_linear_rejects_non_floating_input(dtype):
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "MaskedLinear input must be a floating-point tensor. Got "
-            f"Tensor of shape (4, 3), dtype {dtype}. Convert it first, "
-            "for example with .float()."
+            "MaskedLinear input must be a floating-point tensor.\n"
+            f"  Got: Tensor of shape (4, 3), dtype {dtype}\n"
+            "  Fix: Convert it first, for example with .float()."
         ),
     ):
         layer(

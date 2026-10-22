@@ -41,4 +41,4 @@ def non_bool_match(name: str) -> str:
     Names the argument and holds ``Got``, so the received value
     follows.
     """
-    return re.escape(f"'{name}' must be True or False. Got ")
+    return re.escape(f"'{name}' must be True or False.\n  Got: ")

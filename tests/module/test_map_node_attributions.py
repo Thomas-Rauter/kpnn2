@@ -1194,8 +1194,9 @@ def _received_value_cases():
                 "spec": "spec",
                 "layer": 1,
             },
-            "'spec' must be a LayeredSpec or an AdjacencySpec. Got "
-            "'spec' (str).",
+            "'spec' must be a LayeredSpec or an AdjacencySpec.\n"
+            "  Got: 'spec' (str)\n"
+            "  Fix: Build one with parse_layered() or parse_adjacency().",
             id="spec",
         ),
         pytest.param(
@@ -1214,13 +1215,13 @@ def _received_value_cases():
         pytest.param(
             scores,
             {"layer": 1.0},
-            "'layer' must be an int. Got 1.0 (float).",
+            "'layer' must be an int.\n  Got: 1.0 (float)",
             id="layer_float",
         ),
         pytest.param(
             scores,
             {"layer": True},
-            "'layer' must be an int. Got True (bool).",
+            "'layer' must be an int.\n  Got: True (bool)",
             id="layer_bool",
         ),
         pytest.param(
@@ -1311,9 +1312,10 @@ def _received_value_cases():
                 "layer": 1,
                 "dims": {"node"},
             },
-            "'dims' must be a sequence of strings, one per tensor axis, "
-            "not a set: its items are matched by position. Got "
-            "{'node'} (set). Pass a list or tuple in the intended order.",
+            "'dims' must be a sequence of strings, one per tensor axis, not "
+            "a set: its items are matched by position.\n"
+            "  Got: {'node'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="dims_set",
         ),
         pytest.param(
@@ -1388,10 +1390,11 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": {"s"}},
             },
-            "'coords['observation']' must be a sequence of labels, one "
-            "per position on that axis, not a set: its items are "
-            "matched by position. Got {'s'} (set). Pass a list or tuple "
-            "in the intended order.",
+            "'coords['observation']' must be a sequence of labels, one per "
+            "position on that axis, not a set: its items are matched by "
+            "position.\n"
+            "  Got: {'s'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="coords_value_set",
         ),
         pytest.param(
@@ -1400,10 +1403,11 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": {0: "s"}},
             },
-            "'coords['observation']' must be a sequence of labels, one "
-            "per position on that axis, not a mapping: its items are "
-            "matched by position. Got {0: 's'} (dict). Pass a list or "
-            "tuple in the intended order.",
+            "'coords['observation']' must be a sequence of labels, one per "
+            "position on that axis, not a mapping: its items are matched by "
+            "position.\n"
+            "  Got: {0: 's'} (dict)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="coords_value_mapping",
         ),
     ]

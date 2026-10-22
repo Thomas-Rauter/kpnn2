@@ -131,7 +131,7 @@ def test_as_positive_int_returns_python_int_for_numpy(value):
 def test_as_positive_int_rejects_numpy_non_positive_or_non_integer(value):
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("'n' must be a positive int. Got "),
+        match=re.escape("'n' must be a positive int.\n  Got: "),
     ):
         as_positive_int(
             value,
@@ -175,7 +175,7 @@ def test_as_positive_int_rejects_and_reports_value(
 ):
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape(f"'n' must be a positive int. Got {got}."),
+        match=re.escape(f"'n' must be a positive int.\n  Got: {got}"),
     ):
         as_positive_int(
             value,
@@ -231,7 +231,7 @@ def test_as_bool_rejects_and_reports_value(
 ):
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape(f"'flag' must be True or False. Got {got}."),
+        match=re.escape(f"'flag' must be True or False.\n  Got: {got}"),
     ):
         as_bool(
             value,
@@ -379,7 +379,7 @@ def test_require_node_mapping_rejects_and_reports_value(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"'widths' must be a mapping of node name to int. Got {got}."
+            f"'widths' must be a mapping of node name to int.\n  Got: {got}"
         ),
     ):
         require_node_mapping(
@@ -477,8 +477,8 @@ def test_reject_unordered_rejects_sets_and_mappings(
         Kpnn2Error,
         match=re.escape(
             f"'index' must be a sequence of int, not {kind}: its items "
-            f"are matched by position. Got {got}. Pass a list or tuple "
-            "in the intended order."
+            f"are matched by position.\n  Got: {got}\n  Fix: Pass a list "
+            "or tuple in the intended order."
         ),
     ):
         reject_unordered(
@@ -572,62 +572,69 @@ def test_as_name_list_does_not_mutate_the_callers_sequence():
     [
         pytest.param(
             torch.tensor([1]),
-            "'names' is a tensor; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
             torch.tensor([[1.0, 2.0]]),
-            "'names' is a tensor; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a tensor.\n"
+            "  Got: Tensor of shape (1, 2), dtype torch.float32",
             id="tensor_2d_before_ndim",
         ),
         pytest.param(
             "A",
-            "'names' is a string; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a str.\n"
+            "  Got: 'A' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="str",
         ),
         pytest.param(
             b"A",
-            "'names' is bytes; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not bytes.\n"
+            "  Got: b'A' (bytes)",
             id="bytes",
         ),
         pytest.param(
             {"A"},
             "'names' must be a sequence of node names, not a set: its "
-            "items are matched by position. Got {'A'} (set). Pass a "
-            "list or tuple in the intended order.",
+            "items are matched by position.\n"
+            "  Got: {'A'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="set",
         ),
         pytest.param(
             {"A": 0},
             "'names' must be a sequence of node names, not a mapping: "
-            "its items are matched by position. Got {'A': 0} (dict). "
-            "Pass a list or tuple in the intended order.",
+            "its items are matched by position.\n"
+            "  Got: {'A': 0} (dict)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="mapping",
         ),
         pytest.param(
             np.array([["A"]]),
-            "'names' must be one-dimensional. Got ndarray of shape "
-            "(1, 1), dtype <U1. A matrix is not a name list; pass the "
-            "node names and index the matrix yourself.",
+            "'names' must be one-dimensional: a matrix is not a name "
+            "list.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1\n"
+            "  Fix: Pass the node names, and index the matrix yourself.",
             id="matrix",
         ),
         pytest.param(
             np.array("A"),
-            "'names' must be one-dimensional. Got ndarray of shape (), "
-            "dtype <U1. A matrix is not a name list; pass the node "
-            "names and index the matrix yourself.",
+            "'names' must be one-dimensional: a matrix is not a name "
+            "list.\n"
+            "  Got: ndarray of shape (), dtype <U1\n"
+            "  Fix: Pass the node names, and index the matrix yourself.",
             id="zero_dim_array",
         ),
         pytest.param(
             5,
-            "Unsupported names type. Expected a sequence of node names. "
-            "Got 5 (int).",
+            "'names' must be a sequence of node names.\n  Got: 5 (int)",
             id="int",
         ),
         pytest.param(
             None,
-            "Unsupported names type. Expected a sequence of node names. "
-            "Got None.",
+            "'names' must be a sequence of node names.\n  Got: None",
             id="None",
         ),
     ],
@@ -680,9 +687,9 @@ def test_require_floating_rejects_and_omits_values(dtype):
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Layer input must be a floating-point tensor. Got Tensor of "
-            f"shape (2,), dtype {dtype}. Convert it first, for example "
-            "with .float()."
+            "Layer input must be a floating-point tensor.\n"
+            f"  Got: Tensor of shape (2,), dtype {dtype}\n"
+            "  Fix: Convert it first, for example with .float()."
         ),
     ) as caught:
         require_floating(

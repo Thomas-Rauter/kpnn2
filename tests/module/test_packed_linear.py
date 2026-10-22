@@ -97,7 +97,7 @@ def test_packed_linear_rejects_input_of_wrong_width(width):
     ) as caught:
         layer(torch.randn(4, width))
 
-    assert f"Got last dimension {width}." in str(caught.value)
+    assert f"Got: Tensor of shape (4, {width})," in str(caught.value)
 
 
 def test_packed_linear_rejects_zero_dim_and_non_tensor_input():
@@ -110,13 +110,13 @@ def test_packed_linear_rejects_zero_dim_and_non_tensor_input():
 
     with pytest.raises(
         Kpnn2Error,
-        match="0-dimensional",
+        match=re.escape("Got: Tensor of shape (),"),
     ):
         layer(torch.tensor(1.0))
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "PackedLinear input must be a torch.Tensor. Got [[1.0]] (list)."
+            "PackedLinear input must be a torch.Tensor.\n  Got: [[1.0]] (list)"
         ),
     ):
         layer([[1.0]])
@@ -143,9 +143,9 @@ def test_packed_linear_rejects_non_floating_input(dtype):
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "PackedLinear input must be a floating-point tensor. Got "
-            f"Tensor of shape (4, 3), dtype {dtype}. Convert it first, "
-            "for example with .float()."
+            "PackedLinear input must be a floating-point tensor.\n"
+            f"  Got: Tensor of shape (4, 3), dtype {dtype}\n"
+            "  Fix: Convert it first, for example with .float()."
         ),
     ):
         layer(
@@ -230,7 +230,7 @@ def test_packed_linear_rejects_stale_alignment_after_reparse():
 
     with pytest.raises(
         Kpnn2Error,
-        match="Got last dimension 4.",
+        match=r"Got: Tensor of shape \(\d+, 4\),",
     ):
         layer(
             torch.as_tensor(

@@ -235,44 +235,49 @@ def test_caller_names_are_not_mutated():
     [
         pytest.param(
             "a",
-            "'names' is a string; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a str.\n"
+            "  Got: 'a' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="str",
         ),
         pytest.param(
             b"a",
-            "'names' is bytes; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not bytes.\n"
+            "  Got: b'a' (bytes)",
             id="bytes",
         ),
         pytest.param(
             torch.tensor([0]),
-            "'names' is a tensor; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
             5,
-            "Unsupported names type. Expected a sequence of node names. "
-            "Got 5 (int).",
+            "'names' must be a sequence of node names.\n  Got: 5 (int)",
             id="int",
         ),
         pytest.param(
             {"a"},
-            "'names' must be a sequence of node names, not a set: its "
-            "items are matched by position. Got {'a'} (set). Pass a list "
-            "or tuple in the intended order.",
+            "'names' must be a sequence of node names, not a set: its items "
+            "are matched by position.\n"
+            "  Got: {'a'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="set",
         ),
         pytest.param(
             {"a": 0},
             "'names' must be a sequence of node names, not a mapping: its "
-            "items are matched by position. Got {'a': 0} (dict). Pass a "
-            "list or tuple in the intended order.",
+            "items are matched by position.\n"
+            "  Got: {'a': 0} (dict)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="mapping",
         ),
         pytest.param(
             np.array([["a"]]),
-            "'names' must be one-dimensional. Got ndarray of shape (1, 1), "
-            "dtype <U1. A matrix is not a name list; pass the node names "
-            "and index the matrix yourself.",
+            "'names' must be one-dimensional: a matrix is not a name list.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1\n"
+            "  Fix: Pass the node names, and index the matrix yourself.",
             id="matrix",
         ),
         pytest.param(

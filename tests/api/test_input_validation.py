@@ -707,7 +707,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "unit_index_names_is_an_int",
         _TYPE,
-        "Unsupported names type",
+        "'names' must be a sequence of node names.",
         lambda: _LAYERED.unit_index(
             5,
             layer=1,
@@ -787,7 +787,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_index_sources_is_an_int",
         _TYPE,
-        "Unsupported sources type",
+        "'sources' must be a sequence of source node names.",
         lambda: _LAYERED.edge_index(
             5,
             ["C"],
@@ -997,7 +997,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "unit_index_names_is_an_int",
         _TYPE,
-        "Unsupported names type",
+        "'names' must be a sequence of node names.",
         lambda: _ADJACENCY.unit_index(5),
     ),
     _Bad(
@@ -1039,7 +1039,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "edge_index_targets_is_an_int",
         _TYPE,
-        "Unsupported targets type",
+        "'targets' must be a sequence of target node names.",
         lambda: _ADJACENCY.edge_index(
             ["a"],
             5,

@@ -409,92 +409,100 @@ def test_layer_is_keyword_only_and_required():
         pytest.param(
             "a",
             1,
-            "'names' is a string; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a str.\n"
+            "  Got: 'a' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="str",
         ),
         pytest.param(
             b"a",
             1,
-            "'names' is bytes; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not bytes.\n"
+            "  Got: b'a' (bytes)",
             id="bytes",
         ),
         pytest.param(
             torch.tensor([0]),
             1,
-            "'names' is a tensor; pass a sequence of node names.",
+            "'names' must be a sequence of node names, not a tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
             5,
             1,
-            "Unsupported names type. Expected a sequence of node names. "
-            "Got 5 (int).",
+            "'names' must be a sequence of node names.\n  Got: 5 (int)",
             id="int",
         ),
         pytest.param(
             {"a"},
             1,
-            "'names' must be a sequence of node names, not a set: its "
-            "items are matched by position. Got {'a'} (set). Pass a list "
-            "or tuple in the intended order.",
+            "'names' must be a sequence of node names, not a set: its items "
+            "are matched by position.\n"
+            "  Got: {'a'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="set",
         ),
         pytest.param(
             {"a": 0},
             1,
             "'names' must be a sequence of node names, not a mapping: its "
-            "items are matched by position. Got {'a': 0} (dict). Pass a "
-            "list or tuple in the intended order.",
+            "items are matched by position.\n"
+            "  Got: {'a': 0} (dict)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="mapping",
         ),
         pytest.param(
             np.array([["a"]]),
             1,
-            "'names' must be one-dimensional. Got ndarray of shape (1, 1), "
-            "dtype <U1. A matrix is not a name list; pass the node names "
-            "and index the matrix yourself.",
+            "'names' must be one-dimensional: a matrix is not a name list.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1\n"
+            "  Fix: Pass the node names, and index the matrix yourself.",
             id="matrix",
         ),
         pytest.param(
             ["a"],
             1.0,
-            "'layer' must be an int. Got 1.0 (float).",
+            "'layer' must be an int.\n  Got: 1.0 (float)",
             id="layer_float",
         ),
         pytest.param(
             ["a"],
             True,
-            "'layer' must be an int. Got True (bool).",
+            "'layer' must be an int.\n  Got: True (bool)",
             id="layer_bool",
         ),
         pytest.param(
             ["a"],
             np.bool_(True),
-            "'layer' must be an int. Got True (bool).",
+            "'layer' must be an int.\n  Got: True (bool)",
             id="layer_numpy_bool",
         ),
         pytest.param(
             ["a"],
             None,
-            "'layer' must be an int. Got None.",
+            "'layer' must be an int.\n  Got: None",
             id="layer_none",
         ),
         pytest.param(
             ["a"],
             -1,
-            "'layer' must be in range [0, 4). Got -1.",
+            "'layer' must be in range [0, 4).\n"
+            "  Got: -1 (int)\n"
+            "  Fix: Count from 0: the last layer is 3. Negative indices do "
+            "not count from the end.",
             id="layer_negative",
         ),
         pytest.param(
             ["a"],
             4,
-            "'layer' must be in range [0, 4). Got 4.",
+            "'layer' must be in range [0, 4).\n  Got: 4 (int)",
             id="layer_past_the_end",
         ),
         pytest.param(
             ["q"],
             4,
-            "'layer' must be in range [0, 4). Got 4.",
+            "'layer' must be in range [0, 4).\n  Got: 4 (int)",
             id="layer_before_unknown_name",
         ),
         pytest.param(

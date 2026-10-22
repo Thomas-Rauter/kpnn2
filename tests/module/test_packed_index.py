@@ -60,6 +60,7 @@ _UNORDERED = (
     "must be a 1-dimensional integer tensor or a sequence of int, not "
     "{kind}: its items are matched by position."
 )
+_IN_ORDER = "Pass a list or tuple in the intended order."
 
 # Type name of a numpy scalar: ``bool`` on numpy 2, ``bool_`` on 1.x.
 _NUMPY_BOOL = type(np.bool_(True)).__name__
@@ -167,24 +168,25 @@ _CASES = [
     pytest.param(
         {1, 0},
         [0, 1],
-        f"'source_index' {_UNORDERED.format(kind='a set')} Got "
-        "{{0, 1}} (set). Pass a list or tuple in the intended order.",
+        f"'source_index' {_UNORDERED.format(kind='a set')}\n"
+        "  Got: {{0, 1}} (set)\n"
+        f"  Fix: {_IN_ORDER}",
         id="set",
     ),
     pytest.param(
         [0, 1],
         frozenset({0, 1}),
-        f"'target_index' {_UNORDERED.format(kind='a set')} Got "
-        "frozenset({{0, 1}}) (frozenset). Pass a list or tuple in the "
-        "intended order.",
+        f"'target_index' {_UNORDERED.format(kind='a set')}\n"
+        "  Got: frozenset({{0, 1}}) (frozenset)\n"
+        f"  Fix: {_IN_ORDER}",
         id="frozenset",
     ),
     pytest.param(
         {1: "b", 0: "a"},
         [0, 1],
-        f"'source_index' {_UNORDERED.format(kind='a mapping')} Got "
-        "{{1: 'b', 0: 'a'}} (dict). Pass a list or tuple in the "
-        "intended order.",
+        f"'source_index' {_UNORDERED.format(kind='a mapping')}\n"
+        "  Got: {{1: 'b', 0: 'a'}} (dict)\n"
+        f"  Fix: {_IN_ORDER}",
         id="mapping",
     ),
     pytest.param(

@@ -476,14 +476,18 @@ _OTHER_HOP = parse_layered(
             "x",
             ["c"],
             1,
-            "'sources' is a string; pass a sequence of source node names.",
+            "'sources' must be a sequence of source node names, not a str.\n"
+            "  Got: 'x' (str)\n"
+            "  Fix: Wrap a single name in a list.",
             id="str",
         ),
         pytest.param(
             ["x"],
             torch.tensor([0]),
             1,
-            "'targets' is a tensor; pass a sequence of target node names.",
+            "'targets' must be a sequence of target node names, not a "
+            "tensor.\n"
+            "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
@@ -491,17 +495,18 @@ _OTHER_HOP = parse_layered(
             ["c"],
             1,
             "'sources' must be a sequence of source node names, not a set: "
-            "its items are matched by position. Got {'x'} (set). Pass a "
-            "list or tuple in the intended order.",
+            "its items are matched by position.\n"
+            "  Got: {'x'} (set)\n"
+            "  Fix: Pass a list or tuple in the intended order.",
             id="set",
         ),
         pytest.param(
             ["x"],
             np.array([["c"]]),
             1,
-            "'targets' must be one-dimensional. Got ndarray of shape (1, 1), "
-            "dtype <U1. A matrix is not a name list; pass the target node "
-            "names and index the matrix yourself.",
+            "'targets' must be one-dimensional: a matrix is not a name list.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1\n"
+            "  Fix: Pass the target node names, and index the matrix yourself.",
             id="matrix",
         ),
         pytest.param(

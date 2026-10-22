@@ -2113,9 +2113,9 @@ def test_forward_rejects_non_floating_inputs(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"'{name}' must be a floating-point tensor. Got Tensor of "
-            f"shape {shape}, dtype {dtype}. Convert it first, for "
-            "example with .float()."
+            f"'{name}' must be a floating-point tensor.\n"
+            f"  Got: Tensor of shape {shape}, dtype {dtype}\n"
+            "  Fix: Convert it first, for example with .float()."
         ),
     ):
         layer(**inputs)

@@ -213,7 +213,7 @@ def test_widths_rejects_non_mapping():
             widths=[("H", 2)],
         )
 
-    assert "Got [('H', 2)] (list)." in str(exc_info.value)
+    assert "\n  Got: [('H', 2)] (list)" in str(exc_info.value)
 
 
 def test_edgelist_round_trip_requires_widths():

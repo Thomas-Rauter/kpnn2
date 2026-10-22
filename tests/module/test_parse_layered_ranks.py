@@ -276,7 +276,7 @@ def test_ranks_rejects_non_mapping():
             ranks=["A"],
         )
 
-    assert "Got ['A'] (list)." in str(exc_info.value)
+    assert "\n  Got: ['A'] (list)" in str(exc_info.value)
 
 
 def test_inputs_not_all_at_min_rank_raise():
