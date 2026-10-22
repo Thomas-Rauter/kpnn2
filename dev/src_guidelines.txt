@@ -48,7 +48,7 @@ and explain the conflict.
 ------------------
 - Never call print(). No progress bars. Raise `Kpnn2Error`
   for invalid use. Warn only for recoverable oddities
-  (`warnings.warn`; `FutureWarning` for deprecation). If
+  (`warn_at_caller`; `FutureWarning` for deprecation). If
   the user need not act, stay silent. Do not add a logging
   subsystem.
 - Never set global state in library code: no global seeds
@@ -102,11 +102,59 @@ and explain the conflict.
   policy (reject, propagate, or mask) in its contract.
 - Enforce important constraints in code, not only in
   docstrings.
-- Messages name the argument, state the expectation, then
-  `Got <received>.`, then a fix sentence when the fix is
-  obvious: "'bias' must be True or False. Got 'no' (str)."
-  Build `<received>` with `_validate.describe`; never print
-  tensor values.
+- Every error and warning message has one format: a
+  headline, then optional field lines, each at most once
+  and in this order:
+
+      <headline>
+        Got: <received>
+        Expected: <valid>
+        Did you mean: <close names>
+        Fix: <instructions>
+
+  Example:
+
+      'constraint' must be a torch.nn.Module or None.
+        Got: 'softplus' (str)
+        Fix: Pass an instance such as nn.Softplus().
+
+  The headline, the four labels, their order, and one line
+  per field are a stable format callers and their agents
+  can rely on. The wording is not.
+- Build messages only in `_errors.py`: `raise
+  caller_error(...)` for a `Kpnn2Error`, `warn_at_caller`
+  for a warning, `raise internal_error(...)` for a failed
+  internal check. Do not call `Kpnn2Error(...)`,
+  `AssertionError(...)`, or `warnings.warn(...)` anywhere
+  else; `tests/api/test_package_locks.py` enforces this.
+  Modules on its `_NOT_YET_CONVERTED` list still build
+  messages by hand until they are converted.
+- Headline (required): one line that says what is wrong,
+  ending with a period. It may add a short reason. For an
+  argument, name it and state the rule: "'bias' must be
+  True or False." When one check finds several problems,
+  report them in one message, so the caller fixes them in
+  one go: the headline sums them up.
+- Fields (optional): each exactly one line. Give a field
+  only when it helps; never fill one to fill it.
+  - Got: the received value, built with
+    `_validate.describe` (never print tensor values), or
+    the part of the input that breaks the rule: names,
+    rows, a shape. No trailing period.
+  - Expected: what would be valid, only when the headline
+    does not say it already. Never repeat the headline. No
+    trailing period.
+  - Did you mean: close valid names, from `close_matches`.
+    Every lookup of a name in a set of valid names offers
+    it. It suggests; never pick the name for the caller.
+    No trailing period or question mark.
+  - Fix: what to do, as instructions ending with a period.
+    When almost no names match, say to check the kind of
+    identifier instead of suggesting names.
+- Several problems in one message: separate the items
+  within a field with "; ".
+- Lists of names, rows, or values go through `listed`: at
+  most ten items, then ", and N more".
 - Flag arguments must be a Python `bool`
   (`_validate.as_bool`). Integer arguments go through
   `_validate.is_integer`, which accepts numpy integers, and
@@ -195,8 +243,9 @@ BEFORE FINISHING ANY CHANGE TO src/
     `internal_error`, not `assert`, and caller mistakes
     still raise `Kpnn2Error`.
 [ ] Boundary checks call the shared helpers, messages
-    report `Got <received>.`, and every new public entry
-    point has rows in `tests/api/test_input_validation.py`.
+    follow the format in section 3 with only the fields
+    that help, and every new public entry point has rows
+    in `tests/api/test_input_validation.py`.
 [ ] No numerical defaults or public signatures changed
     without approval.
 [ ] No new dependencies, options, or features beyond the

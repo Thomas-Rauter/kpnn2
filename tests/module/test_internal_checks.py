@@ -91,10 +91,10 @@ def test_issues_url_matches_pyproject():
 def test_warn_at_caller_points_at_the_first_frame_outside_kpnn2():
     with pytest.warns(
         FutureWarning,
-        match="^soon$",
+        match=r"^soon\.$",
     ) as record:
         warn_at_caller(
-            "soon",
+            "soon.",
             FutureWarning,
         )
 

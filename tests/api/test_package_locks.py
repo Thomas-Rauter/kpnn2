@@ -17,6 +17,7 @@ _LOCKS = (
     "device",
     "dependency",
     "assert",
+    "message",
 )
 
 # Pinned here. Reading pyproject.toml would let a new
@@ -38,12 +39,44 @@ _GLOBAL_SEEDS = frozenset(
 
 _COMPILER_NAMES = frozenset(_COMPILER_LEFTOVERS)
 
+# Messages are built only here, so every error and warning shares
+# one format (dev/src_guidelines.txt, section 3).
+_MESSAGE_BUILDERS = "src/kpnn2/_errors.py"
+
+# Modules that still build messages by hand. Each step of the
+# message-format migration converts some and removes them here.
+_NOT_YET_CONVERTED = frozenset(
+    {
+        "src/kpnn2/_adjacency_spec.py",
+        "src/kpnn2/_aggregation/_bind.py",
+        "src/kpnn2/_aggregation/_dispatch.py",
+        "src/kpnn2/_aggregation/_methods/_rauter_mangano_2026.py",
+        "src/kpnn2/_aggregation/_registry.py",
+        "src/kpnn2/_align.py",
+        "src/kpnn2/_attributions.py",
+        "src/kpnn2/_constraint.py",
+        "src/kpnn2/_gather.py",
+        "src/kpnn2/_generator.py",
+        "src/kpnn2/_identity.py",
+        "src/kpnn2/_layout.py",
+        "src/kpnn2/_masked_linear.py",
+        "src/kpnn2/_packed_index.py",
+        "src/kpnn2/_packed_multihead_attention.py",
+        "src/kpnn2/_parse.py",
+        "src/kpnn2/_serialize.py",
+        "src/kpnn2/_spec.py",
+        "src/kpnn2/_validate.py",
+    }
+)
+
 _FORBIDDEN = """\
 import random
+import warnings
 import numpy as np
 import torch
 import torch.sparse
 import captum
+from kpnn2 import Kpnn2Error
 
 def compile_graph():
     return None
@@ -61,6 +94,11 @@ def demo(x):
     torch.device("cuda")
     torch.set_default_device("cuda")
     assert x is not None
+    warnings.warn("odd")
+    if x == 0:
+        raise Kpnn2Error("bad")
+    if x == 1:
+        raise AssertionError("bug")
     return torch.sparse.sum(x)
 """
 
@@ -70,6 +108,7 @@ import pandas
 import torch
 import xarray
 from kpnn2 import __version__
+from kpnn2._errors import Kpnn2Error, caller_error
 
 def copy_device(x, weight, scores, source, target, generator):
     \"\"\"torch.sparse is not imported.\"\"\"
@@ -87,6 +126,10 @@ def copy_device(x, weight, scores, source, target, generator):
         target.device,
         __version__,
     )
+
+def check(x):
+    if isinstance(x, Kpnn2Error):
+        raise caller_error("x is wrong.")
 """
 
 
@@ -148,6 +191,19 @@ def _dependency_allowed(module: str) -> bool:
     if top in _CORE_DEPENDENCIES or top == "kpnn2":
         return True
     return top in sys.stdlib_module_names
+
+
+def _message_call(dotted: str) -> str | None:
+    name = dotted.rsplit(".", 1)[-1]
+    if name in {"Kpnn2Error", "AssertionError"}:
+        return name
+    if dotted == "warnings.warn":
+        return dotted
+    return None
+
+
+def _hit_path(hit: str) -> str:
+    return hit.split(":", 1)[0]
 
 
 def _blank() -> dict[str, list[tuple[int, str]]]:
@@ -274,6 +330,13 @@ def _scan_call(
         node.func,
         aliases,
     )
+    message = None if dotted is None else _message_call(dotted)
+    if message is not None:
+        add(
+            "message",
+            node.lineno,
+            message,
+        )
     if dotted in {"print", "builtins.print"}:
         add(
             "print",
@@ -375,6 +438,21 @@ def test_src_does_not_use_assert():
     assert _src_findings()["assert"] == []
 
 
+def test_src_builds_messages_only_in_the_errors_module():
+    allowed = _NOT_YET_CONVERTED | {_MESSAGE_BUILDERS}
+    hits = [
+        hit
+        for hit in _src_findings()["message"]
+        if _hit_path(hit) not in allowed
+    ]
+    assert hits == []
+
+
+def test_not_yet_converted_modules_still_build_messages():
+    paths = {_hit_path(hit) for hit in _src_findings()["message"]}
+    assert sorted(_NOT_YET_CONVERTED - paths) == []
+
+
 def test_scanner_flags_forbidden_syntax_and_allows_copies():
     bad = _scan_source(
         _FORBIDDEN,
@@ -394,6 +472,9 @@ def test_scanner_flags_forbidden_syntax_and_allows_copies():
     assert any("captum" in hit for hit in bad["dependency"])
     assert not any("torch" in hit for hit in bad["dependency"])
     assert any("assert" in hit for hit in bad["assert"])
+    assert any("warnings.warn" in hit for hit in bad["message"])
+    assert any("Kpnn2Error" in hit for hit in bad["message"])
+    assert any("AssertionError" in hit for hit in bad["message"])
 
     good = _scan_source(
         _ALLOWED,
