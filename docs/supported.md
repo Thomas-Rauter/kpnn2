@@ -76,35 +76,81 @@ graph states which
 interactions exist; how that prior enters the model is a second
 choice, and each choice encodes a different hypothesis about the
 data-generating process. In `kpnn2` the graph is the
-**architecture**, not the data.
+**architecture**, not the data: it stays the same in every sample,
+and it decides which weights exist. The two subsections below take
+these in turn.
 
-- **Fixed structure, varying state.** A GNN assumes that the
-  structure itself varies and is informative: a sample is a graph,
-  its nodes carry feature vectors, and the batch is drawn from a
-  distribution over graphs. A KPNN assumes the converse. The graph
-  is known and identical across samples, what varies is the state
-  of its named nodes, and the batch is samples. Where no structure
-  varies, the regularity a GNN is built to exploit is not present.
-- **Prior-indexed parameters, not one shared function.** A GNN
-  applies the same message and update functions at every node and
-  edge. That sharing is what permits generalization to unseen
-  graphs, and it is also what leaves edge-level attribution
-  ill-posed. Here the prior indexes the parameters instead: each
-  named edge carries its own weights, a scalar at unit width and a
-  block once `widths=` (on either parser) widens its endpoints, so
-  an attribution resolves to a named interaction rather than to a
-  rule shared across all of them. `PackedMultiheadAttention` places
-  the prior one level up, constraining which pairs may attend at
-  all.
-- **Directed propagation, not k rounds of neighborhood
-  aggregation.** Many graphs of say protein-protein interactions in a cell are
-  a deep directed cascade, and the quantity of interest is what propagates along
-  it. A sparsely connected feedforward network traverses that
-  cascade in one pass with [skip edges](concepts.md#skip-edge)
-  intact; message passing
-  reaches the same depth only by stacking rounds, mixing
-  neighboring node states as it proceeds. The latter can be the "right model of
-  the world", but in many cases it probably is not.
+### In a GNN the graph varies between samples; in a KPNN only the node values do
+
+Picture two ways to learn about traffic. One model studies many
+different city maps, each with its own streets, and learns which
+street layouts tend to jam. The other has one city map and studies
+many days of traffic on it: the streets stay put, and what changes
+from day to day is how many cars are on each street.
+
+The first model is how a GNN sees data. Each sample is its own
+graph, with its own nodes and edges, and the shape of that graph is
+part of what decides the answer. Node 5 in one graph and node 5 in
+another have nothing in common, because the numbering is arbitrary.
+
+The second is how a KPNN sees data. The graph is known before
+training and is the same in every sample; what varies is the value
+on each node. A node stands for the same entity in every sample, so
+its name carries meaning. The edge weights change during training,
+but the trained model applies the same weights to every sample.
+
+That difference decides whether a GNN's design pays off. Across
+many cities, the same kind of junction recurs in thousands of
+places, so one learned rule for it serves them all. On a single
+map, Main Street is not one more instance of a recurring pattern:
+it is one specific street, the same every day. A standard GNN is
+also built not to care which node is which, and that discards what
+a KPNN keeps: the nodes have names, and the names matter.
+
+### A GNN shares one rule across all edges; a KPNN gives each edge its own weights
+
+Take a graph with three nodes, A → C ← B, and data in which C
+follows A and ignores B. Here `a`, `b`, and `c` are the node values
+in one sample, `c'` is the value of C after one GNN round, and `σ`
+is the activation:
+
+```text
+KPNN:  c  = σ(w_AC · a + w_BC · b)
+GNN:   c' = σ(W · (a + b) + U · c)
+```
+
+The KPNN has one weight per edge, so it learns a large `w_AC` and a
+`w_BC` near zero. The GNN, in its simplest message-passing form,
+has one `W` for both edges and one `U` for every node's own value.
+It sees only `a + b`, so it cannot tell A from B. Graph attention
+networks do give each edge its own weight, but compute it from the
+values `a` and `b` with another shared function, so they can learn
+that large inputs count more, not that A counts more.
+
+In general, a GNN applies the same message and update functions at
+every node and edge. In a KPNN the prior indexes the parameters
+instead: the graph decides which weights exist, and training
+decides their values.
+
+The sharing is deliberate. Because `W` never mentions A or B, a GNN
+can apply it to a graph it has never seen. `w_AC` means nothing on
+another graph: a KPNN gives up transfer to unseen graphs, which a
+fixed graph does not need, and gets one parameter per named
+interaction in return.
+
+That trade is what lets you ask which interaction the trained model
+relies on. In the KPNN, the weight `w_AC` and the signal
+`w_AC · a` belong to A → C alone, so the answer names A → C. In the
+GNN you can still remove A → C and measure the change, but no
+learned parameter belongs to that edge, so the answer describes the
+shared rule at that spot.
+
+Widening an endpoint with `widths=` (on either parser) turns an
+edge's scalar weight into a block, still owned by that edge alone.
+`PackedMultiheadAttention` places the prior one level up,
+constraining which pairs may attend at all.
+
+### When a GNN is the better hypothesis
 
 A GNN is the better hypothesis where the structure is the object of
 study: samples that are distinct graphs, nodes or edges unseen at
