@@ -145,7 +145,7 @@ def test_two_dimensional_labels_message_reports_the_shape():
 
 
 @pytest.mark.parametrize(
-    ("name", "candidates"),
+    ("name", "fix"),
     [
         pytest.param(
             "sample",
@@ -154,14 +154,14 @@ def test_two_dimensional_labels_message_reports_the_shape():
         ),
         pytest.param(
             "observations",
-            "\n  Did you mean: 'observations'",
+            "\n  Fix: Rename dim 'observations' to 'observation'.",
             id="close",
         ),
     ],
 )
 def test_missing_observation_dim_message_reports_the_dims(
     name,
-    candidates,
+    fix,
 ):
     with pytest.raises(Kpnn2Error) as excinfo:
         bind_labels(
@@ -169,36 +169,45 @@ def test_missing_observation_dim_message_reports_the_dims(
             [0, 1, 2],
         )
     assert str(excinfo.value) == (
-        "Attribution DataArray must have an 'observation' dim.\n"
-        f"  Got: dims {name!r}, 'node'{candidates}"
+        "'attributions' is missing required dim(s): 'observation'.\n"
+        f"  Got: dims {name!r}, 'node'{fix}"
     )
 
 
 @pytest.mark.parametrize(
-    "labels",
+    ("labels", "got", "fix"),
     [
         pytest.param(
             xr.DataArray(np.zeros(3)),
+            "DataArray of shape (3,), dtype float64",
+            "Pass labels.to_series(), which aligns the labels by their "
+            "coordinate.",
             id="DataArray",
         ),
         pytest.param(
             pd.DataFrame({"label": [0, 1, 2]}),
+            "DataFrame of shape (3, 1)",
+            "Pass the column that holds the labels, as a Series.",
             id="DataFrame",
         ),
     ],
 )
-def test_labels_table_or_dataarray_is_rejected(labels):
-    with pytest.raises(
-        Kpnn2Error,
-        match=re.escape(
-            "'labels' must be a 1-d array or pandas Series.\n"
-            f"  Got: {type(labels).__name__} of shape"
-        ),
-    ):
+def test_labels_table_or_dataarray_is_rejected(
+    labels,
+    got,
+    fix,
+):
+    with pytest.raises(Kpnn2Error) as excinfo:
         bind_labels(
             _attributions(),
             labels,
         )
+    assert str(excinfo.value) == (
+        "'labels' must be a 1-d array or pandas Series, not a "
+        f"{type(labels).__name__}.\n"
+        f"  Got: {got}\n"
+        f"  Fix: {fix}"
+    )
 
 
 def test_labels_length_message_reports_both_lengths():
@@ -214,16 +223,31 @@ def test_labels_length_message_reports_both_lengths():
     )
 
 
-def test_missing_required_dim_suggests_a_close_dim():
+def test_missing_required_dim_is_reported_with_the_dims():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        require_named_dims(
+            _attributions(),
+            required=("observation", "node", "seed"),
+        )
+    assert str(excinfo.value) == (
+        "'attributions' is missing required dim(s): 'seed'.\n"
+        "  Got: dims 'observation', 'node'"
+    )
+
+
+def test_missing_and_unexpected_dims_raise_in_one_message():
     with pytest.raises(Kpnn2Error) as excinfo:
         require_named_dims(
             _attributions().rename(observation="observations"),
             required=("observation", "node"),
         )
     assert str(excinfo.value) == (
-        "Attribution DataArray is missing required dim(s): 'observation'.\n"
-        "  Got: dims 'observations', 'node'\n"
-        "  Did you mean: 'observations'"
+        "'attributions' has unexpected dim(s) and is missing required "
+        "dim(s).\n"
+        "  Got: unexpected 'observations'; missing 'observation'\n"
+        "  Expected: only dims 'node', 'observation'\n"
+        "  Did you mean: 'observation'\n"
+        "  Fix: Reduce or rename the unexpected dims first."
     )
 
 
@@ -235,7 +259,7 @@ def test_unexpected_dim_suggests_a_close_optional_dim():
             optional=("seed",),
         )
     assert str(excinfo.value) == (
-        "Attribution DataArray has unexpected dim(s).\n"
+        "'attributions' has unexpected dim(s).\n"
         "  Got: 'seeds'\n"
         "  Expected: only dims 'node', 'observation', 'seed'\n"
         "  Did you mean: 'seed'\n"
@@ -252,3 +276,68 @@ def test_repeated_node_names_raise():
         ),
     ):
         require_unique_nodes(attributions)
+
+
+def test_labels_index_sharing_no_value_says_to_check_the_identifier():
+    labels = pd.Series(
+        [0, 1, 0],
+        index=["s1", "s2", "s3"],
+    )
+    with pytest.raises(Kpnn2Error) as excinfo:
+        bind_labels(
+            _attributions().assign_coords(observation=[0, 1, 2]),
+            labels,
+        )
+    assert str(excinfo.value) == (
+        "'labels' index does not match the 'observation' coordinate.\n"
+        "  Got: missing 0, 1, 2; extra 's1', 's2', 's3'\n"
+        "  Fix: No index value names an observation; check the kind of "
+        "identifier, or name the observations with coords= in "
+        "map_node_attributions()."
+    )
+
+
+def test_labels_index_differing_only_by_case_gets_suggestions():
+    labels = pd.Series(
+        [0, 1, 0],
+        index=["A", "B", "C"],
+    )
+    with pytest.raises(Kpnn2Error) as excinfo:
+        bind_labels(
+            _attributions(),
+            labels,
+        )
+    assert str(excinfo.value) == (
+        "'labels' index does not match the 'observation' coordinate.\n"
+        "  Got: missing 'a', 'b', 'c'; extra 'A', 'B', 'C'\n"
+        "  Did you mean: 'a' for 'A'; 'b' for 'B'; 'c' for 'C'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("labels", "got"),
+    [
+        pytest.param(
+            {0, 1, 2},
+            "{0, 1, 2} (set)",
+            id="set",
+        ),
+        pytest.param(
+            "abc",
+            "'abc' (str)",
+            id="str",
+        ),
+    ],
+)
+def test_labels_that_convert_to_zero_dims_are_described(
+    labels,
+    got,
+):
+    with pytest.raises(Kpnn2Error) as excinfo:
+        bind_labels(
+            _attributions(),
+            labels,
+        )
+    assert str(excinfo.value) == (
+        f"'labels' must be 1-dimensional.\n  Got: {got}"
+    )

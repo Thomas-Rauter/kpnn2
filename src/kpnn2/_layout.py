@@ -524,8 +524,10 @@ def resolve_edge_names(
 
     Converts with ``str(...)``. Empty names and names that are
     not in ``known_names`` raise ``Kpnn2Error`` naming the pair
-    as ``{source} -> {target}`` and the first bad name, with the
-    hints ``resolve_node_name`` gives.
+    as ``{source} -> {target}``, checked source first. An empty
+    name says which argument is empty. An unknown source is
+    reported together with an unknown target, with the hints
+    ``unknown_name_hints`` gives.
 
     Parameters
     ----------
@@ -551,15 +553,33 @@ def resolve_edge_names(
     """
     source_name = str(source)
     target_name = str(target)
-    for node_name in (source_name, target_name):
-        error = _node_name_error(
-            node_name,
+    edge = f"{source_name} -> {target_name}"
+    if source_name == "":
+        if target_name == "":
+            raise caller_error(
+                f"No edge {edge}: 'source' and 'target' are empty."
+            )
+        raise caller_error(f"No edge {edge}: 'source' is empty.")
+    if source_name not in known_names:
+        unknown = [source_name]
+        target_unknown = target_name not in known_names
+        if target_unknown and target_name not in ("", source_name):
+            unknown.append(target_name)
+        raise _unknown_node_names_error(
+            unknown,
             known_names,
             listed_in,
-            f"{source_name} -> {target_name}",
+            edge,
         )
-        if error is not None:
-            raise error
+    if target_name == "":
+        raise caller_error(f"No edge {edge}: 'target' is empty.")
+    if target_name not in known_names:
+        raise _unknown_node_names_error(
+            [target_name],
+            known_names,
+            listed_in,
+            edge,
+        )
     return source_name, target_name
 
 
@@ -575,9 +595,10 @@ def resolve_edge_pairs(
 
     The many-edge form of ``resolve_edge_names``: edge ``i`` is
     ``sources[i] -> targets[i]``. Checks, in order: equal lengths;
-    every name as ``resolve_node_names`` checks it (an empty name,
-    then every unknown name in one message); then every pair that
-    is not a named edge, each once, sorted, in one message.
+    every name as ``resolve_node_names`` checks it (every empty
+    name, by argument and position, in one message, then every
+    unknown name in one message); then every pair that is not a
+    named edge, each once, sorted, in one message.
 
     Parameters
     ----------
@@ -611,7 +632,13 @@ def resolve_edge_pairs(
             "is sources[i] -> targets[i].",
             got=f"{len(sources)} source(s) and {len(targets)} target(s)",
         )
-    resolve_node_names(
+    _reject_empty_names(
+        (
+            ("sources", sources),
+            ("targets", targets),
+        )
+    )
+    _require_known_names(
         [*sources, *targets],
         known_names,
         listed_in,
@@ -728,14 +755,15 @@ def resolve_node_name(
         If the name is empty or is not in ``known_names``.
     """
     node_name = str(name)
-    error = _node_name_error(
-        node_name,
-        known_names,
-        listed_in,
-        None,
-    )
-    if error is not None:
-        raise error
+    if node_name == "":
+        raise caller_error(_EMPTY_NODE_NAME)
+    if node_name not in known_names:
+        raise _unknown_node_names_error(
+            [node_name],
+            known_names,
+            listed_in,
+            None,
+        )
     return node_name
 
 
@@ -743,14 +771,16 @@ def resolve_node_names(
     names: Iterable[object],
     known_names: Iterable[str],
     listed_in: str,
+    argument: str,
 ) -> list[str]:
     """
     Match several node names the way parse matches node names.
 
     The many-name form of ``resolve_node_name``. Converts each
-    name with ``str(...)``. An empty name raises first. Otherwise
-    every name that is not in ``known_names`` is reported in one
-    ``Kpnn2Error``, each once, sorted.
+    name with ``str(...)``. Empty names raise first, with their
+    positions. Otherwise every name that is not in
+    ``known_names`` is reported in one ``Kpnn2Error``, each once,
+    sorted.
 
     Parameters
     ----------
@@ -762,6 +792,9 @@ def resolve_node_names(
     listed_in
         The spec field a caller reads for the valid names, such
         as ``"spec.nodes"``, quoted in the message.
+    argument
+        The caller's argument that held ``names``, quoted in the
+        empty-name message.
 
     Returns
     -------
@@ -775,8 +808,69 @@ def resolve_node_names(
         ``known_names``.
     """
     node_names = [str(name) for name in names]
-    if "" in node_names:
-        raise caller_error(_EMPTY_NODE_NAME)
+    _reject_empty_names(((argument, node_names),))
+    _require_known_names(
+        node_names,
+        known_names,
+        listed_in,
+    )
+    return node_names
+
+
+def _reject_empty_names(
+    arguments: Sequence[tuple[str, Sequence[str]]],
+) -> None:
+    """
+    Raise if a name list holds an empty name, naming where.
+
+    ``arguments`` pairs each caller argument with its names after
+    ``str(...)``. Every empty name of every argument goes into one
+    message, by position in that argument. With one argument,
+    ``Got`` gives the positions alone.
+    """
+    found = [
+        (
+            argument,
+            [position for position, name in enumerate(names) if name == ""],
+        )
+        for argument, names in arguments
+    ]
+    found = [
+        (argument, positions) for argument, positions in found if positions
+    ]
+    if not found:
+        return
+    quoted = " or ".join(f"'{argument}'" for argument, _ in arguments)
+    parts = [
+        f"{len(positions)} name(s) at position {listed(positions)}"
+        for _, positions in found
+    ]
+    if len(arguments) > 1:
+        parts = [
+            f"'{argument}': {part}"
+            for (argument, _), part in zip(
+                found,
+                parts,
+                strict=True,
+            )
+        ]
+    raise caller_error(
+        f"{quoted} contains empty node names.",
+        got="; ".join(parts),
+    )
+
+
+def _require_known_names(
+    node_names: Sequence[str],
+    known_names: Iterable[str],
+    listed_in: str,
+) -> None:
+    """
+    Raise if any of ``node_names`` is not in ``known_names``.
+
+    Every unknown name goes into one message, each once, sorted,
+    with the hints of ``unknown_name_hints``.
+    """
     known = frozenset(known_names)
     unknown = sorted({name for name in node_names if name not in known})
     if unknown:
@@ -793,7 +887,6 @@ def resolve_node_names(
             candidates=candidates,
             fix=fix,
         )
-    return node_names
 
 
 def unknown_name_hints(
@@ -806,9 +899,11 @@ def unknown_name_hints(
     Return the ``Did you mean`` and ``Fix`` values for unknown names.
 
     Close valid names are suggested, unless none of several given
-    names is valid: then they are likely another kind of
-    identifier, such as Ensembl IDs for gene symbols, and the fix
-    says to check them instead.
+    names is valid and none matches a valid name when case is
+    ignored: then they are likely another kind of identifier,
+    such as Ensembl IDs for gene symbols, and the fix says to
+    check them instead. A name that differs from a valid one only
+    by case is a typo, so it keeps its suggestions.
 
     Parameters
     ----------
@@ -828,7 +923,12 @@ def unknown_name_hints(
     tuple of (str or None, str or None)
         ``(candidates, fix)``; at most one is not ``None``.
     """
-    if len(unknown) == n_given > 1:
+    known = list(known_names)
+    if likely_other_identifiers(
+        unknown,
+        n_given,
+        known,
+    ):
         where = "" if argument is None else f" in '{argument}'"
         fix = (
             f"None of the names{where} is a node; check that they use "
@@ -838,47 +938,80 @@ def unknown_name_hints(
     return (
         close_matches(
             unknown,
-            known_names,
+            known,
         ),
         None,
     )
 
 
-def _node_name_error(
-    node_name: str,
+def likely_other_identifiers(
+    unknown: Sequence[str],
+    n_given: int,
+    known_names: Iterable[str],
+) -> bool:
+    """
+    Return whether unknown names are likely another kind of identifier.
+
+    That is the case when none of several given names is valid and
+    none matches a valid name when case is ignored, such as Ensembl
+    IDs given for gene symbols. A name that differs from a valid
+    one only by case is a typo instead.
+
+    Parameters
+    ----------
+    unknown
+        The names that are not valid.
+    n_given
+        How many distinct names the caller gave.
+    known_names
+        The valid names.
+
+    Returns
+    -------
+    bool
+        ``True`` when a message should say to check the kind of
+        identifier instead of suggesting names.
+    """
+    if not len(unknown) == n_given > 1:
+        return False
+    folded = {name.casefold() for name in known_names}
+    return not any(name.casefold() in folded for name in unknown)
+
+
+def _unknown_node_names_error(
+    unknown: list[str],
     known_names: Collection[str],
     listed_in: str,
     edge: str | None,
-) -> Kpnn2Error | None:
+) -> Kpnn2Error:
     """
-    Return the error for a name that names no node, or ``None``.
+    Build the error for the one or two names of a lookup that name no node.
 
-    ``edge`` is ``"source -> target"`` when the name is half of a
+    ``edge`` is ``"source -> target"`` when the names are of a
     pair. The valid names are not listed, because a graph may have
     thousands; ``Expected`` points at ``listed_in`` instead.
     """
-    if node_name != "" and node_name in known_names:
-        return None
-    prefix = "" if edge is None else f"No edge {edge}: "
-    if node_name == "":
-        if edge is None:
-            return caller_error(_EMPTY_NODE_NAME)
-        return caller_error(f"{prefix}a node name is empty.")
-    candidates, _ = unknown_name_hints(
-        [node_name],
-        1,
+    candidates, fix = unknown_name_hints(
+        unknown,
+        len(unknown),
         known_names,
         None,
     )
+    plural = "s" if len(unknown) > 1 else ""
     if edge is None:
-        headline = "Unknown node name."
+        headline = f"Unknown node name{plural}."
     else:
-        headline = f"{prefix}unknown node name."
+        headline = f"No edge {edge}: unknown node name{plural}."
+    if plural:
+        expected = f"names in {listed_in}"
+    else:
+        expected = f"a name in {listed_in}"
     return caller_error(
         headline,
-        got=repr(node_name),
-        expected=f"a name in {listed_in}",
+        got=listed(repr(name) for name in unknown),
+        expected=expected,
         candidates=candidates,
+        fix=fix,
     )
 
 

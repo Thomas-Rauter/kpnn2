@@ -252,7 +252,7 @@ def test_ranks_message_describes_the_value_without_its_data(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"Rank for node 'H' must be a non-negative int.\n  Got: {got}"
+            f"'ranks' values must be non-negative ints.\n  Got: 'H': {got}"
         ),
     ) as caught:
         parse_layered(
@@ -425,4 +425,42 @@ def test_ranks_naming_no_node_say_to_check_the_identifiers():
     assert message.endswith(
         "\n  Fix: None of the names in 'ranks' is a node; check that "
         "they use the same identifiers as the edgelist."
+    )
+
+
+def test_every_bad_rank_value_is_reported_in_one_message():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        parse_layered(
+            _chain_edgelist(),
+            ranks={"A": 0, "H": -1, "C": "2"},
+        )
+    assert str(excinfo.value) == (
+        "'ranks' values must be non-negative ints.\n"
+        "  Got: 'C': '2' (str); 'H': -1 (int)"
+    )
+
+
+def test_non_forward_edge_message_gives_the_ranks_passed():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        parse_layered(
+            _chain_edgelist(),
+            ranks={"A": 0, "H": 10, "C": 10},
+        )
+    assert str(excinfo.value) == (
+        "Every named edge must go strictly forward under 'ranks'.\n"
+        "  Got: non-forward edge(s) H -> C (rank 10 -> 10)"
+    )
+
+
+def test_minimum_rank_message_names_input_nodes():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        parse_layered(
+            _chain_edgelist(),
+            ranks={"A": 1, "H": 0, "C": 2},
+        )
+    assert str(excinfo.value) == (
+        "Input nodes (in-degree 0) must share the minimum rank in 'ranks', "
+        "and no other node may use it.\n"
+        "  Got: input node(s) not at the minimum rank: A; non-input "
+        "node(s) at the minimum rank: H"
     )

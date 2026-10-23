@@ -296,14 +296,14 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "width_is_float",
         _TYPE,
-        "Width for node 'H'",
+        "'widths' values must be positive ints.\n  Got: 'H': 2.0",
         lambda: _layered(widths={"H": 2.0}),
     ),
     _Bad(
         "parse_layered",
         "width_is_zero",
         _VALUE,
-        "Width for node 'H'",
+        "'widths' values must be positive ints.\n  Got: 'H': 0",
         lambda: _layered(widths={"H": 0}),
     ),
     _Bad(
@@ -317,14 +317,14 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "rank_is_bool",
         _TYPE,
-        "Rank for node 'A'",
+        "'ranks' values must be non-negative ints.\n  Got: 'A': True",
         lambda: _layered(ranks={"A": True, "H": 1, "C": 2}),
     ),
     _Bad(
         "parse_layered",
         "rank_is_negative",
         _VALUE,
-        "Rank for node 'A'",
+        "'ranks' values must be non-negative ints.\n  Got: 'A': -1",
         lambda: _layered(ranks={"A": -1, "H": 1, "C": 2}),
     ),
     _Bad(
@@ -422,7 +422,7 @@ _PARSE_LAYERED_CASES = [
         "parse_layered",
         "outputs_is_a_mapping",
         _TYPE,
-        "'outputs' must be a collection of node names, not a mapping",
+        "'outputs' must be a collection of output node names, not a mapping",
         lambda: _layered(outputs={"C": 1}),
     ),
     _Bad(
@@ -542,14 +542,14 @@ _PARSE_ADJACENCY_CASES = [
         "parse_adjacency",
         "width_is_numpy_bool",
         _TYPE,
-        "Width for node 'a'",
+        "'widths' values must be positive ints.\n  Got: 'a': True",
         lambda: _adjacency(widths={"a": np.bool_(True)}),
     ),
     _Bad(
         "parse_adjacency",
         "width_is_negative",
         _VALUE,
-        "Width for node 'a'",
+        "'widths' values must be positive ints.\n  Got: 'a': ",
         lambda: _adjacency(widths={"a": -1}),
     ),
     _Bad(
@@ -715,7 +715,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_location_empty_name",
         _SEMANTIC,
-        "a node name is empty.",
+        "No edge  -> H: 'source' is empty.",
         lambda: _LAYERED.edge_location(
             "",
             "H",
@@ -789,7 +789,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "unit_index_names_is_a_matrix",
         _SHAPE,
-        "'names' must be one-dimensional",
+        "'names' must be a 1-dimensional sequence of",
         lambda: _LAYERED.unit_index(
             np.array([["H"]]),
             layer=1,
@@ -819,7 +819,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "unit_index_empty_name",
         _SEMANTIC,
-        "Node name is empty",
+        "contains empty node names.",
         lambda: _LAYERED.unit_index(
             ["H", ""],
             layer=1,
@@ -871,7 +871,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_index_sources_is_a_matrix",
         _SHAPE,
-        "'sources' must be one-dimensional",
+        "'sources' must be a 1-dimensional sequence of",
         lambda: _LAYERED.edge_index(
             np.array([["A"]]),
             ["C"],
@@ -915,7 +915,7 @@ _LAYERED_SPEC_CASES = [
         "LayeredSpec",
         "edge_index_empty_name",
         _SEMANTIC,
-        "Node name is empty",
+        "contains empty node names.",
         lambda: _LAYERED.edge_index(
             ["A"],
             [""],
@@ -1135,14 +1135,14 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "unit_index_names_is_a_matrix",
         _SHAPE,
-        "'names' must be one-dimensional",
+        "'names' must be a 1-dimensional sequence of",
         lambda: _ADJACENCY.unit_index(np.array([["a"]])),
     ),
     _Bad(
         "AdjacencySpec",
         "unit_index_empty_name",
         _SEMANTIC,
-        "Node name is empty",
+        "contains empty node names.",
         lambda: _ADJACENCY.unit_index(["a", ""]),
     ),
     _Bad(
@@ -1176,7 +1176,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "edge_index_targets_is_a_matrix",
         _SHAPE,
-        "'targets' must be one-dimensional",
+        "'targets' must be a 1-dimensional sequence of",
         lambda: _ADJACENCY.edge_index(
             ["a"],
             np.array([["b"]]),
@@ -1196,7 +1196,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "edge_index_empty_name",
         _SEMANTIC,
-        "Node name is empty",
+        "contains empty node names.",
         lambda: _ADJACENCY.edge_index(
             [""],
             ["b"],
@@ -1247,7 +1247,7 @@ _ADJACENCY_SPEC_CASES = [
         "AdjacencySpec",
         "from_dict_width_is_zero",
         _VALUE,
-        "Width for node 'a'",
+        "'widths' values must be positive ints.\n  Got: 'a': ",
         lambda: _adjacency_payload(widths={"a": 0}),
     ),
     _Bad(
@@ -1483,8 +1483,8 @@ _PACKED_LINEAR_CASES = [
         "PackedLinear",
         "source_index_is_a_set",
         _TYPE,
-        "'source_index' must be a 1-dimensional integer tensor or a "
-        "sequence of int, not a set",
+        "'source_index' must be a 1-dimensional integer tensor or array, "
+        "or a sequence of int, not a set",
         lambda: _packed(source_index={1, 0}),
     ),
     _Bad(
@@ -1777,8 +1777,8 @@ _ATTENTION_CASES = [
         "PackedMultiheadAttention",
         "target_index_is_a_mapping",
         _TYPE,
-        "'target_index' must be a 1-dimensional integer tensor or a "
-        "sequence of int, not a mapping",
+        "'target_index' must be a 1-dimensional integer tensor or array, "
+        "or a sequence of int, not a mapping",
         lambda: _attention(target_index={0: 0, 1: 0}),
     ),
     _Bad(
@@ -2083,21 +2083,21 @@ _ALIGN_CASES = [
         "align_inputs",
         "names_is_a_matrix",
         _SHAPE,
-        "'names' must be one-dimensional",
+        "'names' must be a 1-dimensional sequence of",
         lambda: _align(np.array([["A"]])),
     ),
     _Bad(
         "align_inputs",
         "names_repeat_a_label",
         _SEMANTIC,
-        "strings).\n  Got: A",
+        "strings).\n  Got: 'A'",
         lambda: _align(["A", "A"]),
     ),
     _Bad(
         "align_inputs",
         "names_miss_an_input",
         _SEMANTIC,
-        "Got: missing: A;",
+        "Got: missing: 'A';",
         lambda: _align(["H"]),
     ),
     _Bad(
@@ -2201,14 +2201,14 @@ _MAP_CASES = [
         "map_node_attributions",
         "coords_value_is_none",
         _TYPE,
-        "'coords['observation']'",
+        "'coords[\"observation\"]'",
         lambda: _map(coords={"observation": None}),
     ),
     _Bad(
         "map_node_attributions",
         "coords_value_is_a_str",
         _TYPE,
-        "'coords['observation']'",
+        "'coords[\"observation\"]'",
         lambda: _map(coords={"observation": "abc"}),
     ),
     _Bad(

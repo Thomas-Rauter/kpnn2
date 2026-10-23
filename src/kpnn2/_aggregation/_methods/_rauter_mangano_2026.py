@@ -63,4 +63,8 @@ def rauter_mangano_2026(
     list_aggregation_methods : Registry table.
     """
     del attributions, labels, kwargs
-    raise caller_error(_NOT_IMPLEMENTED)
+    raise caller_error(
+        _NOT_IMPLEMENTED,
+        fix="Reduce the scores with xarray until it is, for example "
+        "attributions.mean('observation').",
+    )

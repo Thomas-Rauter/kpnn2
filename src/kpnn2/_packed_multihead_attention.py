@@ -165,6 +165,36 @@ def _dropout_value(value: object) -> float:
     return float(number)
 
 
+def _check_input_dim(
+    value: object,
+    name: str,
+    tokens: str,
+    embed_dim: int,
+) -> None:
+    """
+    Raise unless ``value``, ``kdim`` or ``vdim``, is None or embed_dim.
+
+    ``tokens`` names what the dim is the width of, such as
+    ``"Keys"``. A positive int of another width gets a ``Fix`` that
+    says how to keep such inputs: project them to ``embed_dim``.
+    """
+    if value is None or (is_integer(value) and int(value) == embed_dim):
+        return
+    if is_integer(value) and int(value) >= 1:
+        fix = (
+            f"{tokens} of another width are not supported: project them "
+            "to embed_dim before this layer, for example with "
+            f"nn.Linear({int(value)}, {embed_dim})."
+        )
+    else:
+        fix = None
+    raise caller_error(
+        f"'{name}' must be None or an int equal to embed_dim.",
+        got=f"{name}={describe(value)} and embed_dim={embed_dim}",
+        fix=fix,
+    )
+
+
 def _layout_to_batch_first(
     tensor: torch.Tensor,
     name: str,
@@ -172,6 +202,7 @@ def _layout_to_batch_first(
     seq_attr: str,
     embed_dim: int,
     batch_first: bool,
+    batch_size: int | None = None,
 ) -> tuple[torch.Tensor, bool]:
     if not isinstance(tensor, torch.Tensor):
         raise caller_error(
@@ -182,15 +213,35 @@ def _layout_to_batch_first(
         tensor,
         f"'{name}'",
     )
-    if tensor.ndim < 2:
+    if tensor.ndim < 2 or tensor.shape[-1] != embed_dim:
+        if batch_first:
+            expected = f"shape (..., {seq_len}, {embed_dim})"
+        else:
+            expected = (
+                f"shape ({seq_len}, {embed_dim}) or "
+                f"({seq_len}, batch, {embed_dim})"
+            )
+        # A tensor of one value per token, such as a PackedLinear
+        # input, has the sequence length on its last axis.
+        if tensor.ndim >= 1 and tensor.shape[-1] == seq_len:
+            fix = (
+                "If the last axis holds one value per token, embed the "
+                f"values first, for example with nn.Linear(1, {embed_dim}) "
+                "applied to x.unsqueeze(-1)."
+            )
+        else:
+            fix = None
+        if tensor.ndim < 2:
+            headline = f"'{name}' must be 2-dimensional or higher."
+        else:
+            headline = (
+                f"'{name}' last dimension must equal embed_dim={embed_dim}."
+            )
         raise caller_error(
-            f"'{name}' must be 2-dimensional or higher.",
+            headline,
             got=describe(tensor),
-        )
-    if tensor.shape[-1] != embed_dim:
-        raise caller_error(
-            f"'{name}' last dimension must equal embed_dim={embed_dim}.",
-            got=describe(tensor),
+            expected=expected,
+            fix=fix,
         )
     if tensor.ndim == 2:
         if tensor.shape[0] != seq_len:
@@ -200,6 +251,8 @@ def _layout_to_batch_first(
                 seq_len,
                 seq_attr,
                 0,
+                batch_first,
+                batch_size,
             )
         return tensor, False
     if batch_first:
@@ -210,6 +263,8 @@ def _layout_to_batch_first(
                 seq_len,
                 seq_attr,
                 -2,
+                batch_first,
+                batch_size,
             )
         return tensor, False
     if tensor.ndim != 3:
@@ -229,6 +284,8 @@ def _layout_to_batch_first(
             seq_len,
             seq_attr,
             0,
+            batch_first,
+            batch_size,
         )
     return tensor.transpose(0, 1), True
 
@@ -239,13 +296,49 @@ def _sequence_length_error(
     seq_len: int,
     seq_attr: str,
     seq_axis: int,
+    batch_first: bool,
+    batch_size: int | None,
 ) -> Kpnn2Error:
+    """
+    Build the error for a token axis of the wrong length.
+
+    A 3-D tensor whose other leading axis has the sequence length
+    is most likely in the other batch layout, which
+    ``nn.MultiheadAttention`` defaults to: ``Expected`` then swaps
+    the two axes, and the ``Fix`` names the layout. ``batch_size``
+    is the query's batch size when it is known; the token axis
+    must then hold it, so a batch that happens to be as long as
+    the sequence is not read as a swapped layout.
+    """
     expected = list(tensor.shape)
-    expected[seq_axis] = seq_len
+    other_axis = 1 if seq_axis == 0 else 0
+    fix = None
+    swapped = (
+        tensor.ndim == 3
+        and tensor.shape[other_axis] == seq_len
+        and batch_size in (None, tensor.shape[seq_axis])
+    )
+    if swapped:
+        expected[0], expected[1] = expected[1], expected[0]
+        if batch_first:
+            fix = (
+                "This layer has batch_first=True: transpose the tensor to "
+                "(batch, seq, embed_dim), or build the layer with "
+                "batch_first=False."
+            )
+        else:
+            fix = (
+                "This layer has batch_first=False: transpose the tensor to "
+                "(seq, batch, embed_dim), or build the layer with "
+                "batch_first=True."
+            )
+    else:
+        expected[seq_axis] = seq_len
     return caller_error(
         f"'{name}' sequence length must equal {seq_attr}.",
         got=describe(tensor),
         expected=f"shape {tuple(expected)}",
+        fix=fix,
     )
 
 
@@ -1468,20 +1561,18 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
             bias,
             "bias",
         )
-        if kdim is not None and not (
-            is_integer(kdim) and int(kdim) == embed_dim
-        ):
-            raise caller_error(
-                "'kdim' must be None or equal to embed_dim.",
-                got=f"kdim={describe(kdim)} and embed_dim={embed_dim}",
-            )
-        if vdim is not None and not (
-            is_integer(vdim) and int(vdim) == embed_dim
-        ):
-            raise caller_error(
-                "'vdim' must be None or equal to embed_dim.",
-                got=f"vdim={describe(vdim)} and embed_dim={embed_dim}",
-            )
+        _check_input_dim(
+            kdim,
+            "kdim",
+            "Keys",
+            embed_dim,
+        )
+        _check_input_dim(
+            vdim,
+            "vdim",
+            "Values",
+            embed_dim,
+        )
         batch_first = as_bool(
             batch_first,
             "batch_first",
@@ -1498,6 +1589,7 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
             source_bound_name="key_features",
             target_bound_name="query_features",
             owner="PackedMultiheadAttention",
+            builders="PackedMultiheadAttention.from_adjacency()",
         )
         source, target = _maybe_self_loops(
             source,
@@ -1657,7 +1749,8 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         """
         require_adjacency_spec(
             spec,
-            "Build one with parse_adjacency().",
+            "Build one with parse_adjacency(), or load a saved one with "
+            "AdjacencySpec.from_dict().",
         )
         return cls(
             spec.source_index,
@@ -1764,7 +1857,7 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        check_identity(
+        identity_matched = check_identity(
             state_dict,
             prefix,
             self.identity,
@@ -1784,9 +1877,14 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
                 saved,
                 current,
             ):
+                # num_heads is in the digest; the weight shapes do not
+                # show it.
                 raise wiring_mismatch(
-                    "The checkpoint indices do not match this layer",
+                    "The checkpoint indices or num_heads do not match this "
+                    "layer",
                     prefix,
+                    identity_matched,
+                    "with the same embed_dim and num_heads",
                 )
         super()._load_from_state_dict(
             state_dict,
@@ -1963,6 +2061,9 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
             self.embed_dim,
             self.batch_first,
         )
+        # One batch axis on the query tells a swapped key layout from
+        # a batch as long as the key sequence.
+        batch_size = int(query_bf.shape[0]) if query_bf.ndim == 3 else None
         key_bf, _ = _layout_to_batch_first(
             key,
             "key",
@@ -1970,6 +2071,7 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
             "key_features",
             self.embed_dim,
             self.batch_first,
+            batch_size,
         )
         value_bf, _ = _layout_to_batch_first(
             value,
@@ -1978,6 +2080,7 @@ class PackedMultiheadAttention(nn.Module):  # numpydoc ignore=PR06
             "key_features",
             self.embed_dim,
             self.batch_first,
+            batch_size,
         )
         if (
             query_bf.shape[:-2] != key_bf.shape[:-2]

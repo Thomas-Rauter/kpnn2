@@ -18,12 +18,19 @@ IDENTITY_KEY = "identity"
 # a ``spec.fingerprint`` is 64 hex characters.
 _SHOWN_IDENTITY_LENGTH = 12
 
+_REPARSE_FIX = (
+    "To move weights onto a different prior, copy them by name with "
+    "edge_location() on the old and the new spec (see 'Changing the "
+    "prior (reparse)' on the PackedLinear page of the kpnn2 docs)."
+)
 _MISMATCH_FIX = (
     "Load a checkpoint saved from a layer built from the same spec "
-    "(with identity=spec.fingerprint). To move weights onto a "
-    "different prior, copy them by name with edge_location() on the "
-    "old and the new spec (see 'Changing the prior (reparse)' on the "
-    "PackedLinear page of the kpnn2 docs)."
+    f"(with identity=spec.fingerprint). {_REPARSE_FIX}"
+)
+# For a layer built without an identity: the fix is this layer.
+_NO_IDENTITY_FIX = (
+    "Build this layer with identity=spec.fingerprint, from the spec "
+    f"the checkpoint was saved with. {_REPARSE_FIX}"
 )
 
 
@@ -139,7 +146,7 @@ def check_identity(
     state_dict: dict[str, Any],
     prefix: str,
     identity: str | None,
-) -> None:
+) -> bool:
     """
     Pop and check a saved identity; none saved is not an error.
 
@@ -154,6 +161,13 @@ def check_identity(
     identity : str or None
         Live layer identity.
 
+    Returns
+    -------
+    bool
+        Whether an identity was saved, and so matched. A wiring
+        mismatch after a matching identity has another cause than
+        one with no identity to compare.
+
     Raises
     ------
     Kpnn2Error
@@ -165,7 +179,7 @@ def check_identity(
     key = prefix + IDENTITY_KEY
     saved = state_dict.pop(key, None)
     if saved is None:
-        return
+        return False
     if not identity_matches(
         saved,
         identity,
@@ -175,13 +189,16 @@ def check_identity(
             f"{_location(prefix)}.",
             got=_saved_identity(saved),
             expected=_live_identity(identity),
-            fix=_MISMATCH_FIX,
+            fix=_NO_IDENTITY_FIX if identity is None else _MISMATCH_FIX,
         )
+    return True
 
 
 def wiring_mismatch(
     problem: str,
     prefix: str,
+    identity_matched: bool,
+    same_build: str,
 ) -> Kpnn2Error:
     """
     Build the error for a saved wiring digest that does not match.
@@ -194,6 +211,14 @@ def wiring_mismatch(
     prefix : str
         Module prefix, as in
         ``nn.Module._load_from_state_dict``.
+    identity_matched : bool
+        What ``check_identity`` returned. A matching identity
+        means the checkpoint came from the same spec, so the
+        submodule was built differently, not from another prior.
+    same_build : str
+        How to build the submodule as it was built then, such as
+        ``"from the same hop and with the same sizes"``; used
+        when ``identity_matched``.
 
     Returns
     -------
@@ -202,10 +227,18 @@ def wiring_mismatch(
         what differs, and whose ``Fix`` line says how to fix the
         load.
     """
+    if identity_matched:
+        fix = (
+            "The checkpoint has this layer's identity, so it was saved "
+            "from the same spec: build this submodule as it was built "
+            f"then, {same_build}."
+        )
+    else:
+        fix = _MISMATCH_FIX
     return caller_error(
         f"{problem}{_location(prefix)}: the saved edges, sizes, or edge "
         "order differ.",
-        fix=_MISMATCH_FIX,
+        fix=fix,
     )
 
 

@@ -86,7 +86,9 @@ def test_default_method_is_not_yet_implemented():
             class_1=1,
         )
     assert str(excinfo.value) == (
-        "Aggregation method 'rauter_mangano_2026' is not yet implemented."
+        "Aggregation method 'rauter_mangano_2026' is not yet implemented.\n"
+        "  Fix: Reduce the scores with xarray until it is, for example "
+        "attributions.mean('observation')."
     )
     xr.testing.assert_identical(da, before)
 
@@ -124,7 +126,7 @@ def test_deprecated_method_emits_future_warning(register_dummy):
     )
 
 
-def test_deprecation_message_replaces_the_warning_headline(register_dummy):
+def test_deprecation_message_ends_the_warning_headline(register_dummy):
     name = "_dummy_deprecated_message"
     register_dummy(
         name,
@@ -140,7 +142,8 @@ def test_deprecation_message_replaces_the_warning_headline(register_dummy):
             method=name,
         )
     assert str(record[0].message) == (
-        "Folded into rauter_mangano_2026.\n"
+        "Aggregation method '_dummy_deprecated_message' was deprecated in "
+        "kpnn2 0.2.0. Folded into rauter_mangano_2026.\n"
         "  Fix: Pass method='rauter_mangano_2026' instead."
     )
 
@@ -166,7 +169,7 @@ def test_deprecation_message_must_be_one_line_with_a_period(
         ValueError,
         match=re.escape(
             "Aggregation method '_dummy_bad_headline': "
-            "'deprecation_message' becomes the headline of its "
+            "'deprecation_message' ends the headline of its "
             "FutureWarning, so it must be one line ending with a period. "
             f"Got {message!r}."
         ),

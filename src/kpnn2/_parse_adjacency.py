@@ -377,5 +377,7 @@ def parse_adjacency(  # numpydoc ignore=PR06
     _confirm_outputs(
         spec,
         declared,
+        widths=widths,
+        ranks=None,
     )
     return spec

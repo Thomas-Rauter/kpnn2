@@ -44,6 +44,7 @@ _LAYERS = [
         "in_features",
         "out_features",
         "PackedLinear",
+        "PackedLinear.from_hop() or PackedLinear.from_adjacency()",
         id="PackedLinear",
     ),
     pytest.param(
@@ -51,11 +52,14 @@ _LAYERS = [
         "key_features",
         "query_features",
         "PackedMultiheadAttention",
+        "PackedMultiheadAttention.from_adjacency()",
         id="PackedMultiheadAttention",
     ),
 ]
 
-_NOT_INDEX = "must be a 1-dimensional integer tensor or a sequence of int."
+_NOT_INDEX = (
+    "must be a 1-dimensional integer tensor or array, or a sequence of int."
+)
 _SOURCE_RANGE = (
     f"entries from 0 to {_SOURCE_BOUND - 1}, as "
     f"{{source_bound}}={_SOURCE_BOUND}"
@@ -65,8 +69,8 @@ _TARGET_RANGE = (
     f"{{target_bound}}={_TARGET_BOUND}"
 )
 _UNORDERED = (
-    "must be a 1-dimensional integer tensor or a sequence of int, not "
-    "{kind}: its items are matched by position."
+    "must be a 1-dimensional integer tensor or array, or a sequence of "
+    "int, not {kind}: its items are matched by position."
 )
 _IN_ORDER = "Pass a list or tuple in the intended order."
 
@@ -148,19 +152,22 @@ _CASES = [
         [0, 1],
         [np.int64(0), np.bool_(True)],
         f"'target_index' {_NOT_INDEX}\n"
-        f"  Got: True ({_NUMPY_BOOL}) at position 1",
+        f"  Got: True (numpy.{_NUMPY_BOOL}) at position 1",
         id="numpy_bool_item",
     ),
     pytest.param(
         [0, 1],
         [np.int64(0), np.float64(1.0)],
-        f"'target_index' {_NOT_INDEX}\n  Got: 1.0 (float64) at position 1",
+        f"'target_index' {_NOT_INDEX}\n"
+        "  Got: 1.0 (numpy.float64) at position 1",
         id="numpy_float_item",
     ),
     pytest.param(
         [0, 1, 2],
         [0, 1, "2"],
-        f"'target_index' {_NOT_INDEX}\n  Got: '2' (str) at position 2",
+        f"'target_index' {_NOT_INDEX}\n  Got: '2' (str) at position 2\n"
+        "  Fix: Pass integer positions, not node names. To build the layer "
+        "from named edges, parse the edgelist and use {builders}.",
         id="str_item",
     ),
     pytest.param(
@@ -296,6 +303,7 @@ _CASES = [
         "source_bound",
         "target_bound",
         "owner",
+        "builders",
     ),
     _LAYERS,
 )
@@ -312,6 +320,7 @@ def test_packed_layers_share_index_errors(
     source_bound,
     target_bound,
     owner,
+    builders,
     source_index,
     target_index,
     message,
@@ -320,6 +329,7 @@ def test_packed_layers_share_index_errors(
         source_bound=source_bound,
         target_bound=target_bound,
         owner=owner,
+        builders=builders,
     )
     with pytest.raises(Kpnn2Error) as excinfo:
         build(

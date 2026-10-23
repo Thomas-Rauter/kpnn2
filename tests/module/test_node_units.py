@@ -380,7 +380,7 @@ def test_hop_messages_report_the_received_value():
         match=re.escape(
             "'hop' must match an entry of spec.hops: a Hop from another "
             "spec does not match.\n"
-            "  Got: a Hop that equals none of them\n"
+            "  Got: a Hop into layer 2 that differs from spec.hops[1]\n"
             "  Fix: Take it from this spec's hops."
         ),
     ):
@@ -388,3 +388,26 @@ def test_hop_messages_report_the_received_value():
             foreign,
             "A",
         )
+
+
+def test_hop_into_a_layer_this_spec_lacks_says_so():
+    spec = parse_layered(_chain_edgelist())
+    deeper = parse_layered(
+        pd.DataFrame(
+            {
+                "source": ["A", "B", "C"],
+                "target": ["B", "C", "D"],
+            }
+        )
+    )
+    with pytest.raises(Kpnn2Error) as excinfo:
+        spec.hop_units(
+            deeper.hops[2],
+            "A",
+        )
+    assert str(excinfo.value) == (
+        "'hop' must match an entry of spec.hops: a Hop from another spec "
+        "does not match.\n"
+        "  Got: a Hop into layer 3, which this spec does not have\n"
+        "  Fix: Take it from this spec's hops."
+    )

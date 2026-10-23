@@ -166,14 +166,19 @@ def gather_hop_inputs(
     # names every layer the caller forgot to store.
     missing = [layer for layer in hop.source_layers if layer not in saved]
     if missing:
+        # The keys show a layer stored under another key, such as "0".
+        if saved:
+            held = f"'saved' has keys {listed(repr(key) for key in saved)}"
+        else:
+            held = "'saved' is empty"
         raise caller_error(
             "'saved' must hold every layer the hop into layer "
             f"{hop.target_layer} reads.",
-            got=f"missing {_layers(missing)}",
+            got=f"missing {_layers(missing)}; {held}",
             expected=_layers(hop.source_layers),
             fix=(
                 "Store every layer the forward pass produces in 'saved', "
-                "keyed by its depth."
+                "keyed by its depth as an int."
             ),
         )
 

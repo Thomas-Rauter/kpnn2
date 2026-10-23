@@ -128,10 +128,10 @@ def test_gather_missing_layer_message_names_the_hop():
         match="^"
         + re.escape(
             "'saved' must hold every layer the hop into layer 2 reads.\n"
-            "  Got: missing layer 0\n"
+            "  Got: missing layer 0; 'saved' has keys 1\n"
             "  Expected: layers 0, 1\n"
             "  Fix: Store every layer the forward pass produces in 'saved', "
-            "keyed by its depth."
+            "keyed by its depth as an int."
         )
         + "$",
     ):
@@ -145,7 +145,7 @@ def test_gather_names_every_missing_layer():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("  Got: missing layers 0, 1\n"),
+        match=re.escape("  Got: missing layers 0, 1; 'saved' has keys 2\n"),
     ):
         gather_hop_inputs(
             {2: torch.zeros(1, 1)},
@@ -157,7 +157,7 @@ def test_gather_reports_missing_layers_before_a_bad_entry():
     spec = _skip_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("  Got: missing layer 1\n"),
+        match=re.escape("  Got: missing layer 1; 'saved' has keys 0\n"),
     ):
         gather_hop_inputs(
             {0: [[1.0, 2.0]]},
@@ -424,4 +424,36 @@ def test_gather_non_hop_message_reports_the_received_value():
         gather_hop_inputs(
             {0: torch.zeros(1, 2)},
             0,
+        )
+
+
+@pytest.mark.parametrize(
+    ("saved", "held"),
+    [
+        pytest.param(
+            {
+                "0": torch.zeros(1, 2),
+                "1": torch.zeros(1, 1),
+            },
+            "'saved' has keys '0', '1'",
+            id="str_keys",
+        ),
+        pytest.param(
+            {},
+            "'saved' is empty",
+            id="empty",
+        ),
+    ],
+)
+def test_gather_missing_layer_message_shows_what_saved_holds(
+    saved,
+    held,
+):
+    with pytest.raises(
+        Kpnn2Error,
+        match=re.escape(f"  Got: missing layers 0, 1; {held}\n"),
+    ):
+        gather_hop_inputs(
+            saved,
+            _skip_spec().hops[1],
         )

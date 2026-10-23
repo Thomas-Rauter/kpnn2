@@ -135,14 +135,19 @@ def describe(value: object) -> str:
     cut at the first line break and at about 60 characters,
     followed by its type name: ``'no' (str)``, ``1.5 (float)``.
     A numpy scalar has shape ``()`` but holds one value, not an
-    array, so it is described by that value in the same way:
-    ``1.5 (float64)``, ``True (bool)``. A 0-dimensional array or
-    tensor still gets the shape form. ``None`` is ``None``.
+    array, so it is described by that value in the same way, with
+    its type name after ``numpy.``: ``1.5 (numpy.float64)``,
+    ``True (numpy.bool)``. Without the module, a numpy ``bool``
+    would read like a Python ``bool`` in a message that rejects
+    it. A 0-dimensional array or tensor still gets the shape form.
+    ``None`` is ``None``.
     """
     if value is None:
         return "None"
+    type_name = type(value).__name__
     if isinstance(value, np.generic):
         full = _numpy_scalar_text(value)
+        type_name = f"numpy.{type_name}"
     else:
         shape = getattr(value, "shape", None)
         if isinstance(shape, tuple):
@@ -163,7 +168,7 @@ def describe(value: object) -> str:
     text = full.partition("\n")[0]
     if text != full or len(text) > _DESCRIBE_LIMIT:
         text = f"{text[: _DESCRIBE_LIMIT - 3]}..."
-    return f"{text} ({type(value).__name__})"
+    return f"{text} ({type_name})"
 
 
 def _numpy_scalar_text(value: np.generic) -> str:
@@ -219,6 +224,9 @@ def as_name_list(
     names: object,
     argument: str,
     noun: str,
+    *,
+    container: str = "sequence",
+    ndim_fix: str | None = None,
 ) -> list[str]:
     """
     Return ``names`` as a list of ``str`` labels, or raise.
@@ -243,6 +251,13 @@ def as_name_list(
     noun : str
         What the labels are, in the plural, such as
         ``"feature names"``.
+    container : str, default "sequence"
+        What the headlines call ``names``: ``"sequence"`` where
+        order matters, ``"collection"`` where it does not.
+    ndim_fix : str, optional
+        The ``Fix`` for an ``ndim`` other than 1, for a caller
+        who holds a matrix that the result indexes. Without it,
+        that message has no ``Fix``.
 
     Returns
     -------
@@ -257,38 +272,38 @@ def as_name_list(
         not iterable, checked in that order. The message quotes
         ``argument``, names ``noun``, and describes ``names``.
     """
+    rule = f"'{argument}' must be a {container} of {noun}"
     if isinstance(names, torch.Tensor):
         raise caller_error(
-            f"'{argument}' must be a sequence of {noun}, not a tensor.",
+            f"{rule}, not a tensor.",
             got=describe(names),
         )
     if isinstance(names, str):
         raise caller_error(
-            f"'{argument}' must be a sequence of {noun}, not a str.",
+            f"{rule}, not a single string.",
             got=describe(names),
-            fix="Wrap a single name in a list.",
+            fix="Wrap it in a list.",
         )
     if isinstance(names, bytes):
         raise caller_error(
-            f"'{argument}' must be a sequence of {noun}, not bytes.",
+            f"{rule}, not bytes.",
             got=describe(names),
         )
     reject_unordered(
         names,
         argument,
-        f"a sequence of {noun}",
+        f"a {container} of {noun}",
     )
     ndim = getattr(names, "ndim", None)
     if ndim is not None and ndim != 1:
         raise caller_error(
-            f"'{argument}' must be one-dimensional: a matrix is not a "
-            "name list.",
+            f"'{argument}' must be a 1-dimensional {container} of {noun}.",
             got=describe(names),
-            fix=f"Pass the {noun}, and index the matrix yourself.",
+            fix=ndim_fix,
         )
     if not isinstance(names, Iterable):
         raise caller_error(
-            f"'{argument}' must be a sequence of {noun}.",
+            f"{rule}.",
             got=describe(names),
         )
     return [str(item) for item in names]
@@ -336,7 +351,9 @@ def require_spec(spec: "LayeredSpec | AdjacencySpec") -> None:
         raise caller_error(
             "'spec' must be a LayeredSpec or an AdjacencySpec.",
             got=describe(spec),
-            fix="Build one with parse_layered() or parse_adjacency().",
+            fix="Build one with parse_layered() or parse_adjacency(), or "
+            "load a saved one with LayeredSpec.from_dict() or "
+            "AdjacencySpec.from_dict().",
         )
 
 

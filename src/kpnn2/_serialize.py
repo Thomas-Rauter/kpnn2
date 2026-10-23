@@ -10,7 +10,13 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 
 from ._adjacency_spec import AdjacencySpec
-from ._errors import Kpnn2Error, caller_error, close_matches, internal_error
+from ._errors import (
+    Kpnn2Error,
+    caller_error,
+    close_matches,
+    internal_error,
+    listed,
+)
 from ._layout import build_layout, hop_axis_layouts
 from ._spec import LayeredSpec
 from ._validate import describe, require_node_mapping
@@ -303,14 +309,22 @@ def _edgelist_from_payload(
             got=describe(payload),
         )
     if "kpnn2_spec" not in payload:
+        # Its own keys show a checkpoint dict passed whole.
         raise caller_error(
-            "'kpnn2_spec' must be 1.",
-            got="a payload with no 'kpnn2_spec' key",
+            "'payload' has no 'kpnn2_spec' key, so it is not a dict from "
+            "to_dict().",
+            got=(
+                f"keys {listed(repr(key) for key in payload)}"
+                if payload
+                else "no keys"
+            ),
+            fix="Pass the dict that to_dict() returned; if it was saved "
+            "inside a larger dict, pass that entry.",
         )
     version = payload["kpnn2_spec"]
     if type(version) is not int or version != _SPEC_VERSION:
         raise caller_error(
-            "'kpnn2_spec' must be 1.",
+            "'kpnn2_spec' must be the int 1.",
             got=describe(version),
         )
     if "layout" not in payload:
@@ -336,8 +350,9 @@ def _edgelist_from_payload(
         class_name = _LAYOUT_CLASS_NAME[expected_layout]
         other_class = _LAYOUT_CLASS_NAME[layout]
         raise caller_error(
-            f"{class_name}.from_dict received layout '{layout}'.",
-            expected=f"'{expected_layout}'",
+            f"{class_name}.from_dict needs a payload with layout "
+            f"'{expected_layout}'.",
+            got=f"layout '{layout}'",
             fix=(
                 f"Pass it to {other_class}.from_dict, or pick the class "
                 "from payload['layout']."
@@ -369,6 +384,7 @@ def _pairs_from_edges(edges: object) -> list[list[object]]:
             got=describe(edges),
         )
     pairs: list[list[object]] = []
+    bad: list[str] = []
     for position, pair in enumerate(edges):
         is_pair = (
             isinstance(pair, Sequence)
@@ -377,11 +393,21 @@ def _pairs_from_edges(edges: object) -> list[list[object]]:
         )
         names = [str(name) for name in pair] if is_pair else []
         if not is_pair or "" in names:
-            raise caller_error(
-                "Each edge must be a pair of two nonempty names.",
-                got=f"edges[{position}] = {describe(pair)}",
-            )
-        pairs.append(list(pair))
+            bad.append(f"edges[{position}] = {describe(pair)}")
+        else:
+            pairs.append(list(pair))
+    if bad:
+        if len(bad) == 1:
+            headline = "'edges' has 1 entry that is not"
+        else:
+            headline = f"'edges' has {len(bad)} entries that are not"
+        raise caller_error(
+            f"{headline} a pair of two nonempty names.",
+            got=listed(
+                bad,
+                separator="; ",
+            ),
+        )
     return pairs
 
 

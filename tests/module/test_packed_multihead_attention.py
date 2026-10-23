@@ -752,8 +752,11 @@ def test_kdim_or_vdim_not_embed_dim_raises():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'kdim' must be None or equal to embed_dim.\n"
-            "  Got: kdim=4 (int) and embed_dim=8"
+            "'kdim' must be None or an int equal to embed_dim.\n"
+            "  Got: kdim=4 (int) and embed_dim=8\n"
+            "  Fix: Keys of another width are not supported: project them "
+            "to embed_dim before this layer, for example with "
+            "nn.Linear(4, 8)."
         ),
     ):
         PackedMultiheadAttention(
@@ -768,8 +771,11 @@ def test_kdim_or_vdim_not_embed_dim_raises():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'vdim' must be None or equal to embed_dim.\n"
-            "  Got: vdim=4 (int) and embed_dim=8"
+            "'vdim' must be None or an int equal to embed_dim.\n"
+            "  Got: vdim=4 (int) and embed_dim=8\n"
+            "  Fix: Values of another width are not supported: project "
+            "them to embed_dim before this layer, for example with "
+            "nn.Linear(4, 8)."
         ),
     ):
         PackedMultiheadAttention(
@@ -1310,7 +1316,7 @@ def test_load_rejects_foreign_indices():
     }
     with pytest.raises(
         Kpnn2Error,
-        match="checkpoint indices do not match",
+        match="checkpoint indices or num_heads do not match",
     ):
         dst.load_state_dict(src.state_dict())
     for name, tensor in dst.named_parameters():
@@ -1395,7 +1401,7 @@ def test_load_rejects_foreign_num_heads():
     before = dst.q_proj.weight.detach().clone()
     with pytest.raises(
         Kpnn2Error,
-        match="checkpoint indices do not match",
+        match="checkpoint indices or num_heads do not match",
     ):
         dst.load_state_dict(src.state_dict())
     torch.testing.assert_close(
@@ -1974,8 +1980,24 @@ def test_chunk_size_error_reports_the_value():
                 4,
             ),
             "'query' must be 2-dimensional or higher.\n"
-            "  Got: Tensor of shape (4,), dtype torch.float32",
+            "  Got: Tensor of shape (4,), dtype torch.float32\n"
+            "  Expected: shape (..., 2, 4)",
             id="one_dimensional",
+        ),
+        pytest.param(
+            False,
+            torch.zeros(2),
+            torch.zeros(
+                3,
+                4,
+            ),
+            "'query' must be 2-dimensional or higher.\n"
+            "  Got: Tensor of shape (2,), dtype torch.float32\n"
+            "  Expected: shape (2, 4) or (2, batch, 4)\n"
+            "  Fix: If the last axis holds one value per token, embed the "
+            "values first, for example with nn.Linear(1, 4) applied to "
+            "x.unsqueeze(-1).",
+            id="one_value_per_token_seq_first",
         ),
         pytest.param(
             True,
@@ -1988,8 +2010,27 @@ def test_chunk_size_error_reports_the_value():
                 5,
             ),
             "'key' last dimension must equal embed_dim=4.\n"
-            "  Got: Tensor of shape (3, 5), dtype torch.float32",
+            "  Got: Tensor of shape (3, 5), dtype torch.float32\n"
+            "  Expected: shape (..., 3, 4)",
             id="embed_dim",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(
+                2,
+                4,
+            ),
+            torch.zeros(
+                6,
+                3,
+            ),
+            "'key' last dimension must equal embed_dim=4.\n"
+            "  Got: Tensor of shape (6, 3), dtype torch.float32\n"
+            "  Expected: shape (..., 3, 4)\n"
+            "  Fix: If the last axis holds one value per token, embed the "
+            "values first, for example with nn.Linear(1, 4) applied to "
+            "x.unsqueeze(-1).",
+            id="one_value_per_token",
         ),
         pytest.param(
             True,
@@ -2039,6 +2080,64 @@ def test_chunk_size_error_reports_the_value():
             "  Got: Tensor of shape (2, 6, 4), dtype torch.float32\n"
             "  Expected: shape (3, 6, 4)",
             id="seq_first_sequence",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(
+                2,
+                2,
+                4,
+            ),
+            torch.zeros(
+                3,
+                2,
+                4,
+            ),
+            "'key' sequence length must equal key_features.\n"
+            "  Got: Tensor of shape (3, 2, 4), dtype torch.float32\n"
+            "  Expected: shape (2, 3, 4)\n"
+            "  Fix: This layer has batch_first=True: transpose the tensor "
+            "to (batch, seq, embed_dim), or build the layer with "
+            "batch_first=False.",
+            id="batch_first_swapped_layout",
+        ),
+        pytest.param(
+            True,
+            torch.zeros(
+                3,
+                2,
+                4,
+            ),
+            torch.zeros(
+                3,
+                2,
+                4,
+            ),
+            # A batch of 3 as long as the key sequence: not a swap.
+            "'key' sequence length must equal key_features.\n"
+            "  Got: Tensor of shape (3, 2, 4), dtype torch.float32\n"
+            "  Expected: shape (3, 3, 4)",
+            id="batch_as_long_as_the_sequence",
+        ),
+        pytest.param(
+            False,
+            torch.zeros(
+                2,
+                2,
+                4,
+            ),
+            torch.zeros(
+                2,
+                3,
+                4,
+            ),
+            "'key' sequence length must equal key_features.\n"
+            "  Got: Tensor of shape (2, 3, 4), dtype torch.float32\n"
+            "  Expected: shape (3, 2, 4)\n"
+            "  Fix: This layer has batch_first=False: transpose the tensor "
+            "to (seq, batch, embed_dim), or build the layer with "
+            "batch_first=True.",
+            id="seq_first_swapped_layout",
         ),
         pytest.param(
             False,

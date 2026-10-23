@@ -8,6 +8,7 @@ import torch
 
 from ._adjacency_spec import AdjacencySpec
 from ._errors import caller_error, close_matches, listed
+from ._layout import likely_other_identifiers
 from ._spec import LayeredSpec
 from ._validate import as_name_list, describe, require_spec
 
@@ -244,7 +245,7 @@ def align_inputs(
         raise caller_error(
             "'names' must not contain duplicate labels (including after "
             "converting labels to strings).",
-            got=listed(duplicated_labels),
+            got=listed(repr(label) for label in duplicated_labels),
         )
 
     _require_input_roles(
@@ -270,9 +271,10 @@ def _require_input_roles(
     hidden or output node, whose column the model would never
     read. Both findings go into one message. Missing input nodes
     get close labels that name no node as suggestions, unless none
-    of several input nodes is a label and some label is no node:
-    then the names likely use another kind of identifier, as in
-    ``unknown_name_hints``.
+    of several input nodes is a label, some label is no node, and
+    no input node matches such a label when case is ignored: then
+    the names likely use another kind of identifier
+    (``likely_other_identifiers``).
     """
     label_set = set(labels)
     missing = sorted(name for name in spec.input_nodes if name not in label_set)
@@ -292,12 +294,16 @@ def _require_input_roles(
         groups.append(
             (
                 "missing",
-                listed(missing),
+                listed(repr(name) for name in missing),
             )
         )
         nodes = set(spec.input_nodes) | roles.keys()
         unused = [label for label in labels if label not in nodes]
-        if len(missing) == n_inputs > 1 and unused:
+        if unused and likely_other_identifiers(
+            missing,
+            n_inputs,
+            unused,
+        ):
             fixes.append(_IDENTIFIER_FIX)
         else:
             candidates = close_matches(
@@ -365,4 +371,6 @@ def _labels_from_names(names: object) -> list[str]:
         names,
         "names",
         "feature names",
+        ndim_fix="Pass the feature names, and apply the returned index "
+        "to the matrix yourself.",
     )

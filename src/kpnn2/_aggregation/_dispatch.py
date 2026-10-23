@@ -165,11 +165,14 @@ def _emit_status_signal(entry: AggregationMethod) -> None:
         )
         return
     if status == "deprecated":
-        # A method's own deprecation message replaces the headline.
-        headline = entry.deprecation_message or (
+        # A method's own deprecation message ends the headline as its
+        # reason, so the headline still names the method and version.
+        headline = (
             f"Aggregation method {entry.name!r} was deprecated in kpnn2 "
             f"{entry.deprecated_in}."
         )
+        if entry.deprecation_message:
+            headline = f"{headline} {entry.deprecation_message}"
         warn_at_caller(
             headline,
             FutureWarning,

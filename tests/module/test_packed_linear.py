@@ -1608,3 +1608,15 @@ def test_masked_and_packed_report_the_same_live_map():
         packed(x),
         masked(x),
     )
+
+
+def test_from_hop_on_an_adjacency_spec_points_at_from_adjacency():
+    spec = parse_adjacency(_cyclic_edgelist())
+    with pytest.raises(Kpnn2Error) as excinfo:
+        PackedLinear.from_hop(spec)
+    message = str(excinfo.value)
+    assert message.startswith("'hop' must be a Hop from spec.hops.\n")
+    assert message.endswith(
+        "\n  Fix: An AdjacencySpec has no hops: call "
+        "PackedLinear.from_adjacency(spec)."
+    )

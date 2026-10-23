@@ -231,13 +231,13 @@ def test_layered_from_dict_rejects_adjacency_layout():
 
     with pytest.raises(
         Kpnn2Error,
-        match="LayeredSpec.from_dict received layout 'adjacency'",
+        match="LayeredSpec.from_dict needs a payload with layout 'layered'",
     ) as caught:
         LayeredSpec.from_dict(payload)
 
     assert str(caught.value) == (
-        "LayeredSpec.from_dict received layout 'adjacency'.\n"
-        "  Expected: 'layered'\n"
+        "LayeredSpec.from_dict needs a payload with layout 'layered'.\n"
+        "  Got: layout 'adjacency'\n"
         "  Fix: Pass it to AdjacencySpec.from_dict, or pick the class from "
         "payload['layout']."
     )
@@ -248,7 +248,7 @@ def test_adjacency_from_dict_rejects_layered_layout():
 
     with pytest.raises(
         Kpnn2Error,
-        match="AdjacencySpec.from_dict received layout 'layered'",
+        match="AdjacencySpec.from_dict needs a payload with layout 'adjacency'",
     ) as caught:
         AdjacencySpec.from_dict(payload)
 
@@ -373,7 +373,7 @@ def test_from_dict_bad_third_edge_names_its_position_and_pair():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "Each edge must be a pair of two nonempty names.\n"
+            "'edges' has 1 entry that is not a pair of two nonempty names.\n"
             "  Got: edges[2] = ['C', ''] (list)"
         ),
     ):
@@ -412,13 +412,13 @@ def test_from_dict_bad_edge_message_shortens_a_long_pair():
         pytest.param(
             "kpnn2_spec",
             2,
-            "'kpnn2_spec' must be 1.\n  Got: 2 (int)",
+            "'kpnn2_spec' must be the int 1.\n  Got: 2 (int)",
             id="version-2",
         ),
         pytest.param(
             "kpnn2_spec",
             "1",
-            "'kpnn2_spec' must be 1.\n  Got: '1' (str)",
+            "'kpnn2_spec' must be the int 1.\n  Got: '1' (str)",
             id="version-str",
         ),
         pytest.param(
@@ -492,8 +492,11 @@ def test_adjacency_from_dict_reports_received_widths():
     [
         pytest.param(
             "kpnn2_spec",
-            "'kpnn2_spec' must be 1.\n"
-            "  Got: a payload with no 'kpnn2_spec' key",
+            "'payload' has no 'kpnn2_spec' key, so it is not a dict from "
+            "to_dict().\n"
+            "  Got: keys 'layout', 'edges'\n"
+            "  Fix: Pass the dict that to_dict() returned; if it was saved "
+            "inside a larger dict, pass that entry.",
             id="version",
         ),
         pytest.param(
@@ -779,3 +782,48 @@ def test_adjacency_from_dict_ignores_stray_ranks():
         roundtrip,
     )
     assert "ranks" not in spec.to_dict()
+
+
+@pytest.mark.parametrize(
+    ("payload", "got"),
+    [
+        pytest.param(
+            {
+                "spec": {"kpnn2_spec": 1},
+                "state_dict": {},
+            },
+            "keys 'spec', 'state_dict'",
+            id="checkpoint_dict",
+        ),
+        pytest.param(
+            {},
+            "no keys",
+            id="empty",
+        ),
+    ],
+)
+def test_from_dict_without_the_version_key_shows_the_keys(
+    payload,
+    got,
+):
+    with pytest.raises(kpnn2.Kpnn2Error) as excinfo:
+        LayeredSpec.from_dict(payload)
+    assert str(excinfo.value) == (
+        "'payload' has no 'kpnn2_spec' key, so it is not a dict from "
+        "to_dict().\n"
+        f"  Got: {got}\n"
+        "  Fix: Pass the dict that to_dict() returned; if it was saved "
+        "inside a larger dict, pass that entry."
+    )
+
+
+def test_from_dict_names_every_bad_edge_in_one_message():
+    payload = parse_layered(_chain_edgelist()).to_dict()
+    payload["edges"] = [["A", "H"], ["H"], ["C"], ["A", ""]]
+    with pytest.raises(kpnn2.Kpnn2Error) as excinfo:
+        LayeredSpec.from_dict(payload)
+    assert str(excinfo.value) == (
+        "'edges' has 3 entries that are not a pair of two nonempty names.\n"
+        "  Got: edges[1] = ['H'] (list); edges[2] = ['C'] (list); "
+        "edges[3] = ['A', ''] (list)"
+    )

@@ -206,7 +206,7 @@ def test_align_inputs_missing_message_counts_input_nodes():
         match="^"
         + re.escape(
             "Feature names are missing 1 of 2 input nodes.\n"
-            "  Got: B\n"
+            "  Got: 'B'\n"
             f"{_ROLE_RULE}"
             f"  Fix: {_MISSING_FIX}"
         )
@@ -270,7 +270,7 @@ def test_align_inputs_reports_missing_and_computed_together():
             "Feature names are missing 1 of 2 input nodes and match 1 "
             "node(s) the model computes, so their columns would never be "
             "read.\n"
-            "  Got: missing: B; computed: H (hidden)\n"
+            "  Got: missing: 'B'; computed: H (hidden)\n"
             f"{_ROLE_RULE}"
             f"  Fix: {_MISSING_FIX} {_COMPUTED_FIX}"
         )
@@ -290,7 +290,7 @@ def test_align_inputs_suggests_unused_feature_names_for_missing_inputs():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "  Got: missing: B; computed: H (hidden)\n"
+            "  Got: missing: 'B'; computed: H (hidden)\n"
             f"{_ROLE_RULE}"
             "  Did you mean: 'b'\n"
         ),
@@ -313,7 +313,7 @@ def test_align_inputs_suggests_for_each_missing_input():
         Kpnn2Error,
         match=re.escape(
             "Feature names are missing 2 of 3 input nodes.\n"
-            "  Got: B, D\n"
+            "  Got: 'B', 'D'\n"
             f"{_ROLE_RULE}"
             "  Did you mean: 'b' for 'B'; 'd' for 'D'\n"
         ),
@@ -340,7 +340,7 @@ def test_align_inputs_says_to_check_identifiers_when_no_input_matches():
         match="^"
         + re.escape(
             "Feature names are missing 2 of 2 input nodes.\n"
-            "  Got: MYC, TP53\n"
+            "  Got: 'MYC', 'TP53'\n"
             f"{_ROLE_RULE}"
             "  Fix: None of the input nodes is among the feature names; "
             "first check that the feature names use the same identifiers "
@@ -380,7 +380,7 @@ def test_align_inputs_skips_identifier_check_without_unused_names():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match=re.escape("  Got: missing: A, B; computed: C (output)\n"),
+        match=re.escape("  Got: missing: 'A', 'B'; computed: C (output)\n"),
     ) as caught:
         align_inputs(
             ["C"],
@@ -569,7 +569,7 @@ def test_align_inputs_rejects_2d_numpy_matrix():
     spec = _tiny_spec()
     with pytest.raises(
         Kpnn2Error,
-        match="one-dimensional",
+        match="1-dimensional",
     ):
         align_inputs(
             np.array([[1.0, 2.0]]),
@@ -608,7 +608,7 @@ def _invalid_align_cases():
         pytest.param(
             "AB",
             spec,
-            "'names' must be a sequence of feature names, not a str",
+            "'names' must be a sequence of feature names, not a single string",
             id="string",
         ),
         pytest.param(
@@ -695,7 +695,7 @@ def test_align_inputs_duplicate_labels_sorted_comma_separated():
         )
 
     message = str(caught.value)
-    assert "1, A" in message
+    assert "'1', 'A'" in message
     assert "converting labels to strings" in message
 
 
@@ -947,9 +947,10 @@ def test_align_inputs_matrix_message_reports_the_received_shape():
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            "'names' must be one-dimensional: a matrix is not a name "
-            "list.\n"
-            "  Got: ndarray of shape (1, 2), dtype float64"
+            "'names' must be a 1-dimensional sequence of feature names.\n"
+            "  Got: ndarray of shape (1, 2), dtype float64\n"
+            "  Fix: Pass the feature names, and apply the returned index to "
+            "the matrix yourself."
         ),
     ):
         align_inputs(
@@ -982,9 +983,10 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
         ),
         pytest.param(
             "A",
-            "'names' must be a sequence of feature names, not a str.\n"
+            "'names' must be a sequence of feature names, not a single "
+            "string.\n"
             "  Got: 'A' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="str",
         ),
         pytest.param(
@@ -1011,9 +1013,10 @@ def test_align_inputs_unsupported_type_message_reports_the_received_value():
         ),
         pytest.param(
             np.array([["A"]]),
-            "'names' must be one-dimensional: a matrix is not a name list.\n"
+            "'names' must be a 1-dimensional sequence of feature names.\n"
             "  Got: ndarray of shape (1, 1), dtype <U1\n"
-            "  Fix: Pass the feature names, and index the matrix yourself.",
+            "  Fix: Pass the feature names, and apply the returned index to "
+            "the matrix yourself.",
             id="matrix",
         ),
         pytest.param(
@@ -1073,10 +1076,26 @@ def test_align_inputs_spec_message_reports_the_received_type():
         match=re.escape(
             "'spec' must be a LayeredSpec or an AdjacencySpec.\n"
             "  Got: DataFrame of shape (2, 2)\n"
-            "  Fix: Build one with parse_layered() or parse_adjacency()."
+            "  Fix: Build one with parse_layered() or parse_adjacency(), or "
+            "load a saved one with LayeredSpec.from_dict() or "
+            "AdjacencySpec.from_dict()."
         ),
     ):
         align_inputs(
             ["A", "B"],
             edgelist,
         )
+
+
+def test_align_inputs_suggests_names_that_differ_only_by_case():
+    # No input node is a feature name, but each differs from one only
+    # by case: a typo, not another kind of identifier.
+    with pytest.raises(Kpnn2Error) as excinfo:
+        align_inputs(
+            ["a", "b"],
+            _tiny_spec(),
+        )
+    message = str(excinfo.value)
+    assert "\n  Got: 'A', 'B'\n" in message
+    assert "\n  Did you mean: 'a' for 'A'; 'b' for 'B'\n" in message
+    assert "same identifiers" not in message

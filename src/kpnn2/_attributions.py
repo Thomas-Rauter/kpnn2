@@ -427,7 +427,7 @@ def map_node_attributions(  # numpydoc ignore=PR06
     )
     node_axis = dim_names.index(_NODE_DIM)
     if tensor.shape[node_axis] != n_units:
-        units, size_source = _node_axis_units(
+        units, size_source, fix = _node_axis_units(
             spec,
             layer,
             hop_input,
@@ -443,6 +443,7 @@ def map_node_attributions(  # numpydoc ignore=PR06
                 f"{stacked}shape {tuple(tensor.shape)})"
             ),
             expected=f"{n_units} ({size_source})",
+            fix=fix,
         )
 
     coord_map = _build_coords(
@@ -483,6 +484,22 @@ def _resolve_node_layout(
     ``None``; its ``axis="inputs"`` is the input units only.
     """
     if axis is not None and (not isinstance(axis, str) or axis != "inputs"):
+        # 'output' and 'outputs' name the other end of the model:
+        # taking 'inputs' for them would mislabel without an error.
+        suggest = isinstance(axis, str) and not axis.casefold().startswith(
+            "out"
+        )
+        if isinstance(spec, AdjacencySpec):
+            fix = (
+                "axis='inputs' names only the model inputs; omit axis to "
+                "name the whole state vector, output nodes included."
+            )
+        else:
+            fix = (
+                "axis='inputs' names only the model inputs; for another "
+                "layer pass layer=, or hop_output= with a Hop from "
+                "spec.hops."
+            )
         raise caller_error(
             "'axis' must be 'inputs' or None.",
             got=describe(axis),
@@ -491,9 +508,10 @@ def _resolve_node_layout(
                     [axis],
                     ["inputs"],
                 )
-                if isinstance(axis, str)
+                if suggest
                 else None
             ),
+            fix=fix,
         )
     require_spec(spec)
     if isinstance(spec, LayeredSpec):
@@ -580,25 +598,48 @@ def _node_axis_units(
     hop_input: Hop | None,
     hop_output: Hop | None,
     axis: str | None,
-) -> tuple[str, str]:
+) -> tuple[str, str, str | None]:
     """
-    Name the units the ``node`` axis must match, and their count.
+    Name the units the ``node`` axis must match, their count, and a fix.
 
     For the message on a wrong axis length, after
     ``_resolve_node_layout`` has accepted the arguments: what the
-    caller's choice names, and the field that holds its length.
+    caller's choice names, the field that holds its length, and a
+    ``Fix`` that names the argument for the other side of the same
+    object, or ``None``. The fix does not depend on the tensor
+    width, so nothing is inferred from it.
     """
     if hop_input is not None:
-        return "input unit of 'hop_input'", "hop_input.in_features"
+        return (
+            "input unit of 'hop_input'",
+            "hop_input.in_features",
+            "For scores on what the hop's module returns, pass "
+            "hop_output= instead.",
+        )
     if hop_output is not None:
-        return "output unit of 'hop_output'", "hop_output.out_features"
+        return (
+            "output unit of 'hop_output'",
+            "hop_output.out_features",
+            "For scores on what the hop's module reads, pass hop_input= "
+            "instead.",
+        )
     if axis == "inputs":
         if isinstance(spec, LayeredSpec):
-            return "input unit", "spec.layer_dims[0]"
-        return "input unit", "len(spec.input_index)"
+            return "input unit", "spec.layer_dims[0]", None
+        return "input unit", "len(spec.input_index)", None
     if isinstance(spec, LayeredSpec):
-        return f"unit of layer {layer}", f"spec.layer_dims[{layer}]"
-    return "unit of the state vector", "spec.state_dim"
+        return (
+            f"unit of layer {layer}",
+            f"spec.layer_dims[{layer}]",
+            "For the output of the module on spec.hops[i], pass "
+            "hop_output=spec.hops[i]; layer counts from 0 at the input "
+            "layer.",
+        )
+    return (
+        "unit of the state vector",
+        "spec.state_dim",
+        "For scores on the input units, pass axis='inputs'.",
+    )
 
 
 def _layered_axis(
@@ -659,11 +700,14 @@ def _as_tensor(
     ):
         if tuple(piece.shape) != first_shape:
             raise caller_error(
-                "Tensors in 'attributions' must all have the same shape.",
+                "Tensors in 'attributions' must all have the same shape: a "
+                "list or tuple is stacked on a new 'step' axis.",
                 got=(
                     f"shape {first_shape} at position 0 and shape "
                     f"{tuple(piece.shape)} at position {position}"
                 ),
+                fix="To label several layers or hops, call "
+                "map_node_attributions() once per tensor.",
             )
     stacked = torch.stack(
         pieces,
@@ -824,7 +868,8 @@ def _build_coords(
                 expected=(
                     f"dim names {listed(repr(name) for name in others)}"
                     if others
-                    else None
+                    else f"no key: the only dim of 'attributions' is "
+                    f"'{_NODE_DIM}'"
                 ),
                 candidates=close_matches(
                     [key for key in unknown_keys if isinstance(key, str)],
@@ -838,14 +883,17 @@ def _build_coords(
             coord_map[dim] = names
             continue
         if dim in extra:
+            # Double quotes inside the single quotes that mark the
+            # argument keep the name one quoted token.
+            name = f'coords["{dim}"]'
             labels = _sequence_items(
                 extra[dim],
-                f"coords[{dim!r}]",
+                name,
                 "a sequence of labels, one per position on that axis",
             )
             if len(labels) != size:
                 raise caller_error(
-                    f"'coords[{dim!r}]' must have one label per position "
+                    f"'{name}' must have one label per position "
                     f"on the {dim!r} axis.",
                     got=f"length {len(labels)}",
                     expected=f"length {size}",

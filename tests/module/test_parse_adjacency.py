@@ -287,9 +287,11 @@ def test_parse_adjacency_rejects_a_pure_ring_for_having_no_input():
         parse_adjacency(edgelist)
 
     message = str(exc_info.value)
-    assert "every node has an incoming edge" in message
+    assert "every node has an incoming and an outgoing edge" in message
+    assert "at least one output node" in message
     assert message.endswith(
-        "\n  Fix: Add input nodes that appear only in 'source'."
+        "\n  Fix: Add input nodes that appear only in 'source', and output "
+        "nodes that appear only in 'target'."
     )
 
 
@@ -307,7 +309,9 @@ def test_parse_adjacency_rejects_a_lone_self_loop():
     ) as exc_info:
         parse_adjacency(edgelist)
 
-    assert "every node has an incoming edge" in str(exc_info.value)
+    message = str(exc_info.value)
+    assert "every node has an incoming and an outgoing edge" in message
+    assert "at least one output node" in message
 
 
 def test_parse_adjacency_rejects_a_graph_with_no_output():

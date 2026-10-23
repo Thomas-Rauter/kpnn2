@@ -176,7 +176,7 @@ def test_from_dict_schema_tag_stays_a_python_int():
 
     with pytest.raises(
         Kpnn2Error,
-        match="'kpnn2_spec' must be 1.",
+        match="'kpnn2_spec' must be the int 1.",
     ):
         LayeredSpec.from_dict(payload)
 
@@ -188,7 +188,7 @@ def test_from_dict_schema_tag_stays_a_python_int():
 def test_non_integer_widths_still_raise(value):
     with pytest.raises(
         Kpnn2Error,
-        match="must be a positive int",
+        match="values must be positive ints",
     ):
         parse_layered(
             _layered_edgelist(),
@@ -196,7 +196,7 @@ def test_non_integer_widths_still_raise(value):
         )
     with pytest.raises(
         Kpnn2Error,
-        match="must be a positive int",
+        match="values must be positive ints",
     ):
         parse_adjacency(
             _cycle_edgelist(),
@@ -217,7 +217,7 @@ def test_non_integer_ranks_still_raise(value):
     }
     with pytest.raises(
         Kpnn2Error,
-        match="must be a non-negative int",
+        match="values must be non-negative ints",
     ):
         parse_layered(
             _layered_edgelist(),
@@ -667,7 +667,7 @@ def test_packed_attention_bad_numpy_kdim_vdim_still_raise(
 ):
     with pytest.raises(
         Kpnn2Error,
-        match=f"'{name}' must be None or equal to embed_dim.",
+        match=f"'{name}' must be None or an int equal to embed_dim.",
     ):
         _attention(
             _ATTENTION_SOURCE,

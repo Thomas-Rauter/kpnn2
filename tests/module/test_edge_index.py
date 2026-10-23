@@ -365,9 +365,10 @@ def test_caller_names_are_not_mutated():
         pytest.param(
             "a",
             ["b"],
-            "'sources' must be a sequence of source node names, not a str.\n"
+            "'sources' must be a sequence of source node names, not a single "
+            "string.\n"
             "  Got: 'a' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="str",
         ),
         pytest.param(
@@ -413,9 +414,9 @@ def test_caller_names_are_not_mutated():
         pytest.param(
             np.array([["a"]]),
             ["b"],
-            "'sources' must be one-dimensional: a matrix is not a name list.\n"
-            "  Got: ndarray of shape (1, 1), dtype <U1\n"
-            "  Fix: Pass the source node names, and index the matrix yourself.",
+            "'sources' must be a 1-dimensional sequence of source node "
+            "names.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1",
             id="matrix",
         ),
         pytest.param(
@@ -429,13 +430,15 @@ def test_caller_names_are_not_mutated():
         pytest.param(
             ["a", ""],
             ["b", "a"],
-            "Node name is empty.",
+            "'sources' or 'targets' contains empty node names.\n"
+            "  Got: 'sources': 1 name(s) at position 1",
             id="empty_source",
         ),
         pytest.param(
             ["q", "a"],
             ["b", ""],
-            "Node name is empty.",
+            "'sources' or 'targets' contains empty node names.\n"
+            "  Got: 'targets': 1 name(s) at position 1",
             id="empty_target_before_unknown",
         ),
         pytest.param(
@@ -476,3 +479,16 @@ def test_rejection_messages_are_pinned(
             sources,
             targets,
         )
+
+
+def test_empty_names_are_reported_by_argument_and_position():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        _spec().edge_index(
+            ["", "x", ""],
+            ["a", "", "b"],
+        )
+    assert str(excinfo.value) == (
+        "'sources' or 'targets' contains empty node names.\n"
+        "  Got: 'sources': 2 name(s) at position 0, 2; 'targets': 1 "
+        "name(s) at position 1"
+    )

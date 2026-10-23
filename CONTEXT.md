@@ -609,13 +609,16 @@ never a declaration: roles stay inferred, and a spec parsed with
   `Kpnn2Error` before the edgelist is read.
 - Unknown names and names of nodes with an outgoing edge raise
   `Kpnn2Error` in one message, each found name with its role
-  (`TF1 (hidden)`, `g1 (input)`); the message points at
-  `unit_index()` for reading a node that feeds others.
+  (`TF1 (hidden)`, `g1 (input)`); the message says to leave a
+  node that feeds others out of `outputs=` and read it with
+  `spec.unit_index()`.
 - Otherwise, output nodes missing from `outputs=` raise
   `Kpnn2Error` naming them and every node with no directed path to
   a declared output (sorted), with the fix: drop the rows whose
   target is one of those and parse again, with those nodes also
-  cut from `widths=` and `ranks=`, which raise on an unknown name.
+  cut from `widths=` and `ranks=`, which raise on an unknown name
+  (the fix names whichever of the two the call passed with one of
+  those nodes).
   The kept rows have exactly the declared outputs as nodes with no
   outgoing edge. They parse unless no input node reaches a
   declared output, which only a cycle no input feeds allows on
@@ -1044,7 +1047,9 @@ silently points into the wrong node after a wide one.
   `spec.layer_nodes`), then nodes in another layer, listed in
   one message, sorted, each with its layer:
   `Node(s) not in layer 1.` / `Got: c (layer 2), u (layer 0)` /
-  `Expected: names in spec.layer_nodes[1]`.
+  `Expected: names in spec.layer_nodes[1]` / `Fix: Call
+  unit_index once per layer; node_units gives the layer of a
+  node.`
 - Names in several layers need one call per layer; no single
   tensor holds their units. Outputs at different depths can
   share the last layer through `ranks=`.
@@ -2541,7 +2546,8 @@ gather_hop_inputs(saved, hop) -> torch.Tensor
 - Store every produced layer in `saved`. A missing source
   **layer** (not a missing named node) raises `Kpnn2Error`
   instead of silently dropping those edges. One message names
-  every missing layer and the hop that wanted them.
+  every missing layer, the keys `saved` holds, and the hop that
+  wanted them.
 - Differentiable into every source: `torch.cat` passes gradient
   back to each part.
 - All parts must share dtype, device, and every dimension but
@@ -2658,15 +2664,18 @@ state = state.index_copy(
 - Names that are not graph nodes are ignored.
 - Duplicate labels (including after string conversion):
   `Kpnn2Error`. The message names the unique duplicated labels
-  after `str(...)`, sorted, comma-separated. Checked first.
+  after `str(...)`, quoted, sorted, comma-separated, so a blank
+  label or a stray space shows. Checked first.
 - Missing required names: `Kpnn2Error`. The message names them,
-  sorted, comma-separated, and its headline counts them against
-  all input nodes ("missing 1 of 2 input nodes"). `Did you mean`
-  offers close feature names that name no node. When none of
-  several input nodes is a feature name and some feature name
-  is no node, the names likely use another kind of identifier:
-  the `Fix` says to check that instead, and nothing is
-  suggested.
+  quoted, sorted, comma-separated, and its headline counts them
+  against all input nodes ("missing 1 of 2 input nodes"). `Did
+  you mean` offers close feature names that name no node. When
+  none of several input nodes is a feature name, some feature
+  name is no node, and no input node matches such a feature name
+  when case is ignored, the names likely use another kind of
+  identifier: the `Fix` says to check that instead, and nothing
+  is suggested. A case-only difference is a typo and keeps its
+  suggestions.
 - A name of a hidden or output node: `Kpnn2Error`. The model
   computes that node and would never read the column, and one
   name is one node, so that feature has no input node of its
@@ -3100,8 +3109,10 @@ no order, and a mapping would be read as its keys.
 check is a kpnn2 bug: package code raises it explicitly with
 `raise internal_error("...")` from `src/kpnn2/_errors.py`, which
 returns an `AssertionError` (not a `Kpnn2Error`) whose headline
-says it is a bug in kpnn2 and whose `Fix` line asks for a report
-at the issue tracker. It never warns. `src/` never uses the
+says it is a bug in kpnn2 if every spec came from a parser or
+`from_dict`, and whose `Fix` line asks for a report at the issue
+tracker and says that a spec built or changed by hand is
+unsupported (see below). It never warns. `src/` never uses the
 `assert` statement, because `python -O` strips it;
 `tests/api/test_package_locks.py` enforces that. Checks cover
 invariants whose violation would otherwise go

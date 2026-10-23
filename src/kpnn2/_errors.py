@@ -132,9 +132,11 @@ def internal_error(what: str) -> AssertionError:
     Returns
     -------
     AssertionError
-        Error whose headline says the failure is a kpnn2 bug and
-        whose ``Fix`` line asks for a report at the issue
-        tracker.
+        Error whose headline says the failure is a kpnn2 bug if
+        every spec came from a parser or ``from_dict``, and whose
+        ``Fix`` line asks for a report at the issue tracker. The
+        hedge is there because a spec built or changed by hand is
+        unsupported and can trip an internal check.
     """
     from kpnn2 import __version__
 
@@ -142,8 +144,17 @@ def internal_error(what: str) -> AssertionError:
     return AssertionError(
         _render(
             f"kpnn2 internal check failed: {what}. This is a bug in "
-            f"kpnn2 {__version__}, not a problem with your call.",
-            (("Fix", f"Report it with this message at {_ISSUES_URL}."),),
+            f"kpnn2 {__version__} if every spec came from a parser or "
+            "from_dict().",
+            (
+                (
+                    "Fix",
+                    f"Report it with this message at {_ISSUES_URL}. A spec, "
+                    "Hop, or Skip built or changed by hand is unsupported: "
+                    "rebuild it with parse_layered(), parse_adjacency(), or "
+                    "from_dict().",
+                ),
+            ),
         )
     )
 
@@ -204,7 +215,10 @@ def warn_at_caller(
     )
 
 
-def listed(items: Iterable[object]) -> str:
+def listed(
+    items: Iterable[object],
+    separator: str = ", ",
+) -> str:
     """
     Join items with commas, showing at most ten.
 
@@ -213,6 +227,9 @@ def listed(items: Iterable[object]) -> str:
     items : iterable of object
         The items, in the order to show them. Each is shown
         through ``str()``.
+    separator : str, default ", "
+        What goes between two items. Items that hold commas
+        themselves, such as one entry per problem, use ``"; "``.
 
     Returns
     -------
@@ -221,10 +238,10 @@ def listed(items: Iterable[object]) -> str:
         ``", and N more"``.
     """
     values = list(items)
-    shown = ", ".join(str(item) for item in values[:_LIST_LIMIT])
+    shown = separator.join(str(item) for item in values[:_LIST_LIMIT])
     hidden = len(values) - _LIST_LIMIT
     if hidden > 0:
-        return f"{shown}, and {hidden} more"
+        return f"{shown}{separator}and {hidden} more"
     return shown
 
 
@@ -299,11 +316,18 @@ def _message(
         ("Did you mean", candidates),
         ("Fix", fix),
     )
+    # The headline is quoted, so the report names the message, and a
+    # caller mistake that reaches here keeps what it was about.
     for label, value in fields:
         if value == "":
-            raise internal_error(f"the {label} line of a message is empty")
+            raise internal_error(
+                f'the {label} line is empty in the message "{headline}"'
+            )
     if fix is not None and not fix.endswith("."):
-        raise internal_error(f"Fix line {fix!r} does not end with a period")
+        raise internal_error(
+            f"the Fix line {fix!r} does not end with a period in the "
+            f'message "{headline}"'
+        )
     return _render(
         headline,
         fields,

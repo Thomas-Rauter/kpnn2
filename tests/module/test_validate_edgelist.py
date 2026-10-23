@@ -461,7 +461,7 @@ def test_validate_edgelist_whitespace_message_quotes_names_and_names_fix():
 
     message = str(exc_info.value)
     assert "'A', 'A '" in message
-    assert 'edgelist["source"].str.strip()' in message
+    assert "edgelist[column].astype(str).str.strip()" in message
     assert "distinct names" in message
 
 

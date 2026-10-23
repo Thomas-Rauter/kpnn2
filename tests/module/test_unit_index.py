@@ -235,9 +235,9 @@ def test_caller_names_are_not_mutated():
     [
         pytest.param(
             "a",
-            "'names' must be a sequence of node names, not a str.\n"
+            "'names' must be a sequence of node names, not a single string.\n"
             "  Got: 'a' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="str",
         ),
         pytest.param(
@@ -275,19 +275,20 @@ def test_caller_names_are_not_mutated():
         ),
         pytest.param(
             np.array([["a"]]),
-            "'names' must be one-dimensional: a matrix is not a name list.\n"
-            "  Got: ndarray of shape (1, 1), dtype <U1\n"
-            "  Fix: Pass the node names, and index the matrix yourself.",
+            "'names' must be a 1-dimensional sequence of node names.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1",
             id="matrix",
         ),
         pytest.param(
             ["a", ""],
-            "Node name is empty.",
+            "'names' contains empty node names.\n"
+            "  Got: 1 name(s) at position 1",
             id="empty_name",
         ),
         pytest.param(
             ["q", ""],
-            "Node name is empty.",
+            "'names' contains empty node names.\n"
+            "  Got: 1 name(s) at position 1",
             id="empty_name_before_unknown",
         ),
         pytest.param(
@@ -330,3 +331,16 @@ def test_one_unknown_name_among_nodes_gets_a_suggestion():
         _spec().unit_index(["a", "A"])
 
     assert "\n  Did you mean: 'a'" in str(caught.value)
+
+
+def test_unknown_names_with_a_case_only_match_get_suggestions():
+    # Every name is unknown, but 'A' differs from 'a' only by case: a
+    # typo, not another kind of identifier.
+    with pytest.raises(Kpnn2Error) as excinfo:
+        _spec().unit_index(["A", "Q"])
+    assert str(excinfo.value) == (
+        "Unknown node name(s).\n"
+        "  Got: 'A', 'Q'\n"
+        "  Expected: names in spec.nodes\n"
+        "  Did you mean: 'a' for 'A'"
+    )

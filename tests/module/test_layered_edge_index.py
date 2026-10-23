@@ -476,9 +476,10 @@ _OTHER_HOP = parse_layered(
             "x",
             ["c"],
             1,
-            "'sources' must be a sequence of source node names, not a str.\n"
+            "'sources' must be a sequence of source node names, not a single "
+            "string.\n"
             "  Got: 'x' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="str",
         ),
         pytest.param(
@@ -504,9 +505,9 @@ _OTHER_HOP = parse_layered(
             ["x"],
             np.array([["c"]]),
             1,
-            "'targets' must be one-dimensional: a matrix is not a name list.\n"
-            "  Got: ndarray of shape (1, 1), dtype <U1\n"
-            "  Fix: Pass the target node names, and index the matrix yourself.",
+            "'targets' must be a 1-dimensional sequence of target node "
+            "names.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1",
             id="matrix",
         ),
         pytest.param(
@@ -522,7 +523,7 @@ _OTHER_HOP = parse_layered(
             "other",
             "'hop' must match an entry of spec.hops: a Hop from another spec "
             "does not match.\n"
-            "  Got: a Hop that equals none of them\n"
+            "  Got: a Hop into layer 1 that differs from spec.hops[0]\n"
             "  Fix: Take it from this spec's hops.",
             id="hop_from_another_spec",
         ),
@@ -539,7 +540,8 @@ _OTHER_HOP = parse_layered(
             ["x", "q"],
             ["", "c"],
             1,
-            "Node name is empty.",
+            "'sources' or 'targets' contains empty node names.\n"
+            "  Got: 'targets': 1 name(s) at position 0",
             id="empty_name_before_unknown",
         ),
         pytest.param(

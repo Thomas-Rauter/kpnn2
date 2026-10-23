@@ -280,15 +280,21 @@ class Hop:
 def require_hop(
     hop: object,
     name: str,
-) -> None:
+    fix: str | None = None,
+) -> Hop:
     """
-    Raise unless ``hop`` is a ``Hop``; ``name`` is its argument.
+    Return ``hop`` if it is a ``Hop``; ``name`` is its argument.
+
+    ``fix`` is the message's ``Fix``, which the call site words for
+    the value it got, or ``None``.
     """
     if not isinstance(hop, Hop):
         raise caller_error(
             f"'{name}' must be a Hop from spec.hops.",
             got=describe(hop),
+            fix=fix,
         )
+    return hop
 
 
 def require_spec_hop(
@@ -299,17 +305,35 @@ def require_spec_hop(
     """
     Raise unless ``hop`` is a ``Hop`` equal to one of ``hops``.
 
-    ``hops`` is ``spec.hops``; ``name`` is the argument.
+    ``hops`` is ``spec.hops``; ``name`` is the argument. ``Got``
+    names the layer the hop goes into and the hop of ``hops`` into
+    that layer, so a caller can tell which hop of which spec it
+    was.
     """
-    require_hop(
+    checked = require_hop(
         hop,
         name,
     )
-    if hop not in hops:
+    if checked not in hops:
+        same_target = [
+            index
+            for index, own in enumerate(hops)
+            if own.target_layer == checked.target_layer
+        ]
+        if same_target:
+            got = (
+                f"a Hop into layer {checked.target_layer} that differs "
+                f"from spec.hops[{same_target[0]}]"
+            )
+        else:
+            got = (
+                f"a Hop into layer {checked.target_layer}, which this "
+                "spec does not have"
+            )
         raise caller_error(
             f"'{name}' must match an entry of spec.hops: a Hop from "
             "another spec does not match.",
-            got="a Hop that equals none of them",
+            got=got,
             fix="Take it from this spec's hops.",
         )
 
@@ -1368,6 +1392,7 @@ class LayeredSpec:
             name_list,
             layer_of,
             "spec.layer_nodes",
+            "names",
         )
         elsewhere = sorted(
             {name for name in node_names if layer_of[name] != layer}
@@ -1379,6 +1404,8 @@ class LayeredSpec:
                     f"{name} (layer {layer_of[name]})" for name in elsewhere
                 ),
                 expected=f"names in spec.layer_nodes[{layer}]",
+                fix="Call unit_index once per layer; node_units gives the "
+                "layer of a node.",
             )
         return build_layout(
             self.layer_nodes[layer],

@@ -95,6 +95,22 @@ def _flagged_rows(
     return "; ".join(parts)
 
 
+def _bad_entries(bad_values: Mapping[str, object]) -> str:
+    """
+    Name each ``widths`` or ``ranks`` entry with a bad value.
+
+    Entries are sorted by node name and separated by ``"; "``,
+    since a described value can hold commas.
+    """
+    return listed(
+        (
+            f"{name!r}: {describe(bad_values[name])}"
+            for name in sorted(bad_values)
+        ),
+        separator="; ",
+    )
+
+
 def _name_kind(value: object) -> str:
     """
     Classify one ``source`` / ``target`` value as a node name.
@@ -351,9 +367,9 @@ def _validate_edgelist(edgelist: pd.DataFrame) -> pd.DataFrame:
             "Edgelist contains node names that differ only by leading "
             "or trailing whitespace.",
             got=groups_str,
-            fix="Strip the names before parsing (for example "
-            'edgelist["source"].str.strip()) or give them distinct '
-            "names.",
+            fix="Strip the names in both 'source' and 'target' before "
+            "parsing (for example edgelist[column].astype(str).str.strip() "
+            "for each column) or give them distinct names.",
         )
 
     n_duplicates = int(normalized.duplicated().sum())
@@ -485,6 +501,15 @@ def _node_sets(
     """
     input_nodes = sorted(node for node in nodes if in_degree[node] == 0)
     output_nodes = sorted(node for node in nodes if out_degree[node] == 0)
+    if not input_nodes and not output_nodes:
+        raise caller_error(
+            "Edgelist must contain at least one input node (in-degree 0) "
+            "and at least one output node (out-degree 0): every node has "
+            "an incoming and an outgoing edge, so the graph has no entry "
+            "or exit point.",
+            fix="Add input nodes that appear only in 'source', and output "
+            "nodes that appear only in 'target'.",
+        )
     if not input_nodes:
         raise caller_error(
             "Edgelist must contain at least one input node (in-degree 0): "
@@ -611,15 +636,17 @@ def _layers_from_user_ranks(
         ranks,
         "ranks",
     )
-    requested: dict[str, int] = {}
-    for key, value in ranks.items():
-        name = str(key)
-        if not is_integer(value) or value < 0:
-            raise caller_error(
-                f"Rank for node {name!r} must be a non-negative int.",
-                got=describe(value),
-            )
-        requested[name] = int(value)
+    bad_values = {
+        str(key): value
+        for key, value in ranks.items()
+        if not is_integer(value) or value < 0
+    }
+    if bad_values:
+        raise caller_error(
+            "'ranks' values must be non-negative ints.",
+            got=_bad_entries(bad_values),
+        )
+    requested = {str(key): int(value) for key, value in ranks.items()}
     unknown = sorted(set(requested) - nodes)
     if unknown:
         raise _unknown_names_error(
@@ -662,8 +689,8 @@ def _layers_from_user_ranks(
                 f"{listed(non_inputs_at_min)}"
             )
         raise caller_error(
-            "All in-degree-0 nodes must share the minimum rank "
-            "in 'ranks', and no non-input may use that rank.",
+            "Input nodes (in-degree 0) must share the minimum rank in "
+            "'ranks', and no other node may use it.",
             got="; ".join(offenders),
         )
 
@@ -682,8 +709,11 @@ def _layers_from_user_ranks(
             )
     if bad_pairs:
         unique_pairs = sorted(set(bad_pairs))
+        # The ranks the caller passed, not the compacted layers.
         pair_labels = [
-            f"{source} -> {target}" for source, target in unique_pairs
+            f"{source} -> {target} "
+            f"(rank {requested[source]} -> {requested[target]})"
+            for source, target in unique_pairs
         ]
         raise caller_error(
             "Every named edge must go strictly forward under 'ranks'.",
@@ -714,15 +744,17 @@ def _normalize_widths(
         widths,
         "widths",
     )
-    requested: dict[str, int] = {}
-    for key, value in widths.items():
-        name = str(key)
-        if not is_integer(value) or value < 1:
-            raise caller_error(
-                f"Width for node {name!r} must be a positive int.",
-                got=describe(value),
-            )
-        requested[name] = int(value)
+    bad_values = {
+        str(key): value
+        for key, value in widths.items()
+        if not is_integer(value) or value < 1
+    }
+    if bad_values:
+        raise caller_error(
+            "'widths' values must be positive ints.",
+            got=_bad_entries(bad_values),
+        )
+    requested = {str(key): int(value) for key, value in widths.items()}
     unknown = sorted(set(requested) - nodes)
     if unknown:
         raise _unknown_names_error(
@@ -739,7 +771,8 @@ def _normalize_widths(
             "Input nodes (in-degree 0) must have width 1 in 'widths', "
             "since each reads one feature column.",
             got=listed(f"{name}={requested[name]}" for name in wide_inputs),
-            fix="Give each measurement its own input node.",
+            fix="Leave input nodes out of 'widths'; to feed several "
+            "measurements, give each its own input node.",
         )
     return {node: requested.get(node, 1) for node in nodes}
 
@@ -1108,7 +1141,8 @@ def _declared_outputs(outputs: object) -> list[str] | None:
         return None
     if isinstance(outputs, Mapping):
         raise caller_error(
-            "'outputs' must be a collection of node names, not a mapping.",
+            "'outputs' must be a collection of output node names, not a "
+            "mapping.",
             got=describe(outputs),
             fix="Pass the names as a list.",
         )
@@ -1116,6 +1150,7 @@ def _declared_outputs(outputs: object) -> list[str] | None:
         list(outputs) if isinstance(outputs, AbstractSet) else outputs,
         "outputs",
         "output node names",
+        container="collection",
     )
     if not names:
         raise caller_error(
@@ -1158,6 +1193,9 @@ def _without_path_to(
 def _confirm_outputs(
     spec: LayeredSpec | AdjacencySpec,
     declared: list[str] | None,
+    *,
+    widths: Mapping[str, int] | None,
+    ranks: Mapping[str, int] | None,
 ) -> None:
     """
     Check the output nodes against ``declared``, or warn without it.
@@ -1169,8 +1207,10 @@ def _confirm_outputs(
     Output nodes left out of ``declared`` raise next, naming
     every node with no path to a declared one: in the rows whose
     target is none of those, exactly ``declared`` have no
-    outgoing edge. Without ``declared``, more than one output
-    node warns.
+    outgoing edge. The ``Fix`` also says to leave those nodes
+    out of ``widths`` or ``ranks`` when either names one, since
+    either raises on a name that is not in the edgelist. Without
+    ``declared``, more than one output node warns.
     """
     found = spec.output_nodes
     if declared is None:
@@ -1206,6 +1246,18 @@ def _confirm_outputs(
             declared,
             spec.to_edgelist(),
         )
+        dead_set = set(dead)
+        naming = [
+            f"'{argument}'"
+            for argument, mapping in (("widths", widths), ("ranks", ranks))
+            if mapping is not None
+            and any(str(key) in dead_set for key in mapping)
+        ]
+        cut = (
+            f", leave those nodes out of {' and '.join(naming)},"
+            if naming
+            else ""
+        )
         # Every name, not listed(): the fix drops the rows of each.
         raise caller_error(
             "Node(s) with no outgoing edge that are not in 'outputs': "
@@ -1214,7 +1266,7 @@ def _confirm_outputs(
             got=listed(extra),
             fix="Drop the edgelist rows whose target is one of the "
             "nodes with no path to a node in 'outputs' "
-            f"({', '.join(dead)}) and parse again, or add a node to "
+            f"({', '.join(dead)}){cut} and parse again, or add a node to "
             "'outputs' if you read it.",
         )
 
@@ -1257,7 +1309,10 @@ def _wrong_outputs_error(
             "node(s) with an outgoing edge, which are not output nodes"
         )
         found_parts.append(("with an outgoing edge", listed(not_outputs)))
-        fixes.append("Index a node that feeds others with unit_index().")
+        fixes.append(
+            "Leave nodes with an outgoing edge out of 'outputs', and read "
+            "them with spec.unit_index()."
+        )
     if len(found_parts) == 1:
         got = found_parts[0][1]
     else:
@@ -1679,5 +1734,7 @@ def parse_layered(  # numpydoc ignore=PR06
     _confirm_outputs(
         spec,
         declared,
+        widths=widths,
+        ranks=ranks,
     )
     return spec

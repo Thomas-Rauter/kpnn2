@@ -9,22 +9,25 @@ import torch
 from ._errors import Kpnn2Error, caller_error, listed
 from ._validate import describe, is_integer, reject_unordered
 
-_INDEX_FORMS = "a 1-dimensional integer tensor or a sequence of int"
+_INDEX_FORMS = "a 1-dimensional integer tensor or array, or a sequence of int"
 
 
 def _not_an_index(
     name: str,
     received: str,
+    fix: str | None = None,
 ) -> Kpnn2Error:
     return caller_error(
         f"'{name}' must be {_INDEX_FORMS}.",
         got=received,
+        fix=fix,
     )
 
 
 def copy_index(
     value: object,
     name: str,
+    builders: str,
 ) -> torch.Tensor:
     """
     Copy ``value`` to a 1-D int64 tensor.
@@ -34,7 +37,9 @@ def copy_index(
     ``int`` or numpy integer scalars. ``bool``, floating, and
     complex tensors or arrays are rejected, and so are sets and
     mappings, whose order is not the caller's. The result is
-    contiguous and independent of ``value``.
+    contiguous and independent of ``value``. A node name among
+    the items gets a ``Fix`` that names ``builders``, the class
+    methods that build the layer from a spec.
     """
     if isinstance(value, torch.Tensor):
         if value.ndim != 1:
@@ -88,9 +93,18 @@ def copy_index(
         ) from exc
     for position, item in enumerate(items):
         if not is_integer(item):
+            if isinstance(item, str):
+                fix = (
+                    "Pass integer positions, not node names. To build the "
+                    "layer from named edges, parse the edgelist and use "
+                    f"{builders}."
+                )
+            else:
+                fix = None
             raise _not_an_index(
                 name,
                 f"{describe(item)} at position {position}",
+                fix,
             )
     return torch.tensor(
         items,
@@ -107,6 +121,7 @@ def as_packed_pairs(
     source_bound_name: str,
     target_bound_name: str,
     owner: str,
+    builders: str,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Copy and check the packed ``(source, target)`` index pair.
@@ -129,6 +144,11 @@ def as_packed_pairs(
         error messages.
     owner : str
         Layer class name, used in the duplicate-pair message.
+    builders : str
+        The class methods that build the layer from a spec, such
+        as ``"PackedLinear.from_hop() or
+        PackedLinear.from_adjacency()"``, named when an index
+        holds node names.
 
     Returns
     -------
@@ -144,10 +164,12 @@ def as_packed_pairs(
     source = copy_index(
         source_index,
         "source_index",
+        builders,
     )
     target = copy_index(
         target_index,
         "target_index",
+        builders,
     )
     if source.shape != target.shape:
         raise caller_error(

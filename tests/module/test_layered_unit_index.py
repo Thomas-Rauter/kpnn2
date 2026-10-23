@@ -409,9 +409,9 @@ def test_layer_is_keyword_only_and_required():
         pytest.param(
             "a",
             1,
-            "'names' must be a sequence of node names, not a str.\n"
+            "'names' must be a sequence of node names, not a single string.\n"
             "  Got: 'a' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="str",
         ),
         pytest.param(
@@ -455,9 +455,8 @@ def test_layer_is_keyword_only_and_required():
         pytest.param(
             np.array([["a"]]),
             1,
-            "'names' must be one-dimensional: a matrix is not a name list.\n"
-            "  Got: ndarray of shape (1, 1), dtype <U1\n"
-            "  Fix: Pass the node names, and index the matrix yourself.",
+            "'names' must be a 1-dimensional sequence of node names.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1",
             id="matrix",
         ),
         pytest.param(
@@ -475,7 +474,8 @@ def test_layer_is_keyword_only_and_required():
         pytest.param(
             ["a"],
             np.bool_(True),
-            "'layer' must be an int.\n  Got: True (bool)",
+            "'layer' must be an int.\n"
+            f"  Got: True (numpy.{type(np.bool_(True)).__name__})",
             id="layer_numpy_bool",
         ),
         pytest.param(
@@ -508,13 +508,15 @@ def test_layer_is_keyword_only_and_required():
         pytest.param(
             ["a", ""],
             1,
-            "Node name is empty.",
+            "'names' contains empty node names.\n"
+            "  Got: 1 name(s) at position 1",
             id="empty_name",
         ),
         pytest.param(
             ["q", ""],
             1,
-            "Node name is empty.",
+            "'names' contains empty node names.\n"
+            "  Got: 1 name(s) at position 1",
             id="empty_name_before_unknown",
         ),
         pytest.param(
@@ -538,7 +540,9 @@ def test_layer_is_keyword_only_and_required():
             1,
             "Node(s) not in layer 1.\n"
             "  Got: c (layer 2), u (layer 0), y (layer 3)\n"
-            "  Expected: names in spec.layer_nodes[1]",
+            "  Expected: names in spec.layer_nodes[1]\n"
+            "  Fix: Call unit_index once per layer; node_units gives the "
+            "layer of a node.",
             id="other_layers",
         ),
     ],

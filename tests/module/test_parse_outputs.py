@@ -459,7 +459,8 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
             "node(s) with an outgoing edge, which are not output nodes.\n"
             "  Got: not in the edgelist: 'oot'; with an outgoing edge: TF1 "
             "(hidden), g1 (input)\n"
-            "  Fix: Index a node that feeds others with unit_index()."
+            "  Fix: Leave nodes with an outgoing edge out of 'outputs', and "
+            "read them with spec.unit_index()."
         ),
     ):
         parse(
@@ -477,29 +478,29 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
     [
         pytest.param(
             "C",
-            "'outputs' must be a sequence of output node names, not a "
-            "str.\n"
+            "'outputs' must be a collection of output node names, not a "
+            "single string.\n"
             "  Got: 'C' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="string",
         ),
         pytest.param(
             b"C",
-            "'outputs' must be a sequence of output node names, not "
+            "'outputs' must be a collection of output node names, not "
             "bytes.\n"
             "  Got: b'C' (bytes)",
             id="bytes",
         ),
         pytest.param(
             torch.tensor([1]),
-            "'outputs' must be a sequence of output node names, not a "
+            "'outputs' must be a collection of output node names, not a "
             "tensor.\n"
             "  Got: Tensor of shape (1,), dtype torch.int64",
             id="tensor",
         ),
         pytest.param(
             {"C": 1},
-            "'outputs' must be a collection of node names, not a "
+            "'outputs' must be a collection of output node names, not a "
             "mapping.\n"
             "  Got: {'C': 1} (dict)\n"
             "  Fix: Pass the names as a list.",
@@ -507,12 +508,14 @@ def test_unknown_and_non_output_names_raise_in_one_message(parse):
         ),
         pytest.param(
             np.array([["C", "E"]]),
-            "'outputs' must be one-dimensional: a matrix is not a name list.",
+            "'outputs' must be a 1-dimensional collection of output node "
+            "names.\n"
+            "  Got: ndarray of shape (1, 2), dtype <U1",
             id="matrix",
         ),
         pytest.param(
             5,
-            "'outputs' must be a sequence of output node names.\n"
+            "'outputs' must be a collection of output node names.\n"
             "  Got: 5 (int)",
             id="int",
         ),
@@ -557,7 +560,8 @@ def test_bad_outputs_raise(
 def test_outputs_type_is_checked_before_the_edgelist(parse):
     with pytest.raises(
         Kpnn2Error,
-        match="'outputs' must be a sequence of output node names, not a str",
+        match="'outputs' must be a collection of output node names, not a "
+        "single string",
     ):
         parse(
             "not a frame",
@@ -678,3 +682,53 @@ def test_left_out_outputs_are_capped_but_every_node_to_drop_is_named(parse):
     )
     assert "and 2 more\n" in message
     assert f"'outputs' ({', '.join(dead)})" in message
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "cut"),
+    [
+        pytest.param(
+            {},
+            "",
+            id="neither",
+        ),
+        pytest.param(
+            {"widths": {"H": 2}},
+            "",
+            id="widths_without_a_dropped_node",
+        ),
+        pytest.param(
+            {"widths": {"E": 2}},
+            ", leave those nodes out of 'widths',",
+            id="widths",
+        ),
+        pytest.param(
+            {"ranks": {"A": 0, "H": 1, "E": 1, "C": 2}},
+            ", leave those nodes out of 'ranks',",
+            id="ranks",
+        ),
+        pytest.param(
+            {
+                "widths": {"E": 2},
+                "ranks": {"A": 0, "H": 1, "E": 1, "C": 2},
+            },
+            ", leave those nodes out of 'widths' and 'ranks',",
+            id="both",
+        ),
+    ],
+)
+def test_left_out_output_fix_names_the_mappings_that_name_it(
+    kwargs,
+    cut,
+):
+    with pytest.raises(Kpnn2Error) as excinfo:
+        parse_layered(
+            _two_output_edgelist(),
+            outputs=["C"],
+            **kwargs,
+        )
+    assert str(excinfo.value).endswith(
+        "\n  Fix: Drop the edgelist rows whose target is one of the nodes "
+        f"with no path to a node in 'outputs' (E){cut} and parse again, or "
+        "add a node to 'outputs' if you read it."
+    )

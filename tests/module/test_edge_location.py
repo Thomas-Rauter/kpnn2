@@ -447,15 +447,17 @@ def test_bad_name_message_gives_the_reason_after_the_pair():
             layered,
             "Y",
             "Z",
-            "No edge Y -> Z: unknown node name.\n"
-            "  Got: 'Y'\n"
-            "  Expected: a name in spec.layer_nodes",
+            "No edge Y -> Z: unknown node names.\n"
+            "  Got: 'Y', 'Z'\n"
+            "  Expected: names in spec.layer_nodes\n"
+            "  Fix: None of the names is a node; check that they use the "
+            "same identifiers as the edgelist.",
         ),
         (
             layered,
             "A",
             "",
-            "No edge A -> : a node name is empty.",
+            "No edge A -> : 'target' is empty.",
         ),
         (
             adjacency,
@@ -469,7 +471,22 @@ def test_bad_name_message_gives_the_reason_after_the_pair():
             adjacency,
             "",
             "a",
-            "No edge  -> a: a node name is empty.",
+            "No edge  -> a: 'source' is empty.",
+        ),
+        (
+            adjacency,
+            "",
+            "",
+            "No edge  -> : 'source' and 'target' are empty.",
+        ),
+        (
+            adjacency,
+            "X",
+            "Y",
+            "No edge X -> Y: unknown node names.\n"
+            "  Got: 'X', 'Y'\n"
+            "  Expected: names in spec.nodes\n"
+            "  Did you mean: 'x' for 'X'; 'y' for 'Y'",
         ),
     )
     for spec, source, target, message in cases:

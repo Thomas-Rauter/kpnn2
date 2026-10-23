@@ -431,8 +431,8 @@ def _invalid_map_cases():
             spec,
             1,
             {"coords": {"observation": ["a"]}},
-            "'coords['observation']' must have one label per position on the "
-            "'observation' axis.\n"
+            "'coords[\"observation\"]' must have one label per position on "
+            "the 'observation' axis.\n"
             "  Got: length 1\n"
             "  Expected: length 2",
             id="coords_wrong_length",
@@ -1281,7 +1281,9 @@ def _received_value_cases():
             },
             "'spec' must be a LayeredSpec or an AdjacencySpec.\n"
             "  Got: 'spec' (str)\n"
-            "  Fix: Build one with parse_layered() or parse_adjacency().",
+            "  Fix: Build one with parse_layered() or parse_adjacency(), or "
+            "load a saved one with LayeredSpec.from_dict() or "
+            "AdjacencySpec.from_dict().",
             id="spec",
         ),
         pytest.param(
@@ -1320,7 +1322,7 @@ def _received_value_cases():
             {"hop_output": other},
             "'hop_output' must match an entry of spec.hops: a Hop from "
             "another spec does not match.\n"
-            "  Got: a Hop that equals none of them\n"
+            "  Got: a Hop into layer 2 that differs from spec.hops[1]\n"
             "  Fix: Take it from this spec's hops.",
             id="hop_output_not_in_spec",
         ),
@@ -1349,8 +1351,12 @@ def _received_value_cases():
                 torch.zeros(2, 2),
             ),
             {"layer": 1},
-            "Tensors in 'attributions' must all have the same shape.\n"
-            "  Got: shape (1, 2) at position 0 and shape (2, 2) at position 2",
+            "Tensors in 'attributions' must all have the same shape: a list "
+            "or tuple is stacked on a new 'step' axis.\n"
+            "  Got: shape (1, 2) at position 0 and shape (2, 2) at position "
+            "2\n"
+            "  Fix: To label several layers or hops, call "
+            "map_node_attributions() once per tensor.",
             id="attributions_shapes",
         ),
         pytest.param(
@@ -1535,7 +1541,7 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": None},
             },
-            "'coords['observation']' must be a sequence of labels, one per "
+            "'coords[\"observation\"]' must be a sequence of labels, one per "
             "position on that axis.\n"
             "  Got: None",
             id="coords_value_none",
@@ -1546,7 +1552,7 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": "s"},
             },
-            "'coords['observation']' must be a sequence of labels, one per "
+            "'coords[\"observation\"]' must be a sequence of labels, one per "
             "position on that axis, not a single string.\n"
             "  Got: 's' (str)\n"
             "  Fix: Wrap it in a list.",
@@ -1558,7 +1564,7 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": {"s"}},
             },
-            "'coords['observation']' must be a sequence of labels, one per "
+            "'coords[\"observation\"]' must be a sequence of labels, one per "
             "position on that axis, not a set: its items are matched by "
             "position.\n"
             "  Got: {'s'} (set)\n"
@@ -1571,7 +1577,7 @@ def _received_value_cases():
                 "layer": 1,
                 "coords": {"observation": {0: "s"}},
             },
-            "'coords['observation']' must be a sequence of labels, one per "
+            "'coords[\"observation\"]' must be a sequence of labels, one per "
             "position on that axis, not a mapping: its items are matched by "
             "position.\n"
             "  Got: {0: 's'} (dict)\n"
@@ -1645,3 +1651,131 @@ def test_map_node_attributions_rejects_a_zero_dimensional_tensor(
             _tiny_spec(),
             1,
         )
+
+
+_LAYERED_AXIS_FIX = (
+    "  Fix: axis='inputs' names only the model inputs; for another layer "
+    "pass layer=, or hop_output= with a Hop from spec.hops."
+)
+_ADJACENCY_AXIS_FIX = (
+    "  Fix: axis='inputs' names only the model inputs; omit axis to name "
+    "the whole state vector, output nodes included."
+)
+
+
+@pytest.mark.parametrize(
+    ("spec", "axis", "fields"),
+    [
+        pytest.param(
+            _tiny_spec(),
+            "outputs",
+            [_LAYERED_AXIS_FIX],
+            id="outputs_layered",
+        ),
+        pytest.param(
+            _tiny_adjacency_spec(),
+            "output",
+            [_ADJACENCY_AXIS_FIX],
+            id="output_adjacency",
+        ),
+        pytest.param(
+            _tiny_spec(),
+            "input",
+            [
+                "  Did you mean: 'inputs'",
+                _LAYERED_AXIS_FIX,
+            ],
+            id="input_layered",
+        ),
+    ],
+)
+def test_axis_message_never_suggests_inputs_for_the_other_end(
+    spec,
+    axis,
+    fields,
+):
+    # Taking 'inputs' for 'outputs' would label the scores with the
+    # wrong end of the model without an error.
+    with pytest.raises(Kpnn2Error) as excinfo:
+        map_node_attributions(
+            torch.zeros(2, 1),
+            spec,
+            axis=axis,
+        )
+    assert str(excinfo.value).splitlines() == [
+        "'axis' must be 'inputs' or None.",
+        f"  Got: {axis!r} (str)",
+        *fields,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("spec", "kwargs", "fix"),
+    [
+        pytest.param(
+            _tiny_adjacency_spec(),
+            {},
+            "  Fix: For scores on the input units, pass axis='inputs'.",
+            id="state_vector",
+        ),
+        pytest.param(
+            _tiny_spec(),
+            {"layer": 1},
+            "  Fix: For the output of the module on spec.hops[i], pass "
+            "hop_output=spec.hops[i]; layer counts from 0 at the input "
+            "layer.",
+            id="layer",
+        ),
+        pytest.param(
+            _tiny_spec(),
+            {"hop_output": _tiny_spec().hops[0]},
+            "  Fix: For scores on what the hop's module reads, pass "
+            "hop_input= instead.",
+            id="hop_output",
+        ),
+        pytest.param(
+            _tiny_spec(),
+            {"hop_input": _tiny_spec().hops[0]},
+            "  Fix: For scores on what the hop's module returns, pass "
+            "hop_output= instead.",
+            id="hop_input",
+        ),
+        pytest.param(
+            _tiny_spec(),
+            {"axis": "inputs"},
+            None,
+            id="inputs",
+        ),
+    ],
+)
+def test_node_axis_length_message_names_the_other_side(
+    spec,
+    kwargs,
+    fix,
+):
+    with pytest.raises(Kpnn2Error) as excinfo:
+        map_node_attributions(
+            torch.zeros(2, 99),
+            spec,
+            **kwargs,
+        )
+    last = str(excinfo.value).splitlines()[-1]
+    if fix is None:
+        assert last.startswith("  Expected: ")
+    else:
+        assert last == fix
+
+
+def test_coords_on_a_node_only_tensor_says_node_is_the_only_dim():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        map_node_attributions(
+            torch.zeros(1),
+            _tiny_spec(),
+            0,
+            coords={"observation": ["s1"]},
+        )
+    assert str(excinfo.value) == (
+        "Unknown dim name(s) in 'coords'.\n"
+        "  Got: 'observation'\n"
+        "  Expected: no key: the only dim of 'attributions' is 'node'"
+    )

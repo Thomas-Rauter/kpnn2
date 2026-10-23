@@ -96,8 +96,15 @@ _LAYERS = {
     ),
     "PackedMultiheadAttention": (
         _packed_attention,
-        "The checkpoint indices do not match this layer",
+        "The checkpoint indices or num_heads do not match this layer",
     ),
+}
+# How each layer is rebuilt when the identity matched but the wiring
+# did not.
+_SAME_BUILD = {
+    "MaskedLinear": "from the same hop and with the same sizes",
+    "PackedLinear": "from the same hop and with the same sizes",
+    "PackedMultiheadAttention": "with the same embed_dim and num_heads",
 }
 
 
@@ -279,7 +286,44 @@ def test_identity_mismatch_says_when_the_layer_has_no_identity(
         "  Expected: no identity, as this layer has identity=None",
     ]
     _assert_names_only_the_middle_hop(message)
-    _assert_names_the_fix(message)
+    fix = message.splitlines()[-1]
+    assert fix.startswith(
+        "  Fix: Build this layer with identity=spec.fingerprint, from the "
+        "spec the checkpoint was saved with."
+    )
+    assert "edge_location()" in fix
+    assert "'Changing the prior (reparse)'" in fix
+
+
+@pytest.mark.parametrize("layer", sorted(_LAYERS))
+def test_wiring_mismatch_after_a_matching_identity_says_how_to_rebuild(
+    layer: str,
+) -> None:
+    build, sentence = _LAYERS[layer]
+    saved = _model(
+        build,
+        _WIRING,
+        _SAVED_IDENTITY,
+        _SAVED_IDENTITY,
+    )
+    live = _model(
+        build,
+        _REWIRED,
+        _SAVED_IDENTITY,
+        _SAVED_IDENTITY,
+    )
+
+    message = _load_error(
+        live,
+        saved,
+    )
+
+    assert message.splitlines() == [
+        f"{sentence} in submodule 'hops.1'{_WIRING_REASON}",
+        "  Fix: The checkpoint has this layer's identity, so it was saved "
+        "from the same spec: build this submodule as it was built then, "
+        f"{_SAME_BUILD[layer]}.",
+    ]
 
 
 @pytest.mark.parametrize("layer", sorted(_LAYERS))

@@ -81,8 +81,8 @@ def _check_mask_entries(mask: torch.Tensor) -> None:
         )
     if not bool(is_one.any()):
         raise caller_error(
-            "'mask' has no live entry: every value is 0, so the layer "
-            "would output only its bias.",
+            "'mask' has no live entry: every value is 0, so the output "
+            "would not depend on the input.",
             fix="Build it with Hop.to_mask() or AdjacencySpec.to_mask().",
         )
 
@@ -375,7 +375,8 @@ class MaskedLinear(nn.Module):
             raise caller_error(
                 "'mask' must be a torch.Tensor.",
                 got=describe(mask),
-                fix="Build it with Hop.to_mask() or AdjacencySpec.to_mask().",
+                fix="Build it with Hop.to_mask() or AdjacencySpec.to_mask(), "
+                "or convert a 0/1 array with torch.as_tensor().",
             )
         if mask.ndim != 2:
             raise caller_error(
@@ -633,7 +634,7 @@ class MaskedLinear(nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        check_identity(
+        identity_matched = check_identity(
             state_dict,
             prefix,
             self.identity,
@@ -649,6 +650,8 @@ class MaskedLinear(nn.Module):
                 raise wiring_mismatch(
                     "The checkpoint mask does not match this layer",
                     prefix,
+                    identity_matched,
+                    "from the same hop and with the same sizes",
                 )
         legacy = prefix + _LEGACY_WEIGHT_KEY
         migrated = (

@@ -87,21 +87,22 @@ def test_line_breaks_in_parts_are_escaped():
                 "headline": "Bad.",
                 "fix": "Do this",
             },
-            "Fix line 'Do this' does not end with a period",
+            "the Fix line 'Do this' does not end with a period in the "
+            'message "Bad."',
         ),
         (
             {
                 "headline": "Bad.",
                 "got": "",
             },
-            "the Got line of a message is empty",
+            'the Got line is empty in the message "Bad."',
         ),
         (
             {
                 "headline": "Bad.",
                 "candidates": "",
             },
-            "the Did you mean line of a message is empty",
+            'the Did you mean line is empty in the message "Bad."',
         ),
     ],
 )
@@ -146,9 +147,11 @@ def test_internal_error_has_a_headline_and_a_fix_line():
 
     assert message.splitlines() == [
         "kpnn2 internal check failed: hop edges are not conserved. "
-        f"This is a bug in kpnn2 {kpnn2.__version__}, not a problem "
-        "with your call.",
-        f"  Fix: Report it with this message at {_ISSUES_URL}.",
+        f"This is a bug in kpnn2 {kpnn2.__version__} if every spec came "
+        "from a parser or from_dict().",
+        f"  Fix: Report it with this message at {_ISSUES_URL}. A spec, "
+        "Hop, or Skip built or changed by hand is unsupported: rebuild it "
+        "with parse_layered(), parse_adjacency(), or from_dict().",
     ]
 
 
@@ -240,4 +243,16 @@ def test_close_matches_looks_up_only_the_first_five_names():
             ["TP53"],
         )
         is None
+    )
+
+
+def test_listed_joins_items_that_hold_commas_with_a_separator():
+    items = [f"'{index}': 1, 2" for index in range(12)]
+
+    assert (
+        listed(
+            items,
+            separator="; ",
+        )
+        == "; ".join(items[:10]) + "; and 2 more"
     )

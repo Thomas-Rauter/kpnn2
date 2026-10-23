@@ -152,7 +152,7 @@ def test_widths_message_describes_the_value_without_its_data(
     with pytest.raises(
         Kpnn2Error,
         match=re.escape(
-            f"Width for node 'H' must be a positive int.\n  Got: {got}"
+            f"'widths' values must be positive ints.\n  Got: 'H': {got}"
         ),
     ) as caught:
         parse_layered(
@@ -175,7 +175,8 @@ def test_widths_rejects_wide_input_nodes_listed_sorted():
             "Input nodes (in-degree 0) must have width 1 in 'widths', "
             "since each reads one feature column.\n"
             "  Got: A=2, B=3\n"
-            "  Fix: Give each measurement its own input node."
+            "  Fix: Leave input nodes out of 'widths'; to feed several "
+            "measurements, give each its own input node."
         ),
     ):
         parse_layered(
@@ -285,4 +286,16 @@ def test_widths_naming_no_node_says_to_check_the_identifiers():
     assert message.endswith(
         "\n  Fix: None of the names in 'widths' is a node; check that "
         "they use the same identifiers as the edgelist."
+    )
+
+
+def test_every_bad_width_value_is_reported_in_one_message():
+    with pytest.raises(Kpnn2Error) as excinfo:
+        parse_layered(
+            _chain_edgelist(),
+            widths={"H": 0, "C": -2},
+        )
+    assert str(excinfo.value) == (
+        "'widths' values must be positive ints.\n"
+        "  Got: 'C': -2 (int); 'H': 0 (int)"
     )

@@ -22,30 +22,41 @@ def require_named_dims(
     required: Sequence[str],
     optional: Sequence[str] = (),
 ) -> None:
-    """Require named dims and reject any leftover dim."""
+    """
+    Require named dims and reject any leftover dim.
+
+    Missing and unexpected dims are found together, and both go
+    into one message, whose suggestions name an allowed dim for
+    each unexpected one.
+    """
     dims = set(attributions.dims)
     allowed = set(required) | set(optional)
     missing = [name for name in required if name not in dims]
-    if missing:
+    extra = sorted(dims - allowed)
+    if missing and not extra:
         raise caller_error(
-            "Attribution DataArray is missing required dim(s): "
+            "'attributions' is missing required dim(s): "
             f"{listed(repr(name) for name in missing)}.",
             got=_dims_text(attributions),
-            candidates=close_matches(
-                missing,
-                [
-                    name
-                    for name in attributions.dims
-                    if isinstance(name, str) and name not in allowed
-                ],
-            ),
         )
-    extra = sorted(dims - allowed)
     if extra:
         allowed_names = listed(repr(name) for name in sorted(allowed))
+        extra_names = listed(repr(name) for name in extra)
+        if missing:
+            headline = (
+                "'attributions' has unexpected dim(s) and is missing "
+                "required dim(s)."
+            )
+            got = (
+                f"unexpected {extra_names}; missing "
+                f"{listed(repr(name) for name in missing)}"
+            )
+        else:
+            headline = "'attributions' has unexpected dim(s)."
+            got = extra_names
         raise caller_error(
-            "Attribution DataArray has unexpected dim(s).",
-            got=listed(repr(name) for name in extra),
+            headline,
+            got=got,
             expected=f"only dims {allowed_names}",
             candidates=close_matches(
                 [name for name in extra if isinstance(name, str)],
@@ -66,7 +77,7 @@ def require_unique_nodes(attributions: xr.DataArray) -> None:
             f"The {NODE_DIM!r} coordinate repeats node names.",
             got=listed(repr(name) for name in repeated),
             fix="Reduce the units to one column per node first; a node "
-            "wider than 1, or a hop axis, has one column per unit.",
+            "wider than 1 has one column per unit.",
         )
 
 
@@ -87,19 +98,45 @@ def bind_labels(
             "'labels' is required for this aggregation method.",
             fix="Pass labels= with one label per observation.",
         )
-    if isinstance(labels, (xr.DataArray, pd.DataFrame)):
+    if isinstance(labels, xr.DataArray):
         raise caller_error(
-            "'labels' must be a 1-d array or pandas Series.",
+            "'labels' must be a 1-d array or pandas Series, not a DataArray.",
             got=describe(labels),
+            fix="Pass labels.to_series(), which aligns the labels by their "
+            "coordinate.",
+        )
+    if isinstance(labels, pd.DataFrame):
+        raise caller_error(
+            "'labels' must be a 1-d array or pandas Series, not a DataFrame.",
+            got=describe(labels),
+            fix="Pass the column that holds the labels, as a Series.",
         )
     if observation_dim not in attributions.dims:
-        raise caller_error(
-            f"Attribution DataArray must have an {observation_dim!r} dim.",
-            got=_dims_text(attributions),
-            candidates=close_matches(
+        # A close dim is the caller's own, so it is a rename, not a
+        # name to suggest.
+        close = [
+            name
+            for name in attributions.dims
+            if isinstance(name, str)
+            and close_matches(
                 [observation_dim],
-                [name for name in attributions.dims if isinstance(name, str)],
-            ),
+                [name],
+            )
+            is not None
+        ]
+        if len(close) == 1:
+            fix = f"Rename dim {close[0]!r} to {observation_dim!r}."
+        elif close:
+            fix = (
+                f"Rename one of dims {listed(repr(name) for name in close)} "
+                f"to {observation_dim!r}."
+            )
+        else:
+            fix = None
+        raise caller_error(
+            f"'attributions' is missing required dim(s): {observation_dim!r}.",
+            got=_dims_text(attributions),
+            fix=fix,
         )
     n_obs = int(attributions.sizes[observation_dim])
     if isinstance(labels, pd.Series):
@@ -111,9 +148,15 @@ def bind_labels(
     else:
         aligned = np.asarray(labels)
         if aligned.ndim != 1:
+            # A set, dict, or str converts to a 0-d array; its shape
+            # would describe the conversion, not what was passed.
             raise caller_error(
                 "'labels' must be 1-dimensional.",
-                got=f"shape {tuple(aligned.shape)}",
+                got=(
+                    describe(labels)
+                    if aligned.ndim == 0
+                    else f"shape {tuple(aligned.shape)}"
+                ),
             )
         if int(aligned.shape[0]) != n_obs:
             raise caller_error(
@@ -154,14 +197,33 @@ def _align_series(
             groups.append(f"missing {listed(repr(v) for v in missing)}")
         if extra:
             groups.append(f"extra {listed(repr(v) for v in extra)}")
+        extra_names = [v for v in extra if isinstance(v, str)]
+        missing_names = [v for v in missing if isinstance(v, str)]
+        folded = {v.casefold() for v in missing_names}
+        # No shared value, and no case-only typo: the index likely
+        # holds another kind of identifier, such as sample IDs for
+        # the default 0..n-1 coordinate.
+        if obs_index.intersection(labels.index).empty and not any(
+            v.casefold() in folded for v in extra_names
+        ):
+            candidates = None
+            fix = (
+                "No index value names an observation; check the kind of "
+                "identifier, or name the observations with coords= in "
+                "map_node_attributions()."
+            )
+        else:
+            candidates = close_matches(
+                extra_names,
+                missing_names,
+            )
+            fix = None
         raise caller_error(
             "'labels' index does not match the "
             f"{observation_dim!r} coordinate.",
             got="; ".join(groups),
-            candidates=close_matches(
-                [v for v in extra if isinstance(v, str)],
-                [v for v in missing if isinstance(v, str)],
-            ),
+            candidates=candidates,
+            fix=fix,
         )
     return labels.reindex(obs_index).to_numpy()
 

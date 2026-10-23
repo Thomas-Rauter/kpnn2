@@ -299,7 +299,8 @@ def test_masked_linear_rejects_non_tensor_mask():
         match=re.escape(
             "'mask' must be a torch.Tensor.\n"
             "  Got: [[1.0, 0.0]] (list)\n"
-            "  Fix: Build it with Hop.to_mask() or AdjacencySpec.to_mask()."
+            "  Fix: Build it with Hop.to_mask() or AdjacencySpec.to_mask(), "
+            "or convert a 0/1 array with torch.as_tensor()."
         ),
     ):
         MaskedLinear(

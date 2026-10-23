@@ -400,6 +400,7 @@ class AdjacencySpec:
             ),
             self.nodes,
             "spec.nodes",
+            "names",
         )
         return self._layout().units_of(node_names)
 

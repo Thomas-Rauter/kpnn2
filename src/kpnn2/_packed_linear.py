@@ -380,6 +380,7 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
             source_bound_name="in_features",
             target_bound_name="out_features",
             owner="PackedLinear",
+            builders="PackedLinear.from_hop() or PackedLinear.from_adjacency()",
         )
         nnz = int(source.numel())
 
@@ -494,6 +495,12 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         require_hop(
             hop,
             "hop",
+            fix=(
+                "An AdjacencySpec has no hops: call "
+                "PackedLinear.from_adjacency(spec)."
+                if isinstance(hop, AdjacencySpec)
+                else None
+            ),
         )
         return cls(
             hop.source_index,
@@ -589,8 +596,9 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         """
         require_adjacency_spec(
             spec,
-            "Build one with parse_adjacency(). On a LayeredSpec, "
-            "call PackedLinear.from_hop(hop) for each hop.",
+            "Build one with parse_adjacency(), or load a saved one with "
+            "AdjacencySpec.from_dict(). On a LayeredSpec, call "
+            "PackedLinear.from_hop(hop) for each hop.",
         )
         return cls(
             spec.source_index,
@@ -916,7 +924,7 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        check_identity(
+        identity_matched = check_identity(
             state_dict,
             prefix,
             self.identity,
@@ -937,6 +945,8 @@ class PackedLinear(nn.Module):  # numpydoc ignore=PR06
                 raise wiring_mismatch(
                     "The checkpoint indices do not match this layer",
                     prefix,
+                    identity_matched,
+                    "from the same hop and with the same sizes",
                 )
         super()._load_from_state_dict(
             state_dict,

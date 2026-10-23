@@ -132,9 +132,11 @@ def test_parse_layered_rejects_missing_input():
         parse_layered(edgelist)
 
     message = str(exc_info.value)
-    assert "every node has an incoming edge" in message
+    assert "every node has an incoming and an outgoing edge" in message
+    assert "at least one output node" in message
     assert message.endswith(
-        "\n  Fix: Add input nodes that appear only in 'source'."
+        "\n  Fix: Add input nodes that appear only in 'source', and output "
+        "nodes that appear only in 'target'."
     )
 
 

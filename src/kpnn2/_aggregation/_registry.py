@@ -98,7 +98,7 @@ def register_aggregation_method(
         or not deprecation_message.endswith(".")
     ):
         raise ValueError(
-            f"Aggregation method {name!r}: 'deprecation_message' becomes "
+            f"Aggregation method {name!r}: 'deprecation_message' ends "
             "the headline of its FutureWarning, so it must be one line "
             f"ending with a period. Got {deprecation_message!r}."
         )

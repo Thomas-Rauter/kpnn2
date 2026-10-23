@@ -584,9 +584,9 @@ def test_as_name_list_does_not_mutate_the_callers_sequence():
         ),
         pytest.param(
             "A",
-            "'names' must be a sequence of node names, not a str.\n"
+            "'names' must be a sequence of node names, not a single string.\n"
             "  Got: 'A' (str)\n"
-            "  Fix: Wrap a single name in a list.",
+            "  Fix: Wrap it in a list.",
             id="str",
         ),
         pytest.param(
@@ -613,18 +613,14 @@ def test_as_name_list_does_not_mutate_the_callers_sequence():
         ),
         pytest.param(
             np.array([["A"]]),
-            "'names' must be one-dimensional: a matrix is not a name "
-            "list.\n"
-            "  Got: ndarray of shape (1, 1), dtype <U1\n"
-            "  Fix: Pass the node names, and index the matrix yourself.",
+            "'names' must be a 1-dimensional sequence of node names.\n"
+            "  Got: ndarray of shape (1, 1), dtype <U1",
             id="matrix",
         ),
         pytest.param(
             np.array("A"),
-            "'names' must be one-dimensional: a matrix is not a name "
-            "list.\n"
-            "  Got: ndarray of shape (), dtype <U1\n"
-            "  Fix: Pass the node names, and index the matrix yourself.",
+            "'names' must be a 1-dimensional sequence of node names.\n"
+            "  Got: ndarray of shape (), dtype <U1",
             id="zero_dim_array",
         ),
         pytest.param(
@@ -708,32 +704,32 @@ _NUMPY_BOOL = type(np.bool_(True)).__name__
     [
         pytest.param(
             np.float64(1.5),
-            "1.5 (float64)",
+            "1.5 (numpy.float64)",
             id="float64",
         ),
         pytest.param(
             np.float32(0.1),
-            "0.1 (float32)",
+            "0.1 (numpy.float32)",
             id="float32_shortest_form",
         ),
         pytest.param(
             np.int64(-3),
-            "-3 (int64)",
+            "-3 (numpy.int64)",
             id="int64",
         ),
         pytest.param(
             np.bool_(True),
-            f"True ({_NUMPY_BOOL})",
+            f"True (numpy.{_NUMPY_BOOL})",
             id="bool",
         ),
         pytest.param(
             np.complex64(1 + 2j),
-            "(1+2j) (complex64)",
+            "(1+2j) (numpy.complex64)",
             id="complex64",
         ),
         pytest.param(
             np.str_("no"),
-            "'no' (str_)",
+            "'no' (numpy.str_)",
             id="str_",
         ),
     ],
